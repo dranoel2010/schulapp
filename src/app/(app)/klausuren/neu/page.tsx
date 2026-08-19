@@ -21,7 +21,7 @@ export default async function NewExamPage() {
   // speichern.
   if (subjects.length === 0) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 md:max-w-3xl">
         <header className="space-y-1">
           <h1 className="text-xl font-semibold text-foreground">
             Neue Klausur
@@ -38,7 +38,7 @@ export default async function NewExamPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 md:max-w-3xl">
       <header className="space-y-1">
         <h1 className="text-xl font-semibold text-foreground">Neue Klausur</h1>
         <p className="text-sm text-muted">

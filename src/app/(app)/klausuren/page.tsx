@@ -218,7 +218,7 @@ export default async function ExamsPage() {
   const [next, ...later] = upcoming;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 md:max-w-3xl">
       <header className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-foreground">Klausuren</h1>
         {exams.length > 0 ? (

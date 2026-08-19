@@ -21,7 +21,7 @@ export default async function SubjectsPage() {
   const archived = subjects.filter((subject) => subject.archived);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 md:max-w-3xl">
       <header className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-foreground">Fächer</h1>
         {subjects.length > 0 ? (

@@ -87,7 +87,7 @@ export default async function ExamPage({
   const dateText = formatGerman(exam.date);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 md:max-w-3xl">
       <Link
         href="/klausuren"
         className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"

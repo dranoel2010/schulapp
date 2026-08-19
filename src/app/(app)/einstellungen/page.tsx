@@ -39,7 +39,7 @@ export default async function SettingsPage() {
   const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 md:max-w-3xl">
       <h1 className="text-2xl font-semibold tracking-tight">Einstellungen</h1>
 
       <Card>

@@ -27,7 +27,7 @@ export default async function EditSubjectPage({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 md:max-w-3xl">
       <header className="space-y-1">
         <h1 className="text-xl font-semibold text-foreground">
           {subject.name}

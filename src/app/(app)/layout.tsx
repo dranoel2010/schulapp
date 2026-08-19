@@ -28,6 +28,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       <AppNav userName={user.name} />
 
       <div className="flex min-w-0 flex-1 flex-col">
+        {/* Nur am Handy: ab md steht der Name der App in der Seitenspalte,
+            und die Seiten bringen ihre eigene Überschrift mit. */}
         <header className="sticky top-0 z-20 border-b border-border bg-background/90 pt-safe backdrop-blur md:hidden">
           <div className="page flex h-14 items-center">
             <span className="text-[0.9375rem] font-semibold tracking-tight">
@@ -36,8 +38,11 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </div>
         </header>
 
-        {/* Unten Platz für die feste Leiste am Handy. */}
-        <main className="page flex-1 pb-28 pt-6 md:pb-12 md:pt-10">
+        {/* Am Handy die gewohnte schmale Spalte (wie die Hilfsklasse `page`)
+            mit Platz für die feste Leiste unten. Ab md die volle Breite
+            neben der Seitenspalte — das Dashboard braucht sie für sein
+            Raster, min-w-0 hält die Spalten darin im Rahmen. */}
+        <main className="mx-auto w-full min-w-0 max-w-xl flex-1 px-4 pt-6 pb-28 md:mx-0 md:max-w-none md:min-h-dvh md:px-[26px] md:py-6">
           {children}
         </main>
       </div>

@@ -13,7 +13,7 @@ export default async function NewSubjectPage() {
   await requireUser();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 md:max-w-3xl">
       <header className="space-y-1">
         <h1 className="text-xl font-semibold text-foreground">Neues Fach</h1>
         <p className="text-sm text-muted">
