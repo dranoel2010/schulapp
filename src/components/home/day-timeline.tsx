@@ -175,10 +175,9 @@ function LearnCard({ block, today }: { block: Block; today: string }) {
         {examLineFor(block, today)}
       </p>
 
-      <ButtonLink
-        href={`/klausuren/${block.examId}`}
-        className="mt-[12px] w-full"
-      >
+      {/* In den Lernbereich, nicht auf die Klausur: hier will man loslegen
+          und abhaken, nicht den Termin bearbeiten. */}
+      <ButtonLink href="/lernen" className="mt-[12px] w-full">
         Öffnen
       </ButtonLink>
     </div>
@@ -220,8 +219,8 @@ function emptyLineFor(data: HomeData): string {
 }
 
 export function DayTimeline({ data }: { data: HomeData }) {
-  // Der erste offene Block ist der hervorgehobene — dieselbe Regel wie beim
-  // "Lernen"-Ziel im Kachelmenü, damit beide Seiten auf dasselbe zeigen.
+  // Der erste offene Block ist der hervorgehobene: er beantwortet die Frage
+  // "womit fange ich an". Der Knopf daran führt in den Lernbereich.
   const highlighted = data.todayBlocks.find((block) => block.status === "open");
 
   return (

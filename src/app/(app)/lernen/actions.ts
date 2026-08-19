@@ -13,7 +13,11 @@ import {
 } from "@/lib/exams";
 
 /**
- * Die Aktionen der Lernplan-Ansicht.
+ * Die Aktionen des Lernbereichs — alles, was man mit einem Lernplan tut.
+ *
+ * Sie liegen hier, weil gelernt wird auf /lernen; die Klausurenseiten
+ * verwalten nur noch. Benutzt werden sie von /lernen selbst und von der
+ * Startseite, die dieselben Häkchen und dieselbe Nachfrage zeigt.
  *
  * Gerechnet und gespeichert wird in @/lib/exams; hier stehen nur Anmeldung,
  * "heute" und das Auffrischen der betroffenen Seiten. "Heute" kommt immer aus
@@ -24,9 +28,10 @@ import {
  * Funktionen in @/lib/exams filtern zusätzlich selbst nach userId.
  */
 
-/** Nach jeder Änderung: Startseite, Liste und die Prüfung selbst. */
+/** Nach jeder Änderung: Startseite, Lernbereich, Liste und die Prüfung selbst. */
 function revalidateExam(examId: string): void {
   revalidatePath("/");
+  revalidatePath("/lernen");
   revalidatePath("/klausuren");
   revalidatePath(`/klausuren/${examId}`);
 }

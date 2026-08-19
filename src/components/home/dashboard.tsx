@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 
-import { setBlockStatusAction } from "@/app/(app)/klausuren/[id]/plan-actions";
+import { setBlockStatusAction } from "@/app/(app)/lernen/actions";
 import { ButtonLink } from "@/components/ui/button";
 import { subjectColor } from "@/lib/colors";
 import { formatGerman } from "@/lib/dates";
@@ -162,7 +162,9 @@ function NextExamCard({
   const progress = planProgress(exam);
 
   return (
-    <Link href={`/klausuren/${exam.id}`} className={CARD_LINK}>
+    // Die Karte zeigt den Stand des Lernplans — also führt sie in den
+    // Lernbereich und nicht auf die Klausur, wo der Termin verwaltet wird.
+    <Link href="/lernen" className={CARD_LINK}>
       <p className="text-[13px] text-muted">
         {NEXT_EXAM_LABELS[exam.kind] ?? "Nächste Prüfung"}
       </p>
@@ -251,7 +253,7 @@ function TodayCard({
 /**
  * Eine Zeile der Heute-Karte. Sie ist abhakbar — das war auf der alten
  * Startseite so und bleibt es: den heutigen Block erledigt man dort, wo man ihn
- * sieht, nicht erst nach zwei Klicks auf der Prüfungsseite.
+ * sieht, nicht erst nach einem Umweg über den Lernbereich.
  */
 function BlockRow({ block }: { block: Block }) {
   const done = block.status === "done";

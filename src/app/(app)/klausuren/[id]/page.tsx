@@ -2,52 +2,33 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { MissedPrompt } from "@/components/study/missed-prompt";
-import { ButtonLink } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { requireUser } from "@/lib/auth";
 import { subjectColor } from "@/lib/colors";
-import {
-  daysBetween,
-  formatCountdown,
-  formatGerman,
-  todayInBerlin,
-} from "@/lib/dates";
+import { formatGerman, todayInBerlin } from "@/lib/dates";
 import { getExam } from "@/lib/exams";
-import { buildPlan } from "@/lib/study-plan";
+import { listSubjects } from "@/lib/subjects";
 
-import { catchUpMissedAction, skipMissedAction } from "./plan-actions";
-import { StudyPlanView } from "./study-plan-view";
+import { deleteExamAction, updateExamAction } from "../actions";
+import { ExamDangerZone, ExamForm } from "../exam-form";
+
+/**
+ * Eine Prüfung antippen heißt: sie bearbeiten. Hier stehen ihre Daten —
+ * Fach, Art, Titel, Datum, Themen, Lernplanung, Notizen — und ganz unten das
+ * Löschen. Der Lernplan selbst gehört nicht hierher: was heute ansteht und was
+ * abzuhaken ist, steht unter /lernen.
+ */
 
 export const metadata: Metadata = {
-  title: "Prüfung",
+  title: "Klausur bearbeiten",
 };
 
-/** Wie in der Erinnerungs-Route: die Art einer Prüfung in Worten. */
+/** Die Art einer Prüfung in Worten, wie in der Erinnerungs-Route. */
 const EXAM_KIND_LABELS: Record<string, string> = {
   klausur: "Klausur",
   test: "Test",
   referat: "Referat",
   muendlich: "Mündliche Prüfung",
 };
-
-function capitalize(text: string): string {
-  return text.slice(0, 1).toUpperCase() + text.slice(1);
-}
-
-/** "In 5 Tagen", "Morgen", "Heute", "Vorbei". */
-function countdownHeadline(today: string, examDate: string): string {
-  const days = daysBetween(today, examDate);
-
-  if (days === 0) return "Heute";
-  if (days < 0) return "Vorbei";
-  return capitalize(formatCountdown(today, examDate));
-}
 
 export default async function ExamPage({
   params,
@@ -62,29 +43,16 @@ export default async function ExamPage({
 
   const { exam, subject, topics, blocks } = detail;
 
-  const today = todayInBerlin();
+  const active = await listSubjects(user.id);
+  // Hängt die Prüfung an einem archivierten Fach, fehlte es sonst in der
+  // Auswahl — und beim Speichern stünde plötzlich ein anderes Fach dort.
+  const subjects = active.some((item) => item.id === subject.id)
+    ? active
+    : [subject, ...active];
+
   const color = subjectColor(subject.color).hex;
-  const daysLeft = daysBetween(today, exam.date);
   const kindLabel = EXAM_KIND_LABELS[exam.kind] ?? "Prüfung";
-
-  // Der Plan wird hier nur gerechnet, nicht gespeichert — gebraucht werden
-  // seine Warnungen. Gespeichert wird ausschließlich über generatePlanAction.
-  const plan = buildPlan({
-    examDate: exam.date,
-    today,
-    topics: topics.map((topic) => ({ id: topic.id, title: topic.title })),
-    leadDays: exam.leadDays,
-    minutesPerDay: exam.minutesPerDay,
-  });
-
-  // Liegen gebliebene Blöcke. Ist die Prüfung vorbei, fragt niemand mehr nach.
-  const missed =
-    daysLeft >= 0
-      ? blocks.filter((block) => block.status === "open" && block.date < today)
-      : [];
-  const missedMinutes = missed.reduce((sum, block) => sum + block.minutes, 0);
-  const missedDays = new Set(missed.map((block) => block.date)).size;
-  const dateText = formatGerman(exam.date);
+  const label = exam.title ? `${subject.name} · ${exam.title}` : subject.name;
 
   return (
     <div className="space-y-6 md:max-w-3xl">
@@ -126,92 +94,52 @@ export default async function ExamPage({
           {exam.title ?? kindLabel}
         </h1>
 
-        <p className="mt-5 text-3xl font-semibold tracking-tight text-foreground">
-          {countdownHeadline(today, exam.date)}
-        </p>
         <p className="mt-1 text-muted">
-          {[
-            exam.title ? kindLabel : null,
-            dateText,
-            daysLeft < 0 ? formatCountdown(today, exam.date) : null,
-          ]
+          {[exam.title ? kindLabel : null, formatGerman(exam.date)]
             .filter(Boolean)
             .join(" · ")}
         </p>
+
+        <p className="mt-4 text-sm text-muted">
+          Änderungen an Datum, Themen oder Lernplanung verteilen den Lernplan
+          neu. Was du schon abgehakt hast, bleibt erledigt.
+        </p>
+
+        <Link
+          href="/lernen"
+          className="-ml-1 mt-1 inline-flex min-h-11 items-center gap-1 px-1 text-sm text-accent transition-colors hover:text-accent-hover"
+        >
+          Lernplan ansehen
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            className="size-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="m9 6 6 6-6 6" />
+          </svg>
+        </Link>
       </header>
 
-      {missed.length > 0 ? (
-        <MissedPrompt
-          subjectName={subject.name}
-          color={color}
-          days={missedDays}
-          minutes={missedMinutes}
-          lastDate={missed[missed.length - 1].date}
-          today={today}
-          catchUp={catchUpMissedAction.bind(null, exam.id)}
-          skip={skipMissedAction.bind(null, exam.id)}
-        />
-      ) : null}
-
-      <StudyPlanView
-        examId={exam.id}
-        examDate={exam.date}
-        today={today}
-        color={color}
-        topicCount={topics.length}
-        blocks={blocks}
-        warnings={plan.warnings}
-        minutesPerDay={exam.minutesPerDay}
-        leadDays={exam.leadDays}
+      <ExamForm
+        action={updateExamAction.bind(null, exam.id)}
+        subjects={subjects}
+        today={todayInBerlin()}
+        exam={exam}
+        topics={topics.map((topic) => topic.title)}
+        submitLabel="Änderungen speichern"
+        cancelHref="/klausuren"
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Themen</CardTitle>
-          <ButtonLink
-            href={`/klausuren/${exam.id}/bearbeiten`}
-            variant="secondary"
-          >
-            Bearbeiten
-          </ButtonLink>
-        </CardHeader>
-        <CardContent>
-          {topics.length === 0 ? (
-            <p className="text-sm text-muted">
-              Noch keine Themen eingetragen.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {topics.map((topic) => (
-                <li
-                  key={topic.id}
-                  className="flex items-baseline gap-2.5 text-[0.9375rem] text-foreground"
-                >
-                  <span
-                    aria-hidden="true"
-                    style={{ backgroundColor: color }}
-                    className="size-1.5 shrink-0 -translate-y-0.5 rounded-full"
-                  />
-                  {topic.title}
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-
-      {exam.notes ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Notiz</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="whitespace-pre-line text-[0.9375rem] text-muted">
-              {exam.notes}
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
+      <ExamDangerZone
+        examLabel={label}
+        blockCount={blocks.length}
+        deleteAction={deleteExamAction.bind(null, exam.id)}
+      />
     </div>
   );
 }

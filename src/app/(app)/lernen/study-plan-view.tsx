@@ -5,10 +5,18 @@ import type { ExamTopic, StudyBlock } from "@/db/schema";
 import { daysBetween, formatGerman } from "@/lib/dates";
 import type { PlanWarning } from "@/lib/study-plan";
 
-import { generatePlanAction, setBlockStatusAction } from "./plan-actions";
+import { generatePlanAction, setBlockStatusAction } from "./actions";
 
 /**
  * Der Lernplan einer Prüfung: Fortschritt, Hinweise und die Blöcke nach Tagen.
+ *
+ * Steht im Lernbereich, einmal je anstehender Prüfung, unter deren Kopfzeile.
+ * Deshalb ist "Lernplan" hier eine Zwischenüberschrift (h3): die Prüfung
+ * darüber ist die Überschrift des Abschnitts.
+ *
+ * Hier wird nur gelernt — abhaken, zurücknehmen, neu berechnen. Das einzige
+ * Zugeständnis an die Verwaltung ist der Weg zum Bearbeiten, wenn die Themen
+ * fehlen; ohne sie kann die App nichts verteilen.
  *
  * Gestrichene Blöcke stehen nicht in der Liste — sie sind bewusst weg. Damit
  * sie trotzdem nicht spurlos verschwinden, nennt der Fortschritt ihre Zahl.
@@ -98,9 +106,9 @@ export function StudyPlanView({
     topicCount > 0 && daysLeft >= 0 ? warningText(warnings, daysLeft) : null;
 
   return (
-    <section className="space-y-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-foreground">Lernplan</h2>
+        <h3 className="text-base font-semibold text-foreground">Lernplan</h3>
 
         {upcoming && planned.length > 0 ? (
           <form action={generatePlanAction.bind(null, examId)}>
@@ -143,7 +151,7 @@ export function StudyPlanView({
           title="Ohne Themen kein Plan"
           description="Die App verteilt die Themen auf die Tage vor der Prüfung. Sobald du einträgst, was drankommt, steht der Plan."
           action={
-            <ButtonLink href={`/klausuren/${examId}/bearbeiten`}>
+            <ButtonLink href={`/klausuren/${examId}`}>
               Themen eintragen
             </ButtonLink>
           }
@@ -241,6 +249,6 @@ export function StudyPlanView({
           ) : null}
         </>
       )}
-    </section>
+    </div>
   );
 }

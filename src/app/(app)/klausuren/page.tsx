@@ -11,10 +11,13 @@ import { listExams, type ExamListItem } from "@/lib/exams";
 import { listSubjects } from "@/lib/subjects";
 
 /**
- * Die Übersicht: was ansteht, wie lange es noch dauert und wie weit der
- * Lernplan ist. Die nächste Prüfung steht groß oben, alles Weitere als Zeile
- * darunter. Vergangenes ist zugeklappt — es interessiert selten, ganz weg soll
- * es aber auch nicht sein.
+ * Die Verwaltung: welche Termine eingetragen sind, wie lange es noch dauert
+ * und wie weit der Lernplan ist. Die nächste Prüfung steht groß oben, alles
+ * Weitere als Zeile darunter. Vergangenes ist zugeklappt — es interessiert
+ * selten, ganz weg soll es aber auch nicht sein.
+ *
+ * Eine Prüfung antippen heißt: sie bearbeiten. Gelernt und abgehakt wird
+ * nebenan unter /lernen.
  */
 
 export const metadata: Metadata = {
@@ -57,7 +60,10 @@ function Chevron() {
   );
 }
 
-/** Die nächste Prüfung — größer, mit Countdown als Überschrift. */
+/**
+ * Die nächste Prüfung — größer, mit Countdown als Überschrift. Die Karte führt
+ * zum Bearbeiten, der Fortschritt darunter zum Lernplan.
+ */
 function NextExam({ exam, today }: { exam: ExamListItem; today: string }) {
   const color = subjectColor(exam.subject.color);
   const progress = progressLabel(exam);
@@ -67,8 +73,7 @@ function NextExam({ exam, today }: { exam: ExamListItem; today: string }) {
       : 0;
 
   return (
-    <Link
-      href={`/klausuren/${exam.id}`}
+    <div
       style={
         {
           "--subject": color.hex,
@@ -77,43 +82,48 @@ function NextExam({ exam, today }: { exam: ExamListItem; today: string }) {
           borderColor: "color-mix(in oklab, var(--subject) 30%, var(--border))",
         } as CSSProperties
       }
-      className="block rounded-card border p-4 shadow-soft transition-shadow hover:shadow-lift sm:p-5"
+      className="rounded-card border p-4 shadow-soft transition-shadow hover:shadow-lift sm:p-5"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="flex items-center gap-2">
-            <span
-              aria-hidden="true"
-              style={{ backgroundColor: color.hex }}
-              className="size-3 shrink-0 rounded-full"
-            />
-            <span className="truncate font-semibold text-foreground">
-              {exam.subject.name}
-            </span>
-            <span
-              style={{
-                backgroundColor:
-                  "color-mix(in oklab, var(--subject) 18%, var(--surface))",
-                color: "color-mix(in oklab, var(--subject) 72%, var(--foreground))",
-              }}
-              className="shrink-0 rounded-pill px-2 py-0.5 text-xs font-semibold"
-            >
-              {kindLabel(exam.kind)}
-            </span>
-          </p>
+      {/* Nur der obere Teil führt ins Bearbeiten — der Fortschritt darunter
+          hat sein eigenes Ziel und darf deshalb nicht im selben Link stecken. */}
+      <Link href={`/klausuren/${exam.id}`} className="block">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2">
+              <span
+                aria-hidden="true"
+                style={{ backgroundColor: color.hex }}
+                className="size-3 shrink-0 rounded-full"
+              />
+              <span className="truncate font-semibold text-foreground">
+                {exam.subject.name}
+              </span>
+              <span
+                style={{
+                  backgroundColor:
+                    "color-mix(in oklab, var(--subject) 18%, var(--surface))",
+                  color:
+                    "color-mix(in oklab, var(--subject) 72%, var(--foreground))",
+                }}
+                className="shrink-0 rounded-pill px-2 py-0.5 text-xs font-semibold"
+              >
+                {kindLabel(exam.kind)}
+              </span>
+            </p>
 
-          {exam.title ? (
-            <p className="mt-1 truncate text-sm text-muted">{exam.title}</p>
-          ) : null}
+            {exam.title ? (
+              <p className="mt-1 truncate text-sm text-muted">{exam.title}</p>
+            ) : null}
+          </div>
+
+          <Chevron />
         </div>
 
-        <Chevron />
-      </div>
-
-      <p className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
-        {formatCountdown(today, exam.date)}
-      </p>
-      <p className="mt-0.5 text-sm text-muted">{formatGerman(exam.date)}</p>
+        <p className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
+          {formatCountdown(today, exam.date)}
+        </p>
+        <p className="mt-0.5 text-sm text-muted">{formatGerman(exam.date)}</p>
+      </Link>
 
       {progress ? (
         <div className="mt-4 space-y-1.5">
@@ -126,18 +136,26 @@ function NextExam({ exam, today }: { exam: ExamListItem; today: string }) {
               className="block h-full rounded-pill"
             />
           </span>
-          <p className="text-sm text-muted">{progress}</p>
+          <div className="flex flex-wrap items-center justify-between gap-x-3">
+            <p className="text-sm text-muted">{progress}</p>
+            <Link
+              href="/lernen"
+              className="text-sm text-accent transition-colors hover:text-accent-hover"
+            >
+              Zum Lernplan
+            </Link>
+          </div>
         </div>
       ) : exam.topicCount === 0 ? (
         <p className="mt-4 text-sm text-warning">
           Noch keine Themen — ohne die kann die App nichts verteilen.
         </p>
       ) : null}
-    </Link>
+    </div>
   );
 }
 
-/** Alle weiteren Prüfungen als Zeile. Die ganze Zeile führt zur Detailseite. */
+/** Alle weiteren Prüfungen als Zeile. Die ganze Zeile führt ins Bearbeiten. */
 function ExamRow({ exam, today }: { exam: ExamListItem; today: string }) {
   const color = subjectColor(exam.subject.color);
   const progress = progressLabel(exam);
@@ -219,14 +237,30 @@ export default async function ExamsPage() {
 
   return (
     <div className="space-y-6 md:max-w-3xl">
-      <header className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-foreground">Klausuren</h1>
+      <div className="space-y-1">
+        <header className="flex items-center justify-between gap-3">
+          <h1 className="text-xl font-semibold text-foreground">Klausuren</h1>
+          {exams.length > 0 ? (
+            <ButtonLink href="/klausuren/neu" variant="secondary">
+              Klausur eintragen
+            </ButtonLink>
+          ) : null}
+        </header>
+
         {exams.length > 0 ? (
-          <ButtonLink href="/klausuren/neu" variant="secondary">
-            Klausur eintragen
-          </ButtonLink>
+          <p className="text-sm text-muted">
+            Antippen öffnet die Prüfung zum Bearbeiten. Was du heute lernen
+            sollst, steht unter{" "}
+            <Link
+              href="/lernen"
+              className="text-accent transition-colors hover:text-accent-hover"
+            >
+              Lernen
+            </Link>
+            .
+          </p>
         ) : null}
-      </header>
+      </div>
 
       {exams.length === 0 ? (
         subjects.length === 0 ? (

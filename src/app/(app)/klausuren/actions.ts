@@ -24,6 +24,11 @@ import type { ExamFieldErrors, ExamFormState } from "./exam-form";
  * Der Lernplan wird hier nicht gerechnet, sondern nur angestoßen: beim Anlegen
  * einmal, beim Bearbeiten nur dann, wenn sich an seinen Grundlagen etwas
  * geändert hat. "heute" kommt aus todayInBerlin(), nie aus new Date().
+ *
+ * Verwalten und Lernen sind getrennt: nach dem Anlegen geht es zum frisch
+ * gebauten Lernplan unter /lernen, nach dem Bearbeiten und Löschen zurück in
+ * die Liste. Weil jede Änderung den Plan betrifft, wird /lernen mit
+ * aufgefrischt.
  */
 
 /** Länger als eine Zeile ist kein Thema mehr. */
@@ -118,12 +123,14 @@ export async function createExamAction(
 
   const exam = await createExam(user.id, parsed.data);
   await setTopics(user.id, exam.id, readTopics(formData));
-  // Der Plan entsteht sofort, damit auf der Detailseite gleich etwas steht.
+  // Der Plan entsteht sofort, damit unter "Lernen" gleich etwas steht.
   await generatePlan(user.id, exam.id, todayInBerlin());
 
   revalidatePath("/klausuren");
+  revalidatePath("/lernen");
   revalidatePath("/");
-  redirect(`/klausuren/${exam.id}`);
+  // Genau dafür wurde die Prüfung eingetragen: der Lernplan steht jetzt da.
+  redirect("/lernen");
 }
 
 export async function updateExamAction(
@@ -186,8 +193,9 @@ export async function updateExamAction(
 
   revalidatePath("/klausuren");
   revalidatePath(`/klausuren/${examId}`);
+  revalidatePath("/lernen");
   revalidatePath("/");
-  redirect(`/klausuren/${examId}`);
+  redirect("/klausuren");
 }
 
 export async function deleteExamAction(examId: string): Promise<void> {
@@ -197,6 +205,7 @@ export async function deleteExamAction(examId: string): Promise<void> {
   await deleteExam(user.id, examId);
 
   revalidatePath("/klausuren");
+  revalidatePath("/lernen");
   revalidatePath("/");
   redirect("/klausuren");
 }

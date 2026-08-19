@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import {
   catchUpMissedAction,
   skipMissedAction,
-} from "@/app/(app)/klausuren/[id]/plan-actions";
+} from "@/app/(app)/lernen/actions";
 import { HomeDashboard } from "@/components/home/dashboard";
 import { DayTimeline } from "@/components/home/day-timeline";
 import { SwipePager } from "@/components/home/swipe-pager";

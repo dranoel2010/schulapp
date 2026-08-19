@@ -141,10 +141,17 @@ export function SwipePager({ start, calendar }: SwipePagerProps) {
 
     // Mit Capture bekommt der Rahmen auch die Ereignisse, die neben ihm
     // enden. Manche Browser werfen dabei — dann wischt es eben ohne.
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {
-      // absichtlich still
+    //
+    // Nur für Finger und Stift: hält der Rahmen einen Mauszeiger fest, bekommt
+    // er auch den anschließenden Klick — die Kachel darunter nie. In einem
+    // schmalen Fenster am Rechner ließe sich dann keine Kachel mehr öffnen.
+    // Mit der Maus wird ohnehin nicht gewischt, sondern gescrollt.
+    if (event.pointerType !== "mouse") {
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // absichtlich still
+      }
     }
 
     dragValue.current = 0;

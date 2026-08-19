@@ -6,8 +6,8 @@ import { formatCountdown } from "@/lib/dates";
 /**
  * Die Nachfrage bei liegen gebliebenen Lernblöcken.
  *
- * Sie steht oben auf der Startseite und auf der Detailseite der betroffenen
- * Prüfung — je Prüfung einmal, über alle betroffenen Tage zusammengefasst.
+ * Sie steht oben auf der Startseite und im Lernbereich — je Prüfung einmal,
+ * über alle betroffenen Tage zusammengefasst.
  * Bewusst kein Alarm: eine Frage, zwei Antworten, danach ist sie weg.
  */
 

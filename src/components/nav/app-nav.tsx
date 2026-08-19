@@ -12,8 +12,11 @@ import type { ReactNode } from "react";
  * es über den Knopf oben links (`MobileTopBar`). So bleibt der ganze Bildschirm
  * für den Inhalt frei.
  *
- * Ab Tablet-Breite bleibt die schmale Seitenspalte links mit ihren vier
+ * Ab Tablet-Breite bleibt die schmale Seitenspalte links mit ihren fünf
  * Punkten — Stundenplan und Noten kommen in späteren Ausbaustufen dazu.
+ *
+ * Lernen und Klausuren sind zwei Bereiche, nicht einer: unter "Lernen" steht
+ * der Lernplan zum Abhaken, unter "Klausuren" werden die Termine verwaltet.
  */
 
 type NavItem = {
@@ -56,6 +59,18 @@ const ITEMS: NavItem[] = [
         <path d="M3.5 10.2 12 3.5l8.5 6.7" />
         <path d="M5.5 9v10.5h13V9" />
         <path d="M9.75 19.5V14h4.5v5.5" />
+      </>
+    ),
+  },
+  {
+    href: "/lernen",
+    label: "Lernen",
+    // Ein Häkchen im Kreis: hier wird abgehakt. Der Kalender daneben steht
+    // für die Termine, dieser Punkt für das Tun.
+    icon: (
+      <>
+        <circle cx="12" cy="12" r="8.25" />
+        <path d="m8.5 12.15 2.35 2.35 4.65-4.9" />
       </>
     ),
   },
@@ -157,6 +172,7 @@ export function AppNav({ userName }: AppNavProps) {
 
 /** Feste Namen für die Seiten, die es genau einmal gibt. */
 const SECTION_TITLES: Record<string, string> = {
+  "/lernen": "Lernen",
   "/klausuren": "Klausuren",
   "/klausuren/neu": "Neue Klausur",
   "/faecher": "Fächer",
@@ -178,13 +194,10 @@ function sectionTitle(pathname: string): string | null {
   const exact = SECTION_TITLES[pathname];
   if (exact) return exact;
 
-  if (pathname.startsWith("/klausuren/")) {
-    return pathname.endsWith("/bearbeiten") ? "Klausur bearbeiten" : "Klausur";
-  }
-
-  if (pathname.startsWith("/faecher/")) {
-    return pathname.endsWith("/bearbeiten") ? "Fach bearbeiten" : "Fach";
-  }
+  // Eine Prüfung oder ein Fach antippen heißt: bearbeiten. Eine eigene
+  // Unterseite dafür gibt es nicht mehr, die Detailseite ist das Formular.
+  if (pathname.startsWith("/klausuren/")) return "Klausur bearbeiten";
+  if (pathname.startsWith("/faecher/")) return "Fach bearbeiten";
 
   return "Schulapp";
 }

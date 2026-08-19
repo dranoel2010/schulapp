@@ -130,10 +130,6 @@ function SettingsLink() {
 export function HomeTiles({ data }: { data: HomeData }) {
   const hasSubjects = data.subjectCount > 0;
 
-  // Lernen führt in die Prüfung, an der heute als Nächstes gearbeitet wird.
-  const nextOpen = data.todayBlocks.find((block) => block.status === "open");
-  const learnHref = nextOpen ? `/klausuren/${nextOpen.examId}` : "/klausuren";
-
   let learnValue: string | undefined;
   let learnCaption: string;
 
@@ -228,11 +224,13 @@ export function HomeTiles({ data }: { data: HomeData }) {
       )}
 
       <div className="grid flex-1 auto-rows-fr grid-cols-2 gap-[10px] px-[14px] pb-[18px]">
+        {/* Immer in den Lernbereich — dort steht der Plan für heute. Die
+            Klausur selbst wird woanders verwaltet. */}
         <Tile
           label="Lernen"
           value={learnValue}
           caption={learnCaption}
-          href={learnHref}
+          href="/lernen"
           // Ohne Fächer gibt es nichts zu lernen — dann trägt die Kachel den
           // Akzent nicht, damit sie dem Hinweis darüber nicht die Schau stiehlt.
           highlighted={hasSubjects}
