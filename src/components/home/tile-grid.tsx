@@ -9,13 +9,23 @@ import type { HomeData } from "@/lib/home";
  *
  * Ein Raster großer Flächen, jede führt in ihren Bereich. Die Maße stammen aus
  * dem Entwurf und sind auf ein 390px breites Gerät gerechnet; deshalb stehen
- * hier feste Pixelwerte, wo es kein passendes Token gibt. Den seitlichen Rand
- * gibt das Layout vor — eigener Rand käme oben drauf und würde die Kacheln
- * schmaler machen als gezeichnet.
+ * hier feste Pixelwerte, wo es kein passendes Token gibt.
+ *
+ * Die Seite trägt ihre Ränder selbst: Kopfzeile 20/22/16, Raster 0/14/18. Am
+ * Handy steckt sie in der Wischhülle, die keinen eigenen Rand setzt — sonst
+ * käme ein zweiter Rand obendrauf und die Kacheln würden schmaler als
+ * gezeichnet. Kopfzeile und Raster sind unterschiedlich weit eingerückt: die
+ * Schrift steht auf 22px, die Kacheln liegen mit 14px näher am Rand.
+ *
+ * Das Raster liegt auf flex-1 mit gleich hohen Reihen: die Kacheln füllen den
+ * Bildschirm, so wie im Entwurf gezeichnet. Dafür muss die Flex-Kette von
+ * <body> über das Layout bis hierher durchgehen — reißt sie an einer Stelle,
+ * fallen die Kacheln auf ihre Mindesthöhe zurück.
  *
  * Ehrlichkeit vor Vollständigkeit: Stundenplan, Hausaufgaben und Noten gibt es
- * noch nicht. Ihre Kacheln stehen als leere, gestrichelte Flächen da und sind
- * bewusst nicht anklickbar — lieber eine sichtbare Lücke als erfundene Zahlen.
+ * noch nicht. Ihre Kacheln behalten die Form der anderen, sind aber sichtbar
+ * zurückgenommen und nicht anklickbar — lieber eine sichtbare Lücke als eine
+ * erfundene Zahl.
  *
  * Die Kopfzeile bringt die Komponente selbst mit. Ums Ausblenden ab mittlerer
  * Breite kümmert sich die Startseite.
@@ -27,8 +37,10 @@ const TILE_SHAPE =
 
 const LABEL = "text-[15px] leading-snug";
 
+// Der Entwurf setzt die großen Zahlen in Geist, nicht in Geist Mono — Mono
+// steht dort nur in der Statusleiste und an den Uhrzeiten des Kalenders.
 const VALUE =
-  "block font-mono text-[42px] font-semibold leading-none tracking-[-0.03em]";
+  "block text-[42px] font-semibold leading-none tracking-[-0.03em] tabular-nums";
 
 const CAPTION = "block text-[14px] leading-snug";
 
@@ -71,18 +83,47 @@ function Tile({ label, value, caption, href, highlighted = false }: TileProps) {
 }
 
 /**
- * Ein Bereich, den es noch nicht gibt: keine Fläche, keine Zahl, kein Link.
- * Ein div statt eines Links — was nirgendwohin führt, soll sich auch nicht
- * anfassen lassen.
+ * Ein Bereich, den es noch nicht gibt. Die Fläche sieht aus wie die anderen,
+ * damit das Raster seinen Rhythmus behält — aber sichtbar zurückgenommen und
+ * ohne Link: was nirgendwohin führt, soll sich auch nicht anfassen lassen.
+ * Eine erfundene Zahl stünde hier nicht, auch wenn der Entwurf eine zeigt.
  */
 function SoonTile({ label }: { label: string }) {
   return (
-    <div
-      className={`${TILE_SHAPE} border border-dashed border-border-strong text-subtle`}
-    >
+    <div className={`${TILE_SHAPE} bg-surface-muted/60 text-subtle`}>
       <span className={LABEL}>{label}</span>
       <span className={CAPTION}>kommt noch</span>
     </div>
+  );
+}
+
+/**
+ * Das Zahnrad in der Kopfzeile. Die Tippfläche ist volle 44px groß, sitzt aber
+ * mit -10px Rand so weit außen, dass das Symbol optisch auf der Randlinie der
+ * Kopfzeile steht — groß genug für den Daumen, ohne den Text zu verschieben.
+ */
+function SettingsLink() {
+  return (
+    <Link
+      href="/einstellungen"
+      aria-label="Einstellungen"
+      className="-mr-[10px] flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-[14px] bg-transparent text-muted transition-colors duration-150 hover:bg-surface-muted hover:text-foreground"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width={22}
+        height={22}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="12" r="3.2" />
+        <path d="M19.4 14.6a1.6 1.6 0 0 0 .32 1.77l.06.06a1.9 1.9 0 1 1-2.69 2.69l-.06-.06a1.6 1.6 0 0 0-1.77-.32 1.6 1.6 0 0 0-.97 1.47v.17a1.9 1.9 0 1 1-3.8 0v-.09a1.6 1.6 0 0 0-1.05-1.47 1.6 1.6 0 0 0-1.77.32l-.06.06a1.9 1.9 0 1 1-2.69-2.69l.06-.06a1.6 1.6 0 0 0 .32-1.77 1.6 1.6 0 0 0-1.47-.97H3.6a1.9 1.9 0 1 1 0-3.8h.09a1.6 1.6 0 0 0 1.47-1.05 1.6 1.6 0 0 0-.32-1.77l-.06-.06A1.9 1.9 0 1 1 7.47 4.4l.06.06a1.6 1.6 0 0 0 1.77.32h.08A1.6 1.6 0 0 0 10.35 3.3v-.17a1.9 1.9 0 1 1 3.8 0v.09a1.6 1.6 0 0 0 .97 1.47 1.6 1.6 0 0 0 1.77-.32l.06-.06a1.9 1.9 0 1 1 2.69 2.69l-.06.06a1.6 1.6 0 0 0-.32 1.77v.08a1.6 1.6 0 0 0 1.47.97h.17a1.9 1.9 0 1 1 0 3.8h-.09a1.6 1.6 0 0 0-1.47.97Z" />
+      </svg>
+    </Link>
   );
 }
 
@@ -147,8 +188,11 @@ export function HomeTiles({ data }: { data: HomeData }) {
   }
 
   return (
-    <div>
-      <header className="flex items-end justify-between gap-4 pb-[16px]">
+    // Normalerweise füllt das Raster den Bildschirm genau aus. Bleibt darüber
+    // eine Nachfrage stehen, wird es enger als seine Mindesthöhe — dann muss
+    // sich der Rest schieben lassen, sonst verschluckt ihn die Wischhülle.
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain">
+      <header className="flex items-end justify-between gap-4 px-[22px] pt-[20px] pb-[16px]">
         <div className="min-w-0">
           <h1 className="text-[30px] font-semibold leading-none tracking-[-0.03em]">
             {formatGerman(data.today, "kurz")}
@@ -158,15 +202,19 @@ export function HomeTiles({ data }: { data: HomeData }) {
           </p>
         </div>
 
-        <p className="shrink-0 text-[13px] leading-snug text-subtle">
-          {data.userName}
-        </p>
+        <div className="flex shrink-0 items-center gap-[10px]">
+          <p className="text-[13px] leading-snug text-subtle">
+            {data.userName}
+          </p>
+          <SettingsLink />
+        </div>
       </header>
 
       {/* Ohne Fächer hängt alles andere in der Luft — dann steht der Weg
-          dorthin vorn und das Raster tritt zurück. */}
+          dorthin vorn und das Raster tritt zurück. Der seitliche Rand ist der
+          des Rasters, damit der Hinweis auf einer Linie mit den Kacheln steht. */}
       {hasSubjects ? null : (
-        <div className="mb-[10px] rounded-[20px] bg-surface p-[18px] shadow-soft">
+        <div className="mx-[14px] mb-[10px] rounded-[20px] bg-surface p-[18px] shadow-soft">
           <p className="text-[15px] font-medium text-foreground">
             Zuerst die Fächer
           </p>
@@ -179,7 +227,7 @@ export function HomeTiles({ data }: { data: HomeData }) {
         </div>
       )}
 
-      <div className="grid auto-rows-fr grid-cols-2 gap-[10px]">
+      <div className="grid flex-1 auto-rows-fr grid-cols-2 gap-[10px] px-[14px] pb-[18px]">
         <Tile
           label="Lernen"
           value={learnValue}
@@ -197,16 +245,16 @@ export function HomeTiles({ data }: { data: HomeData }) {
           href="/klausuren"
         />
 
+        <SoonTile label="Hausaufgaben" />
+        <SoonTile label="Noten" />
+        <SoonTile label="Stundenplan" />
+
         <Tile
           label="Fächer"
           value={String(data.subjectCount)}
           caption="verwalten"
           href="/faecher"
         />
-
-        <SoonTile label="Stundenplan" />
-        <SoonTile label="Hausaufgaben" />
-        <SoonTile label="Noten" />
       </div>
     </div>
   );

@@ -5,12 +5,15 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 /**
- * Die Navigation der App. Am Handy als feste Leiste unten (Daumen-Reichweite),
- * ab Tablet-Breite als schmale Seitenspalte links.
+ * Die Navigation der App.
  *
- * Vier Punkte — Stundenplan und Noten kommen in späteren Ausbaustufen dazu.
- * Am Handy teilen sich die vier die Breite: die Fläche zum Antippen bleibt
- * 56px hoch, nur die Beschriftung wird kleiner.
+ * Am Handy gibt es keine feste Leiste unten mehr: dort ist das Kachelmenü der
+ * Startseite selbst das Menü. Jede Kachel führt in ihren Bereich, zurück geht
+ * es über den Knopf oben links (`MobileTopBar`). So bleibt der ganze Bildschirm
+ * für den Inhalt frei.
+ *
+ * Ab Tablet-Breite bleibt die schmale Seitenspalte links mit ihren vier
+ * Punkten — Stundenplan und Noten kommen in späteren Ausbaustufen dazu.
  */
 
 type NavItem = {
@@ -20,7 +23,7 @@ type NavItem = {
   icon: ReactNode;
 };
 
-/** Ein Symbol in der gewünschten Größe: unten 24px, in der Spalte 18px. */
+/** Ein Symbol in der gewünschten Größe: in der Spalte 18px. */
 function NavIcon({
   className,
   children,
@@ -108,32 +111,32 @@ export function AppNav({ userName }: AppNavProps) {
   const pathname = usePathname();
 
   return (
-    <>
-      {/* Handy: feste Leiste unten. pb-safe hält die Gestenleiste frei. */}
-      <nav
-        aria-label="Hauptbereiche"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface pb-safe md:hidden"
-      >
-        <ul className="mx-auto flex max-w-md">
+    // Ab Tablet: schmale Spalte links, bleibt beim Scrollen stehen.
+    // Sie trägt den Namen der App — deshalb hat der Inhalt daneben
+    // ab dieser Breite keine eigene Kopfleiste mehr.
+    <aside className="sticky top-0 hidden h-dvh w-[226px] shrink-0 flex-col gap-1 border-r border-border bg-surface px-3 pt-[calc(1.25rem_+_env(safe-area-inset-top))] pb-5 md:flex">
+      <div className="px-3 pb-[18px]">
+        <p className="text-[15px] font-semibold tracking-tight">Schulapp</p>
+        <p className="mt-0.5 truncate text-[13px] text-muted">{userName}</p>
+      </div>
+
+      <nav aria-label="Hauptbereiche">
+        <ul className="flex flex-col gap-1">
           {ITEMS.map((item) => {
             const active = isActive(pathname, item.href);
             return (
-              <li key={item.href} className="min-w-0 flex-1">
+              <li key={item.href}>
                 <Link
                   href={item.href}
                   aria-current={active ? "page" : undefined}
-                  className={`flex min-h-14 flex-col items-center justify-center gap-1 px-0.5 py-2 text-[0.6875rem] transition-colors ${
+                  className={`flex min-h-11 items-center gap-[10px] rounded-control px-3 text-left text-[15px] transition-colors ${
                     active
-                      ? "font-medium text-accent"
-                      : "text-muted hover:text-foreground"
+                      ? "bg-accent-soft font-medium text-accent"
+                      : "bg-transparent text-muted hover:bg-surface-muted hover:text-foreground"
                   }`}
                 >
-                  <NavIcon className="size-6 shrink-0">{item.icon}</NavIcon>
-                  {/* Auf schmalen Bildschirmen darf die Beschriftung kürzen,
-                      die Fläche zum Antippen bleibt gleich groß. */}
-                  <span className="w-full truncate text-center leading-none">
-                    {item.label}
-                  </span>
+                  <NavIcon className="size-[18px] shrink-0">{item.icon}</NavIcon>
+                  <span className="truncate">{item.label}</span>
                 </Link>
               </li>
             );
@@ -141,49 +144,111 @@ export function AppNav({ userName }: AppNavProps) {
         </ul>
       </nav>
 
-      {/* Ab Tablet: schmale Spalte links, bleibt beim Scrollen stehen.
-          Sie trägt den Namen der App — deshalb hat der Inhalt daneben
-          ab dieser Breite keine eigene Kopfleiste mehr. */}
-      <aside className="sticky top-0 hidden h-dvh w-[226px] shrink-0 flex-col gap-1 border-r border-border bg-surface px-3 pt-[calc(1.25rem_+_env(safe-area-inset-top))] pb-5 md:flex">
-        <div className="px-3 pb-[18px]">
-          <p className="text-[15px] font-semibold tracking-tight">Schulapp</p>
-          <p className="mt-0.5 truncate text-[13px] text-muted">{userName}</p>
-        </div>
+      <div className="flex-1" />
 
-        <nav aria-label="Hauptbereiche">
-          <ul className="flex flex-col gap-1">
-            {ITEMS.map((item) => {
-              const active = isActive(pathname, item.href);
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    aria-current={active ? "page" : undefined}
-                    className={`flex min-h-11 items-center gap-[10px] rounded-control px-3 text-left text-[15px] transition-colors ${
-                      active
-                        ? "bg-accent-soft font-medium text-accent"
-                        : "bg-transparent text-muted hover:bg-surface-muted hover:text-foreground"
-                    }`}
-                  >
-                    <NavIcon className="size-[18px] shrink-0">
-                      {item.icon}
-                    </NavIcon>
-                    <span className="truncate">{item.label}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
+      {/* Der Entwurf zeigt hier eine Uhrzeit der letzten Synchronisierung.
+          So etwas gibt es nicht — also steht hier etwas Wahres. */}
+      <p className="px-3 text-[12px] leading-snug text-subtle">
+        Alle Daten liegen auf deinem eigenen Server.
+      </p>
+    </aside>
+  );
+}
 
-        <div className="flex-1" />
+/** Feste Namen für die Seiten, die es genau einmal gibt. */
+const SECTION_TITLES: Record<string, string> = {
+  "/klausuren": "Klausuren",
+  "/klausuren/neu": "Neue Klausur",
+  "/faecher": "Fächer",
+  "/faecher/neu": "Neues Fach",
+  "/einstellungen": "Einstellungen",
+};
 
-        {/* Der Entwurf zeigt hier eine Uhrzeit der letzten Synchronisierung.
-            So etwas gibt es nicht — also steht hier etwas Wahres. */}
-        <p className="px-3 text-[12px] leading-snug text-subtle">
-          Alle Daten liegen auf deinem eigenen Server.
-        </p>
-      </aside>
-    </>
+/**
+ * Der Name des Bereichs für die Kopfzeile am Handy — `null` auf der
+ * Startseite, die keine Kopfzeile hat.
+ *
+ * Detailseiten tragen keinen Titel aus der Datenbank: die Kopfzeile wird im
+ * Layout gerendert und weiß nichts von Fach oder Klausur. Sie bleibt deshalb
+ * allgemein; den genauen Namen zeigt die Seite selbst in ihrer Überschrift.
+ */
+function sectionTitle(pathname: string): string | null {
+  if (pathname === "/") return null;
+
+  const exact = SECTION_TITLES[pathname];
+  if (exact) return exact;
+
+  if (pathname.startsWith("/klausuren/")) {
+    return pathname.endsWith("/bearbeiten") ? "Klausur bearbeiten" : "Klausur";
+  }
+
+  if (pathname.startsWith("/faecher/")) {
+    return pathname.endsWith("/bearbeiten") ? "Fach bearbeiten" : "Fach";
+  }
+
+  return "Schulapp";
+}
+
+/**
+ * Die Kopfzeile am Handy: ein Knopf zurück zur Startseite und der Name des
+ * Bereichs. Auf der Startseite selbst gibt es sie nicht — dort beginnt das
+ * Kachelmenü direkt unter der Statusleiste und bringt seine eigene
+ * Überschrift mit.
+ *
+ * Sie bleibt beim Scrollen stehen: seit die Leiste unten fehlt, ist dieser
+ * Knopf der einzige Weg zurück innerhalb der App, er darf nicht oben aus dem
+ * Bild laufen. Zum oberen Rand kommt die Statusleiste dazu, im Browser ist
+ * dieser Wert 0 — dort bleiben es genau die 14px aus dem Entwurf.
+ *
+ * Der Name ist bewusst keine Überschrift: jede Seite hat ihr eigenes h1.
+ */
+export function MobileTopBar() {
+  const pathname = usePathname();
+  const title = sectionTitle(pathname);
+
+  if (title === null) return null;
+
+  return (
+    <header className="sticky top-0 z-20 flex items-center gap-3 bg-background px-[22px] pt-[calc(14px_+_env(safe-area-inset-top))] pb-[14px] md:hidden">
+      <Link
+        href="/"
+        aria-label="Zur Startseite"
+        className="inline-flex min-h-10 shrink-0 items-center rounded-control border border-border bg-surface px-3 text-[14px] leading-none text-foreground transition-colors duration-150 hover:bg-surface-muted"
+      >
+        ← Start
+      </Link>
+
+      <span className="min-w-0 truncate text-[15px] font-semibold">
+        {title}
+      </span>
+    </header>
+  );
+}
+
+/**
+ * Der Rahmen um den Seiteninhalt am Handy.
+ *
+ * Die Startseite bekommt keinen seitlichen Rand: das Kachelmenü bringt seine
+ * eigenen 14px mit und die Kacheln sollen bis an den Bildschirmrand laufen
+ * können. Sie beginnt dafür direkt unter der Statusleiste. Alle anderen
+ * Seiten behalten ihre gewohnten 16px und den Abstand nach oben — und
+ * unten denselben Abstand, den früher die Leiste dort mitbrachte: ohne ihn
+ * klebt die letzte Zeile am Bildschirmrand.
+ *
+ * Ab md gibt das <main> die Ränder vor — deshalb hängt hier alles an `max-md`.
+ * Die Flex-Kette läuft durch: sonst könnte das Kachelmenü den Bildschirm nicht
+ * ausfüllen.
+ */
+export function PageBody({ children }: { children: ReactNode }) {
+  const isHome = usePathname() === "/";
+
+  return (
+    <div
+      className={`flex min-w-0 flex-1 flex-col ${
+        isHome ? "max-md:pt-safe" : "max-md:px-4 max-md:pt-6 max-md:pb-6"
+      }`}
+    >
+      {children}
+    </div>
   );
 }
