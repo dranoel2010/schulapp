@@ -1,0 +1,180 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   Tokens
+
+   Jede Farbe steht hier genau einmal: hell in :root, dunkel in der
+   prefers-color-scheme-Regel darunter. Über @theme inline werden daraus
+   Tailwind-Klassen (bg-surface, text-muted, border-border, bg-accent …).
+   Deshalb braucht in den Komponenten praktisch nichts eine dark:-Variante —
+   wer bg-surface schreibt, ist in beiden Modi richtig.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* Flächen — warmes Off-White statt kaltem Grau */
+  --background: #faf9f7;
+  --surface: #ffffff;
+  --surface-muted: #f2f1ee;
+
+  /* Text */
+  --foreground: #1c1917;
+  --muted: #6d6762;
+  --subtle: #857f78;
+
+  /* Linien */
+  --border: #e7e4e0;
+  --border-strong: #d4d0cb;
+
+  /* Akzent — der einzige bunte Ton der Oberfläche.
+     Bunt sind sonst nur die Fächerfarben aus src/lib/colors.ts. */
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-foreground: #ffffff;
+
+  /* Signale */
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-foreground: #ffffff;
+  --success: #15803d;
+  --warning: #b45309;
+
+  /* Abgetönte Flächen werden abgeleitet und stimmen dadurch in beiden
+     Modi automatisch — color-mix() wird erst beim Benutzen ausgerechnet. */
+  --accent-soft: color-mix(in oklab, var(--accent) 10%, var(--surface));
+  --danger-soft: color-mix(in oklab, var(--danger) 10%, var(--surface));
+
+  --ring: var(--accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --background: #121110;
+    --surface: #1b1a18;
+    --surface-muted: #24221f;
+
+    --foreground: #f2f0ed;
+    --muted: #a29c95;
+    --subtle: #8a837b;
+
+    --border: #302d2a;
+    --border-strong: #423e39;
+
+    --accent: #6366f1;
+    --accent-hover: #818cf8;
+    --accent-foreground: #ffffff;
+
+    --danger: #ef4444;
+    --danger-hover: #f87171;
+    --danger-foreground: #ffffff;
+    --success: #4ade80;
+    --warning: #fbbf24;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  --color-ring: var(--ring);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Eigene Radien-Namen, damit rounded-lg & Co. ihre gewohnte Bedeutung
+     behalten: rounded-control für Knöpfe und Eingabefelder,
+     rounded-card für Karten, rounded-pill für Chips. */
+  --radius-control: 0.75rem;
+  --radius-card: 1rem;
+  --radius-pill: 9999px;
+
+  /* Schatten sparsam — Karten tragen nur eine Haarlinie. */
+  --shadow-soft: 0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 3px 0 rgb(0 0 0 / 0.05);
+  --shadow-lift: 0 8px 24px -10px rgb(0 0 0 / 0.22);
+}
+
+@layer base {
+  /* Tailwind v4 setzt Rahmen auf currentColor. Ein Standardton spart in
+     jeder Komponente das border-border. */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
+
+  * {
+    /* Android blitzt sonst bei jeder Berührung einen grauen Kasten auf. */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  /* Ein Fokusring für alles — Knöpfe, Links, Eingabefelder. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--accent) 22%, transparent);
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+}
+
+/* Einheitliche Seitenbreite: Handy randlos, am Laptop mittig und ruhig. */
+@utility page {
+  width: 100%;
+  max-width: 36rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+
+/* Für Leisten, die im Vollbild-Modus an den Bildschirmrand stoßen. */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
