@@ -42,3 +42,9 @@ next-env.d.ts
 
 # Lokale Datenbank (PGlite)
 .data/
+
+# Vorlage darf mit
+!.env.example
+
+# Datenbank-Sicherungen
+.backups/

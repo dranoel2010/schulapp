@@ -8,8 +8,9 @@ import type { ReactNode } from "react";
  * Die Navigation der App. Am Handy als feste Leiste unten (Daumen-Reichweite),
  * ab Tablet-Breite als schmale Spalte links.
  *
- * Genau drei Punkte — mehr gibt es noch nicht. Klausuren, Stundenplan und
- * Noten kommen in späteren Ausbaustufen dazu.
+ * Vier Punkte — Stundenplan und Noten kommen in späteren Ausbaustufen dazu.
+ * Am Handy teilen sich die vier die Breite: die Fläche zum Antippen bleibt
+ * 56px hoch, nur die Beschriftung wird kleiner.
  */
 
 type NavItem = {
@@ -38,6 +39,19 @@ const ITEMS: NavItem[] = [
         <path d="M3.5 10.2 12 3.5l8.5 6.7" />
         <path d="M5.5 9v10.5h13V9" />
         <path d="M9.75 19.5V14h4.5v5.5" />
+      </svg>
+    ),
+  },
+  {
+    href: "/klausuren",
+    label: "Klausuren",
+    icon: (
+      <svg {...ICON}>
+        <path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h11A2.5 2.5 0 0 1 20 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-9Z" />
+        <path d="M4 10.5h16" />
+        <path d="M8.5 3.5v3" />
+        <path d="M15.5 3.5v3" />
+        <path d="m9.5 14.75 1.75 1.75 3.25-3.5" />
       </svg>
     ),
   },
@@ -90,18 +104,22 @@ export function AppNav({ userName }: AppNavProps) {
           {ITEMS.map((item) => {
             const active = isActive(pathname, item.href);
             return (
-              <li key={item.href} className="flex-1">
+              <li key={item.href} className="min-w-0 flex-1">
                 <Link
                   href={item.href}
                   aria-current={active ? "page" : undefined}
-                  className={`flex min-h-14 flex-col items-center justify-center gap-1 px-1 py-2 text-xs transition-colors ${
+                  className={`flex min-h-14 flex-col items-center justify-center gap-1 px-0.5 py-2 text-[0.6875rem] transition-colors ${
                     active
                       ? "font-medium text-accent"
                       : "text-muted hover:text-foreground"
                   }`}
                 >
                   {item.icon}
-                  <span>{item.label}</span>
+                  {/* Auf schmalen Bildschirmen darf die Beschriftung kürzen,
+                      die Fläche zum Antippen bleibt gleich groß. */}
+                  <span className="w-full truncate text-center leading-none">
+                    {item.label}
+                  </span>
                 </Link>
               </li>
             );

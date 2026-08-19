@@ -56,14 +56,22 @@ Fach ──┬── Stundenplan-Slot   Wochentag, Stunde, Raum
 
 ## Lernphasen-Logik
 
-**Plan erzeugen** — aus Klausurdatum + Themenliste:
+**Plan erzeugen** — aus Klausurdatum + Themenliste. Die Regeln sind bewusst
+festgeschrieben, weil sie durch Tests abgesichert sind:
 
-- Standard-Lernzeitraum: 10 Tage vor der Klausur (einstellbar pro Klausur)
-- Standard-Block: 45 Minuten pro Lerntag (einstellbar)
-- Themen werden über die Lerntage verteilt, nicht alle auf den letzten Tag
-- Jedes Thema kommt **zweimal** vor: einmal lernen, einmal wiederholen
-- Die letzten zwei Tage sind Wiederholung aller Themen
-- Freie Tage (z.B. Wochenende oder Termine) lassen sich ausnehmen
+1. Lerntage sind alle Tage von spätestens *Klausurdatum − 10* bis zum Tag
+   **vor** der Klausur. Der Prüfungstag selbst ist nie ein Lerntag.
+2. Von diesen Tagen sind die letzten zwei Wiederholungstage — bei nur zwei
+   oder drei verfügbaren Tagen der letzte, bei einem einzigen keiner.
+3. Die Themen werden **gleichmäßig über den ganzen Zeitraum** verteilt, nicht
+   vorne zusammengedrängt.
+4. An den Wiederholungstagen kommt jedes Thema noch einmal dran.
+5. Die Minuten eines Tages werden auf seine Blöcke aufgeteilt, auf 5 Minuten
+   gerundet, mindestens 10 — die Tagessumme überschreitet nie das Budget.
+6. Vorlauf (10 Tage) und Tagesbudget (45 Minuten) sind pro Klausur änderbar.
+
+Gerechnet wird ausschließlich mit Kalenderdaten in UTC, nie mit Zeitstempeln.
+Dadurch verschiebt die Sommerzeit-Umstellung keinen einzigen Lerntag.
 
 **Verpasster Lerntag** — die App fragt nach:
 > "Gestern Mathe nicht geschafft — heute nachholen oder streichen?"
@@ -76,10 +84,9 @@ Meldung einige Tage vor der Klausur.
 
 ## Reihenfolge des Baus
 
-1. **Fundament** — Projekt, Datenbank, Login, Fächer anlegen, Deployment
-   *Ziel: liegt als Icon auf dem Homescreen*
-2. **Klausuren & Lernphasen** — Termine, Themen, Plan-Generator, Countdown,
-   Fortschritt, Nachfrage bei verpassten Tagen, Push
+1. ~~**Fundament** — Projekt, Datenbank, Login, Fächer anlegen~~ **fertig**
+2. ~~**Klausuren & Lernphasen** — Termine, Themen, Plan-Generator, Countdown,
+   Fortschritt, Nachfrage bei verpassten Tagen, Push~~ **fertig**
 3. **Stundenplan & Hausaufgaben** — Wochenplan, Aufgaben, Startseite
    "Was ist heute und morgen?"
 4. **Noten** — Eintragen, Schnitt pro Fach und gesamt,
@@ -91,3 +98,5 @@ Meldung einige Tage vor der Klausur.
 - Genaue Gewichtung schriftlich/mündlich pro Fach (in den Einstellungen)
 - Offline **schreiben** (Hausaufgabe im Schulnetz ohne Empfang eintragen) —
   bewusst später, erst wird offline nur gelesen
+- Freie Tage vom Lernplan ausnehmen (Wochenende, Urlaub) — im Datenmodell
+  vorgesehen, in der Oberfläche noch nicht angeboten

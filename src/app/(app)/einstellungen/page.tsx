@@ -10,6 +10,9 @@ import {
 } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth";
 
+import { setReminderHourAction } from "./actions";
+import { PushSettings, ReminderTime } from "./push-settings";
+
 export const metadata: Metadata = {
   title: "Einstellungen",
 };
@@ -31,31 +34,27 @@ export default async function SettingsPage() {
   // eine DATABASE_URL auf einen echten Postgres.
   const onServer = Boolean(process.env.DATABASE_URL);
 
+  // Ohne Schlüssel kann der Browser sich gar nicht erst anmelden — die
+  // Komponente sagt das dann geradeheraus, statt einen Knopf anzubieten.
+  const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Einstellungen</h1>
 
       <Card>
         <CardHeader>
-          <CardTitle>Konto</CardTitle>
+          <CardTitle>Erinnerungen</CardTitle>
         </CardHeader>
-        <CardContent>
-          <dl className="space-y-3">
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-sm text-muted">Name</dt>
-              <dd className="text-right font-medium">{user.name}</dd>
-            </div>
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-sm text-muted">Angelegt am</dt>
-              <dd className="text-right font-medium">{since}</dd>
-            </div>
-          </dl>
+        <CardContent className="space-y-5">
+          <PushSettings vapidPublicKey={vapidPublicKey} />
 
-          <form action={logout} className="pt-1">
-            <Button type="submit" variant="secondary" className="w-full sm:w-auto">
-              Abmelden
-            </Button>
-          </form>
+          <div className="h-px bg-border" />
+
+          <ReminderTime
+            action={setReminderHourAction}
+            hour={user.reminderHour}
+          />
         </CardContent>
       </Card>
 
@@ -95,6 +94,30 @@ export default async function SettingsPage() {
             Danach liegt sie mit eigenem Symbol im App-Menü und startet ohne
             Browserleiste.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Konto</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <dl className="space-y-3">
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-sm text-muted">Name</dt>
+              <dd className="text-right font-medium">{user.name}</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-sm text-muted">Angelegt am</dt>
+              <dd className="text-right font-medium">{since}</dd>
+            </div>
+          </dl>
+
+          <form action={logout} className="pt-1">
+            <Button type="submit" variant="secondary" className="w-full sm:w-auto">
+              Abmelden
+            </Button>
+          </form>
         </CardContent>
       </Card>
 
