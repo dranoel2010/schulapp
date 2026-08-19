@@ -56,8 +56,15 @@ npm run build && npm run start
 src/
   app/
     (auth)/         Einrichtung und Anmeldung — ohne Navigation
-    (app)/          alles hinter der Anmeldung, mit Navigationsleiste
-    layout.tsx      Wurzel: Schriften, Metadaten, Service Worker
+    (app)/          alles hinter der Anmeldung
+      page.tsx        Start: am Handy Kachelmenü und Tagesspur, am
+                      Rechner das Dashboard
+      lernen/         der Lernplan — abhaken, Fortschritt, Countdown
+      klausuren/      Termine eintragen und ändern
+      faecher/        Fächer mit Farbe, Kürzel und Gewichtung
+      einstellungen/  Erinnerungen, Darstellung, Konto
+    layout.tsx      Wurzel: Schriften, Metadaten, Service Worker,
+                    hell/dunkel
     manifest.ts     PWA-Manifest
   components/
     ui/             Bausteine: Button, Input, Field, Card, EmptyState
@@ -75,7 +82,15 @@ src/
     study-plan.ts   Lernplan-Generator (reine Rechnung, getestet)
     exams.ts        Datenzugriff für Prüfungen, Themen, Lernblöcke
     push.ts         Push-Nachrichten an die angemeldeten Geräte
+    home.ts         die Zahlen der Startseite, einmal geladen für
+                    Kachelmenü und Dashboard
+    theme.ts        hell, dunkel oder dem Gerät überlassen
 ```
+
+**Lernen und Verwalten sind getrennt.** Unter *Klausuren* trägt man Termine
+ein und ändert sie; eine Klausur antippen öffnet direkt das Formular. Unter
+*Lernen* steht der Plan und wird abgehakt. Das ist Absicht — es sind zwei
+verschiedene Tätigkeiten, und vermischt taugt keine von beiden etwas.
 
 ## Datenbank
 
