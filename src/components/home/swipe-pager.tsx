@@ -54,6 +54,9 @@ export function SwipePager({ start, calendar }: SwipePagerProps) {
   const [drag, setDrag] = useState(0);
   const [dragging, setDragging] = useState(false);
 
+  // Der Rahmen selbst — für die Berührungs-Listener, die React nicht
+  // unpassiv anmelden kann.
+  const frame_ = useRef<HTMLDivElement>(null);
   // X-Position beim Aufsetzen des Fingers.
   const startX = useRef(0);
   // Der zuletzt gemessene Zug. Er wird bei jeder Bewegung mitgeschrieben,
@@ -64,6 +67,66 @@ export function SwipePager({ start, calendar }: SwipePagerProps) {
   const frame = useRef<number | null>(null);
   // Zeitgeber der Trackpad-Sperre, solange sie hält.
   const wheelLock = useRef<number | null>(null);
+
+  /**
+   * Der Browser darf senkrecht scrollen (touch-action: pan-y). Sobald er
+   * eine Geste für sich beansprucht, schickt er `pointercancel` — und das
+   * kam hier schon nach der ERSTEN Bewegung, womit der Wisch tot war.
+   *
+   * Also nehmen wir ihm die Geste ab, sobald sie erkennbar waagerecht ist:
+   * ein preventDefault auf touchmove hält ihn davon ab, selbst zu scrollen.
+   * Das geht nur mit einem unpassiven Listener, und den kann React über
+   * onTouchMove nicht anmelden — deshalb von Hand.
+   *
+   * Senkrechte Gesten bleiben unangetastet: dort greifen wir nicht ein, der
+   * Browser scrollt wie gewohnt und darf die Geste auch abbrechen.
+   */
+  useEffect(() => {
+    const element = frame_.current;
+    if (!element) return;
+
+    let origin: { x: number; y: number } | null = null;
+    let horizontal = false;
+
+    function onTouchStart(event: TouchEvent) {
+      const touch = event.touches[0];
+      origin = touch ? { x: touch.clientX, y: touch.clientY } : null;
+      horizontal = false;
+    }
+
+    function onTouchMove(event: TouchEvent) {
+      const touch = event.touches[0];
+      if (!origin || !touch) return;
+
+      const dx = touch.clientX - origin.x;
+      const dy = touch.clientY - origin.y;
+
+      // Die Richtung wird einmal je Geste entschieden und bleibt dann dabei,
+      // damit ein leichtes Zittern sie nicht mittendrin umwirft.
+      if (!horizontal && Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 6) {
+        horizontal = true;
+      }
+
+      if (horizontal && event.cancelable) event.preventDefault();
+    }
+
+    function onTouchEnd() {
+      origin = null;
+      horizontal = false;
+    }
+
+    element.addEventListener("touchstart", onTouchStart, { passive: true });
+    element.addEventListener("touchmove", onTouchMove, { passive: false });
+    element.addEventListener("touchend", onTouchEnd, { passive: true });
+    element.addEventListener("touchcancel", onTouchEnd, { passive: true });
+
+    return () => {
+      element.removeEventListener("touchstart", onTouchStart);
+      element.removeEventListener("touchmove", onTouchMove);
+      element.removeEventListener("touchend", onTouchEnd);
+      element.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, []);
 
   // Beim Abbau darf weder ein Bild noch ein Zeitgeber offen bleiben.
   useEffect(() => {
@@ -175,6 +238,7 @@ export function SwipePager({ start, calendar }: SwipePagerProps) {
 
   return (
     <div
+      ref={frame_}
       className="flex flex-1 flex-col overflow-hidden touch-pan-y"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
