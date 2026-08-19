@@ -3,8 +3,8 @@
 /* ==========================================================================
    Tokens
 
-   Jede Farbe steht hier genau einmal: hell in :root, dunkel in der
-   prefers-color-scheme-Regel darunter. Über @theme inline werden daraus
+   Jede Farbe steht hier genau einmal: hell in :root, dunkel als --dark-*
+   daneben und weiter unten angewendet. Über @theme inline werden daraus
    Tailwind-Klassen (bg-surface, text-muted, border-border, bg-accent …).
    Deshalb braucht in den Komponenten praktisch nichts eine dark:-Variante —
    wer bg-surface schreibt, ist in beiden Modi richtig.
@@ -46,33 +46,96 @@
   --danger-soft: color-mix(in oklab, var(--danger) 10%, var(--surface));
 
   --ring: var(--accent);
+
+  /* --------------------------------------------------------------------
+     Die dunkle Palette. Hier nur abgelegt, angewendet wird sie weiter
+     unten — damit jeder Farbwert im Projekt an genau einer Stelle steht.
+     -------------------------------------------------------------------- */
+  --dark-background: #121110;
+  --dark-surface: #1b1a18;
+  --dark-surface-muted: #24221f;
+
+  --dark-foreground: #f2f0ed;
+  --dark-muted: #a29c95;
+  --dark-subtle: #8a837b;
+
+  --dark-border: #302d2a;
+  --dark-border-strong: #423e39;
+
+  --dark-accent: #6366f1;
+  --dark-accent-hover: #818cf8;
+  --dark-accent-foreground: #ffffff;
+
+  --dark-danger: #ef4444;
+  --dark-danger-hover: #f87171;
+  --dark-danger-foreground: #ffffff;
+  --dark-success: #4ade80;
+  --dark-warning: #fbbf24;
 }
 
+/* --------------------------------------------------------------------------
+   Hell oder dunkel
+
+   Ohne Wahl folgt die App dem Gerät. Trifft der Nutzer in den Einstellungen
+   eine Wahl, schreibt der Server sie als data-theme ins <html> — schon beim
+   Ausliefern, damit die Seite nicht erst hell erscheint und dann umspringt.
+
+   Die Rangfolge muss in BEIDE Richtungen gelten: ausdrücklich hell schlägt
+   ein dunkel gestelltes Gerät, ausdrücklich dunkel schlägt ein helles. Genau
+   dafür stehen die beiden Regeln unten. Ihre Inhalte sind gleich — wer eine
+   Farbe ergänzt, ergänzt sie oben bei --dark-* und in beiden Listen.
+   -------------------------------------------------------------------------- */
+
 @media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
+  :root:not([data-theme="light"]) {
+  color-scheme: dark;
 
-    --background: #121110;
-    --surface: #1b1a18;
-    --surface-muted: #24221f;
+  --background: var(--dark-background);
+  --surface: var(--dark-surface);
+  --surface-muted: var(--dark-surface-muted);
 
-    --foreground: #f2f0ed;
-    --muted: #a29c95;
-    --subtle: #8a837b;
+  --foreground: var(--dark-foreground);
+  --muted: var(--dark-muted);
+  --subtle: var(--dark-subtle);
 
-    --border: #302d2a;
-    --border-strong: #423e39;
+  --border: var(--dark-border);
+  --border-strong: var(--dark-border-strong);
 
-    --accent: #6366f1;
-    --accent-hover: #818cf8;
-    --accent-foreground: #ffffff;
+  --accent: var(--dark-accent);
+  --accent-hover: var(--dark-accent-hover);
+  --accent-foreground: var(--dark-accent-foreground);
 
-    --danger: #ef4444;
-    --danger-hover: #f87171;
-    --danger-foreground: #ffffff;
-    --success: #4ade80;
-    --warning: #fbbf24;
+  --danger: var(--dark-danger);
+  --danger-hover: var(--dark-danger-hover);
+  --danger-foreground: var(--dark-danger-foreground);
+  --success: var(--dark-success);
+  --warning: var(--dark-warning);
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: var(--dark-background);
+  --surface: var(--dark-surface);
+  --surface-muted: var(--dark-surface-muted);
+
+  --foreground: var(--dark-foreground);
+  --muted: var(--dark-muted);
+  --subtle: var(--dark-subtle);
+
+  --border: var(--dark-border);
+  --border-strong: var(--dark-border-strong);
+
+  --accent: var(--dark-accent);
+  --accent-hover: var(--dark-accent-hover);
+  --accent-foreground: var(--dark-accent-foreground);
+
+  --danger: var(--dark-danger);
+  --danger-hover: var(--dark-danger-hover);
+  --danger-foreground: var(--dark-danger-foreground);
+  --success: var(--dark-success);
+  --warning: var(--dark-warning);
 }
 
 @theme inline {

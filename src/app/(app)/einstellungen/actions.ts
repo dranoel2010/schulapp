@@ -2,11 +2,13 @@
 
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { z } from "zod";
 
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
+import { isThemePreference, THEME_COOKIE, THEME_MAX_AGE } from "@/lib/theme";
 
 /**
  * Einstellungen, die der Nutzer selbst dreht.
@@ -56,4 +58,33 @@ export async function setReminderHourAction(
   revalidatePath("/einstellungen");
 
   return { savedHour: hour };
+}
+
+/**
+ * Hell, dunkel oder dem Gerät überlassen.
+ *
+ * Die Wahl landet in einem Cookie, nicht in der Datenbank — dann liest der
+ * Server sie beim Ausliefern und die Seite erscheint sofort richtig. Und sie
+ * gilt pro Gerät: das Handy darf abends dunkel sein, der Laptop hell bleiben.
+ *
+ * revalidatePath mit "layout" ist nötig, weil das data-theme im Wurzel-Layout
+ * hängt — ohne das bliebe die alte Farbe stehen, bis etwas anderes die Seite
+ * neu rendert.
+ */
+export async function setThemeAction(formData: FormData): Promise<void> {
+  await requireUser();
+
+  const value = formData.get("theme");
+  if (!isThemePreference(value)) return;
+
+  const store = await cookies();
+  store.set(THEME_COOKIE, value, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: THEME_MAX_AGE,
+    secure: process.env.NODE_ENV === "production",
+  });
+
+  revalidatePath("/", "layout");
 }
