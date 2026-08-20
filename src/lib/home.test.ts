@@ -203,6 +203,16 @@ function homeData(overrides: Partial<HomeData> = {}): HomeData {
     todayHomework: [],
     openHomework: [],
     homeworkCounts: { open: 0, overdue: 0, dueToday: 0 },
+    // Leerer Notenstand: dayLine und findNextLesson rechnen nicht mit ihm,
+    // aber HomeData verlangt das Feld — und eine ausgedachte Zahl hätte in
+    // einer Vorgabe nichts zu suchen, die von "nichts eingetragen" ausgeht.
+    grades: {
+      overall: null,
+      gradeCount: 0,
+      gradedSubjects: 0,
+      latest: null,
+      perSubject: [],
+    },
     ...overrides,
   };
 }

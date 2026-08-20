@@ -2,12 +2,19 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 
 import { setBlockStatusAction } from "@/app/(app)/lernen/actions";
+import { AverageBar } from "@/components/grades/average-bar";
 import { HomeworkCheck } from "@/components/homework/homework-check";
 import { ButtonLink } from "@/components/ui/button";
 import { subjectColor } from "@/lib/colors";
 import { formatGerman } from "@/lib/dates";
 import { dueLabel, dueTone, type DueTone } from "@/lib/due-label";
-import { lessonRoom, planProgress, type HomeData } from "@/lib/home";
+import { formatAverage } from "@/lib/grade-scale";
+import {
+  countedGrades,
+  lessonRoom,
+  planProgress,
+  type HomeData,
+} from "@/lib/home";
 import { mergeDoubleLessons, periodTimes } from "@/lib/timetable";
 
 /**
@@ -15,15 +22,17 @@ import { mergeDoubleLessons, periodTimes } from "@/lib/timetable";
  * nebeneinander, ohne Scrollen. Am Handy übernimmt das Kachelmenü — dort wird
  * diese Ansicht von der Startseite ausgeblendet.
  *
- * Alle Zahlen kommen aus @/lib/home. Was es noch nicht gibt — die Noten —
- * bleibt als ehrliche Lücke stehen: kein erfundener Schnitt, und auch keine
- * erfundene Schulstunde, solange kein Stundenplan eingetragen ist.
+ * Alle Zahlen kommen aus @/lib/home, und gezeigt wird nur, was dort auch
+ * steht: keine erfundene Schulstunde, solange kein Stundenplan eingetragen
+ * ist, und neben dem Notenschnitt keine Bewegung — die App hebt keinen alten
+ * Stand auf, gegen den sie rechnen könnte.
  */
 
 type Block = HomeData["todayBlocks"][number];
 type Lesson = HomeData["todayLessons"][number];
 type Task = HomeData["openHomework"][number];
 type Exam = NonNullable<HomeData["nextExam"]>;
+type SubjectAverage = HomeData["grades"]["perSubject"][number];
 
 function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -62,14 +71,11 @@ const NEXT_EXAM_LABELS: Record<string, string> = {
   muendlich: "Nächste mündliche Prüfung",
 };
 
-/** Was in Phase 4 dazukommt. Bewusst ohne Zahlen und ohne Links. */
-const ROADMAP = [
-  {
-    title: "Noten",
-    text: "Eintragen, Schnitt pro Fach und insgesamt.",
-    phase: "Phase 4",
-  },
-];
+/**
+ * So viele Fächer passen unter den Schnitt, ohne dass die Spalte wächst — so
+ * viele zeigt auch der Entwurf. Der Rest steht auf der Notenseite.
+ */
+const SUBJECT_AVERAGE_LIMIT = 5;
 
 /**
  * Die Zeile unter dem Datum: erst, was noch offen ist, dann, was heute im
@@ -135,7 +141,7 @@ export function HomeDashboard({ data }: { data: HomeData }) {
 
         <div className="flex min-h-0 flex-col gap-4">
           <SubjectsCard count={data.subjectCount} />
-          <RoadmapCard />
+          <AverageCard grades={data.grades} />
         </div>
       </div>
     </div>
@@ -565,38 +571,96 @@ function SubjectsCard({ count }: { count: number }) {
 }
 
 /**
- * Die ehrliche Lücke. Der Entwurf hat hier einen Notenschnitt mit Balken —
- * Noten gibt es noch nicht, also steht hier auch keine Zahl.
+ * Der Notenschnitt: die große Zahl, darunter die Fächer mit ihrem Schnitt und
+ * einem Balken in der Fachfarbe. Die ganze Karte führt auf die Notenseite.
+ *
+ * Ohne Note steht dort keine Zahl, sondern ein Satz und der Weg dorthin —
+ * dieselbe Antwort, die auch die Countdown-Karte ohne Prüfung gibt.
  */
-function RoadmapCard() {
+function AverageCard({ grades }: { grades: HomeData["grades"] }) {
+  const overall = grades.overall;
+
+  if (overall === null) {
+    return (
+      <section className={CARD}>
+        <h3 className="text-[15px] font-semibold text-foreground">Schnitt</h3>
+        <p className="mt-2 text-[15px] text-foreground">
+          Noch keine Note eingetragen.
+        </p>
+        <p className="mt-1 text-[13px] text-muted">
+          Sobald eine drinsteht, stehen hier der Gesamtschnitt und der Schnitt
+          jedes Fachs.
+        </p>
+        <Link
+          href="/noten"
+          className="mt-3 inline-block text-[13px] font-medium text-accent hover:underline"
+        >
+          Note eintragen
+        </Link>
+      </section>
+    );
+  }
+
+  const shown = grades.perSubject.slice(0, SUBJECT_AVERAGE_LIMIT);
+  const count = countedGrades(grades);
+
   return (
-    <section className={cn(CARD, "flex min-h-0 flex-col")}>
-      <h3 className="text-[15px] font-semibold text-foreground">
-        Was noch kommt
-      </h3>
-      <p className="mt-1 text-[13px] text-muted">
-        Dieser Bereich ist noch nicht gebaut. Bis dahin steht hier keine Zahl —
-        lieber eine Lücke als eine erfundene Angabe.
+    <Link href="/noten" className={CARD_LINK}>
+      <h3 className="text-[15px] font-semibold text-foreground">Schnitt</h3>
+
+      <p className="mt-1.5 flex items-baseline gap-2">
+        <span className="text-[40px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-foreground">
+          {formatAverage(overall, 1)}
+        </span>
+        {/* Hier steht im Entwurf „+0,2 seit Juli“ in Grün. Einen Stand von
+            Juli hebt die App nicht auf, sie kennt also keine Bewegung — statt
+            einer erfundenen steht hier die wahre Angabe, worauf der Schnitt
+            überhaupt beruht. */}
+        <span className="text-[13px] text-muted">
+          {count === 1 ? "aus 1 Note" : `aus ${count} Noten`}
+        </span>
       </p>
 
-      <ul className="mt-4 space-y-2">
-        {ROADMAP.map((item) => (
-          <li
-            key={item.title}
-            className="rounded-control border border-dashed border-border px-3 py-2.5"
-          >
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[14px] font-medium text-foreground">
-                {item.title}
-              </span>
-              <span className="shrink-0 text-[12px] text-subtle">
-                {item.phase}
-              </span>
-            </div>
-            <p className="mt-0.5 text-[13px] text-muted">{item.text}</p>
-          </li>
+      <ul className="mt-4 space-y-3">
+        {shown.map((entry) => (
+          <SubjectBar key={entry.subject.id} entry={entry} />
         ))}
       </ul>
-    </section>
+
+      {grades.perSubject.length > shown.length ? (
+        <p className="mt-2.5 text-[13px] text-subtle">
+          und {grades.perSubject.length - shown.length} weitere
+        </p>
+      ) : null}
+    </Link>
+  );
+}
+
+/**
+ * Ein Fach in der Schnitt-Karte: Name links, Schnitt rechts, darunter der
+ * Balken. Eine Nachkommastelle wie bei der großen Zahl darüber — die zweite
+ * Stelle entscheidet auf einen Blick nichts und steht auf der Notenseite.
+ */
+function SubjectBar({ entry }: { entry: SubjectAverage }) {
+  return (
+    <li>
+      <div className="flex items-baseline justify-between gap-2 text-[13px]">
+        <span className="min-w-0 truncate text-foreground">
+          {entry.subject.name}
+        </span>
+        <span className="shrink-0 font-mono tabular-nums text-muted">
+          {formatAverage(entry.average, 1)}
+        </span>
+      </div>
+
+      {/* Derselbe Balken wie auf der Notenseite — samt der Regel, wie voll er
+          steht. Sie stünde sonst zweimal im Projekt und könnte auseinander-
+          laufen. */}
+      <AverageBar
+        average={entry.average}
+        color={subjectColor(entry.subject.color).hex}
+        className="mt-[5px]"
+      />
+    </li>
   );
 }

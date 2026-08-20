@@ -12,8 +12,8 @@ import type { ReactNode } from "react";
  * es über den Knopf oben links (`MobileTopBar`). So bleibt der ganze Bildschirm
  * für den Inhalt frei.
  *
- * Ab Tablet-Breite bleibt die schmale Seitenspalte links. Seit Phase 3 stehen
- * dort sieben Punkte; die Noten kommen in Phase 4 dazu.
+ * Ab Tablet-Breite bleibt die schmale Seitenspalte links. Dort stehen alle
+ * acht Bereiche der App.
  *
  * Lernen und Klausuren sind zwei Bereiche, nicht einer: unter "Lernen" steht
  * der Lernplan zum Abhaken, unter "Klausuren" werden die Termine verwaltet.
@@ -53,8 +53,11 @@ function NavIcon({
 /**
  * Die Reihenfolge folgt dem Tag, nicht dem Alphabet: erst was täglich
  * ansteht — der Stundenplan und die Hausaufgaben —, dann was verwaltet wird —
- * Lernplan, Klausuren, Fächer —, und zuletzt die Einstellungen. Wer die Liste
- * umsortieren will, ändert damit diese Aussage, nicht nur die Optik.
+ * Lernplan, Klausuren, Noten, Fächer —, und zuletzt die Einstellungen. Wer die
+ * Liste umsortieren will, ändert damit diese Aussage, nicht nur die Optik.
+ *
+ * Die Noten stehen hinter den Klausuren und vor den Fächern: sie sind das
+ * Ergebnis der Prüfungen und hängen an den Fächern — genau dazwischen also.
  */
 const ITEMS: NavItem[] = [
   {
@@ -121,6 +124,21 @@ const ITEMS: NavItem[] = [
         <path d="M8.5 3.5v3" />
         <path d="M15.5 3.5v3" />
         <path d="m9.5 14.75 1.75 1.75 3.25-3.5" />
+      </>
+    ),
+  },
+  {
+    href: "/noten",
+    label: "Noten",
+    // Drei Balken, von links nach rechts kürzer werdend: der Schnitt je Fach,
+    // so wie ihn die Seite zeigt. Ein Balkenbild und kein Zeugnisblatt — das
+    // Buch daneben steht schon für die Fächer.
+    icon: (
+      <>
+        <path d="M4 19.5h16" />
+        <path d="M7.25 16.5V8" />
+        <path d="M12 16.5V4.5" />
+        <path d="M16.75 16.5v-5.5" />
       </>
     ),
   },
@@ -216,6 +234,8 @@ const SECTION_TITLES: Record<string, string> = {
   "/klausuren/neu": "Neue Klausur",
   "/hausaufgaben": "Hausaufgaben",
   "/hausaufgaben/neu": "Neue Aufgabe",
+  "/noten": "Noten",
+  "/noten/neu": "Neue Note",
   "/faecher": "Fächer",
   "/faecher/neu": "Neues Fach",
   "/einstellungen": "Einstellungen",
@@ -240,6 +260,10 @@ function sectionTitle(pathname: string): string | null {
   if (pathname.startsWith("/klausuren/")) return "Klausur bearbeiten";
   if (pathname.startsWith("/faecher/")) return "Fach bearbeiten";
   if (pathname.startsWith("/hausaufgaben/")) return "Aufgabe bearbeiten";
+  // Ein Fach unter den Noten ist keine Bearbeitung, sondern die Liste seiner
+  // Noten — deshalb steht dort der Bereichsname und nicht "bearbeiten".
+  if (pathname.startsWith("/noten/fach/")) return "Noten";
+  if (pathname.startsWith("/noten/")) return "Note bearbeiten";
   // Ein Feld im Wochenraster: /stundenplan/<tag>/<stunde>
   if (pathname.startsWith("/stundenplan/")) return "Stunde bearbeiten";
 

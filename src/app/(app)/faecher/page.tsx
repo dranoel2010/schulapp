@@ -35,7 +35,7 @@ export default async function SubjectsPage() {
         <div className="space-y-4">
           <EmptyState
             title="Noch keine Fächer"
-            description="Fächer sind der Anfang: Klausuren, Stundenplan und Noten hängen später alle an ihnen."
+            description="Fächer sind der Anfang: Klausuren, Stundenplan, Hausaufgaben und Noten hängen alle an ihnen."
             action={<ButtonLink href="/faecher/neu">Fach anlegen</ButtonLink>}
             icon={
               <svg

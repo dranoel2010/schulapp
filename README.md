@@ -47,7 +47,7 @@ npm run build && npm run start
 | `npm run db:push` | Schemaänderungen in die Datenbank übertragen |
 | `npm run db:studio` | Datenbank im Browser ansehen |
 | `npm run db:backup` | Kopie der lokalen Datenbank nach `.backups/` |
-| `npm test` | Tests der reinen Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten |
+| `npm test` | Tests der reinen Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala |
 | `npm run lint` | ESLint |
 
 ## Aufbau
@@ -64,6 +64,8 @@ src/
       hausaufgaben/   Liste zum Abhaken, anlegen und ändern
       lernen/         der Lernplan — abhaken, Fortschritt, Countdown
       klausuren/      Termine eintragen und ändern
+      noten/          Schnitt je Fach und gesamt, eintragen und ändern;
+                      fach/ zeigt ein Fach mit allen seinen Noten
       faecher/        Fächer mit Farbe, Kürzel und Gewichtung
       einstellungen/  Erinnerungen, Darstellung, Konto
     layout.tsx      Wurzel: Schriften, Metadaten, Service Worker,
@@ -75,6 +77,7 @@ src/
     home/           die drei Ansichten der Startseite
     study/          Lernblock und Nachfrage bei verpassten Tagen
     homework/       das Kästchen zum Abhaken, überall gleich
+    grades/         die Fachzeile mit Schnitt, Balken und Fachfarbe
   db/
     schema.ts       Datenmodell (Vertrag — Änderungen hier betreffen alles)
     index.ts        Datenbankverbindung
@@ -94,6 +97,9 @@ src/
     push.ts         Push-Nachrichten an die angemeldeten Geräte
     home.ts         die Zahlen der Startseite, einmal geladen für
                     Kachelmenü, Tagesspur und Dashboard
+    grade-scale.ts  die Notenskala 1+ bis 6 und alles, was man damit
+                    ausrechnet — Schnitt, Gewichtung, Ziel (getestet)
+    grades.ts       Datenzugriff für Noten und die Schnitte je Fach
     theme.ts        hell, dunkel oder dem Gerät überlassen
 ```
 
@@ -113,6 +119,13 @@ sich aus zur nächsten Stunde ihres Fachs fällig, und eine heute fällige
 Aufgabe erscheint in der Tagesspur in der Zeile dieser Stunde. Genau deshalb
 wurden beide in derselben Phase gebaut.
 
+**Die Noten rechnen ehrlich.** Der Fachschnitt besteht aus zwei Töpfen,
+schriftlich und mündlich, gewichtet nach dem, was am Fach eingestellt ist. Ist
+ein Topf noch leer, zählt er gar nicht — nicht als Vier und nicht als Null.
+Der Gesamtschnitt ist das Mittel der Fachschnitte, jedes Fach einmal;
+archivierte Fächer bleiben draußen, ihre Noten aber sichtbar. Und wo eine Zahl
+fehlt, steht ein Strich und keine geschätzte.
+
 ## Datenbank
 
 Lokal läuft **PGlite**: ein echtes Postgres, das als Datei unter `.data/pglite`
@@ -127,9 +140,9 @@ einem echten Postgres. Der Anwendungscode merkt davon nichts.
 DATABASE_URL=postgres://user:pass@host/db
 ```
 
-Nach Änderungen an `src/db/schema.ts` immer `npm run db:push` ausführen. Phase 3
-bringt drei neue Tabellen mit (`periods`, `lessons`, `homework`) — ohne Push
-laufen Stundenplan und Hausaufgaben nicht.
+Nach Änderungen an `src/db/schema.ts` immer `npm run db:push` ausführen. Zuletzt
+kam mit den Noten die Tabelle `grades` dazu — ohne Push bleibt der Notenbereich
+mit einem Datenbankfehler stehen.
 
 Die lokale Datenbank ist bewusst nicht in Git (`.data/` ist ignoriert).
 
@@ -190,5 +203,10 @@ das Stundenraster ist einstellbar (1 bis 12 Stunden).
 von sich aus zur nächsten Stunde ihres Fachs fällig. Abgehaktes bleibt vierzehn
 Tage stehen und wird nur ausgeblendet, nie gelöscht.
 
-Beides steht auch auf der Startseite: als Kachel, in der Tagesspur und im
-Dashboard. Als Nächstes kommen die Noten — siehe KONZEPT.md.
+**Noten** — eintragen mit Art (schriftlich oder mündlich), Gewicht und Datum.
+Die Übersicht zeigt den Gesamtschnitt und je Fach den Schnitt, aufgeteilt in
+schriftlich und mündlich; ein Fach antippen führt zu seinen einzelnen Noten und
+zur Frage „was brauche ich noch für eine 2?".
+
+Alles steht auch auf der Startseite: als Kachel, in der Tagesspur und im
+Dashboard. Damit sind die vier geplanten Ausbaustufen aus KONZEPT.md gebaut.

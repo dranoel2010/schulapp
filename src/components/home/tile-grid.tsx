@@ -2,7 +2,8 @@ import Link from "next/link";
 
 import { ButtonLink } from "@/components/ui/button";
 import { formatGerman, germanShortParts } from "@/lib/dates";
-import { dayLine, lessonRoom, type HomeData } from "@/lib/home";
+import { formatAverage } from "@/lib/grade-scale";
+import { countedGrades, dayLine, lessonRoom, type HomeData } from "@/lib/home";
 
 /**
  * Das Kachelmenü fürs Handy — die Startansicht auf schmalen Bildschirmen.
@@ -22,11 +23,12 @@ import { dayLine, lessonRoom, type HomeData } from "@/lib/home";
  * <body> über das Layout bis hierher durchgehen — reißt sie an einer Stelle,
  * fallen die Kacheln auf ihre Mindesthöhe zurück.
  *
- * Ehrlichkeit vor Vollständigkeit: Noten gibt es noch nicht. Diese eine Kachel
- * behält die Form der anderen, ist aber sichtbar zurückgenommen und nicht
- * anklickbar — lieber eine sichtbare Lücke als eine erfundene Zahl. Aus
- * demselben Grund steht auf der Stundenplan-Kachel ein Strich statt einer
- * Uhrzeit, solange kein Plan eingetragen ist.
+ * Ehrlichkeit vor Vollständigkeit: jede Kachel zeigt nur, was auch in der
+ * Datenbank steht. Ohne Note bleibt die große Zahl der Noten-Kachel weg, ohne
+ * Termin die der Klausuren-Kachel, und auf der Stundenplan-Kachel steht ein
+ * Strich statt einer Uhrzeit, solange kein Plan eingetragen ist. Aus demselben
+ * Grund fehlt der Trend, den der Entwurf neben den Schnitt setzt — die App
+ * hebt keinen alten Stand auf, gegen den sie rechnen könnte.
  *
  * Die Kopfzeile bringt die Komponente selbst mit. Ums Ausblenden ab mittlerer
  * Breite kümmert sich die Startseite.
@@ -93,21 +95,6 @@ function Tile({
         </span>
       </span>
     </Link>
-  );
-}
-
-/**
- * Ein Bereich, den es noch nicht gibt. Die Fläche sieht aus wie die anderen,
- * damit das Raster seinen Rhythmus behält — aber sichtbar zurückgenommen und
- * ohne Link: was nirgendwohin führt, soll sich auch nicht anfassen lassen.
- * Eine erfundene Zahl stünde hier nicht, auch wenn der Entwurf eine zeigt.
- */
-function SoonTile({ label }: { label: string }) {
-  return (
-    <div className={`${TILE_SHAPE} bg-surface-muted/60 text-subtle`}>
-      <span className={LABEL}>{label}</span>
-      <span className={CAPTION}>kommt noch</span>
-    </div>
   );
 }
 
@@ -189,6 +176,29 @@ export function HomeTiles({ data }: { data: HomeData }) {
     homeworkCaption = `${dueToday} heute fällig`;
   }
 
+  // Der Entwurf setzt unter den Schnitt einen Trend („▲ 0,2“) in Grün. Den
+  // gibt es nicht: die App hebt keinen Vergleichsstand von Juli auf, sie kennt
+  // also keine Bewegung. An seiner Stelle steht eine wahre Angabe, und zwar in
+  // der normalen Kachelfarbe — Grün wäre schon die halbe Behauptung, es ginge
+  // aufwärts.
+  const overall = data.grades.overall;
+  const gradeCount = countedGrades(data.grades);
+
+  let gradeValue: string | undefined;
+  let gradeCaption: string;
+
+  if (overall === null) {
+    // Wie bei den Klausuren ohne Termin: keine Zahl, nur der Hinweis, dass
+    // hier noch nichts steht. Die Kachel führt trotzdem zu den Noten, denn
+    // genau dort fehlt ja etwas.
+    gradeCaption = "nichts eingetragen";
+  } else {
+    // Eine Nachkommastelle: auf einer Kachel zählt der Eindruck, nicht die
+    // zweite Stelle. Genauer steht der Schnitt auf der Notenseite.
+    gradeValue = formatAverage(overall, 1);
+    gradeCaption = gradeCount === 1 ? "aus 1 Note" : `aus ${gradeCount} Noten`;
+  }
+
   const next = data.nextLesson;
 
   let planValue: string;
@@ -250,7 +260,7 @@ export function HomeTiles({ data }: { data: HomeData }) {
             Zuerst die Fächer
           </p>
           <p className="mt-1 text-[14px] leading-snug text-muted">
-            Klausuren, Lernpläne und später auch Noten hängen an deinen Fächern.
+            Klausuren, Lernpläne und Noten hängen an deinen Fächern.
           </p>
           <ButtonLink href="/faecher" className="mt-4 w-full">
             Fächer anlegen
@@ -288,7 +298,12 @@ export function HomeTiles({ data }: { data: HomeData }) {
           warning={overdue > 0 || dueToday > 0}
         />
 
-        <SoonTile label="Noten" />
+        <Tile
+          label="Noten"
+          value={gradeValue}
+          caption={gradeCaption}
+          href="/noten"
+        />
 
         <Tile
           label="Stundenplan"

@@ -322,9 +322,10 @@ export function SubjectDangerZone({
         <div className="space-y-3 rounded-control border border-danger/40 bg-danger-soft p-3.5">
           <p className="text-sm text-foreground">
             {subjectName} wirklich löschen? Damit ist das Fach weg — und mit ihm
-            sofort alle Klausuren samt Lernplan, alle Stundenplan-Einträge und
-            alle Hausaufgaben, die daran hängen. Noten kommen später dazu und
-            gingen dann genauso mit. Rückgängig geht das nicht.
+            sofort alle Klausuren samt Lernplan, alle Stundenplan-Einträge, alle
+            Hausaufgaben und alle Noten, die daran hängen. Rückgängig geht das
+            nicht. Wer nur ein abgewähltes Fach loswerden will, archiviert es:
+            dann bleiben die Noten für den Schnitt vergangener Halbjahre da.
           </p>
           <div className="flex flex-wrap gap-2">
             <form action={deleteAction}>

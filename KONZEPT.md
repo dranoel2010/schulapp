@@ -61,11 +61,15 @@ vierzehn Tagen aus der Liste — gelöscht wird nie, nur ausgeblendet.
 
 **Fach**: Name, Kürzel, Farbe, Lehrkraft, Raum, Gewichtung schriftlich/mündlich
 
-**Noten** werden intern als Dezimalzahl gespeichert, damit der Schnitt stimmt:
+**Noten** werden nicht als „2+" gespeichert, sondern als Zahl — sonst ließe
+sich kein Schnitt rechnen:
 
-| Note | 1+ | 1 | 1− | 2+ | 2 | 2− | … | 6 |
-|---|---|---|---|---|---|---|---|---|
-| Wert | 0,7 | 1,0 | 1,3 | 1,7 | 2,0 | 2,3 | … | 6,0 |
+| Note | 1+ | 1 | 1− | 2+ | 2 | 2− | … | 5− | 6 |
+|---|---|---|---|---|---|---|---|---|---|
+| Wert | 0,7 | 1,0 | 1,3 | 1,7 | 2,0 | 2,3 | … | 5,3 | 6,0 |
+
+In der Datenbank steht davon das Zehnfache als ganze Zahl (7, 10, 13 … 60);
+warum, steht unten bei der Notenlogik.
 
 ## Lernphasen-Logik
 
@@ -95,6 +99,35 @@ realistisch bleibt.
 **Push-Nachrichten**: tägliche Erinnerung an den Lernblock, plus Countdown-
 Meldung einige Tage vor der Klausur.
 
+## Notenlogik
+
+**Gespeichert wird in Zehnteln**, als ganze Zahl: 7 ist eine 1+, 10 eine 1, 13
+eine 1−, 60 eine 6. Der Grund ist der Schnitt — 1,3 + 2,3 ergibt in Fließkomma
+3,5999999999999996 und nicht 3,6, in Zehnteln dagegen genau 36. Die Skala hat
+16 Stufen und endet bei 5−, dann kommt die 6: eine 6 trägt keine Tendenz.
+
+**Der Fachschnitt** setzt sich aus zwei Töpfen zusammen, schriftlich und
+mündlich. Wie stark jeder wiegt, steht am Fach (`weightWritten` in Prozent) und
+nicht an der einzelnen Note. Innerhalb eines Topfes zählt das Gewicht der Note:
+eine Klausur zählt doppelt gegenüber einem Test.
+
+Fehlt ein Topf ganz — noch keine mündliche Note eingetragen —, dann zählt er
+**nicht als Null und nicht als Vier, sondern gar nicht**. Sonst wäre der
+Schnitt nach der ersten Klausur des Schuljahrs eine Lüge.
+
+**Der Gesamtschnitt** ist das schlichte Mittel der Fachschnitte: jedes Fach
+zählt einmal, egal wie viele Noten darin stehen. Das ist die Rechnung, die ein
+Zeugnis meint. Archivierte Fächer zählen nicht mit — ein abgewähltes Fach soll
+den heutigen Schnitt nicht mehr bewegen, seine alten Noten bleiben aber
+erhalten und sichtbar.
+
+**„Was brauche ich noch für eine 2?"** — gesucht wird die schlechteste Note,
+mit der der Fachschnitt das Ziel gerade noch hält. Verglichen wird die auf zwei
+Nachkommastellen gerundete Zahl, also genau die, die auch angezeigt wird; sonst
+stünde „2,00" da und die App sagte trotzdem, das Ziel sei verfehlt. Drei
+Ausgänge: das Ziel hält jede Note, es hält ab dieser Note, oder es ist mit
+einer Note nicht mehr zu schaffen.
+
 ## Reihenfolge des Baus
 
 1. ~~**Fundament** — Projekt, Datenbank, Login, Fächer anlegen~~ **fertig**
@@ -102,13 +135,16 @@ Meldung einige Tage vor der Klausur.
    Fortschritt, Nachfrage bei verpassten Tagen, Push~~ **fertig**
 3. ~~**Stundenplan & Hausaufgaben** — Wochenplan, Aufgaben, Startseite
    "Was ist heute und morgen?"~~ **fertig**
-4. **Noten** — Eintragen, Schnitt pro Fach und gesamt,
-   "Was brauche ich noch für eine 2?"
+4. ~~**Noten** — Eintragen, Schnitt pro Fach und gesamt,
+   "Was brauche ich noch für eine 2?"~~ **fertig**
 
 ## Offene Punkte
 
 - Fächerliste (kommt beim ersten Einrichten in der App)
-- Genaue Gewichtung schriftlich/mündlich pro Fach (in den Einstellungen)
+- Halbjahre: die Noten liegen alle in einem Topf. Ein Schuljahr später will man
+  „Schnitt Q1" sagen können — dafür fehlt ein Zeitraum im Datenmodell
+- Zeugnisnote je Fach von Hand überschreiben (die Lehrkraft rundet anders als
+  die Rechnung)
 - Offline **schreiben** (Hausaufgabe im Schulnetz ohne Empfang eintragen) —
   bewusst später, erst wird offline nur gelesen
 - Erinnerung an fällige Hausaufgaben per Push — der Lernplan hat sie schon,

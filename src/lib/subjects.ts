@@ -9,8 +9,8 @@ import { SUBJECT_COLOR_KEYS } from "@/lib/colors";
  * Fächer — Validierung und Datenzugriff an einer Stelle.
  *
  * Jede Abfrage filtert zusätzlich nach userId. Es gibt zwar nur einen Nutzer,
- * aber sobald Noten und Klausuren dazukommen, ist das die Gewohnheit, die
- * verhindert, dass fremde Daten durchrutschen.
+ * aber es ist die Gewohnheit, die verhindert, dass fremde Daten durchrutschen —
+ * inzwischen hängen Klausuren, Hausaufgaben und Noten an den Fächern.
  */
 
 /** Leere Eingabe soll als NULL in der Datenbank landen, nicht als "". */

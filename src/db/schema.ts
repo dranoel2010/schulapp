@@ -267,6 +267,55 @@ export const homework = pgTable(
   ],
 );
 
+/**
+ * Eine Note.
+ *
+ * Der Wert steht als ganze Zahl in Zehnteln: 7 ist eine 1+, 10 eine 1, 13
+ * eine 1−, 60 eine 6. Der Grund ist der Schnitt: 1,3 + 2,3 ergibt in
+ * Fließkomma 3,5999999999999996 und nicht 3,6 — in Zehnteln dagegen genau 36.
+ * Welche Werte es gibt und wie sie heißen, steht in src/lib/grade-scale.ts —
+ * die Datenbank kennt nur die Zahl.
+ *
+ * Die Skala endet bei 5− und springt dann auf 6: eine 6 trägt keine Tendenz,
+ * das ist in Deutschland so und keine Lücke.
+ *
+ * `weight` ist das Gewicht innerhalb seiner Art: eine Klausur zählt doppelt
+ * gegenüber einem Test, beide sind schriftlich. Wie schriftlich und mündlich
+ * zueinander stehen, hängt dagegen am Fach (`subjects.weightWritten`) — das
+ * ist eine Eigenschaft des Fachs und nicht der einzelnen Note.
+ *
+ * Das Datum ist ein reines Kalenderdatum wie überall sonst: eine Note wird an
+ * einem Tag zurückgegeben, nicht zu einer Uhrzeit in einer Zeitzone.
+ */
+export const grades = pgTable(
+  "grades",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    /** Note in Zehnteln: 7 = 1+, 10 = 1, 13 = 1−, … 53 = 5−, 60 = 6 */
+    value: integer("value").notNull(),
+    /** schriftlich | muendlich */
+    kind: text("kind").notNull().default("schriftlich"),
+    /** Gewicht innerhalb der Art, 1 = einfach, 2 = doppelt, … */
+    weight: integer("weight").notNull().default(1),
+    date: date("date", { mode: "string" }).notNull(),
+    /** Wofür es sie gab, z.B. "2. Klausur" — das Fach steht schon daneben */
+    title: text("title"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("grades_user_date_idx").on(t.userId, t.date),
+    index("grades_subject_idx").on(t.subjectId),
+  ],
+);
+
 /** Ein Gerät, das Push-Nachrichten empfangen darf. */
 export const pushSubscriptions = pgTable(
   "push_subscriptions",
@@ -294,6 +343,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   periods: many(periods),
   lessons: many(lessons),
   homework: many(homework),
+  grades: many(grades),
   pushSubscriptions: many(pushSubscriptions),
 }));
 
@@ -306,6 +356,7 @@ export const subjectsRelations = relations(subjects, ({ one, many }) => ({
   exams: many(exams),
   lessons: many(lessons),
   homework: many(homework),
+  grades: many(grades),
 }));
 
 export const examsRelations = relations(exams, ({ one, many }) => ({
@@ -351,6 +402,14 @@ export const homeworkRelations = relations(homework, ({ one }) => ({
   }),
 }));
 
+export const gradesRelations = relations(grades, ({ one }) => ({
+  user: one(users, { fields: [grades.userId], references: [users.id] }),
+  subject: one(subjects, {
+    fields: [grades.subjectId],
+    references: [subjects.id],
+  }),
+}));
+
 export const pushSubscriptionsRelations = relations(
   pushSubscriptions,
   ({ one }) => ({
@@ -378,6 +437,8 @@ export type Lesson = typeof lessons.$inferSelect;
 export type NewLesson = typeof lessons.$inferInsert;
 export type Homework = typeof homework.$inferSelect;
 export type NewHomework = typeof homework.$inferInsert;
+export type Grade = typeof grades.$inferSelect;
+export type NewGrade = typeof grades.$inferInsert;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 
 /** Art einer Prüfung */
@@ -386,6 +447,12 @@ export type ExamKind = "klausur" | "test" | "referat" | "muendlich";
 export type StudyBlockKind = "learn" | "review";
 /** Zustand eines Lernblocks */
 export type StudyBlockStatus = "open" | "done" | "skipped";
+
+/**
+ * Art einer Note. Schriftlich und mündlich sind die beiden Töpfe, aus denen
+ * sich der Fachschnitt zusammensetzt — wie stark jeder wiegt, steht am Fach.
+ */
+export type GradeKind = "schriftlich" | "muendlich";
 
 /** Wochentag im Stundenplan: 1 = Montag … 5 = Freitag */
 export type Weekday = 1 | 2 | 3 | 4 | 5;

@@ -10,6 +10,7 @@ import {
   type ExamListItem,
   type TodayBlock,
 } from "@/lib/exams";
+import { gradeSummary, type GradeSummary } from "@/lib/grades";
 import {
   homeworkForRange,
   listHomework,
@@ -83,6 +84,8 @@ export type HomeData = {
   openHomework: HomeworkItem[];
   /** Offen insgesamt, davon überfällig und davon heute fällig */
   homeworkCounts: { open: number; overdue: number; dueToday: number };
+  /** Gesamtschnitt, Schnitt je Fach und die zuletzt eingetragene Note */
+  grades: GradeSummary;
 };
 
 export async function loadHomeData(
@@ -105,6 +108,7 @@ export async function loadHomeData(
     todayHomework,
     openHomework,
     homeworkCounts,
+    grades,
   ] = await Promise.all([
     db
       .select({ value: count() })
@@ -120,6 +124,7 @@ export async function loadHomeData(
     homeworkForRange(userId, today, today),
     listHomework(userId),
     openHomeworkCount(userId, today),
+    gradeSummary(userId),
   ]);
 
   const upcoming = exams.filter((exam) => exam.date >= today);
@@ -148,7 +153,21 @@ export async function loadHomeData(
     todayHomework,
     openHomework,
     homeworkCounts,
+    grades,
   };
+}
+
+/**
+ * Wie viele Noten hinter dem angezeigten Schnitt stecken.
+ *
+ * Nicht `GradeSummary.gradeCount` nehmen: der zählt auch die Noten
+ * archivierter Fächer mit, während `overall` und `perSubject` sie weglassen.
+ * „Ø 2,3 aus 14 Noten“ verspräche dann eine Rechnung, die in Wahrheit nur elf
+ * dieser Noten kennt. Neben dem Schnitt steht deshalb genau das, was in ihn
+ * eingegangen ist: die Noten der Fächer aus `perSubject`.
+ */
+export function countedGrades(grades: GradeSummary): number {
+  return grades.perSubject.reduce((sum, entry) => sum + entry.count, 0);
 }
 
 /** Anteil erledigter Lernblöcke einer Prüfung, 0–100. */

@@ -1,7 +1,7 @@
 /**
  * Farben für Fächer. Bewusst als Hex-Werte statt als Tailwind-Klassen, damit
  * sie zur Laufzeit frei kombiniert werden können — Stundenplan-Kacheln,
- * Notenbalken und Klausur-Countdown greifen später auf dieselbe Palette zu.
+ * Notenbalken und Klausur-Countdown greifen auf dieselbe Palette zu.
  *
  * In Komponenten am besten als CSS-Variable setzen:
  *   style={{ "--subject": color.hex } as React.CSSProperties}
