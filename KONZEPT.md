@@ -137,6 +137,39 @@ einer Note nicht mehr zu schaffen.
    "Was ist heute und morgen?"~~ **fertig**
 4. ~~**Noten** — Eintragen, Schnitt pro Fach und gesamt,
    "Was brauche ich noch für eine 2?"~~ **fertig**
+5. **Material und Themen** — die Blätter kommen in die App, und aus ihnen wird
+   Lernstoff. In Stufen:
+   1. ~~**Themen-Vokabular** — jedes Fach führt seine Themen, Klausuren greifen
+      daraus, Pflege unter `/faecher/<id>/themen`~~ **fertig**
+   2. **Kamera und Ablage** — Blätter aufnehmen, speichern, Fach und Thema
+      zuordnen. Ohne KI, und für sich schon nützlich
+   3. **Eingangskorb** — Vorschläge, die man bestätigt, mit vollem Handformular
+   4. **Web MCP** — die App bietet ihre Fähigkeiten als Tools an, ein Agent in
+      Claude benutzt sie
+
+## Wie die KI angeschlossen wird
+
+Nicht in die App hinein, sondern außen herum. Die App ist ohne sie vollständig:
+fotografieren, zuordnen, wiederfinden, Vorschlag von Hand anlegen, bestätigen.
+
+Der Agent läuft in Claude und ruft die App — nicht umgekehrt. Ein MCP-Server
+ruft nie ein Modell auf, er wird gerufen; deshalb kostet dieser Weg kein
+API-Guthaben, sondern läuft über das Abo. Die Tools sitzen dabei **neben** den
+Server Actions auf derselben `src/lib` und nicht darüber: eine Server Action
+endet mit `redirect()`, und das wirft intern — ein Tool bekäme nie ein Ergebnis.
+
+Zwei Regeln stehen darüber:
+
+**Alles, was die KI kann, muss ich auch können.** Jede Fähigkeit des Agenten
+braucht einen Weg in der Oberfläche. Umgekehrt gilt es nicht — der Agent bekommt
+nur `read_*` und `propose_*`, kein Anlegen, kein Ändern, kein Löschen.
+
+**Der Agent schreibt nie in den Bestand.** Er legt Vorschläge an; erst ein
+Mensch übernimmt sie, durch dieselbe Tür wie ein Formular. Das ist keine
+Vorsichtsmaßnahme, sondern die Bedingung: Wer nicht vertrauenswürdige Blätter
+liest und gleichzeitig schreiben darf, ist angreifbar über das Blatt selbst.
+Aus demselben Grund gehören Zettel nie in eine Claude-Code-Sitzung, sondern in
+die Claude-App — dort steht kein Bash und kein Zugriff auf das Repo daneben.
 
 ## Offene Punkte
 
