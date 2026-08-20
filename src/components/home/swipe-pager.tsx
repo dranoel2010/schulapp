@@ -254,8 +254,29 @@ export function SwipePager({ start, calendar }: SwipePagerProps) {
       onWheel={handleWheel}
       onKeyDown={handleKeyDown}
     >
+      {/* Der Höhendeckel ist nicht kosmetisch, sondern trägt die ganze
+          Startseite.
+
+          Die Spur ist ein Zeilen-Flex, beide Seiten strecken sich auf die Höhe
+          der größeren. Über der Spur steht nirgends eine feste Höhe — `body`
+          hat nur ein `min-h-dvh`, also eine Untergrenze. Ohne Deckel wächst
+          die Kette deshalb mit dem Inhalt: ein voller Schultag in der Tagesspur
+          schiebt die Seite auf weit über eine Bildschirmhöhe, das Kachelraster
+          daneben verteilt diese Höhe auf seine drei Reihen und wird dreifach zu
+          hoch — und der eigene Scrollbereich der Tagesspur greift gar nicht
+          mehr, weil über ihm nichts begrenzt ist.
+
+          Der Fehler zeigt sich erst ab genug Inhalt: an einem leeren Tag bleibt
+          alles unter der Bildschirmhöhe und sieht richtig aus. Genau deshalb
+          ist er lange nicht aufgefallen.
+
+          Abgezogen werden die sicheren Ränder, weil das Layout sie oberhalb und
+          unterhalb schon als Polster gesetzt hat (`pt-safe` in PageBody,
+          `pb-safe` im Layout). Ohne den Abzug stünde die Spur im Vollbild um
+          genau diese Ränder über dem Bildschirm und die Seite ließe sich ein
+          Stück schieben. */}
       <div
-        className="flex min-h-0 flex-1 [backface-visibility:hidden] [will-change:transform]"
+        className="flex min-h-0 max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-1 [backface-visibility:hidden] [will-change:transform]"
         style={{
           transform: `translateX(calc(${-page * 100}% + ${drag}px))`,
           transition: dragging ? "none" : TRANSITION,
@@ -263,9 +284,12 @@ export function SwipePager({ start, calendar }: SwipePagerProps) {
       >
         {/* Beide Seiten bleiben für Vorleseprogramme erreichbar: ein
             aria-hidden auf der abgewandten Seite würde ihren Inhalt
-            verschlucken. */}
-        <div className="flex min-w-full flex-col">{start}</div>
-        <div className="flex min-w-full flex-col">{calendar}</div>
+            verschlucken.
+
+            `min-h-0` lässt sie in der Zeile schrumpfen; die Höhe deckelt
+            die Spur darüber. */}
+        <div className="flex min-h-0 min-w-full flex-col">{start}</div>
+        <div className="flex min-h-0 min-w-full flex-col">{calendar}</div>
       </div>
     </div>
   );
