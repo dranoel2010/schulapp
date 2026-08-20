@@ -181,8 +181,26 @@ Einschalten kannst du sie in den Einstellungen der App. Zwei Bedingungen:
 Der Versand wird von `/api/cron/reminders` ausgelöst. Die Route ist durch
 `CRON_SECRET` geschützt und wird **stündlich** aufgerufen — welche Stunde für
 dich gemeint ist, entscheidet die Route anhand deiner Erinnerungszeit in
-Berliner Zeit. In der Cloud übernimmt das der Eintrag in `vercel.json`; lokal
-testest du sie so:
+Berliner Zeit.
+
+Ausgelöst wird sie von `.github/workflows/erinnerungen.yml` und **nicht** von
+`vercel.json`. Der Grund ist eine Grenze des Hobby-Tarifs: dort ist höchstens
+ein Cron-Lauf pro Tag erlaubt, und ein stündlicher Ausdruck lässt schon das
+Deployment scheitern („Hobby accounts are limited to daily cron jobs"). Einmal
+am Tag geht die Rechnung aber nicht auf, weil die Route die passende Stunde
+selbst sucht.
+
+Dafür müssen im GitHub-Repo unter *Settings → Secrets and variables → Actions*
+zwei Werte stehen: `CRON_SECRET` (dasselbe wie in der Umgebung der App) und
+`APP_URL` (die Adresse der laufenden App, ohne Schrägstrich am Ende).
+
+GitHubs Planer ist nicht auf die Minute genau und kann unter Last einige
+Minuten spät kommen. Verschiebt sich ein Lauf über die volle Stunde hinaus,
+fällt die Erinnerung dieser Stunde aus — sie wird nicht nachgeholt. Für eine
+tägliche Lernerinnerung ist das verschmerzbar; wer es genauer braucht, nimmt
+den Vercel-Pro-Tarif und trägt den Cron wieder in `vercel.json` ein.
+
+Lokal testest du sie so:
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/reminders

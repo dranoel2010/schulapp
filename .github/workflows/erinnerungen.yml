@@ -1,0 +1,40 @@
+# Stündlicher Auslöser für die Erinnerungs-Route.
+#
+# Warum nicht der Cron in vercel.json: Auf dem Hobby-Tarif erlaubt Vercel
+# höchstens einen Lauf pro Tag; ein stündlicher Ausdruck lässt das Deployment
+# scheitern ("Hobby accounts are limited to daily cron jobs"). Die Route
+# entscheidet aber selbst anhand der Berliner Uhrzeit, wer gerade dran ist —
+# einmal am Tag geht die Rechnung also nicht auf.
+#
+# Zwei Werte müssen im Repo unter Settings → Secrets and variables → Actions
+# hinterlegt sein:
+#   CRON_SECRET  dasselbe Geheimnis wie in der Umgebung der App
+#   APP_URL      die Adresse der laufenden App, ohne Schrägstrich am Ende
+name: Erinnerungen
+
+on:
+  schedule:
+    # Fünf nach voll, damit der Lauf nicht mit der vollen Stunde konkurriert.
+    - cron: "5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ausloesen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Erinnerungs-Route aufrufen
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          antwort=$(mktemp)
+          code=$(curl -sS --max-time 60 -o "$antwort" -w "%{http_code}" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_URL}/api/cron/reminders")
+          cat "$antwort"
+          echo
+          if [ "$code" != "200" ]; then
+            echo "::error::Die Route hat ${code} geantwortet."
+            exit 1
+          fi

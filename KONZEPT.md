@@ -141,8 +141,11 @@ einer Note nicht mehr zu schaffen.
 ## Offene Punkte
 
 - Fächerliste (kommt beim ersten Einrichten in der App)
-- Halbjahre: die Noten liegen alle in einem Topf. Ein Schuljahr später will man
-  „Schnitt Q1" sagen können — dafür fehlt ein Zeitraum im Datenmodell
+- **Die Oberstufe bringt zwei Änderungen auf einmal.** In der 11. gibt es Punkte
+  0–15 statt Noten 1–6, und spätestens dann braucht die App Halbjahre: heute
+  liegen alle Noten in einem Topf, und eine Themenliste über zwei Schuljahre
+  wird ohne Zeitraum unbrauchbar. Beides gehört zusammen angefasst, nicht
+  einzeln. Bis dahin gilt die Skala 1–6, und die ist für die 10. richtig.
 - Zeugnisnote je Fach von Hand überschreiben (die Lehrkraft rundet anders als
   die Rechnung)
 - Offline **schreiben** (Hausaufgabe im Schulnetz ohne Empfang eintragen) —
