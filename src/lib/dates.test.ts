@@ -6,7 +6,9 @@ import {
   daysBetween,
   formatCountdown,
   formatGerman,
+  germanShortParts,
   isPast,
+  timeInBerlin,
   todayInBerlin,
   weekdayIndex,
 } from "@/lib/dates";
@@ -21,6 +23,25 @@ describe("todayInBerlin", () => {
     assert.equal(todayInBerlin(new Date("2026-08-19T23:30:00Z")), "2026-08-20");
     assert.equal(todayInBerlin(new Date("2026-01-01T23:30:00Z")), "2026-01-02");
     assert.equal(todayInBerlin(new Date("2026-08-19T21:00:00Z")), "2026-08-19");
+  });
+});
+
+describe("timeInBerlin", () => {
+  it("liefert eine Uhrzeit im Format HH:MM", () => {
+    assert.match(timeInBerlin(), /^([01]\d|2[0-3]):[0-5]\d$/);
+  });
+
+  it("rechnet in Berliner Zeit, im Sommer wie im Winter", () => {
+    // Sommerzeit: UTC+2, Winterzeit: UTC+1.
+    assert.equal(timeInBerlin(new Date("2026-08-20T12:37:00Z")), "14:37");
+    assert.equal(timeInBerlin(new Date("2026-01-20T12:37:00Z")), "13:37");
+  });
+
+  it("schreibt die führende Null, wie sie im Stundenraster steht", () => {
+    // "08:00" muss sich mit den Zeiten aus periods vergleichen lassen —
+    // "8:00" wäre größer als "10:00", sobald man Zeichen für Zeichen prüft.
+    assert.equal(timeInBerlin(new Date("2026-08-20T06:00:00Z")), "08:00");
+    assert.equal(timeInBerlin(new Date("2026-08-19T22:05:00Z")), "00:05");
   });
 });
 
@@ -112,6 +133,35 @@ describe("formatGerman", () => {
     assert.equal(formatGerman("2022-09-14", "kurz"), "Mi, 14.9.");
     assert.equal(formatGerman("2026-12-31", "kurz"), "Do, 31.12.");
     assert.equal(formatGerman("2028-02-29", "kurz"), "Di, 29.2.");
+  });
+});
+
+describe("germanShortParts", () => {
+  it("trennt Wochentag und Kurzdatum", () => {
+    assert.deepEqual(germanShortParts("2022-09-14"), {
+      weekday: "Mi",
+      dayMonth: "14.9.",
+    });
+    assert.deepEqual(germanShortParts("2026-12-31"), {
+      weekday: "Do",
+      dayMonth: "31.12.",
+    });
+  });
+
+  it("kennt auch das Wochenende", () => {
+    assert.equal(germanShortParts("2026-09-12").weekday, "Sa");
+    assert.equal(germanShortParts("2026-09-13").weekday, "So");
+  });
+
+  it("setzt sich wieder zur Kurzform zusammen", () => {
+    // Wer beide Teile nimmt, bekommt genau das, was formatGerman liefert —
+    // sonst wären es doch wieder zwei Schreibweisen.
+    const parts = germanShortParts("2026-09-07");
+
+    assert.equal(
+      `${parts.weekday}, ${parts.dayMonth}`,
+      formatGerman("2026-09-07", "kurz"),
+    );
   });
 });
 

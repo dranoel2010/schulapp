@@ -322,8 +322,9 @@ export function SubjectDangerZone({
         <div className="space-y-3 rounded-control border border-danger/40 bg-danger-soft p-3.5">
           <p className="text-sm text-foreground">
             {subjectName} wirklich löschen? Damit ist das Fach weg — und mit ihm
-            später auch alle Noten, Klausuren und Stundenplan-Einträge, die
-            daran hängen. Rückgängig geht das nicht.
+            sofort alle Klausuren samt Lernplan, alle Stundenplan-Einträge und
+            alle Hausaufgaben, die daran hängen. Noten kommen später dazu und
+            gingen dann genauso mit. Rückgängig geht das nicht.
           </p>
           <div className="flex flex-wrap gap-2">
             <form action={deleteAction}>

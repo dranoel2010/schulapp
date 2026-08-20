@@ -7,8 +7,12 @@
  * plötzlich auf dem falschen Datum.
  *
  * Regel für alle Aufrufer: "heute" wird hereingereicht, nicht im Modul aus der
- * Systemuhr gezogen. Einzige Ausnahme ist todayInBerlin() — die Funktion, deren
- * einziger Zweck genau das ist.
+ * Systemuhr gezogen. Ausgenommen sind todayInBerlin() und timeInBerlin() — die
+ * beiden Funktionen, deren einziger Zweck genau das ist.
+ *
+ * Uhrzeiten sind der eine Fall, in dem die Stunde zählt: der Stundenplan
+ * braucht sie, um zu wissen, welche Schulstunde als nächste kommt. Sie stehen
+ * deshalb als "HH:MM" daneben, nicht als Zeitpunkt.
  */
 
 const MS_PER_DAY = 86_400_000;
@@ -88,6 +92,30 @@ export function todayInBerlin(now: Date = new Date()): string {
   return berlinFormat.format(now);
 }
 
+let berlinTime: Intl.DateTimeFormat | null = null;
+
+/**
+ * Die aktuelle Uhrzeit in Berlin als "14:37".
+ *
+ * Der Stundenplan hält seine Zeiten als Zeichenkette "HH:MM" (siehe `periods`
+ * in src/db/schema.ts). Damit "läuft schon" und "kommt noch" ein schlichter
+ * Zeichenkettenvergleich bleiben kann, muss die Uhr genau dieselbe Form
+ * liefern — "sv-SE" schreibt 24 Stunden mit führender Null, also 08:05 und
+ * nicht 8:05 AM.
+ *
+ * Der Zeitpunkt ist wie bei todayInBerlin() übergebbar, damit sich der Wechsel
+ * von einer Stunde zur nächsten testen lässt.
+ */
+export function timeInBerlin(now: Date = new Date()): string {
+  berlinTime ??= new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Berlin",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  return berlinTime.format(now);
+}
+
 /** Verschiebt ein Datum um ganze Tage, auch rückwärts. */
 export function addDays(date: string, days: number): string {
   return toIso(toUtc(date) + Math.trunc(days) * MS_PER_DAY);
@@ -123,6 +151,22 @@ export function formatGerman(
   }
 
   return `${WEEKDAYS_LONG[weekday]}, ${day}. ${MONTHS[month]}`;
+}
+
+/**
+ * "Do, 24.9." in seine beiden Teile zerlegt: Wochentagskürzel und Kurzdatum.
+ *
+ * Wochenraster, Kachelmenü und Fälligkeitsangabe brauchen mal den einen, mal
+ * den anderen Teil. Jede Stelle baute sich das Kurzdatum bisher selbst nach —
+ * drei Rechnungen, die dasselbe meinen und trotzdem auseinanderlaufen können.
+ */
+export function germanShortParts(date: string): {
+  weekday: string;
+  dayMonth: string;
+} {
+  const [weekday = "", dayMonth = ""] = formatGerman(date, "kurz").split(", ");
+
+  return { weekday, dayMonth };
 }
 
 /** Abstand in Alltagssprache: "heute", "in 5 Tagen", "vor 2 Tagen". */

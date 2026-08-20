@@ -12,8 +12,8 @@ import type { ReactNode } from "react";
  * es über den Knopf oben links (`MobileTopBar`). So bleibt der ganze Bildschirm
  * für den Inhalt frei.
  *
- * Ab Tablet-Breite bleibt die schmale Seitenspalte links mit ihren fünf
- * Punkten — Stundenplan und Noten kommen in späteren Ausbaustufen dazu.
+ * Ab Tablet-Breite bleibt die schmale Seitenspalte links. Seit Phase 3 stehen
+ * dort sieben Punkte; die Noten kommen in Phase 4 dazu.
  *
  * Lernen und Klausuren sind zwei Bereiche, nicht einer: unter "Lernen" steht
  * der Lernplan zum Abhaken, unter "Klausuren" werden die Termine verwaltet.
@@ -50,6 +50,12 @@ function NavIcon({
   );
 }
 
+/**
+ * Die Reihenfolge folgt dem Tag, nicht dem Alphabet: erst was täglich
+ * ansteht — der Stundenplan und die Hausaufgaben —, dann was verwaltet wird —
+ * Lernplan, Klausuren, Fächer —, und zuletzt die Einstellungen. Wer die Liste
+ * umsortieren will, ändert damit diese Aussage, nicht nur die Optik.
+ */
 const ITEMS: NavItem[] = [
   {
     href: "/",
@@ -59,6 +65,37 @@ const ITEMS: NavItem[] = [
         <path d="M3.5 10.2 12 3.5l8.5 6.7" />
         <path d="M5.5 9v10.5h13V9" />
         <path d="M9.75 19.5V14h4.5v5.5" />
+      </>
+    ),
+  },
+  {
+    href: "/stundenplan",
+    label: "Stundenplan",
+    // Ein Raster mit Kopfzeile: genau das, was die Seite zeigt. Kein Kalender —
+    // der steht schon für die Klausuren und meint einzelne Termine, nicht die
+    // Woche, die sich wiederholt.
+    icon: (
+      <>
+        <path d="M3.5 7A2.5 2.5 0 0 1 6 4.5h12A2.5 2.5 0 0 1 20.5 7v10a2.5 2.5 0 0 1-2.5 2.5H6A2.5 2.5 0 0 1 3.5 17V7Z" />
+        <path d="M3.5 9.5h17" />
+        <path d="M9.5 9.5v10" />
+        <path d="M15 9.5v10" />
+        <path d="M3.5 14.5h17" />
+      </>
+    ),
+  },
+  {
+    href: "/hausaufgaben",
+    label: "Hausaufgaben",
+    // Kästchen mit Zeile, zweimal: eine Liste zum Abhaken. Die beiden anderen
+    // Häkchen der Leiste stecken in einem Kreis (Lernen) und in einem Kalender
+    // (Klausuren) — das leere Kästchen bleibt davon unterscheidbar.
+    icon: (
+      <>
+        <rect x="3.5" y="4.75" width="5.5" height="5.5" rx="1.5" />
+        <path d="M12.5 7.5h8" />
+        <rect x="3.5" y="13.75" width="5.5" height="5.5" rx="1.5" />
+        <path d="M12.5 16.5h8" />
       </>
     ),
   },
@@ -172,9 +209,13 @@ export function AppNav({ userName }: AppNavProps) {
 
 /** Feste Namen für die Seiten, die es genau einmal gibt. */
 const SECTION_TITLES: Record<string, string> = {
+  "/stundenplan": "Stundenplan",
+  "/stundenplan/zeiten": "Stundenzeiten",
   "/lernen": "Lernen",
   "/klausuren": "Klausuren",
   "/klausuren/neu": "Neue Klausur",
+  "/hausaufgaben": "Hausaufgaben",
+  "/hausaufgaben/neu": "Neue Aufgabe",
   "/faecher": "Fächer",
   "/faecher/neu": "Neues Fach",
   "/einstellungen": "Einstellungen",
@@ -198,6 +239,9 @@ function sectionTitle(pathname: string): string | null {
   // Unterseite dafür gibt es nicht mehr, die Detailseite ist das Formular.
   if (pathname.startsWith("/klausuren/")) return "Klausur bearbeiten";
   if (pathname.startsWith("/faecher/")) return "Fach bearbeiten";
+  if (pathname.startsWith("/hausaufgaben/")) return "Aufgabe bearbeiten";
+  // Ein Feld im Wochenraster: /stundenplan/<tag>/<stunde>
+  if (pathname.startsWith("/stundenplan/")) return "Stunde bearbeiten";
 
   return "Schulapp";
 }

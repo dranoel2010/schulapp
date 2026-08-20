@@ -19,7 +19,7 @@ automatisch geplanten Lernblöcken davor.
 | Nutzer | Nur ich (ein Account) |
 | Geräte | Android-Handy + Laptop, Daten synchron |
 | Notensystem | Deutsche Noten 1–6 mit +/− |
-| Stundenplan | Fester Wochenplan, Mo–Fr |
+| Stundenplan | Fester Wochenplan, Mo–Fr, 1 bis 12 Stunden am Tag |
 | Erinnerungen | Push-Nachrichten aufs Handy |
 
 ## Technik
@@ -39,12 +39,25 @@ kein App-Store, Änderungen sind Minuten später auf dem Handy.
 ## Datenmodell
 
 ```
-Fach ──┬── Stundenplan-Slot   Wochentag, Stunde, Raum
-       ├── Hausaufgabe        Titel, fällig, erledigt
+Nutzer ─── Stundenraster      Nummer, Beginn, Ende   (1.–12. Stunde)
+
+Fach ──┬── Stundenplan-Slot   Wochentag, Stunde, Raum, Notiz
+       ├── Hausaufgabe        Titel, Notiz, fällig, erledigt-Zeitpunkt
        ├── Klausur            Datum, Themen, Gewicht
        │      └── Lernblock   Tag, Dauer, Thema, Status
        └── Note               Wert, Art (schriftl./mündl.), Gewicht, Datum
 ```
+
+Das **Stundenraster** hängt am Nutzer, nicht am Fach: wann die 3. Stunde
+beginnt, gilt für die ganze Schule. Es steht in der Datenbank statt im Code,
+weil jede Schule andere Zeiten hat — ein falsches Raster macht den ganzen
+Stundenplan wertlos. Beim ersten Öffnen wird eine Vorgabe angelegt, die man
+danach ändert.
+
+**Erledigt** ist bei einer Hausaufgabe ein Zeitpunkt, kein Ja/Nein. Ein
+Zeitpunkt kann nicht in Widerspruch zu einem Häkchen geraten, und „heute
+abgehakt" lässt sich daraus ablesen. Abgehakte Aufgaben verschwinden nach
+vierzehn Tagen aus der Liste — gelöscht wird nie, nur ausgeblendet.
 
 **Fach**: Name, Kürzel, Farbe, Lehrkraft, Raum, Gewichtung schriftlich/mündlich
 
@@ -87,8 +100,8 @@ Meldung einige Tage vor der Klausur.
 1. ~~**Fundament** — Projekt, Datenbank, Login, Fächer anlegen~~ **fertig**
 2. ~~**Klausuren & Lernphasen** — Termine, Themen, Plan-Generator, Countdown,
    Fortschritt, Nachfrage bei verpassten Tagen, Push~~ **fertig**
-3. **Stundenplan & Hausaufgaben** — Wochenplan, Aufgaben, Startseite
-   "Was ist heute und morgen?"
+3. ~~**Stundenplan & Hausaufgaben** — Wochenplan, Aufgaben, Startseite
+   "Was ist heute und morgen?"~~ **fertig**
 4. **Noten** — Eintragen, Schnitt pro Fach und gesamt,
    "Was brauche ich noch für eine 2?"
 
@@ -98,5 +111,9 @@ Meldung einige Tage vor der Klausur.
 - Genaue Gewichtung schriftlich/mündlich pro Fach (in den Einstellungen)
 - Offline **schreiben** (Hausaufgabe im Schulnetz ohne Empfang eintragen) —
   bewusst später, erst wird offline nur gelesen
+- Erinnerung an fällige Hausaufgaben per Push — der Lernplan hat sie schon,
+  die Aufgaben noch nicht
+- Vertretung und Ausfall einer einzelnen Stunde — der Wochenplan ist fest,
+  eine Ausnahme für einen Tag kennt er nicht
 - Freie Tage vom Lernplan ausnehmen (Wochenende, Urlaub) — im Datenmodell
   vorgesehen, in der Oberfläche noch nicht angeboten

@@ -160,6 +160,113 @@ export const studyBlocks = pgTable(
   ],
 );
 
+/**
+ * Das Stundenraster: wann die 1., 2., 3. Stunde beginnt und endet.
+ *
+ * Es steht pro Nutzer in der Datenbank und nicht als Konstante im Code, weil
+ * jede Schule andere Zeiten hat — und weil ein falsches Raster den ganzen
+ * Stundenplan wertlos macht. Beim ersten Öffnen wird es aus
+ * `DEFAULT_PERIODS` (src/lib/timetable.ts) angelegt und ist danach änderbar.
+ *
+ * Die Uhrzeiten sind Zeichenketten im Format "HH:MM" — dieselbe Entscheidung
+ * wie bei den Kalenderdaten: eine Schulstunde beginnt um 8 Uhr, nicht zu einem
+ * Zeitpunkt in einer Zeitzone.
+ */
+export const periods = pgTable(
+  "periods",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Die wievielte Stunde, beginnend bei 1 */
+    number: integer("number").notNull(),
+    /** "08:00" */
+    startsAt: text("starts_at").notNull(),
+    /** "08:45" */
+    endsAt: text("ends_at").notNull(),
+  },
+  (t) => [
+    unique("periods_user_number_key").on(t.userId, t.number),
+    index("periods_user_idx").on(t.userId),
+  ],
+);
+
+/**
+ * Eine Stunde im festen Wochenplan: dieses Fach, an diesem Wochentag, in
+ * dieser Stunde.
+ *
+ * Der Plan ist eine Woche lang und wiederholt sich — es gibt bewusst keine
+ * Datumsangabe. Eine Doppelstunde sind zwei Einträge in aufeinanderfolgenden
+ * Stunden; das hält das Modell einfach und die Anzeige kann sie zusammenfassen.
+ *
+ * Pro Wochentag und Stunde gibt es höchstens einen Eintrag. Die App gehört
+ * einer Person, die nicht in zwei Räumen gleichzeitig sitzt — der eindeutige
+ * Schlüssel macht daraus eine Zusage der Datenbank statt einer Hoffnung.
+ */
+export const lessons = pgTable(
+  "lessons",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    /** 1 = Montag … 5 = Freitag (ISO-Zählung, passend zu getUTCDay()) */
+    weekday: integer("weekday").notNull(),
+    /** Verweist auf periods.number, nicht auf eine Zeile — das Raster darf sich ändern */
+    period: integer("period").notNull(),
+    /** Leer heißt: der Raum des Fachs gilt */
+    room: text("room"),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("lessons_user_slot_key").on(t.userId, t.weekday, t.period),
+    index("lessons_user_idx").on(t.userId),
+  ],
+);
+
+/**
+ * Eine Hausaufgabe: was bis wann für welches Fach zu tun ist.
+ *
+ * Fällig ist sie an einem Kalendertag, nicht zu einer Uhrzeit — dieselbe
+ * Zeichenkette "YYYY-MM-DD" wie bei Prüfungen und Lernblöcken.
+ *
+ * Erledigt wird über `doneAt` festgehalten und nicht über ein zusätzliches
+ * Ja/Nein: ein Zeitpunkt kann nicht in Widerspruch zu einem Häkchen geraten,
+ * und "heute abgehakt" lässt sich daraus ablesen. Leer heißt offen.
+ */
+export const homework = pgTable(
+  "homework",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    /** Längere Beschreibung, z.B. "S. 42 Nr. 3–7" passt schon in den Titel */
+    details: text("details"),
+    dueDate: date("due_date", { mode: "string" }).notNull(),
+    /** Wann abgehakt wurde; leer = offen */
+    doneAt: timestamp("done_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("homework_user_due_idx").on(t.userId, t.dueDate),
+    index("homework_subject_idx").on(t.subjectId),
+  ],
+);
+
 /** Ein Gerät, das Push-Nachrichten empfangen darf. */
 export const pushSubscriptions = pgTable(
   "push_subscriptions",
@@ -184,6 +291,9 @@ export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   subjects: many(subjects),
   exams: many(exams),
+  periods: many(periods),
+  lessons: many(lessons),
+  homework: many(homework),
   pushSubscriptions: many(pushSubscriptions),
 }));
 
@@ -194,6 +304,8 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({
 export const subjectsRelations = relations(subjects, ({ one, many }) => ({
   user: one(users, { fields: [subjects.userId], references: [users.id] }),
   exams: many(exams),
+  lessons: many(lessons),
+  homework: many(homework),
 }));
 
 export const examsRelations = relations(exams, ({ one, many }) => ({
@@ -219,6 +331,26 @@ export const studyBlocksRelations = relations(studyBlocks, ({ one }) => ({
   }),
 }));
 
+export const periodsRelations = relations(periods, ({ one }) => ({
+  user: one(users, { fields: [periods.userId], references: [users.id] }),
+}));
+
+export const lessonsRelations = relations(lessons, ({ one }) => ({
+  user: one(users, { fields: [lessons.userId], references: [users.id] }),
+  subject: one(subjects, {
+    fields: [lessons.subjectId],
+    references: [subjects.id],
+  }),
+}));
+
+export const homeworkRelations = relations(homework, ({ one }) => ({
+  user: one(users, { fields: [homework.userId], references: [users.id] }),
+  subject: one(subjects, {
+    fields: [homework.subjectId],
+    references: [subjects.id],
+  }),
+}));
+
 export const pushSubscriptionsRelations = relations(
   pushSubscriptions,
   ({ one }) => ({
@@ -240,6 +372,12 @@ export type ExamTopic = typeof examTopics.$inferSelect;
 export type NewExamTopic = typeof examTopics.$inferInsert;
 export type StudyBlock = typeof studyBlocks.$inferSelect;
 export type NewStudyBlock = typeof studyBlocks.$inferInsert;
+export type Period = typeof periods.$inferSelect;
+export type NewPeriod = typeof periods.$inferInsert;
+export type Lesson = typeof lessons.$inferSelect;
+export type NewLesson = typeof lessons.$inferInsert;
+export type Homework = typeof homework.$inferSelect;
+export type NewHomework = typeof homework.$inferInsert;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 
 /** Art einer Prüfung */
@@ -248,3 +386,6 @@ export type ExamKind = "klausur" | "test" | "referat" | "muendlich";
 export type StudyBlockKind = "learn" | "review";
 /** Zustand eines Lernblocks */
 export type StudyBlockStatus = "open" | "done" | "skipped";
+
+/** Wochentag im Stundenplan: 1 = Montag … 5 = Freitag */
+export type Weekday = 1 | 2 | 3 | 4 | 5;

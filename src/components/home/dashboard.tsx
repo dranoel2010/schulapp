@@ -2,22 +2,27 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 
 import { setBlockStatusAction } from "@/app/(app)/lernen/actions";
+import { HomeworkCheck } from "@/components/homework/homework-check";
 import { ButtonLink } from "@/components/ui/button";
 import { subjectColor } from "@/lib/colors";
 import { formatGerman } from "@/lib/dates";
-import { planProgress, type HomeData } from "@/lib/home";
+import { dueLabel, dueTone, type DueTone } from "@/lib/due-label";
+import { lessonRoom, planProgress, type HomeData } from "@/lib/home";
+import { mergeDoubleLessons, periodTimes } from "@/lib/timetable";
 
 /**
  * Die Startansicht am großen Bildschirm: alles auf einen Blick, in Karten
  * nebeneinander, ohne Scrollen. Am Handy übernimmt das Kachelmenü — dort wird
  * diese Ansicht von der Startseite ausgeblendet.
  *
- * Alle Zahlen kommen aus @/lib/home. Was es noch nicht gibt — Stundenplan,
- * Hausaufgaben, Noten — bleibt als ehrliche Lücke stehen: keine erfundenen
- * Stunden, keine erfundenen Aufgaben, kein erfundener Schnitt.
+ * Alle Zahlen kommen aus @/lib/home. Was es noch nicht gibt — die Noten —
+ * bleibt als ehrliche Lücke stehen: kein erfundener Schnitt, und auch keine
+ * erfundene Schulstunde, solange kein Stundenplan eingetragen ist.
  */
 
 type Block = HomeData["todayBlocks"][number];
+type Lesson = HomeData["todayLessons"][number];
+type Task = HomeData["openHomework"][number];
 type Exam = NonNullable<HomeData["nextExam"]>;
 
 function cn(...parts: Array<string | false | null | undefined>) {
@@ -32,6 +37,21 @@ const CARD_LINK = cn(CARD, "block transition-colors hover:border-border-strong")
 const UPCOMING_LIMIT = 5;
 
 /**
+ * So viele Aufgaben passen in die Karte, ohne dass sie wächst. Der Rest ist
+ * einen Knopf entfernt — das Dashboard soll auf einen Bildschirm passen.
+ */
+const HOMEWORK_LIMIT = 4;
+
+/** Die Farbregel steht bei `DueTone` in @/lib/due-label. */
+const DUE_TONES: Record<DueTone, string> = {
+  overdue: "text-warning",
+  today: "text-muted",
+  soon: "text-muted",
+  later: "text-muted",
+  done: "text-subtle",
+};
+
+/**
  * Die Überschrift der Countdown-Karte richtet sich nach der Art der Prüfung —
  * ein Referat als "Klausur" zu beschriften wäre schon eine kleine Unwahrheit.
  */
@@ -42,18 +62,8 @@ const NEXT_EXAM_LABELS: Record<string, string> = {
   muendlich: "Nächste mündliche Prüfung",
 };
 
-/** Was in Phase 3 und 4 dazukommt. Bewusst ohne Zahlen und ohne Links. */
+/** Was in Phase 4 dazukommt. Bewusst ohne Zahlen und ohne Links. */
 const ROADMAP = [
-  {
-    title: "Stundenplan",
-    text: "Die Woche mit Fächern, Räumen und Zeiten.",
-    phase: "Phase 3",
-  },
-  {
-    title: "Hausaufgaben",
-    text: "Was bis wann fällig ist.",
-    phase: "Phase 3",
-  },
   {
     title: "Noten",
     text: "Eintragen, Schnitt pro Fach und insgesamt.",
@@ -61,32 +71,34 @@ const ROADMAP = [
   },
 ];
 
-/** Eine Zeile unter dem Datum — nur das, was wirklich in den Daten steht. */
-function summaryFor(data: HomeData): string {
-  const parts: string[] = [];
+/**
+ * Die Zeile unter dem Datum: erst, was noch offen ist, dann, was heute im
+ * Lernplan steht. Beides gezählt, nichts geschätzt — und richtig gebeugt, denn
+ * "1 offene Aufgaben" liest man einmal zu oft.
+ */
+function headlineFor(data: HomeData): string {
+  const open = data.homeworkCounts.open;
+  const blocks = data.todayBlocks.length;
 
-  if (data.todayOpenMinutes > 0) {
-    parts.push(`${data.todayOpenMinutes} min Lernzeit offen`);
-  } else if (data.todayBlocks.length > 0) {
-    parts.push("Lernplan für heute erledigt");
-  } else {
-    parts.push("heute nichts im Lernplan");
+  if (open === 0) {
+    if (blocks === 0) {
+      return "Alles abgehakt. Heute steht auch kein Lernblock an.";
+    }
+
+    return blocks === 1
+      ? "Alles abgehakt. Heute nur noch der Lernblock."
+      : `Alles abgehakt. Heute noch ${blocks} Lernblöcke.`;
   }
 
-  if (data.nextExam && data.daysToNextExam !== null) {
-    const days = data.daysToNextExam;
-    parts.push(
-      days === 0
-        ? `${data.nextExam.subject.name} heute`
-        : days === 1
-          ? `${data.nextExam.subject.name} morgen`
-          : `${data.nextExam.subject.name} in ${days} Tagen`,
-    );
-  } else {
-    parts.push("keine Prüfung eingetragen");
-  }
+  const tasks = open === 1 ? "1 offene Aufgabe" : `${open} offene Aufgaben`;
+  const learn =
+    blocks === 0
+      ? "kein Lernblock"
+      : blocks === 1
+        ? "ein Lernblock"
+        : `${blocks} Lernblöcke`;
 
-  return parts.join(" · ");
+  return `${tasks}, ${learn} heute.`;
 }
 
 export function HomeDashboard({ data }: { data: HomeData }) {
@@ -99,30 +111,30 @@ export function HomeDashboard({ data }: { data: HomeData }) {
           <h2 className="text-[24px] font-semibold leading-tight tracking-[-0.02em] text-foreground">
             {formatGerman(data.today, "lang")}
           </h2>
-          <p className="mt-1 text-[14px] text-muted">{summaryFor(data)}</p>
+          <p className="mt-1 text-[14px] text-muted">{headlineFor(data)}</p>
         </div>
 
-        <ButtonLink href="/klausuren/neu" className="shrink-0">
-          Klausur eintragen
-        </ButtonLink>
+        <div className="flex shrink-0 items-center gap-3">
+          <ButtonLink href="/hausaufgaben" variant="secondary">
+            Hausaufgaben
+          </ButtonLink>
+          <ButtonLink href="/klausuren/neu">Klausur eintragen</ButtonLink>
+        </div>
       </header>
 
       <div className="grid min-h-0 flex-1 grid-cols-[1.15fr_1fr_1fr] gap-4">
         <div className="flex min-h-0 flex-col gap-4">
           <NextExamCard exam={data.nextExam} days={data.daysToNextExam} />
-          <TodayCard
-            blocks={data.todayBlocks}
-            doneCount={data.todayDoneCount}
-            missedCount={data.missed.length}
-          />
+          <TodayCard data={data} />
         </div>
 
         <div className="flex min-h-0 flex-col gap-4">
+          <HomeworkCard data={data} />
           <UpcomingCard exams={upcoming} total={data.upcoming.length} />
-          <SubjectsCard count={data.subjectCount} />
         </div>
 
-        <div className="flex min-h-0 flex-col">
+        <div className="flex min-h-0 flex-col gap-4">
+          <SubjectsCard count={data.subjectCount} />
           <RoadmapCard />
         </div>
       </div>
@@ -204,36 +216,52 @@ function NextExamCard({
 }
 
 /**
- * Die Lernblöcke von heute. Der Entwurf zeigt hier auch Schulstunden mit
- * Uhrzeit — die gibt es nicht. Lernblöcke haben nur eine Dauer, also steht
- * links die Dauer und keine erfundene Uhrzeit.
+ * Der heutige Tag: erst die Schulstunden mit ihrer Uhrzeit, danach die
+ * Lernblöcke. Die Reihenfolge ergibt sich aus den Daten — eine Schulstunde hat
+ * einen Beginn, ein Lernblock nur eine Dauer, also steht links bei ihm die
+ * Dauer und keine erfundene Uhrzeit.
+ *
+ * Freistunden erscheinen hier bewusst nicht: die Karte beantwortet "was steht
+ * heute an", und eine Freistunde steht nicht an. In der Tagesspur am Handy ist
+ * sie dagegen sinnvoll, weil dort der Tagesablauf lückenlos zu sehen ist.
  */
-function TodayCard({
-  blocks,
-  doneCount,
-  missedCount,
-}: {
-  blocks: Block[];
-  doneCount: number;
-  missedCount: number;
-}) {
+function TodayCard({ data }: { data: HomeData }) {
+  const blocks = data.todayBlocks;
+  const times = periodTimes(data.periods);
+
+  // Wie in der Tagesspur: eine Doppelstunde ist ein Termin, nicht zwei.
+  const lessons = mergeDoubleLessons(data.todayLessons);
+  const missedCount = data.missed.length;
+
   return (
-    <section className={cn(CARD, "flex min-h-0 flex-1 flex-col")}>
+    // Die Karte wächst mit ihrem Inhalt statt die Spalte auszufüllen: ein
+    // Schultag hat selten mehr als acht Zeilen, gestreckt stünde sie zu zwei
+    // Dritteln leer. Bleibt am Fuß der Spalte Platz, ist das ehrlicher als
+    // eine Karte, die Fülle vortäuscht.
+    <section className={cn(CARD, "flex min-h-0 flex-col")}>
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-[15px] font-semibold text-foreground">Heute</h3>
         {blocks.length > 0 ? (
           <span className="shrink-0 text-[13px] tabular-nums text-muted">
-            {doneCount} von {blocks.length} erledigt
+            {data.todayDoneCount} von {blocks.length} erledigt
           </span>
         ) : null}
       </div>
 
-      {blocks.length === 0 ? (
+      {lessons.length === 0 && blocks.length === 0 ? (
         <p className="mt-3 text-[14px] text-muted">
-          Für heute steht nichts im Lernplan.
+          Heute steht nichts an — weder eine Schulstunde noch ein Lernblock.
         </p>
       ) : (
-        <ul className="mt-3 max-h-[40vh] min-h-0 flex-1 space-y-2 overflow-y-auto">
+        <ul className="mt-3 max-h-[40vh] min-h-0 space-y-2 overflow-y-auto">
+          {lessons.map((block) => (
+            <LessonRow
+              key={block.lesson.id}
+              lesson={block.lesson}
+              startsAt={times.get(block.from)?.startsAt}
+            />
+          ))}
+
           {blocks.map((block) => (
             <BlockRow key={block.id} block={block} />
           ))}
@@ -246,7 +274,139 @@ function TodayCard({
           {missedCount} {missedCount === 1 ? "Block" : "Blöcke"} offen.
         </p>
       ) : null}
+
+      {data.hasTimetable ? null : (
+        <Link
+          href="/stundenplan"
+          className="mt-3 inline-block text-[13px] font-medium text-accent hover:underline"
+        >
+          Stundenplan eintragen
+        </Link>
+      )}
     </section>
+  );
+}
+
+/**
+ * Eine Schulstunde in der Heute-Karte. Die leere erste Spalte ist der Platz,
+ * den in den Lernblock-Zeilen darunter das Kästchen einnimmt — ohne sie
+ * stünden Uhrzeiten und Dauern nicht auf derselben Linie.
+ */
+function LessonRow({
+  lesson,
+  startsAt,
+}: {
+  lesson: Lesson;
+  startsAt?: string;
+}) {
+  const room = lessonRoom(lesson);
+
+  return (
+    <li
+      style={
+        { "--subject": subjectColor(lesson.subject.color).hex } as CSSProperties
+      }
+      className="flex items-center gap-2.5 py-0.5"
+    >
+      <span aria-hidden="true" className="size-[18px] shrink-0" />
+
+      <span className="w-11 shrink-0 font-mono text-[12px] tabular-nums text-subtle">
+        {startsAt}
+      </span>
+
+      <span
+        aria-hidden="true"
+        className="h-[22px] w-1.5 shrink-0 rounded-[3px] bg-[var(--subject)]"
+      />
+
+      <span className="min-w-0 flex-1 truncate text-[14px] text-foreground">
+        {room ? `${lesson.subject.name} · ${room}` : lesson.subject.name}
+      </span>
+    </li>
+  );
+}
+
+/**
+ * Die offenen Aufgaben, die nächste Fälligkeit zuerst — abhakbar an Ort und
+ * Stelle. Das Badge zieht mit, weil die Action die Startseite mit auffrischt.
+ */
+function HomeworkCard({ data }: { data: HomeData }) {
+  const open = data.homeworkCounts.open;
+  const items = data.openHomework.slice(0, HOMEWORK_LIMIT);
+
+  return (
+    <section className={cn(CARD, "flex min-h-0 flex-col")}>
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-[15px] font-semibold text-foreground">
+          Hausaufgaben
+        </h3>
+        <span
+          className={cn(
+            "shrink-0 font-mono text-[12px] tabular-nums",
+            // Warnfarbe nur, wenn auch etwas offen ist — "nichts offen" in
+            // Bernstein wäre ein Alarm ohne Anlass.
+            open > 0 ? "text-warning" : "text-muted",
+          )}
+        >
+          {open === 0 ? "nichts offen" : `${open} offen`}
+        </span>
+      </div>
+
+      {items.length === 0 ? (
+        <p className="mt-3 text-[14px] text-muted">
+          Nichts offen. Was aufgegeben wird, trägst du unter Hausaufgaben ein.
+        </p>
+      ) : (
+        <ul className="mt-3 space-y-2.5">
+          {items.map((item) => (
+            <HomeworkRow key={item.id} item={item} today={data.today} />
+          ))}
+        </ul>
+      )}
+
+      {open > items.length ? (
+        <p className="mt-2.5 text-[13px] text-subtle">
+          und {open - items.length} weitere
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * Eine Zeile des Widgets — ohne Fach, anders als auf der Hausaufgabenseite.
+ * Hier zählt, was zu tun ist; wohin es gehört, steht dort, wo man es
+ * bearbeitet. Der Titel ist bewusst kein Link: das Kästchen bringt sein
+ * eigenes Formular mit, und ein Formular in einem Link wäre ungültiges HTML.
+ */
+function HomeworkRow({ item, today }: { item: Task; today: string }) {
+  return (
+    <li className="flex items-center gap-2.5">
+      <HomeworkCheck
+        id={item.id}
+        done={item.done}
+        label={`${item.subject.name}: ${item.title}`}
+        size="sm"
+      />
+
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate text-[14px]",
+          item.done ? "text-subtle line-through" : "text-foreground",
+        )}
+      >
+        {item.title}
+      </span>
+
+      <span
+        className={cn(
+          "shrink-0 font-mono text-[12px] tabular-nums",
+          DUE_TONES[dueTone(item.dueDate, today, item.done)],
+        )}
+      >
+        {dueLabel(item.dueDate, today)}
+      </span>
+    </li>
   );
 }
 
@@ -410,12 +570,12 @@ function SubjectsCard({ count }: { count: number }) {
  */
 function RoadmapCard() {
   return (
-    <section className={cn(CARD, "flex min-h-0 flex-1 flex-col")}>
+    <section className={cn(CARD, "flex min-h-0 flex-col")}>
       <h3 className="text-[15px] font-semibold text-foreground">
         Was noch kommt
       </h3>
       <p className="mt-1 text-[13px] text-muted">
-        Diese Bereiche sind noch nicht gebaut. Bis dahin steht hier keine Zahl —
+        Dieser Bereich ist noch nicht gebaut. Bis dahin steht hier keine Zahl —
         lieber eine Lücke als eine erfundene Angabe.
       </p>
 

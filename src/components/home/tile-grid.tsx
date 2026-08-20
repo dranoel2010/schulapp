@@ -1,8 +1,8 @@
 import Link from "next/link";
 
 import { ButtonLink } from "@/components/ui/button";
-import { formatCountdown, formatGerman } from "@/lib/dates";
-import type { HomeData } from "@/lib/home";
+import { formatGerman, germanShortParts } from "@/lib/dates";
+import { dayLine, lessonRoom, type HomeData } from "@/lib/home";
 
 /**
  * Das Kachelmenü fürs Handy — die Startansicht auf schmalen Bildschirmen.
@@ -22,10 +22,11 @@ import type { HomeData } from "@/lib/home";
  * <body> über das Layout bis hierher durchgehen — reißt sie an einer Stelle,
  * fallen die Kacheln auf ihre Mindesthöhe zurück.
  *
- * Ehrlichkeit vor Vollständigkeit: Stundenplan, Hausaufgaben und Noten gibt es
- * noch nicht. Ihre Kacheln behalten die Form der anderen, sind aber sichtbar
- * zurückgenommen und nicht anklickbar — lieber eine sichtbare Lücke als eine
- * erfundene Zahl.
+ * Ehrlichkeit vor Vollständigkeit: Noten gibt es noch nicht. Diese eine Kachel
+ * behält die Form der anderen, ist aber sichtbar zurückgenommen und nicht
+ * anklickbar — lieber eine sichtbare Lücke als eine erfundene Zahl. Aus
+ * demselben Grund steht auf der Stundenplan-Kachel ein Strich statt einer
+ * Uhrzeit, solange kein Plan eingetragen ist.
  *
  * Die Kopfzeile bringt die Komponente selbst mit. Ums Ausblenden ab mittlerer
  * Breite kümmert sich die Startseite.
@@ -52,12 +53,25 @@ type TileProps = {
   href: string;
   /** Nur die erste Kachel trägt den Akzent. */
   highlighted?: boolean;
+  /**
+   * Färbt allein die Caption warnend. Im Entwurf ist das die einzige Farbe im
+   * Raster außer dem Akzent — sie bleibt deshalb den Hausaufgaben vorbehalten.
+   */
+  warning?: boolean;
 };
 
-function Tile({ label, value, caption, href, highlighted = false }: TileProps) {
+function Tile({
+  label,
+  value,
+  caption,
+  href,
+  highlighted = false,
+  warning = false,
+}: TileProps) {
   // Auf der Akzentfläche trägt der Nebentext keine eigene Farbe, sondern
   // weniger Deckkraft — sonst müsste jede Textfarbe zweimal gedacht werden.
   const quiet = highlighted ? "opacity-[0.85]" : "text-muted";
+  const captionTone = warning && !highlighted ? "text-warning" : quiet;
 
   return (
     <Link
@@ -74,7 +88,7 @@ function Tile({ label, value, caption, href, highlighted = false }: TileProps) {
 
       <span className="block">
         {value ? <span className={VALUE}>{value}</span> : null}
-        <span className={`${CAPTION} ${quiet} ${value ? "mt-1.5" : ""}`}>
+        <span className={`${CAPTION} ${captionTone} ${value ? "mt-1.5" : ""}`}>
           {caption}
         </span>
       </span>
@@ -160,27 +174,48 @@ export function HomeTiles({ data }: { data: HomeData }) {
     examCaption = days === 1 ? `Tag bis ${nextShort}` : `Tage bis ${nextShort}`;
   }
 
-  // Die Zusammenfassung nennt nur, was wirklich in der Datenbank steht:
-  // die heutigen Lernblöcke und die nächste Prüfung. Keine Schulstunden.
-  const summary: string[] = [];
+  // Die Zahl sind die offenen Aufgaben, die Zeile darunter sagt, was davon
+  // drängt. Überfälliges hat Vorrang: es ist die schlechtere Nachricht und
+  // deshalb die, die zuerst gelesen werden muss.
+  const { open, overdue, dueToday } = data.homeworkCounts;
 
-  if (!hasSubjects) {
-    summary.push("noch keine Fächer angelegt");
-  } else if (data.todayBlocks.length === 1) {
-    summary.push("1 Lernblock heute");
-  } else if (data.todayBlocks.length > 1) {
-    summary.push(`${data.todayBlocks.length} Lernblöcke heute`);
+  let homeworkCaption: string;
+
+  if (overdue > 0) {
+    homeworkCaption = `${overdue} überfällig`;
+  } else if (dueToday === 0) {
+    homeworkCaption = "nichts heute fällig";
   } else {
-    summary.push("heute keine Lernblöcke");
+    homeworkCaption = `${dueToday} heute fällig`;
   }
 
-  if (data.nextExam) {
-    summary.push(
-      `${data.nextExam.subject.name} ${formatCountdown(
-        data.today,
-        data.nextExam.date,
-      )}`,
-    );
+  const next = data.nextLesson;
+
+  let planValue: string;
+  let planCaption: string;
+
+  if (!next) {
+    // Ohne eingetragene Stunden gibt es keine nächste — dann steht dort ein
+    // Strich und der Weg dorthin, keine erfundene Uhrzeit. Die Kachel führt
+    // trotzdem in den Stundenplan, denn genau dort fehlt ja etwas.
+    planValue = "–";
+    planCaption = "eintragen";
+  } else {
+    // Zweistellig wie im Entwurf: aus "08:50" wird "08". Die Minuten stehen
+    // in der Tagesspur, hier zählt die Stunde.
+    planValue = next.startsAt.slice(0, 2);
+
+    const room = lessonRoom(next.lesson);
+    const where = room
+      ? `${next.lesson.subject.name}, ${room}`
+      : next.lesson.subject.name;
+
+    // "Mo · Mathe, A203": das Kürzel nur, wenn die Stunde nicht mehr heute
+    // ist. Im Kachelmenü ist der Platz auf eine Zeile begrenzt — das ganze
+    // Datum passte nicht daneben.
+    planCaption = next.isToday
+      ? where
+      : `${germanShortParts(next.date).weekday} · ${where}`;
   }
 
   return (
@@ -194,7 +229,7 @@ export function HomeTiles({ data }: { data: HomeData }) {
             {formatGerman(data.today, "kurz")}
           </h1>
           <p className="mt-2 text-[14px] leading-snug text-muted">
-            {summary.join(" · ")}
+            {hasSubjects ? dayLine(data) : "noch keine Fächer angelegt"}
           </p>
         </div>
 
@@ -243,9 +278,24 @@ export function HomeTiles({ data }: { data: HomeData }) {
           href="/klausuren"
         />
 
-        <SoonTile label="Hausaufgaben" />
+        <Tile
+          label="Hausaufgaben"
+          value={String(open)}
+          caption={homeworkCaption}
+          href="/hausaufgaben"
+          // Die Warnfarbe steht nur da, wo auch wirklich etwas drängt —
+          // "nichts heute fällig" in Bernstein wäre ein Alarm ohne Anlass.
+          warning={overdue > 0 || dueToday > 0}
+        />
+
         <SoonTile label="Noten" />
-        <SoonTile label="Stundenplan" />
+
+        <Tile
+          label="Stundenplan"
+          value={planValue}
+          caption={planCaption}
+          href="/stundenplan"
+        />
 
         <Tile
           label="Fächer"
