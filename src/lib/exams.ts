@@ -362,8 +362,9 @@ export async function setTopics(
  * Geschichte der Lernphase. Geplant wird nur, was davon noch übrig ist.
  */
 /**
- * Minuten, die an einem Tag schon durch erledigte Blöcke verbraucht sind.
- * Gestrichene zählen nicht mit — die geben ihre Zeit wieder frei.
+ * Minuten, die an einem Tag schon durch erledigte Blöcke dieser Prüfung
+ * verbraucht sind. Gestrichene zählen nicht mit — die geben ihre Zeit wieder
+ * frei.
  */
 function occupiedMinutes(blocks: StudyBlock[]): Record<string, number> {
   const byDay: Record<string, number> = {};
@@ -371,6 +372,55 @@ function occupiedMinutes(blocks: StudyBlock[]): Record<string, number> {
     if (block.status !== "done") continue;
     byDay[block.date] = (byDay[block.date] ?? 0) + block.minutes;
   }
+  return byDay;
+}
+
+/**
+ * Alles, was an einem Tag schon vergeben ist: die erledigten Blöcke dieser
+ * Prüfung — und was an dem Tag für **andere** Prüfungen geplant oder erledigt
+ * ist.
+ *
+ * Der zweite Teil hat lange gefehlt, und es war ein Fehler mit Folgen. Jede
+ * Prüfung plante für sich, und drei Klausuren mit überlappenden Lernphasen
+ * legten drei Blöcke auf denselben Dienstag: 135 Minuten an einem Tag, den
+ * niemand als überfüllt erkannt hat. Wer mehr Klausuren einträgt, bekam so
+ * einen unrealistischeren Plan — Erfassen wurde bestraft.
+ *
+ * Bei den anderen Prüfungen zählen offene Blöcke mit, nicht nur erledigte: ein
+ * geplanter Dienstag ist belegt, auch wenn er noch vor einem liegt.
+ * Gestrichene zählen nirgends — die geben ihre Zeit wieder frei.
+ *
+ * Wer zuerst geplant wird, belegt die Tage; die nächste Prüfung bekommt, was
+ * übrig bleibt. Das ist Absicht und keine Nachlässigkeit: ein gemeinsames
+ * Neuverteilen aller Pläne würde einen Plan, an dem schon abgehakt wurde,
+ * unter dem Nutzer wegziehen, sobald er die nächste Klausur einträgt.
+ */
+async function occupiedAcrossExams(
+  userId: string,
+  examId: string,
+  ownBlocks: StudyBlock[],
+): Promise<Record<string, number>> {
+  const rows = await db
+    .select({
+      date: studyBlocks.date,
+      minutes: sql<number>`cast(sum(${studyBlocks.minutes}) as int)`,
+    })
+    .from(studyBlocks)
+    .innerJoin(
+      exams,
+      and(eq(exams.id, studyBlocks.examId), eq(exams.userId, userId)),
+    )
+    .where(
+      and(ne(studyBlocks.examId, examId), ne(studyBlocks.status, "skipped")),
+    )
+    .groupBy(studyBlocks.date);
+
+  const byDay = occupiedMinutes(ownBlocks);
+
+  for (const row of rows) {
+    byDay[row.date] = (byDay[row.date] ?? 0) + Number(row.minutes);
+  }
+
   return byDay;
 }
 
@@ -398,7 +448,7 @@ export async function generatePlan(
     title: topic.title,
   }));
 
-  const occupied = occupiedMinutes(blocks);
+  const occupied = await occupiedAcrossExams(userId, examId, blocks);
 
   const plan = buildPlan({
     examDate: exam.date,
@@ -534,13 +584,15 @@ export async function catchUpMissed(
   const open = all.filter((block) => block.status === "open");
   if (open.length === 0) return;
 
+  const occupied = await occupiedAcrossExams(userId, examId, all);
+
   const scheduled = replanOpen({
     examDate: exam.date,
     today,
     topics: topics.map((topic) => ({ id: topic.id, title: topic.title })),
     leadDays: exam.leadDays,
     minutesPerDay: exam.minutesPerDay,
-    occupied: occupiedMinutes(all),
+    occupied,
     open: open.map((block) => ({
       id: block.id,
       topicId: block.topicId,
