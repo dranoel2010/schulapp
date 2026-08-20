@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { z } from "zod";
 
 import { requireUser } from "@/lib/auth";
 import {
+  homeworkInputSchema,
   createHomework,
   deleteHomework,
   getHomework,
@@ -19,58 +19,16 @@ import type { HomeworkFieldErrors, HomeworkFormState } from "./homework-form";
 /**
  * Die Server Actions der Hausaufgaben.
  *
- * Das Prüfschema steht hier und nicht in @/lib/homework: die Datenschicht
- * nimmt fertige Werte entgegen und wirft, wenn etwas nicht stimmt. Im Formular
- * soll aber eine Meldung unter dem Feld stehen und keine Ausnahme hochschlagen
- * — also fängt zod alles ab, bevor die Datenschicht es zu sehen bekommt.
+ * Das Prüfschema steht in @/lib/homework und wird hier nur benutzt. Die
+ * Datenschicht wirft, wenn etwas nicht stimmt; im Formular soll aber eine
+ * Meldung unter dem Feld stehen und keine Ausnahme hochschlagen — also fängt
+ * zod alles ab, bevor die Datenschicht es zu sehen bekommt. Dieselbe Tür gilt
+ * damit für jeden Aufrufer, nicht nur für dieses Formular.
  *
  * Abgehakt wird von drei Stellen aus: aus der Liste, von der Startseite und
  * aus dem Dashboard. Deshalb frischt jede Änderung „/“ mit auf, nicht nur
  * „/hausaufgaben“ — sonst zeigte die Kachel eine Zahl, die nicht mehr stimmt.
  */
-
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * Prüft Form und Gültigkeit: „2026-02-31“ sieht richtig aus, gibt es aber
- * nicht. Dieselbe Prüfung steht in @/lib/homework — dort ist sie privat, und
- * eine Datenschicht, die ihre Prüfungen nach außen reicht, wäre schlechter
- * abgegrenzt als eine Zeile Wiederholung hier.
- */
-function isCalendarDate(value: string): boolean {
-  if (!DATE_PATTERN.test(value)) return false;
-
-  const year = Number(value.slice(0, 4));
-  const month = Number(value.slice(5, 7));
-  const day = Number(value.slice(8, 10));
-  const stamp = new Date(Date.UTC(year, month - 1, day));
-
-  return (
-    stamp.getUTCFullYear() === year &&
-    stamp.getUTCMonth() === month - 1 &&
-    stamp.getUTCDate() === day
-  );
-}
-
-const homeworkInputSchema = z.object({
-  subjectId: z.uuid("Zu welchem Fach gehört die Aufgabe?"),
-  title: z
-    .string("Was ist aufgegeben?")
-    .trim()
-    .min(1, "Was ist aufgegeben?")
-    .max(120, "Der Titel ist zu lang — höchstens 120 Zeichen."),
-  dueDate: z
-    .string("Wann ist die Aufgabe fällig?")
-    .min(1, "Wann ist die Aufgabe fällig?")
-    .refine(isCalendarDate, "Diesen Tag gibt es nicht."),
-  // Leere Eingabe soll als NULL in der Datenbank landen, nicht als "".
-  details: z
-    .string()
-    .trim()
-    .max(2000, "Die Notiz ist zu lang — höchstens 2000 Zeichen.")
-    .nullish()
-    .transform((value) => (value && value.length > 0 ? value : null)),
-});
 
 function readInput(formData: FormData) {
   return {

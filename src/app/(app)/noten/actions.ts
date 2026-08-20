@@ -2,11 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { z } from "zod";
 
 import { requireUser } from "@/lib/auth";
-import { isGradeValue } from "@/lib/grade-scale";
-import { createGrade, deleteGrade, getGrade, updateGrade } from "@/lib/grades";
+import {
+  createGrade,
+  deleteGrade,
+  getGrade,
+  gradeInputSchema,
+  updateGrade,
+} from "@/lib/grades";
 import { listSubjects } from "@/lib/subjects";
 
 import type { GradeFieldErrors, GradeFormState } from "./grade-form";
@@ -23,59 +27,6 @@ import type { GradeFieldErrors, GradeFormState } from "./grade-form";
  * und damit den Gesamtschnitt auf Kachel und Dashboard. Deshalb frischt jede
  * Änderung mehrere Wege auf — siehe revalidateGrades.
  */
-
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-/** Mehr als fünffach zählt keine Note — eine Grenze braucht die Prüfung trotzdem. */
-const MAX_WEIGHT = 5;
-
-/**
- * Prüft Form und Gültigkeit: „2026-02-31“ sieht richtig aus, gibt es aber
- * nicht. Dieselbe Prüfung steht in @/lib/grades — dort ist sie privat, und eine
- * Datenschicht, die ihre Prüfungen nach außen reicht, wäre schlechter
- * abgegrenzt als eine Zeile Wiederholung hier.
- */
-function isCalendarDate(value: string): boolean {
-  if (!DATE_PATTERN.test(value)) return false;
-
-  const year = Number(value.slice(0, 4));
-  const month = Number(value.slice(5, 7));
-  const day = Number(value.slice(8, 10));
-  const stamp = new Date(Date.UTC(year, month - 1, day));
-
-  return (
-    stamp.getUTCFullYear() === year &&
-    stamp.getUTCMonth() === month - 1 &&
-    stamp.getUTCDate() === day
-  );
-}
-
-const gradeInputSchema = z.object({
-  subjectId: z.uuid("Zu welchem Fach gehört die Note?"),
-  // Die leere Vorauswahl kommt als "" an und wird beim Umwandeln zur 0 — auch
-  // die liegt auf keiner Stufe der Skala. Beide Fälle bekommen dieselbe Frage
-  // gestellt, denn beide Male fehlt schlicht die Note.
-  value: z.coerce
-    .number("Welche Note war es?")
-    .refine(isGradeValue, "Welche Note war es?"),
-  kind: z.enum(["schriftlich", "muendlich"], "Schriftlich oder mündlich?"),
-  weight: z.coerce
-    .number("Wie stark zählt die Note?")
-    .int("Das Gewicht ist eine ganze Zahl.")
-    .min(1, "Einfach zählt sie mindestens.")
-    .max(MAX_WEIGHT, "Mehr als fünffach zählt keine Note."),
-  date: z
-    .string("Wann gab es die Note?")
-    .min(1, "Wann gab es die Note?")
-    .refine(isCalendarDate, "Diesen Tag gibt es nicht."),
-  // Leere Eingabe soll als NULL in der Datenbank landen, nicht als "".
-  title: z
-    .string()
-    .trim()
-    .max(120, "Das ist zu lang — höchstens 120 Zeichen.")
-    .nullish()
-    .transform((value) => (value && value.length > 0 ? value : null)),
-});
 
 function readInput(formData: FormData) {
   return {

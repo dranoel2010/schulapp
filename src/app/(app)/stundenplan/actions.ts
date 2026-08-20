@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth";
 import { listSubjects } from "@/lib/subjects";
 import {
   clearSlot,
+  lessonInputSchema,
   listPeriods,
   MAX_PERIOD,
   PeriodsInUseError,
@@ -38,35 +39,8 @@ import type {
  * Änderung mit aufgefrischt.
  */
 
-/** Genauso lang wie das Raumfeld eines Fachs — mehr ist keine Raumnummer. */
-const ROOM_MAX_LENGTH = 20;
-
-/** Eine Notiz an einer Stunde ist ein Hinweis, kein Text. */
-const NOTE_MAX_LENGTH = 200;
-
+/** "08:00" bis "23:59" — das Stundenraster prüft seine Zeiten damit. */
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
-
-/** Leere Eingabe soll als NULL in der Datenbank landen, nicht als "". */
-function optionalText(maxLength: number, tooLong: string) {
-  return z
-    .string()
-    .trim()
-    .max(maxLength, tooLong)
-    .nullish()
-    .transform((value) => (value && value.length > 0 ? value : null));
-}
-
-const lessonInputSchema = z.object({
-  subjectId: z.uuid("Welches Fach ist in dieser Stunde?"),
-  room: optionalText(
-    ROOM_MAX_LENGTH,
-    `Der Raum ist zu lang — höchstens ${ROOM_MAX_LENGTH} Zeichen.`,
-  ),
-  note: optionalText(
-    NOTE_MAX_LENGTH,
-    `Die Notiz ist zu lang — höchstens ${NOTE_MAX_LENGTH} Zeichen.`,
-  ),
-});
 
 /**
  * Eine Zeile des Stundenrasters. Die Uhrzeiten sind Zeichenketten "HH:MM" und

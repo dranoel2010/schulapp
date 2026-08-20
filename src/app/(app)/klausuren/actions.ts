@@ -15,6 +15,7 @@ import {
   updateExam,
 } from "@/lib/exams";
 import { listSubjects } from "@/lib/subjects";
+import { normalizeTopics } from "@/lib/topics";
 
 import type { ExamFieldErrors, ExamFormState } from "./exam-form";
 
@@ -31,12 +32,6 @@ import type { ExamFieldErrors, ExamFormState } from "./exam-form";
  * aufgefrischt.
  */
 
-/** Länger als eine Zeile ist kein Thema mehr. */
-const TOPIC_MAX_LENGTH = 80;
-
-/** So viele Themen kann ein Mensch vor einer Prüfung nicht durcharbeiten. */
-const TOPIC_LIMIT = 40;
-
 function readInput(formData: FormData) {
   return {
     subjectId: formData.get("subjectId"),
@@ -50,29 +45,18 @@ function readInput(formData: FormData) {
 }
 
 /**
- * Die Themen kommen als mehrere Felder gleichen Namens aus dem Formular. Hier
- * werden sie genauso zurechtgeschnitten wie in setTopics — sonst hielte der
- * Vergleich „hat sich etwas geändert?“ Kleinigkeiten für echte Änderungen.
+ * Die Themen kommen als mehrere Felder gleichen Namens aus dem Formular.
+ * Zugeschnitten werden sie von normalizeTopics — derselben Funktion, die auch
+ * setTopics benutzt. Vorher stand die Regel hier ein zweites Mal, und der
+ * Vergleich „hat sich etwas geändert?“ hätte Kleinigkeiten für echte
+ * Änderungen halten können.
  */
 function readTopics(formData: FormData): string[] {
-  const seen = new Set<string>();
-  const titles: string[] = [];
-
-  for (const value of formData.getAll("topics")) {
-    if (typeof value !== "string") continue;
-
-    const title = value.trim().slice(0, TOPIC_MAX_LENGTH);
-    if (!title) continue;
-
-    const key = title.toLocaleLowerCase("de");
-    if (seen.has(key)) continue;
-
-    seen.add(key);
-    titles.push(title);
-    if (titles.length >= TOPIC_LIMIT) break;
-  }
-
-  return titles;
+  return normalizeTopics(
+    formData.getAll("topics").filter((value): value is string =>
+      typeof value === "string",
+    ),
+  );
 }
 
 function sameTopics(before: string[], after: string[]): boolean {

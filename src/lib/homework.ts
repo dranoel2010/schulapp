@@ -1,6 +1,8 @@
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
+import { z } from "zod";
 
 import { db } from "@/db";
+import { isCalendarDate } from "@/lib/dates";
 import {
   homework,
   subjects,
@@ -38,7 +40,29 @@ export type HomeworkInput = {
   dueDate: string;
 };
 
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * Das Prüfschema einer Hausaufgabe — hier und nicht in den Server Actions,
+ * damit jede Tür dieselbe benutzt: das Formular, und später ein Tool.
+ */
+export const homeworkInputSchema = z.object({
+  subjectId: z.uuid("Zu welchem Fach gehört die Aufgabe?"),
+  title: z
+    .string("Was ist aufgegeben?")
+    .trim()
+    .min(1, "Was ist aufgegeben?")
+    .max(120, "Der Titel ist zu lang — höchstens 120 Zeichen."),
+  dueDate: z
+    .string("Wann ist die Aufgabe fällig?")
+    .min(1, "Wann ist die Aufgabe fällig?")
+    .refine(isCalendarDate, "Diesen Tag gibt es nicht."),
+  // Leere Eingabe soll als NULL in der Datenbank landen, nicht als "".
+  details: z
+    .string()
+    .trim()
+    .max(2000, "Die Notiz ist zu lang — höchstens 2000 Zeichen.")
+    .nullish()
+    .transform((value) => (value && value.length > 0 ? value : null)),
+});
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -49,22 +73,6 @@ const UUID_PATTERN =
  */
 function isId(value: string): boolean {
   return UUID_PATTERN.test(value);
-}
-
-/** Prüft Form und Gültigkeit: "2026-02-31" sieht richtig aus, gibt es aber nicht. */
-function isCalendarDate(value: string): boolean {
-  if (!DATE_PATTERN.test(value)) return false;
-
-  const year = Number(value.slice(0, 4));
-  const month = Number(value.slice(5, 7));
-  const day = Number(value.slice(8, 10));
-  const stamp = new Date(Date.UTC(year, month - 1, day));
-
-  return (
-    stamp.getUTCFullYear() === year &&
-    stamp.getUTCMonth() === month - 1 &&
-    stamp.getUTCDate() === day
-  );
 }
 
 export async function listHomework(

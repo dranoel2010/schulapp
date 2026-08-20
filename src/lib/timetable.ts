@@ -1,4 +1,5 @@
 import { and, asc, eq, gt } from "drizzle-orm";
+import { z } from "zod";
 
 import { db } from "@/db";
 import {
@@ -71,8 +72,6 @@ export const WEEKDAYS: readonly {
  * Exportiert, damit Formular und Action nicht ihre eigene Zahl mitbringen.
  */
 export const MAX_PERIOD = 12;
-
-const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -238,6 +237,40 @@ export type WeekPlan = {
  * sagen Wochentag und Stunde — eine id steht nicht dabei, weil jedes Speichern
  * das Feld leert und neu füllt.
  */
+/**
+ * Das Prüfschema einer Stunde — hier und nicht in den Server Actions, damit
+ * jede Tür dieselbe benutzt.
+ */
+/** Genauso lang wie das Raumfeld eines Fachs — mehr ist keine Raumnummer. */
+const ROOM_MAX_LENGTH = 20;
+
+/** Eine Notiz an einer Stunde ist ein Hinweis, kein Text. */
+const NOTE_MAX_LENGTH = 200;
+
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Leere Eingabe soll als NULL in der Datenbank landen, nicht als "". */
+function optionalText(maxLength: number, tooLong: string) {
+  return z
+    .string()
+    .trim()
+    .max(maxLength, tooLong)
+    .nullish()
+    .transform((value) => (value && value.length > 0 ? value : null));
+}
+
+export const lessonInputSchema = z.object({
+  subjectId: z.uuid("Welches Fach ist in dieser Stunde?"),
+  room: optionalText(
+    ROOM_MAX_LENGTH,
+    `Der Raum ist zu lang — höchstens ${ROOM_MAX_LENGTH} Zeichen.`,
+  ),
+  note: optionalText(
+    NOTE_MAX_LENGTH,
+    `Die Notiz ist zu lang — höchstens ${NOTE_MAX_LENGTH} Zeichen.`,
+  ),
+});
+
 export type LessonInput = {
   subjectId: string;
   weekday: number;

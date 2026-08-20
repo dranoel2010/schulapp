@@ -1,6 +1,8 @@
 import { and, asc, desc, eq } from "drizzle-orm";
+import { z } from "zod";
 
 import { db } from "@/db";
+import { isCalendarDate } from "@/lib/dates";
 import {
   grades,
   subjects,
@@ -86,7 +88,37 @@ const MAX_WEIGHT = 5;
 /** Länger als das wäre keine Überschrift mehr, sondern eine Notiz. */
 const MAX_TITLE_LENGTH = 120;
 
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * Das Prüfschema einer Note — hier und nicht in den Server Actions, damit jede
+ * Tür dieselbe benutzt. MAX_WEIGHT stand vorher zweimal im Baum: einmal hier
+ * für die Ausnahme, einmal dort für die Feldmeldung.
+ */
+export const gradeInputSchema = z.object({
+  subjectId: z.uuid("Zu welchem Fach gehört die Note?"),
+  // Die leere Vorauswahl kommt als "" an und wird beim Umwandeln zur 0 — auch
+  // die liegt auf keiner Stufe der Skala. Beide Fälle bekommen dieselbe Frage
+  // gestellt, denn beide Male fehlt schlicht die Note.
+  value: z.coerce
+    .number("Welche Note war es?")
+    .refine(isGradeValue, "Welche Note war es?"),
+  kind: z.enum(["schriftlich", "muendlich"], "Schriftlich oder mündlich?"),
+  weight: z.coerce
+    .number("Wie stark zählt die Note?")
+    .int("Das Gewicht ist eine ganze Zahl.")
+    .min(1, "Einfach zählt sie mindestens.")
+    .max(MAX_WEIGHT, "Mehr als fünffach zählt keine Note."),
+  date: z
+    .string("Wann gab es die Note?")
+    .min(1, "Wann gab es die Note?")
+    .refine(isCalendarDate, "Diesen Tag gibt es nicht."),
+  // Leere Eingabe soll als NULL in der Datenbank landen, nicht als "".
+  title: z
+    .string()
+    .trim()
+    .max(120, "Das ist zu lang — höchstens 120 Zeichen.")
+    .nullish()
+    .transform((value) => (value && value.length > 0 ? value : null)),
+});
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -97,22 +129,6 @@ const UUID_PATTERN =
  */
 function isId(value: string): boolean {
   return UUID_PATTERN.test(value);
-}
-
-/** Prüft Form und Gültigkeit: "2026-02-31" sieht richtig aus, gibt es aber nicht. */
-function isCalendarDate(value: string): boolean {
-  if (!DATE_PATTERN.test(value)) return false;
-
-  const year = Number(value.slice(0, 4));
-  const month = Number(value.slice(5, 7));
-  const day = Number(value.slice(8, 10));
-  const stamp = new Date(Date.UTC(year, month - 1, day));
-
-  return (
-    stamp.getUTCFullYear() === year &&
-    stamp.getUTCMonth() === month - 1 &&
-    stamp.getUTCDate() === day
-  );
 }
 
 /** Alle Noten, die jüngste zuerst. */

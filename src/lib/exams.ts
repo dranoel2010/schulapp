@@ -12,7 +12,8 @@ import {
   type StudyBlock,
   type Subject,
 } from "@/db/schema";
-import { todayInBerlin } from "@/lib/dates";
+import { isCalendarDate, todayInBerlin } from "@/lib/dates";
+import { normalizeTopics, topicKey } from "@/lib/topics";
 import {
   buildPlan,
   replanOpen,
@@ -38,8 +39,6 @@ import {
 
 const EXAM_KINDS = ["klausur", "test", "referat", "muendlich"] as const;
 
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -49,22 +48,6 @@ const UUID_PATTERN =
  */
 function isId(value: string): boolean {
   return UUID_PATTERN.test(value);
-}
-
-/** Prüft Form und Gültigkeit: "2026-02-31" sieht richtig aus, gibt es aber nicht. */
-function isCalendarDate(value: string): boolean {
-  if (!DATE_PATTERN.test(value)) return false;
-
-  const year = Number(value.slice(0, 4));
-  const month = Number(value.slice(5, 7));
-  const day = Number(value.slice(8, 10));
-  const stamp = new Date(Date.UTC(year, month - 1, day));
-
-  return (
-    stamp.getUTCFullYear() === year &&
-    stamp.getUTCMonth() === month - 1 &&
-    stamp.getUTCDate() === day
-  );
 }
 
 /** Leere Eingabe soll als NULL in der Datenbank landen, nicht als "". */
@@ -291,16 +274,10 @@ export async function setTopics(
   const exam = await findExam(userId, examId);
   if (!exam) return;
 
-  const wanted: string[] = [];
-  for (const raw of titles) {
-    const title = raw.trim();
-    if (!title) continue;
-    // Zwei gleiche Titel könnten nicht beide ihr altes Thema behalten.
-    if (wanted.some((seen) => seen.toLowerCase() === title.toLowerCase())) {
-      continue;
-    }
-    wanted.push(title);
-  }
+  // Zuschneiden nach denselben Regeln wie im Formular: getrimmt, gekürzt,
+  // ohne Dubletten, gedeckelt. Vorher galten Länge und Anzahl nur auf dem Weg
+  // übers Formular — ein direkter Aufruf kam ungebremst durch.
+  const wanted = normalizeTopics(titles);
 
   const existing = await db
     .select()
@@ -315,7 +292,7 @@ export async function setTopics(
     const match = existing.find(
       (topic) =>
         !keptIds.has(topic.id) &&
-        topic.title.trim().toLowerCase() === title.toLowerCase(),
+        topicKey(topic.title) === topicKey(title),
     );
 
     if (!match) {

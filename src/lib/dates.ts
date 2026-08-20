@@ -73,6 +73,33 @@ function toIso(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
+/**
+ * Ist das ein echter Kalendertag?
+ *
+ * Prüft Form und Gültigkeit: „2026-02-31" sieht richtig aus, gibt es aber
+ * nicht. Das ist die Schranke vor allem, was hier bei kaputten Eingaben wirft
+ * — und vor jedem Schreiben in die Datenbank.
+ *
+ * Die Prüfung stand lange fünfmal im Baum, wortgleich: in drei Modulen der
+ * Datenschicht und in zwei Server Actions. Bei zwei Türen ging das noch durch.
+ * Sobald eine dritte dazukommt, wäre es die Stelle, an der die App an einer
+ * Tür annimmt, was sie an einer anderen ablehnt.
+ */
+export function isCalendarDate(value: string): boolean {
+  if (!ISO_DATE.test(value)) return false;
+
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  const stamp = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    stamp.getUTCFullYear() === year &&
+    stamp.getUTCMonth() === month - 1 &&
+    stamp.getUTCDate() === day
+  );
+}
+
 let berlinFormat: Intl.DateTimeFormat | null = null;
 
 /**

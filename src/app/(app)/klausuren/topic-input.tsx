@@ -9,6 +9,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TOPIC_MAX_LENGTH } from "@/lib/topics";
 
 /**
  * Die Themenliste einer Prüfung.
@@ -21,9 +22,6 @@ import { Input } from "@/components/ui/input";
  * Eingabefeld trägt denselben Namen: was beim Abschicken noch darin steht,
  * zählt dadurch mit, auch wenn das Enter vergessen wurde.
  */
-
-/** Länger als eine Zeile ist kein Thema mehr, sondern eine Zusammenfassung. */
-const MAX_LENGTH = 80;
 
 export type TopicInputProps = {
   id: string;
@@ -55,7 +53,7 @@ export function TopicInput({
     const next = [...topics];
 
     for (const line of text.split(/[\r\n]+/)) {
-      const title = line.trim().slice(0, MAX_LENGTH);
+      const title = line.trim().slice(0, TOPIC_MAX_LENGTH);
       if (!title || isKnown(next, title)) continue;
       next.push(title);
     }
@@ -138,7 +136,7 @@ export function TopicInput({
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={topics.length === 0 ? "Kurvendiskussion" : "Nächstes Thema"}
-          maxLength={MAX_LENGTH}
+          maxLength={TOPIC_MAX_LENGTH}
           autoComplete="off"
           enterKeyHint="done"
           className="flex-1"
