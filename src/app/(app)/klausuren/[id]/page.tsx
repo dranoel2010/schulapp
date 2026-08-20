@@ -7,6 +7,7 @@ import { subjectColor } from "@/lib/colors";
 import { formatGerman, todayInBerlin } from "@/lib/dates";
 import { getExam } from "@/lib/exams";
 import { listSubjects } from "@/lib/subjects";
+import { suggestTopicsForExam } from "@/lib/subject-topics";
 
 import { deleteExamAction, updateExamAction } from "../actions";
 import { ExamDangerZone, ExamForm } from "../exam-form";
@@ -49,6 +50,22 @@ export default async function ExamPage({
   const subjects = active.some((item) => item.id === subject.id)
     ? active
     : [subject, ...active];
+
+  // Wie beim Anlegen für jedes Fach einmal, nur mit dem gespeicherten Termin:
+  // umstellen kann man das Fach auch hier noch, und dann sollen die Chips schon
+  // dastehen. Was das für ein im Formular verschobenes Datum heißt, steht bei
+  // topicSuggestions in exam-form.tsx.
+  const topicSuggestions = Object.fromEntries(
+    await Promise.all(
+      subjects.map(
+        async (item) =>
+          [
+            item.id,
+            await suggestTopicsForExam(user.id, item.id, exam.date),
+          ] as const,
+      ),
+    ),
+  );
 
   const color = subjectColor(subject.color).hex;
   const kindLabel = EXAM_KIND_LABELS[exam.kind] ?? "Prüfung";
@@ -129,6 +146,7 @@ export default async function ExamPage({
         action={updateExamAction.bind(null, exam.id)}
         subjects={subjects}
         today={todayInBerlin()}
+        topicSuggestions={topicSuggestions}
         exam={exam}
         topics={topics.map((topic) => topic.title)}
         submitLabel="Änderungen speichern"

@@ -258,6 +258,13 @@ function sectionTitle(pathname: string): string | null {
   // Eine Prüfung oder ein Fach antippen heißt: bearbeiten. Eine eigene
   // Unterseite dafür gibt es nicht mehr, die Detailseite ist das Formular.
   if (pathname.startsWith("/klausuren/")) return "Klausur bearbeiten";
+  // Ein Fach hat genau eine echte Unterseite: seine Themen. Sie liegt unter
+  // /faecher/, meint aber nicht das Fach, sondern seine Themenliste — die
+  // Regel darunter würde sie „Fach bearbeiten“ nennen. Als Muster und nicht
+  // als fester Eintrag, weil die Fach-id mitten in der Adresse steht.
+  if (pathname.startsWith("/faecher/") && pathname.endsWith("/themen")) {
+    return "Themen";
+  }
   if (pathname.startsWith("/faecher/")) return "Fach bearbeiten";
   if (pathname.startsWith("/hausaufgaben/")) return "Aufgabe bearbeiten";
   // Ein Fach unter den Noten ist keine Bearbeitung, sondern die Liste seiner

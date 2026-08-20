@@ -15,6 +15,7 @@ import {
   updateExam,
 } from "@/lib/exams";
 import { listSubjects } from "@/lib/subjects";
+import { linkExamTopics } from "@/lib/subject-topics";
 import { normalizeTopics } from "@/lib/topics";
 
 import type { ExamFieldErrors, ExamFormState } from "./exam-form";
@@ -25,6 +26,11 @@ import type { ExamFieldErrors, ExamFormState } from "./exam-form";
  * Der Lernplan wird hier nicht gerechnet, sondern nur angestoßen: beim Anlegen
  * einmal, beim Bearbeiten nur dann, wenn sich an seinen Grundlagen etwas
  * geändert hat. "heute" kommt aus todayInBerlin(), nie aus new Date().
+ *
+ * Dasselbe gilt für das Themen-Vokabular der Fächer: gepflegt wird es in
+ * @/lib/subject-topics, angestoßen hier. Jedes Speichern hängt die Themen der
+ * Prüfung ans Vokabular ihres Fachs — daraus entstehen die Vorschläge, die beim
+ * nächsten Mal unter dem Themenfeld stehen.
  *
  * Verwalten und Lernen sind getrennt: nach dem Anlegen geht es zum frisch
  * gebauten Lernplan unter /lernen, nach dem Bearbeiten und Löschen zurück in
@@ -107,6 +113,16 @@ export async function createExamAction(
 
   const exam = await createExam(user.id, parsed.data);
   await setTopics(user.id, exam.id, readTopics(formData));
+  // Danach und nicht darin: setTopics() gehört der Klausur und weiß vom
+  // Vokabular des Fachs nichts. Es schreibt die Posten der Prüfung, und an
+  // denen hängen über study_blocks.topic_id die abgehakten Lernblöcke eines
+  // Halbjahrs — an dieser Stelle soll nichts stehen, was nebenbei noch in einer
+  // zweiten Tabelle arbeitet. linkExamTopics() läuft deshalb hinterher, wenn
+  // die Posten feststehen: es liest sie, setzt allein
+  // exam_topics.subject_topic_id und löscht nie etwas. Bleibt der Aufruf aus,
+  // hat die Prüfung ihre Themen und das Fach trotzdem kein Vokabular — beim
+  // nächsten Mal stünde unter dem Themenfeld nichts.
+  await linkExamTopics(user.id, exam.id);
   // Der Plan entsteht sofort, damit unter "Lernen" gleich etwas steht.
   await generatePlan(user.id, exam.id, todayInBerlin());
 
@@ -168,6 +184,13 @@ export async function updateExamAction(
 
   await updateExam(user.id, examId, input);
   await setTopics(user.id, examId, topics);
+  // Aus demselben Grund wie beim Anlegen erst hier — und hier zusätzlich als
+  // Reparatur: updateExam() lief davor, das Fach der Prüfung steht also schon
+  // auf dem neuen. Wer von Mathe auf Physik umgestellt hat, dessen Themen
+  // zeigten sonst weiter auf Mathe-Vokabeln und würden in beiden Fächern nicht
+  // mehr gezählt. linkExamTopics() hängt sie um; die alte Vokabel bleibt dem
+  // alten Fach.
+  await linkExamTopics(user.id, examId);
 
   // generatePlan lässt Erledigtes und Gestrichenes stehen und verteilt nur den
   // Rest neu.

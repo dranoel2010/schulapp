@@ -10,6 +10,8 @@ import type { Exam, ExamKind, Subject } from "@/db/schema";
 import { subjectColor } from "@/lib/colors";
 import { addDays, formatGerman } from "@/lib/dates";
 import type { ExamInput } from "@/lib/exams";
+import type { TopicItem } from "@/lib/subject-topics";
+import { topicKey } from "@/lib/topics";
 
 import { TopicInput } from "./topic-input";
 
@@ -20,9 +22,17 @@ import { TopicInput } from "./topic-input";
  * was man selten anfasst, steckt im zugeklappten Bereich „Lernplanung“, damit
  * das Formular beim ersten Blick aus vier Feldern besteht.
  *
+ * Unter dem Themenfeld stehen die Themen des Fachs als antippbare Chips. Das
+ * ist der Weg, auf dem die Themenliste überhaupt gefüllt wird: getippt wird
+ * sie selten genug, dass der Lernplan oft ganz ausfällt.
+ *
  * „heute“ kommt als Eigenschaft vom Server. Im Browser stünde sonst die
  * Zeitzone des Geräts gegen die der Datenbank.
  */
+
+function cn(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
+}
 
 /** Fehler pro Feld, so wie das Formular sie erwartet. */
 export type ExamFieldErrors = Partial<Record<keyof ExamInput, string>>;
@@ -82,6 +92,120 @@ function planStart(date: string, leadDays: string): { iso: string; label: string
   }
 }
 
+/**
+ * So viele Chips stehen unter dem Feld, bevor „Alle zeigen“ kommt.
+ *
+ * Zwölf sind zwei bis drei Zeilen — so viel überfliegt man noch. Vierzig sind
+ * eine Wand, und eine Wand schlägt nichts mehr vor, sondern verlangt, dass man
+ * sucht. Die Reihenfolge kommt aus der Datenschicht (zuletzt gesehenes zuerst),
+ * die zwölf oben sind also die aus dem laufenden Stoff.
+ */
+const SUGGESTION_LIMIT = 12;
+
+type TopicSuggestionsProps = {
+  /** Die Themen des Fachs in der Reihenfolge der Datenschicht. */
+  suggestions: TopicItem[];
+  /** Was schon in der Prüfung steht. */
+  topics: string[];
+  onTopicsChange: (topics: string[]) => void;
+};
+
+/**
+ * Die Themen des Fachs als antippbare Chips: antippen fügt hinzu, nochmal
+ * antippen nimmt wieder weg.
+ *
+ * Verglichen wird über `topicKey()` und nicht über `===` — sonst stünde
+ * „Kettenregel“ neben „kettenregel“, und ein Chip zeigte „nicht gewählt“ für
+ * ein Thema, das längst in der Liste steht. Es ist dieselbe Faltung, mit der
+ * `normalizeTopics()` beim Speichern Dubletten wegwirft; zwei verschiedene
+ * Regeln an denselben Titeln wären genau der Fehler, den man nicht sieht.
+ *
+ * Hinzugefügt wird hinten angehängt. Wer die Chips in Unterrichtsreihenfolge
+ * antippt, bekommt sie in dieser Reihenfolge auf die Lerntage verteilt —
+ * umsortieren lässt sich die Liste im Formular nämlich nicht.
+ *
+ * Sortiert wird hier nichts um: die Datenschicht liefert das zuletzt Gesehene
+ * zuerst, und ein gewählter Chip bleibt deshalb stehen, wo er steht. Ein Chip,
+ * der beim Antippen an die Spitze springt, wäre der nächste, den man
+ * versehentlich zweimal trifft.
+ *
+ * Hat das Fach kein Vokabular, steht hier gar nichts — keine leere Zeile,
+ * keine Aufforderung. Wo Themen herkommen, erklärt die Themenpflege am Fach.
+ */
+function TopicSuggestions({
+  suggestions,
+  topics,
+  onTopicsChange,
+}: TopicSuggestionsProps) {
+  const [showAll, setShowAll] = useState(false);
+
+  if (suggestions.length === 0) return null;
+
+  const chosen = new Set(topics.map(topicKey));
+  const visible = showAll ? suggestions : suggestions.slice(0, SUGGESTION_LIMIT);
+
+  function toggle(title: string) {
+    const key = topicKey(title);
+
+    onTopicsChange(
+      chosen.has(key)
+        ? topics.filter((topic) => topicKey(topic) !== key)
+        : [...topics, title],
+    );
+  }
+
+  return (
+    <div className="space-y-2 pt-1">
+      <div className="flex flex-wrap gap-2">
+        {visible.map((topic) => {
+          const isChosen = chosen.has(topicKey(topic.title));
+
+          return (
+            <button
+              key={topic.id}
+              type="button"
+              aria-pressed={isChosen}
+              onClick={() => toggle(topic.title)}
+              className={cn(
+                "inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-pill",
+                "border px-3.5 py-1.5 text-left text-sm transition-colors",
+                isChosen
+                  ? "border-accent bg-accent-soft font-medium text-accent"
+                  : "border-border bg-surface text-muted hover:border-border-strong hover:text-foreground",
+              )}
+            >
+              {topic.title}
+              {/* Wie oft das Thema schon drankam. Erst ab zwei sagt die Zahl
+                  etwas — „1×“ stünde an fast jedem Chip und an keinem als
+                  Hinweis. */}
+              {topic.examCount > 1 ? (
+                <span
+                  className={cn(
+                    "shrink-0 tabular-nums",
+                    isChosen ? "font-normal" : "text-subtle",
+                  )}
+                >
+                  · {topic.examCount}×
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+
+      {!showAll && suggestions.length > SUGGESTION_LIMIT ? (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          className="inline-flex min-h-11 items-center text-sm text-accent transition-colors hover:text-accent-hover"
+        >
+          Alle zeigen
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 /** Für die Auswahl reicht, woran man ein Fach erkennt. */
 export type ExamFormSubject = Pick<Subject, "id" | "name" | "short" | "color">;
 
@@ -91,6 +215,23 @@ export type ExamFormProps = {
   subjects: ExamFormSubject[];
   /** "YYYY-MM-DD", kommt vom Server. */
   today: string;
+  /**
+   * Je Fach die Themen, die als Chips unter dem Themenfeld stehen — auf dem
+   * Server für jedes Fach einmal vorgerechnet.
+   *
+   * Vorgerechnet, weil sich im Formular das Fach ändert, während man tippt:
+   * eine Abfrage pro Tastendruck wäre der Preis dafür, dass die Liste immer
+   * exakt zum Stand im Formular passt.
+   *
+   * Bezahlt wird stattdessen beim Datum. Gerechnet wurde mit dem Termin, wie
+   * er beim Öffnen der Seite feststand — beim Bearbeiten der gespeicherte, beim
+   * Anlegen der heutige Tag. Verschiebt man das Datum im Formular weit, wandern
+   * die Vorschläge also nicht mit; das Fenster bleibt, wo es war. Das ist
+   * verkraftbar, denn das Fenster reicht ohnehin von der letzten Prüfung des
+   * Fachs bis zum Termin, und ein paar Wochen mehr oder weniger ändern daran
+   * selten etwas.
+   */
+  topicSuggestions?: Record<string, TopicItem[]>;
   /** Beim Bearbeiten die Vorbelegung, beim Anlegen leer. */
   exam?: Exam;
   /** Die Themen der Prüfung in ihrer Reihenfolge. */
@@ -103,6 +244,7 @@ export function ExamForm({
   action,
   subjects,
   today,
+  topicSuggestions = {},
   exam,
   topics: savedTopics = [],
   submitLabel,
@@ -260,12 +402,24 @@ export function ExamForm({
 
       <Field id="topics" label="Themen" hint={topicHint}>
         {(control) => (
-          <TopicInput
-            {...control}
-            name="topics"
-            topics={topics}
-            onTopicsChange={setTopics}
-          />
+          <>
+            <TopicInput
+              {...control}
+              name="topics"
+              topics={topics}
+              onTopicsChange={setTopics}
+            />
+
+            {/* Das key am Fach setzt „Alle zeigen“ beim Fachwechsel zurück:
+                aufgeklappt wurde die Liste des einen Fachs, nicht die des
+                nächsten. */}
+            <TopicSuggestions
+              key={subjectId}
+              suggestions={topicSuggestions[subjectId] ?? []}
+              topics={topics}
+              onTopicsChange={setTopics}
+            />
+          </>
         )}
       </Field>
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { ButtonLink } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
 import { getSubject } from "@/lib/subjects";
 
@@ -44,6 +45,28 @@ export default async function EditSubjectPage({
         subject={subject}
         submitLabel="Änderungen speichern"
       />
+
+      {/* Der Weg zu den Themen steht zwischen Formular und Gefahrenzone.
+          Nach dem Formular, weil die Themen kein Feld des Fachs sind, sondern
+          eine eigene Liste, die daran hängt — sie hätten oben nur Platz
+          weggenommen. Und davor, weil die Gefahrenzone bewusst zuletzt kommt:
+          was dahinter stünde, würde nur noch von jemandem gefunden, der schon
+          ans Löschen denkt. */}
+      <section className="rounded-card border border-border bg-surface p-4 sm:p-5">
+        <h2 className="text-base font-semibold text-foreground">Themen</h2>
+        <p className="mt-2 text-sm text-muted">
+          Das Themen-Vokabular dieses Fachs — alles, was in seinen Klausuren
+          drankam. Hier lassen sich doppelte Schreibweisen zusammenlegen und
+          eigene Themen ergänzen.
+        </p>
+        <ButtonLink
+          href={`/faecher/${subject.id}/themen`}
+          variant="secondary"
+          className="mt-3"
+        >
+          Themen pflegen
+        </ButtonLink>
+      </section>
 
       <SubjectDangerZone
         subjectName={subject.name}
