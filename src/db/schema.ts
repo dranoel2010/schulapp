@@ -9,6 +9,7 @@ import {
   timestamp,
   unique,
   uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -113,6 +114,59 @@ export const exams = pgTable(
   (t) => [index("exams_user_date_idx").on(t.userId, t.date)],
 );
 
+/**
+ * Ein Thema eines Fachs — das Vokabular, aus dem Klausuren und später die
+ * Arbeitsblätter schöpfen.
+ *
+ * Das ist bewusst etwas anderes als `exam_topics`. Dort steht ein **Posten**:
+ * dieses Thema, in dieser Klausur, an dieser Stelle — mit Reihenfolge, und mit
+ * den Lernblöcken daran. Hier steht ein **Verzeichnis**: dieses Thema gibt es
+ * in diesem Fach. Ein Verzeichnis darf umbenannt und zusammengelegt werden,
+ * ohne dass irgendwo Geschichte verloren geht; ein Posten nicht.
+ *
+ * `matchKey` ist die einzige Spalte, über die verglichen wird — die
+ * Inhaltswörter des Titels, gefaltet und sortiert (siehe src/lib/topics.ts).
+ * Der eindeutige Schlüssel darüber macht „pro Fach nur einmal dasselbe Thema"
+ * zu einer Zusage der Datenbank statt zu einer Hoffnung.
+ *
+ * `mergedInto` zeigt auf das Thema, in das dieses zusammengelegt wurde. Die
+ * Zeile bleibt dabei stehen und behält ihren Schlüssel — dadurch löst dieselbe
+ * Schreibweise beim nächsten Mal von selbst auf das Ziel auf. Trennen heißt:
+ * die Spalte wieder leeren. Deshalb ein Zeiger und kein Umschreiben.
+ */
+export const subjectTopics = pgTable(
+  "subject_topics",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    /** Die Anzeigeform, z.B. "Kettenregel" — das Einzige, was auf dem Bildschirm steht */
+    title: text("title").notNull(),
+    /** Nur zum Vergleichen, nie zur Anzeige. Nie leer. */
+    matchKey: text("match_key").notNull(),
+    /** klausur | manuell | blatt — woher das Thema zuerst kam */
+    origin: text("origin").notNull().default("klausur"),
+    /** Zusammengelegt in dieses Thema; leer heißt eigenständig */
+    mergedInto: uuid("merged_into").references(
+      (): AnyPgColumn => subjectTopics.id,
+      { onDelete: "set null" },
+    ),
+    /** Kalendertag, an dem das Thema zuletzt vorkam — sortiert die Vorschläge */
+    lastSeenAt: date("last_seen_at", { mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("subject_topics_key").on(t.subjectId, t.matchKey),
+    index("subject_topics_subject_idx").on(t.subjectId, t.lastSeenAt),
+  ],
+);
+
 /** Ein Thema, das für eine Prüfung gelernt werden muss. */
 export const examTopics = pgTable(
   "exam_topics",
@@ -123,8 +177,25 @@ export const examTopics = pgTable(
       .references(() => exams.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
+    /**
+     * Das Fach-Thema, aus dem dieses Klausurthema stammt. Leer ist erlaubt und
+     * völlig normal: alte Einträge haben keins, und eine von Hand getippte
+     * Sonderformulierung bekommt keins aufgezwungen.
+     *
+     * "set null" ist hier kein Detail, sondern der Grund für den ganzen
+     * Zuschnitt: an diesem Klausurthema hängen über study_blocks.topic_id die
+     * erledigten Lernblöcke. Ein Thema aus dem Verzeichnis zu löschen darf sie
+     * unter keinen Umständen mitnehmen.
+     */
+    subjectTopicId: uuid("subject_topic_id").references(
+      () => subjectTopics.id,
+      { onDelete: "set null" },
+    ),
   },
-  (t) => [index("exam_topics_exam_idx").on(t.examId)],
+  (t) => [
+    index("exam_topics_exam_idx").on(t.examId),
+    index("exam_topics_subject_topic_idx").on(t.subjectTopicId),
+  ],
 );
 
 /**
@@ -344,6 +415,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   lessons: many(lessons),
   homework: many(homework),
   grades: many(grades),
+  subjectTopics: many(subjectTopics),
   pushSubscriptions: many(pushSubscriptions),
 }));
 
@@ -357,6 +429,7 @@ export const subjectsRelations = relations(subjects, ({ one, many }) => ({
   lessons: many(lessons),
   homework: many(homework),
   grades: many(grades),
+  topics: many(subjectTopics),
 }));
 
 export const examsRelations = relations(exams, ({ one, many }) => ({
@@ -371,8 +444,24 @@ export const examsRelations = relations(exams, ({ one, many }) => ({
 
 export const examTopicsRelations = relations(examTopics, ({ one, many }) => ({
   exam: one(exams, { fields: [examTopics.examId], references: [exams.id] }),
+  subjectTopic: one(subjectTopics, {
+    fields: [examTopics.subjectTopicId],
+    references: [subjectTopics.id],
+  }),
   blocks: many(studyBlocks),
 }));
+
+export const subjectTopicsRelations = relations(
+  subjectTopics,
+  ({ one, many }) => ({
+    user: one(users, { fields: [subjectTopics.userId], references: [users.id] }),
+    subject: one(subjects, {
+      fields: [subjectTopics.subjectId],
+      references: [subjects.id],
+    }),
+    examTopics: many(examTopics),
+  }),
+);
 
 export const studyBlocksRelations = relations(studyBlocks, ({ one }) => ({
   exam: one(exams, { fields: [studyBlocks.examId], references: [exams.id] }),
@@ -437,6 +526,8 @@ export type Lesson = typeof lessons.$inferSelect;
 export type NewLesson = typeof lessons.$inferInsert;
 export type Homework = typeof homework.$inferSelect;
 export type NewHomework = typeof homework.$inferInsert;
+export type SubjectTopic = typeof subjectTopics.$inferSelect;
+export type NewSubjectTopic = typeof subjectTopics.$inferInsert;
 export type Grade = typeof grades.$inferSelect;
 export type NewGrade = typeof grades.$inferInsert;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
@@ -453,6 +544,13 @@ export type StudyBlockStatus = "open" | "done" | "skipped";
  * sich der Fachschnitt zusammensetzt — wie stark jeder wiegt, steht am Fach.
  */
 export type GradeKind = "schriftlich" | "muendlich";
+
+/**
+ * Woher ein Fach-Thema zuerst kam. "blatt" gibt es erst, wenn die Kamera
+ * gebaut ist — der Wert steht schon hier, damit die Spalte sich später nicht
+ * ändern muss.
+ */
+export type TopicOrigin = "klausur" | "manuell" | "blatt";
 
 /** Wochentag im Stundenplan: 1 = Montag … 5 = Freitag */
 export type Weekday = 1 | 2 | 3 | 4 | 5;

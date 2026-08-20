@@ -141,8 +141,18 @@ DATABASE_URL=postgres://user:pass@host/db
 ```
 
 Nach Änderungen an `src/db/schema.ts` immer `npm run db:push` ausführen. Zuletzt
-kam mit den Noten die Tabelle `grades` dazu — ohne Push bleibt der Notenbereich
-mit einem Datenbankfehler stehen.
+kamen mit den Themen die Tabelle `subject_topics` und eine Spalte an
+`exam_topics` dazu — ohne Push bleibt der Themenbereich mit einem
+Datenbankfehler stehen.
+
+> **Vorsicht bei einer Rückfrage von `db:push`.** Das Werkzeug kann anbieten,
+> die Tabelle `lessons` zu leeren, weil es den eindeutigen Schlüssel
+> `lessons_user_slot_key` neu anlegen will. Der Schlüssel **existiert bereits**
+> und es gibt keine doppelten Stunden — die Rückfrage ist ein Fehlalarm der
+> Schema-Erkennung. Die Antwort ist niemals „truncate": ein Ja löscht den
+> ganzen Stundenplan. Bricht der Lauf deswegen ab, lässt sich die eigentliche
+> Änderung von Hand als SQL einspielen; welche Tabellen und Spalten es sein
+> müssen, steht in `src/db/schema.ts`.
 
 Die lokale Datenbank ist bewusst nicht in Git (`.data/` ist ignoriert).
 
