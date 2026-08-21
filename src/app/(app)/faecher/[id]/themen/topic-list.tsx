@@ -68,6 +68,8 @@ export type MergedTopic = {
 export type TopicRow = MergedTopic & {
   /** In wie vielen Klausuren des Fachs es vorkommt, Schreibweisen mitgezählt. */
   examCount: number;
+  /** An wie vielen Blättern des Fachs es hängt, Schreibweisen mitgezählt. */
+  materialCount: number;
   merged: MergedTopic[];
 };
 
@@ -99,13 +101,33 @@ function newest(...states: TopicActionState[]): TopicActionState {
 }
 
 /**
- * Die leise Angabe hinter dem Titel. Ein Thema ohne Klausur hat keine 0, es
- * hat noch keine — von Hand angelegt oder gerade erst umbenannt.
+ * Die leise Angabe hinter dem Titel: woran dieses Thema hängt.
+ *
+ * Beide Zahlen müssen dastehen. Seit der Kamera legen auch Blätter Themen an,
+ * und ein Thema an zwölf Blättern nur nach seinen Klausuren zu beurteilen
+ * hieße, es als „noch nirgends benutzt" neben die zu stellen, die es wirklich
+ * sind — genau die Zeile, die man beim Aufräumen zusammenlegt. Zusammengelegt
+ * würde damit stillschweigend auch die Zuordnung von zwölf Blättern verschoben.
+ *
+ * Die Angabe steht in einer Zeile neben dem Titel, deshalb ohne Präposition:
+ * „3 Klausuren · 2 Blätter" statt eines Satzes. Was bei 0 steht, wird
+ * weggelassen und nicht als Null hingeschrieben — ein Thema ohne Klausur hat
+ * keine 0, es hat noch keine.
  */
-function examLabel(count: number): string {
-  if (count <= 0) return "noch in keiner Klausur";
-  if (count === 1) return "in 1 Klausur";
-  return `in ${count} Klausuren`;
+function usageLabel(examCount: number, materialCount: number): string {
+  const teile: string[] = [];
+
+  if (examCount > 0) {
+    teile.push(examCount === 1 ? "1 Klausur" : `${examCount} Klausuren`);
+  }
+
+  if (materialCount > 0) {
+    teile.push(materialCount === 1 ? "1 Blatt" : `${materialCount} Blätter`);
+  }
+
+  if (teile.length === 0) return "noch nirgends benutzt";
+
+  return teile.join(" · ");
 }
 
 /** Knopf, der von selbst merkt, dass sein Formular gerade läuft. */
@@ -249,7 +271,7 @@ function TopicItemRow({
             {topic.title}
           </span>
           <span className="shrink-0 text-sm text-muted">
-            {examLabel(topic.examCount)}
+            {usageLabel(topic.examCount, topic.materialCount)}
           </span>
         </summary>
 
@@ -288,7 +310,8 @@ function TopicItemRow({
               <p className="text-sm text-muted">
                 „{topic.title}“ wandert unter das Ziel: der Titel bleibt als
                 Schreibweise stehen und löst ab jetzt von selbst auf das Ziel
-                auf. Die Klausuren, die daran hängen, zählen dort mit.
+                auf. Die Klausuren und die Blätter, die daran hängen, zählen
+                ab dann beim Ziel mit.
               </p>
             </div>
           ) : (
@@ -355,8 +378,8 @@ function AliasRow({
 
         <div className="space-y-5 border-t border-border py-4 pl-10 pr-4">
           <p className="text-sm text-muted">
-            Zeigt auf „{parent}“. Die Klausuren, in denen diese Schreibweise
-            steht, zählen dort mit.
+            Zeigt auf „{parent}“. Die Klausuren und die Blätter, an denen
+            diese Schreibweise hängt, zählen dort mit.
           </p>
 
           <RenameForm
@@ -432,7 +455,7 @@ export function TopicList({
         {rows.length === 0 ? (
           <EmptyState
             title="Noch keine Themen"
-            description="Themen entstehen aus den Themen deiner Klausuren. Der Knopf liest jede eingetragene Klausur — die aller Fächer, nicht nur die dieses einen — und legt daraus das Vokabular an."
+            description="Themen entstehen aus den Themen deiner Klausuren und aus dem, was du an ein abfotografiertes Blatt schreibst. Der Knopf liest jede eingetragene Klausur — die aller Fächer, nicht nur die dieses einen — und legt daraus das Vokabular an."
             action={seedBlock}
           />
         ) : (
@@ -458,7 +481,7 @@ export function TopicList({
           </h2>
           <p className="text-sm text-muted">
             Ein Titel, ein Knopf. Was hier entsteht, unterscheidet sich in
-            nichts von dem, was aus einer Klausur kommt.
+            nichts von dem, was aus einer Klausur oder von einem Blatt kommt.
           </p>
         </div>
 

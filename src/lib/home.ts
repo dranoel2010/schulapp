@@ -1,7 +1,7 @@
 import { count, eq } from "drizzle-orm";
 
 import { db } from "@/db";
-import { subjects, type Period } from "@/db/schema";
+import { subjects, type Period, type Subject } from "@/db/schema";
 import { addDays, daysBetween, timeInBerlin } from "@/lib/dates";
 import {
   blocksForDay,
@@ -17,6 +17,8 @@ import {
   openHomeworkCount,
   type HomeworkItem,
 } from "@/lib/homework";
+import { listMaterialCards, type MaterialCard } from "@/lib/materials";
+import { listSubjects } from "@/lib/subjects";
 import {
   isSchoolDay,
   loadWeek,
@@ -27,14 +29,31 @@ import {
 } from "@/lib/timetable";
 
 /**
- * Alles, was die Startseite anzeigt — einmal geladen, von allen drei Ansichten
- * benutzt: dem Kachelmenü am Handy, der Tagesspur daneben und dem Dashboard am
- * großen Bildschirm. Alle zeigen dieselben Zahlen, nur anders angeordnet.
+ * Alles, was die Startseite anzeigt — einmal geladen, von allen vier Ansichten
+ * benutzt: am Handy der Kameraseite, dem Kachelmenü und der Tagesspur, am
+ * großen Bildschirm dem Dashboard. Alle zeigen dieselben Zahlen, nur anders
+ * angeordnet.
  *
  * Deshalb steht hier bewusst etwas mehr, als jede einzelne Ansicht braucht:
  * eine zweite Abfrage je Ansicht wäre teurer als ein paar Zeilen zu viel im
  * Ergebnis.
  */
+
+/**
+ * So viele Blätter holt die Startseite mit.
+ *
+ * Sie zeigt sie an zwei Stellen: auf der Kamera-Seite als das, was zuletzt
+ * aufgenommen wurde — dort stehen alle sechs —, und im Dashboard als kürzerer
+ * Ausschnitt daraus. Die ganze Ablage liegt unter /material; die Startseite
+ * lädt sie nicht, nur weil sie sechs Bilder braucht.
+ *
+ * Es ist eine Liste für beide, und sie ist nach dem Zeitpunkt der Aufnahme
+ * sortiert. Der Dashboard-Ausschnitt zeigt damit dieselbe Reihe wie die
+ * Kamera-Seite und nicht die der Ablage; das ist die Reihenfolge, die zu
+ * „zuletzt aufgenommen" gehört, und zwei getrennte Abfragen für sechs Kacheln
+ * wären es nicht wert.
+ */
+const RECENT_MATERIALS = 6;
 
 /**
  * Die nächste Schulstunde, die noch kommt — heute oder am nächsten Schultag.
@@ -58,6 +77,19 @@ export type HomeData = {
   /** "YYYY-MM-DD" in Berliner Zeit */
   today: string;
   subjectCount: number;
+  /**
+   * Die aktiven Fächer, in der Reihenfolge der Fächerliste.
+   *
+   * Die Kacheln kommen mit `subjectCount` aus, die Kamera-Seite nicht: schlägt
+   * der Stundenplan kein Fach vor, entscheidet der Nutzer dort selbst, und dazu
+   * muss er die Namen lesen können. Die Liste steht deshalb hier und nicht in
+   * der Seite — hier lädt sie neben den anderen Abfragen, dort hinge sie hinter
+   * ihnen allen am kritischen Pfad von "/".
+   *
+   * Ihre Länge ist nicht `subjectCount`: der zählt auch die abgewählten Fächer
+   * mit, hier stehen nur die, in die heute noch etwas hineingehört.
+   */
+  subjects: Subject[];
   /** Alle Lernblöcke von heute, offene wie erledigte */
   todayBlocks: TodayBlock[];
   todayOpenMinutes: number;
@@ -86,6 +118,23 @@ export type HomeData = {
   homeworkCounts: { open: number; overdue: number; dueToday: number };
   /** Gesamtschnitt, Schnitt je Fach und die zuletzt eingetragene Note */
   grades: GradeSummary;
+  /**
+   * Die zuletzt aufgenommenen Blätter, das zuletzt fotografierte zuerst.
+   *
+   * Sortiert nach dem Zeitpunkt der Aufnahme und ausdrücklich nicht nach dem
+   * Schultag. Die Ablage unter /material tut das andersherum, weil man dort
+   * nach Unterricht sucht; hier ist die Reihe eine Bestätigung — das eben
+   * ausgelöste Foto muss vorne stehen, auch wenn das Blatt von letzter Woche
+   * ist und sechs Blätter mit jüngerem Schultag darauf warten.
+   *
+   * Ohne ihre Themen: die beiden Ansichten, die Blätter überhaupt zeigen —
+   * Kamera-Seite und Dashboard —, zeigen keins davon. `MaterialCard` lässt das
+   * Feld deshalb ganz weg, statt es leer zu liefern — leer hieße „dieses
+   * Blatt hat kein Thema“, und das wäre in den allermeisten Fällen unwahr. So
+   * spart die Startseite den Join über die Themen, und der Compiler hält fest,
+   * dass hier niemand liest, was gar nicht geladen wurde.
+   */
+  materials: MaterialCard[];
 };
 
 export async function loadHomeData(
@@ -101,6 +150,7 @@ export async function loadHomeData(
 ): Promise<HomeData> {
   const [
     subjectRows,
+    activeSubjects,
     exams,
     todayBlocks,
     missed,
@@ -109,11 +159,13 @@ export async function loadHomeData(
     openHomework,
     homeworkCounts,
     grades,
+    materials,
   ] = await Promise.all([
     db
       .select({ value: count() })
       .from(subjects)
       .where(eq(subjects.userId, userId)),
+    listSubjects(userId),
     listExams(userId),
     blocksForDay(userId, today),
     missedBlocks(userId, today),
@@ -125,6 +177,7 @@ export async function loadHomeData(
     listHomework(userId),
     openHomeworkCount(userId, today),
     gradeSummary(userId),
+    listMaterialCards(userId, { limit: RECENT_MATERIALS, order: "aufnahme" }),
   ]);
 
   const upcoming = exams.filter((exam) => exam.date >= today);
@@ -135,6 +188,7 @@ export async function loadHomeData(
     userName,
     today,
     subjectCount: subjectRows[0]?.value ?? 0,
+    subjects: activeSubjects,
     todayBlocks,
     todayOpenMinutes: todayBlocks
       .filter((block) => block.status === "open")
@@ -154,6 +208,7 @@ export async function loadHomeData(
     openHomework,
     homeworkCounts,
     grades,
+    materials,
   };
 }
 
@@ -212,6 +267,73 @@ export function dayLine(data: HomeData): string {
   );
 
   return parts.join(", ");
+}
+
+/** Nur die vier Spalten, die eine Aufnahme vom Fach braucht. */
+function subjectRef(subject: LessonWithSubject["subject"]) {
+  return {
+    id: subject.id,
+    name: subject.name,
+    short: subject.short,
+    color: subject.color,
+  };
+}
+
+/**
+ * Das Fach, das die Aufnahme vorschlägt: die Stunde, die gerade läuft, sonst
+ * die, die heute als nächste kommt.
+ *
+ * Ein Blatt wird im Unterricht abfotografiert, also stimmt das Fach fast immer
+ * mit der laufenden Stunde überein. In der Pause ist es die Stunde, die gleich
+ * beginnt — man hält das Blatt aus der letzten Stunde in der Hand, aber getippt
+ * wird meist erst, wenn man wieder sitzt.
+ *
+ * Was heute nicht mehr kommt, wird nicht vorgeschlagen: das Fach von morgen
+ * wäre geraten. Ein leeres Feld verlangt eine Antwort und fällt auf; ein falsch
+ * vorbelegtes rutscht unbemerkt durch und die Ablage füllt sich mit Blättern
+ * unter dem falschen Fach.
+ *
+ * Aus demselben Grund bleibt ein abgewähltes Fach draußen, auch wenn seine
+ * Stunde noch im Wochenraster steht.
+ *
+ * Die Uhrzeit steht als Vorgabe im Kopf, damit die Kamera-Seite sie nicht
+ * eigens ausrechnen muss und ein Test sie trotzdem setzen kann — wie bei
+ * `loadHomeData`. Im Browser darf sie nicht gezogen werden, dort stünde die
+ * Gerätezeitzone gegen die der Datenbank.
+ */
+export function captureSubject(
+  data: HomeData,
+  now: string = timeInBerlin(),
+): { id: string; name: string; short: string; color: string } | null {
+  const times = periodTimes(data.periods);
+
+  for (const lesson of data.todayLessons) {
+    // Ein abgewähltes Fach schlägt die App nicht vor. Seine Stunden bleiben im
+    // Wochenraster stehen (siehe `listLessons` in @/lib/timetable) — das ist
+    // dort richtig, hier wäre es falsch: wer ein Fach zumacht, will kein
+    // frisches Blatt mehr darin ablegen, und in der Ablage taucht es danach
+    // unter keinem Fach-Chip mehr auf.
+    if (lesson.subject.archived) continue;
+
+    const period = times.get(lesson.period);
+
+    // Eine Stunde ohne Zeile im Raster hat weder Beginn noch Ende. Ob sie
+    // gerade läuft, lässt sich nicht sagen — also sagt die App es nicht.
+    if (!period) continue;
+
+    // Der Beginn zählt mit, das Ende nicht: um Punkt 08:00 sitzt man schon in
+    // der Stunde, um Punkt 08:45 ist sie vorbei.
+    if (period.startsAt <= now && now < period.endsAt) {
+      return subjectRef(lesson.subject);
+    }
+  }
+
+  const next = data.nextLesson;
+  if (next && next.isToday && !next.lesson.subject.archived) {
+    return subjectRef(next.lesson.subject);
+  }
+
+  return null;
 }
 
 /** Der Raum der Stunde; ohne eigenen Eintrag gilt der des Fachs. */

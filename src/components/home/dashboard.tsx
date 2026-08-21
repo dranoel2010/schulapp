@@ -33,6 +33,7 @@ type Lesson = HomeData["todayLessons"][number];
 type Task = HomeData["openHomework"][number];
 type Exam = NonNullable<HomeData["nextExam"]>;
 type SubjectAverage = HomeData["grades"]["perSubject"][number];
+type Sheet = HomeData["materials"][number];
 
 function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -76,6 +77,23 @@ const NEXT_EXAM_LABELS: Record<string, string> = {
  * viele zeigt auch der Entwurf. Der Rest steht auf der Notenseite.
  */
 const SUBJECT_AVERAGE_LIMIT = 5;
+
+/**
+ * So viele Blätter passen in die dritte Spalte, ohne sie über den Bildschirm
+ * zu schieben — dort stehen schon die Fächer und der Schnitt. Die Ablage
+ * selbst ist einen Klick entfernt.
+ */
+const MATERIAL_LIMIT = 3;
+
+/**
+ * Das Vorschaubild in der Karte: hochkant, so wie ein Blatt liegt, und
+ * kleiner als in der Ablage — hier steht es neben zwei Zeilen Text und nicht
+ * in einer Liste, die nur aus Blättern besteht. Die Maße stehen am `<img>` und
+ * noch einmal als Klasse: sie halten den Platz frei, bevor das Bild da ist,
+ * sonst rutscht die ganze Spalte beim Laden.
+ */
+const COVER_WIDTH = 36;
+const COVER_HEIGHT = 48;
 
 /**
  * Die Zeile unter dem Datum: erst, was noch offen ist, dann, was heute im
@@ -141,6 +159,7 @@ export function HomeDashboard({ data }: { data: HomeData }) {
 
         <div className="flex min-h-0 flex-col gap-4">
           <SubjectsCard count={data.subjectCount} />
+          <MaterialCard sheets={data.materials} />
           <AverageCard grades={data.grades} />
         </div>
       </div>
@@ -567,6 +586,121 @@ function SubjectsCard({ count }: { count: number }) {
         {count === 0 ? "Fächer anlegen" : "Alle Fächer ansehen"}
       </p>
     </Link>
+  );
+}
+
+/**
+ * Die zuletzt aufgenommenen Blätter — und zwar wirklich die zuletzt
+ * aufgenommenen: @/lib/home sortiert diese Liste nach dem Zeitpunkt der
+ * Aufnahme und nicht nach dem Schultag, von dem ein Blatt stammt.
+ *
+ * Am Handy liegt die Kamera eine Wischgeste neben dem Kachelmenü; am großen
+ * Bildschirm gibt es diese Geste nicht, und ohne diese Karte wäre die Ablage
+ * dort allein über die Seitenspalte zu finden. Aufgenommen wird hier trotzdem
+ * nichts — dafür braucht es eine Kamera, und die steckt im Handy.
+ *
+ * Vorne steht das Vorschaubild, wie in der Ablage selbst: ein abfotografiertes
+ * Blatt erkennt man am Bild wieder und nicht am Titel, denn „Blatt vom 21.8.“
+ * heißen sie am Anfang alle.
+ *
+ * Wie viele Blätter insgesamt in der Ablage liegen, steht hier bewusst nicht:
+ * die Startseite lädt nur die letzten paar, sie kennt die Gesamtzahl gar nicht.
+ * Eine Zahl, die niemand gezählt hat, gehört nicht auf den Bildschirm.
+ */
+function MaterialCard({ sheets }: { sheets: Sheet[] }) {
+  const shown = sheets.slice(0, MATERIAL_LIMIT);
+
+  return (
+    <section className={CARD}>
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-[15px] font-semibold text-foreground">Material</h3>
+        {shown.length > 0 ? (
+          <Link
+            href="/material"
+            className="shrink-0 text-[13px] text-muted transition-colors hover:text-foreground"
+          >
+            Alle
+          </Link>
+        ) : null}
+      </div>
+
+      {shown.length === 0 ? (
+        <>
+          <p className="mt-3 text-[14px] text-muted">
+            Noch kein Blatt aufgenommen. Fotografiert wird am Handy, auf der
+            Kamera-Seite neben den Kacheln.
+          </p>
+          <Link
+            href="/material"
+            className="mt-3 inline-block text-[13px] font-medium text-accent hover:underline"
+          >
+            Zur Ablage
+          </Link>
+        </>
+      ) : (
+        <ul className="mt-3 space-y-1.5">
+          {shown.map((sheet) => (
+            <MaterialRow key={sheet.id} sheet={sheet} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Eine Zeile der Material-Karte. Das Datum bleibt weg — es steckt bei den
+ * meisten Blättern schon im Titel, und es wäre hier auch das falsche: die
+ * Liste folgt dem Zeitpunkt der Aufnahme, `capturedOn` ist dagegen der
+ * Schultag. Ein Datum, das nicht der Reihenfolge folgt, in der es steht,
+ * liest sich als Widerspruch — ohne Datum sagt die Reihenfolge schlicht, dass
+ * oben das zuletzt aufgenommene Blatt steht.
+ */
+function MaterialRow({ sheet }: { sheet: Sheet }) {
+  const color = subjectColor(sheet.subject.color);
+
+  return (
+    <li>
+      <Link
+        href={`/material/${sheet.id}`}
+        className="-mx-2 flex items-center gap-2.5 rounded-control px-2 py-1 transition-colors hover:bg-surface-muted"
+      >
+        {sheet.coverPageId ? (
+          // eslint-disable-next-line @next/next/no-img-element -- next/image fragt ohne Session-Cookie an und legt das Blatt in einen öffentlichen Cache
+          <img
+            src={`/api/material/${sheet.coverPageId}/vorschau`}
+            /* Der Titel steht direkt daneben — das Bild noch einmal zu
+               beschreiben, hieße jede Zeile doppelt vorzulesen. */
+            alt=""
+            width={COVER_WIDTH}
+            height={COVER_HEIGHT}
+            loading="lazy"
+            decoding="async"
+            className="h-12 w-9 shrink-0 rounded-control border border-border bg-surface-muted object-cover"
+          />
+        ) : (
+          <span
+            aria-hidden="true"
+            className="h-12 w-9 shrink-0 rounded-control border border-dashed border-border bg-surface-muted"
+          />
+        )}
+
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[14px] text-foreground">
+            {sheet.title}
+          </span>
+
+          <span className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted">
+            <span
+              aria-hidden="true"
+              style={{ backgroundColor: color.hex }}
+              className="size-2 shrink-0 rounded-full"
+            />
+            <span className="min-w-0 truncate">{sheet.subject.name}</span>
+          </span>
+        </span>
+      </Link>
+    </li>
   );
 }
 

@@ -11,9 +11,15 @@ import {
 } from "react";
 
 /**
- * Die Hülle, die am Handy zwischen Startseite und Kalender blättert.
+ * Die Hülle, die am Handy zwischen Kamera, Kachelmenü und Kalender blättert.
  *
- * Beide Seiten kommen fertig gerendert von außen herein und liegen
+ * Das Kachelmenü steht in der Mitte, weil von dort beide Nachbarn einen Wisch
+ * entfernt sind. Rechts liegt der Kalender — dort lag er schon, als es nur zwei
+ * Seiten gab, und der Tag läuft nach vorn. Also bleibt für die Kamera die
+ * andere Richtung: man erreicht sie, indem man dorthin wischt, wo nicht der
+ * Kalender ist.
+ *
+ * Alle drei Seiten kommen fertig gerendert von außen herein und liegen
  * nebeneinander auf einer Spur; geblättert wird allein über deren
  * `transform`. Dadurch bleibt der Inhalt serverseitig gerendert, obwohl die
  * Hülle interaktiv ist, und beim Wischen wird nichts nachgeladen.
@@ -32,11 +38,24 @@ import {
  */
 
 export type SwipePagerProps = {
-  /** Seite 0: das Kachelmenü */
+  /** Seite 0: die Kamera. Links, weil rechts der Kalender liegt. */
+  camera: ReactNode;
+  /** Seite 1: das Kachelmenü. Hier beginnt die Startseite. */
   start: ReactNode;
-  /** Seite 1: der Kalender */
+  /** Seite 2: der Kalender. */
   calendar: ReactNode;
 };
+
+/** So viele Seiten liegen auf der Spur. */
+const PAGES = 3;
+
+/** Angezeigt wird zuerst das Kachelmenü — die Mitte. */
+const START_PAGE = 1;
+
+/** Weiter als bis zur ersten und zur letzten Seite geht es nicht. */
+function clamp(page: number): number {
+  return Math.min(PAGES - 1, Math.max(0, page));
+}
 
 /** Ab so vielen Pixeln Zug blättert die Seite um. */
 const THRESHOLD = 50;
@@ -49,14 +68,23 @@ const WHEEL_LOCK_MS = 500;
 
 const TRANSITION = "transform 460ms cubic-bezier(0.32, 0.72, 0, 1)";
 
-export function SwipePager({ start, calendar }: SwipePagerProps) {
-  const [page, setPage] = useState(0);
+export function SwipePager({ camera, start, calendar }: SwipePagerProps) {
+  const [page, setPage] = useState(START_PAGE);
   const [drag, setDrag] = useState(0);
   const [dragging, setDragging] = useState(false);
 
   // Der Rahmen selbst — für die Berührungs-Listener, die React nicht
   // unpassiv anmelden kann.
   const frame_ = useRef<HTMLDivElement>(null);
+  // Der Zeiger, der die laufende Geste führt — läuft keine, steht hier null.
+  //
+  // Ohne diese Kennung rechnete jede Berührung in dieselben Werte: ein zweiter
+  // Finger überschrieb `startX` mit seiner eigenen Position, und die Bewegung
+  // des ERSTEN wurde danach gegen den Startpunkt des ZWEITEN gerechnet. Der
+  // Sprung daraus ist fast immer größer als THRESHOLD und zeigt in eine
+  // beliebige Richtung — ausgerechnet beim Halten mit einer Hand, wo die
+  // haltenden Finger den Rand mitberühren und für die diese Seite gebaut ist.
+  const activePointer = useRef<number | null>(null);
   // X-Position beim Aufsetzen des Fingers.
   const startX = useRef(0);
   // Der zuletzt gemessene Zug. Er wird bei jeder Bewegung mitgeschrieben,
@@ -137,6 +165,26 @@ export function SwipePager({ start, calendar }: SwipePagerProps) {
   }, []);
 
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    // Führt bereits ein anderer Zeiger, bleibt er der führende: jede weitere
+    // Berührung wird übergangen, bis seine Geste zu Ende ist.
+    //
+    // Gefragt wird dabei nicht allein nach der Kennung, sondern auch danach, ob
+    // der Rahmen den führenden Zeiger überhaupt noch festhält. Für die Maus
+    // wird absichtlich nie Capture gesetzt (der Grund steht gleich darunter),
+    // und ein Mausklick, dessen pointerup neben dem Rahmen fällt, meldet sich
+    // hier nie wieder ab. Ohne Capture gilt deshalb weiter, was bisher galt:
+    // das neue Aufsetzen übernimmt. Nur wo der Rahmen den Zeiger wirklich hält,
+    // ist sein Ende zugesichert — und nur dort darf gesperrt werden.
+    const leading = activePointer.current;
+    if (
+      leading !== null &&
+      leading !== event.pointerId &&
+      event.currentTarget.hasPointerCapture(leading)
+    ) {
+      return;
+    }
+
+    activePointer.current = event.pointerId;
     startX.current = event.clientX;
 
     // Mit Capture bekommt der Rahmen auch die Ereignisse, die neben ihm
@@ -160,12 +208,21 @@ export function SwipePager({ start, calendar }: SwipePagerProps) {
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!dragging) return;
+    // Gemessen wird nur die Bewegung des führenden Zeigers; die der übrigen
+    // gehört zu keinem Startpunkt, den wir kennen. Steht hier null, läuft gar
+    // keine Geste — dann trifft auch keine Kennung zu.
+    if (activePointer.current !== event.pointerId) return;
 
     const dx = event.clientX - startX.current;
     // Über den Rand hinaus zieht es nicht: auf der ersten Seite geht es nur
-    // nach links, auf der zweiten nur nach rechts.
-    dragValue.current = page === 0 ? Math.min(0, dx) : Math.max(0, dx);
+    // nach links, auf der letzten nur nach rechts. Dazwischen — auf dem
+    // Kachelmenü — in beide Richtungen.
+    dragValue.current =
+      page === 0
+        ? Math.min(0, dx)
+        : page === PAGES - 1
+          ? Math.max(0, dx)
+          : dx;
 
     // Höchstens ein Zustandswechsel je Bild — liegt schon ein Bild an, wird
     // dieses Ereignis nicht noch einmal gezeichnet. Gemessen ist es trotzdem.
@@ -177,8 +234,14 @@ export function SwipePager({ start, calendar }: SwipePagerProps) {
     });
   }
 
-  function handlePointerEnd() {
-    if (!dragging) return;
+  function handlePointerEnd(event: ReactPointerEvent<HTMLDivElement>) {
+    // Hebt ein mitliegender Finger ab, ist die Geste nicht vorbei — nur das
+    // Abheben des führenden Zeigers beendet sie. Und beendet ist sie dann
+    // endgültig: die Kennung fällt weg, bevor irgendetwas anderes geschieht,
+    // damit ein zweites Ende (pointerup und gleich darauf pointercancel) nicht
+    // ein zweites Mal blättert.
+    if (activePointer.current !== event.pointerId) return;
+    activePointer.current = null;
 
     if (frame.current !== null) {
       cancelAnimationFrame(frame.current);
@@ -189,8 +252,14 @@ export function SwipePager({ start, calendar }: SwipePagerProps) {
     const travelled = dragValue.current;
     dragValue.current = 0;
 
-    if (travelled < -THRESHOLD) setPage(1);
-    else if (travelled > THRESHOLD) setPage(0);
+    // Ein Wisch blättert um genau eine Seite weiter. Solange es zwei Seiten
+    // waren, ließ sich stattdessen die Zielseite hinschreiben; ab drei sagt
+    // eine Wischrichtung nichts mehr darüber, wo man landet — nur noch, in
+    // welche Richtung. `setPage` bekommt deshalb eine Funktion und keinen Wert:
+    // sie rechnet auf dem Stand, der wirklich gilt, und nicht auf dem aus dem
+    // Rendern von vorhin.
+    if (travelled < -THRESHOLD) setPage((current) => clamp(current + 1));
+    else if (travelled > THRESHOLD) setPage((current) => clamp(current - 1));
 
     setDragging(false);
     setDrag(0);
@@ -209,8 +278,8 @@ export function SwipePager({ start, calendar }: SwipePagerProps) {
     // Erst prüfen, dann sperren — genau in dieser Reihenfolge steht es im
     // Entwurf. Andersherum würde ein Wisch gegen den Rand, der gar nichts
     // bewegt, den Rückweg eine halbe Sekunde lang blockieren.
-    const target = deltaX > 0 ? 1 : 0;
-    if (target === page) return;
+    const step = deltaX > 0 ? 1 : -1;
+    if (clamp(page + step) === page) return;
 
     // Ein Trackpad schickt für einen Wisch viele Ereignisse hinterher. Die
     // Sperre sorgt dafür, dass daraus eine einzige Seite wird.
@@ -218,14 +287,19 @@ export function SwipePager({ start, calendar }: SwipePagerProps) {
       wheelLock.current = null;
     }, WHEEL_LOCK_MS);
 
-    setPage(target);
+    setPage((current) => clamp(current + step));
     setDrag(0);
+    // Das Trackpad hat gerade geblättert; eine gleichzeitig laufende
+    // Finger-Geste ist damit erledigt. Die Kennung fällt mit weg, sonst zöge
+    // der noch aufliegende Finger die Spur weiter, während sie sich für
+    // stillstehend hält — und blätterte beim Abheben ein zweites Mal.
+    activePointer.current = null;
     setDragging(false);
   }
 
-  // Ohne Tastatur wäre die zweite Seite nur mit dem Finger erreichbar. Der
-  // Rahmen bekommt bewusst kein tabIndex — die Tasten wirken, sobald der
-  // Fokus irgendwo in der Hülle steht.
+  // Ohne Tastatur wären die Seiten neben dem Kachelmenü nur mit dem Finger
+  // erreichbar. Der Rahmen bekommt bewusst kein tabIndex — die Tasten wirken,
+  // sobald der Fokus irgendwo in der Hülle steht.
   function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
 
@@ -240,7 +314,9 @@ export function SwipePager({ start, calendar }: SwipePagerProps) {
       return;
     }
 
-    setPage(event.key === "ArrowRight" ? 1 : 0);
+    setPage((current) =>
+      clamp(current + (event.key === "ArrowRight" ? 1 : -1)),
+    );
   }
 
   return (
@@ -257,8 +333,8 @@ export function SwipePager({ start, calendar }: SwipePagerProps) {
       {/* Der Höhendeckel ist nicht kosmetisch, sondern trägt die ganze
           Startseite.
 
-          Die Spur ist ein Zeilen-Flex, beide Seiten strecken sich auf die Höhe
-          der größeren. Über der Spur steht nirgends eine feste Höhe — `body`
+          Die Spur ist ein Zeilen-Flex, alle drei Seiten strecken sich auf die
+          Höhe der größten. Über der Spur steht nirgends eine feste Höhe — `body`
           hat nur ein `min-h-dvh`, also eine Untergrenze. Ohne Deckel wächst
           die Kette deshalb mit dem Inhalt: ein voller Schultag in der Tagesspur
           schiebt die Seite auf weit über eine Bildschirmhöhe, das Kachelraster
@@ -282,12 +358,18 @@ export function SwipePager({ start, calendar }: SwipePagerProps) {
           transition: dragging ? "none" : TRANSITION,
         }}
       >
-        {/* Beide Seiten bleiben für Vorleseprogramme erreichbar: ein
-            aria-hidden auf der abgewandten Seite würde ihren Inhalt
+        {/* Alle drei Seiten bleiben für Vorleseprogramme erreichbar: ein
+            aria-hidden auf den abgewandten Seiten würde ihren Inhalt
             verschlucken.
+
+            `min-w-full` gibt jeder Seite die volle Breite. Die Spur selbst
+            bleibt dabei so breit wie der Rahmen und läuft nur über — deshalb
+            schiebt `translateX(-page * 100%)` weiterhin um genau eine
+            Seitenbreite, egal wie viele Seiten dranhängen.
 
             `min-h-0` lässt sie in der Zeile schrumpfen; die Höhe deckelt
             die Spur darüber. */}
+        <div className="flex min-h-0 min-w-full flex-col">{camera}</div>
         <div className="flex min-h-0 min-w-full flex-col">{start}</div>
         <div className="flex min-h-0 min-w-full flex-col">{calendar}</div>
       </div>

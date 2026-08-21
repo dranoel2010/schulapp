@@ -4,6 +4,7 @@ import {
   catchUpMissedAction,
   skipMissedAction,
 } from "@/app/(app)/lernen/actions";
+import { CapturePane } from "@/components/home/capture-pane";
 import { HomeDashboard } from "@/components/home/dashboard";
 import { DayTimeline } from "@/components/home/day-timeline";
 import { SwipePager } from "@/components/home/swipe-pager";
@@ -16,8 +17,11 @@ import { loadHomeData } from "@/lib/home";
 
 /**
  * Die Startseite. Sie lädt ihre Daten genau einmal und zeigt sie in zwei
- * Anordnungen: am Handy zwei wischbare Seiten (Kachelmenü und Tageskalender),
- * am großen Bildschirm das Dashboard.
+ * Anordnungen: am Handy drei wischbare Seiten (Kamera, Kachelmenü und
+ * Tageskalender), am großen Bildschirm das Dashboard.
+ *
+ * Die Kamera liegt links vom Kachelmenü, der Kalender rechts. Warum diese
+ * Reihenfolge und keine andere, steht im Kopf von SwipePager.
  *
  * Umgeschaltet wird allein per CSS. Die Seite wird auf dem Server gerendert,
  * dort gibt es keine Fensterbreite — eine Messung im Browser käme erst nach
@@ -74,7 +78,7 @@ export default async function StartPage() {
   const missed = [...missedByExam.values()];
 
   return (
-    // Am Handy laufen die beiden Seiten von Rand zu Rand: nur so gleitet die
+    // Am Handy laufen die drei Seiten von Rand zu Rand: nur so gleitet die
     // Spur beim Wischen sauber durch. Das Layout hält die Startseite dort
     // deshalb randlos (PageBody), die Ränder aus dem Entwurf bringen die
     // Seiten selbst mit. Ab md setzt das Layout den Rand ums Dashboard.
@@ -82,7 +86,7 @@ export default async function StartPage() {
       {missed.length > 0 && (
         // Die Nachfrage liegt über der Wischhülle und bringt ihren eigenen
         // Rand mit — die Hülle darunter bleibt randlos. Die 20px oben sind
-        // dieselben, mit denen auch die beiden Seiten beginnen.
+        // dieselben, mit denen auch die drei Seiten beginnen.
         <div className="flex flex-col gap-6 px-[22px] pt-[20px] pb-6 md:px-0 md:pt-0">
           {missed.map((entry) => (
             <MissedPrompt
@@ -105,6 +109,7 @@ export default async function StartPage() {
           Spur davon ab, über den Bildschirm hinauszuwachsen. */}
       <div className="flex min-h-0 flex-1 flex-col md:hidden">
         <SwipePager
+          camera={<CapturePane data={data} />}
           start={<HomeTiles data={data} />}
           calendar={<DayTimeline data={data} />}
         />

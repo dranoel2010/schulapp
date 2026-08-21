@@ -31,6 +31,12 @@ import { TopicList, type TopicRow } from "./topic-list";
  * (Kettenregel)“. Ohne eine Stelle zum Zusammenlegen wird aus dem Vokabular
  * eine Halde.
  *
+ * Gespeist wird das Vokabular aus zwei Quellen: den Themen einer eingetragenen
+ * Prüfung und dem, was an einem abfotografierten Blatt steht. Deshalb nennt
+ * jede Zeile beide Zahlen. Stünden dort nur die Klausuren, sähe ein Thema an
+ * zwölf Blättern aus wie ein unbenutzter Rest — und wer es dann zusammenlegt,
+ * verschiebt die Zuordnung dieser zwölf Blätter, ohne es zu merken.
+ *
  * Die Seite lädt eine einzige Liste (`listTopics` mit `includeMerged`) und
  * baut daraus die zwei Ebenen, die auf dem Bildschirm stehen. Sortiert wird
  * dabei nicht: die Reihenfolge kommt aus der Datenschicht — zuletzt gesehen
@@ -64,6 +70,7 @@ function toRows(topics: TopicItem[]): TopicRow[] {
       id: topic.id,
       title: topic.title,
       examCount: topic.examCount,
+      materialCount: topic.materialCount,
       merged: [],
     };
 
@@ -80,6 +87,7 @@ function toRows(topics: TopicItem[]): TopicRow[] {
         id: topic.id,
         title: topic.title,
         examCount: topic.examCount,
+        materialCount: topic.materialCount,
         merged: [],
       });
       continue;
@@ -142,8 +150,8 @@ export default async function SubjectTopicsPage({
         </h1>
         <p className="text-sm text-muted">
           Alle Themen, die dieses Fach kennt. Sie kommen aus den Themen deiner
-          Klausuren und lassen sich hier umbenennen, zusammenlegen und von Hand
-          ergänzen.
+          Klausuren und von deinen abfotografierten Blättern und lassen sich
+          hier umbenennen, zusammenlegen und von Hand ergänzen.
         </p>
       </header>
 

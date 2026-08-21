@@ -56,8 +56,8 @@ export default async function EditSubjectPage({
         <h2 className="text-base font-semibold text-foreground">Themen</h2>
         <p className="mt-2 text-sm text-muted">
           Das Themen-Vokabular dieses Fachs — alles, was in seinen Klausuren
-          drankam. Hier lassen sich doppelte Schreibweisen zusammenlegen und
-          eigene Themen ergänzen.
+          drankam und auf seinen Blättern steht. Hier lassen sich doppelte
+          Schreibweisen zusammenlegen und eigene Themen ergänzen.
         </p>
         <ButtonLink
           href={`/faecher/${subject.id}/themen`}

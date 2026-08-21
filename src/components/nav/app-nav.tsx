@@ -13,7 +13,7 @@ import type { ReactNode } from "react";
  * für den Inhalt frei.
  *
  * Ab Tablet-Breite bleibt die schmale Seitenspalte links. Dort stehen alle
- * acht Bereiche der App.
+ * neun Bereiche der App.
  *
  * Lernen und Klausuren sind zwei Bereiche, nicht einer: unter "Lernen" steht
  * der Lernplan zum Abhaken, unter "Klausuren" werden die Termine verwaltet.
@@ -52,9 +52,15 @@ function NavIcon({
 
 /**
  * Die Reihenfolge folgt dem Tag, nicht dem Alphabet: erst was täglich
- * ansteht — der Stundenplan und die Hausaufgaben —, dann was verwaltet wird —
- * Lernplan, Klausuren, Noten, Fächer —, und zuletzt die Einstellungen. Wer die
- * Liste umsortieren will, ändert damit diese Aussage, nicht nur die Optik.
+ * ansteht — der Stundenplan, die Hausaufgaben und das Material —, dann was
+ * verwaltet wird — Lernplan, Klausuren, Noten, Fächer —, und zuletzt die
+ * Einstellungen. Wer die Liste umsortieren will, ändert damit diese Aussage,
+ * nicht nur die Optik.
+ *
+ * Das Material steht deshalb bei den Hausaufgaben und nicht bei den Fächern:
+ * ein Blatt wird im Unterricht abfotografiert, an jedem Schultag, so wie eine
+ * Aufgabe aufgeschrieben wird. Dass es später nach Fach und Thema sortiert
+ * dasteht, macht es noch nicht zur Verwaltung.
  *
  * Die Noten stehen hinter den Klausuren und vor den Fächern: sie sind das
  * Ergebnis der Prüfungen und hängen an den Fächern — genau dazwischen also.
@@ -99,6 +105,20 @@ const ITEMS: NavItem[] = [
         <path d="M12.5 7.5h8" />
         <rect x="3.5" y="13.75" width="5.5" height="5.5" rx="1.5" />
         <path d="M12.5 16.5h8" />
+      </>
+    ),
+  },
+  {
+    href: "/material",
+    label: "Material",
+    // Zwei Blätter übereinander: der Stapel, der sich im Laufe des Halbjahrs
+    // ansammelt. Kein Fotoapparat — die Kamera ist der Weg hinein, nicht der
+    // Bereich. Und keins der anderen Symbole ist ein Blatt: das Buch steht für
+    // die Fächer, das Kästchen für die Hausaufgaben, das Raster für die Woche.
+    icon: (
+      <>
+        <path d="M8.25 4.25h7.5A1.75 1.75 0 0 1 17.5 6v9.5" />
+        <rect x="4.5" y="7" width="11.5" height="12.75" rx="1.75" />
       </>
     ),
   },
@@ -234,6 +254,7 @@ const SECTION_TITLES: Record<string, string> = {
   "/klausuren/neu": "Neue Klausur",
   "/hausaufgaben": "Hausaufgaben",
   "/hausaufgaben/neu": "Neue Aufgabe",
+  "/material": "Material",
   "/noten": "Noten",
   "/noten/neu": "Neue Note",
   "/faecher": "Fächer",
@@ -267,6 +288,10 @@ function sectionTitle(pathname: string): string | null {
   }
   if (pathname.startsWith("/faecher/")) return "Fach bearbeiten";
   if (pathname.startsWith("/hausaufgaben/")) return "Aufgabe bearbeiten";
+  // Ein Blatt antippen heißt: die Seiten ansehen und nebenbei richtigstellen,
+  // wohin es gehört. "Blatt bearbeiten" verspräche einen Bildbearbeiter —
+  // hier steht das Blatt selbst im Mittelpunkt.
+  if (pathname.startsWith("/material/")) return "Blatt";
   // Ein Fach unter den Noten ist keine Bearbeitung, sondern die Liste seiner
   // Noten — deshalb steht dort der Bereichsname und nicht "bearbeiten".
   if (pathname.startsWith("/noten/fach/")) return "Noten";

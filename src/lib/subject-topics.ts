@@ -17,6 +17,8 @@ import { db } from "@/db";
 import {
   exams,
   examTopics,
+  materialTopics,
+  materials,
   subjects,
   subjectTopics,
   type SubjectTopic,
@@ -71,14 +73,23 @@ import { normalizeTopics, vocabularyKey } from "@/lib/topics";
 /**
  * Ein Thema des Fachs mit dem, was die Liste darüber zeigt.
  *
- * `examCount` zählt die Klausuren des Fachs, in denen das Thema vorkommt —
- * einschließlich der Schreibweisen, die in dieses Thema zusammengelegt wurden.
- * Umgekehrt heißt das: eine Alias-Zeile selbst zeigt 0, denn ihre Klausuren
- * zählen beim Ziel mit. Sichtbar wird das nur mit `includeMerged`.
+ * `examCount` zählt die Klausuren des Fachs, in denen das Thema vorkommt,
+ * `materialCount` die abfotografierten Blätter — beide einschließlich der
+ * Schreibweisen, die in dieses Thema zusammengelegt wurden. Umgekehrt heißt
+ * das: eine Alias-Zeile selbst zeigt zweimal 0, denn ihre Klausuren und ihre
+ * Blätter zählen beim Ziel mit. Sichtbar wird das nur mit `includeMerged`.
+ *
+ * Zwei Zahlen und nicht eine Summe: seit die Ablage Themen anlegt
+ * (`origin: "blatt"`), gibt es Themen, die an zwölf Blättern hängen und in
+ * keiner Klausur vorkommen. Stünde in der Themenpflege allein die
+ * Klausurzahl, sähen sie aus wie unbenutzte Tippfehler — und wer aufräumt,
+ * legte sie mit etwas anderem zusammen und zöge die Blätter still mit.
  */
 export type TopicItem = SubjectTopic & {
   /** In wie vielen Klausuren dieses Fachs es vorkommt */
   examCount: number;
+  /** An wie vielen Blättern dieses Fachs es hängt */
+  materialCount: number;
 };
 
 /** Wie viel ein Durchlauf über die Klausuren am Vokabular geändert hat. */
@@ -168,7 +179,56 @@ export async function listTopics(
     filters.push(gte(subjectTopics.lastSeenAt, options.since));
   }
 
-  return topicsWithCounts(userId, subjectId, and(...filters));
+  return topicsWithCounts(
+    userId,
+    eq(subjectTopics.subjectId, subjectId),
+    and(...filters),
+  );
+}
+
+/**
+ * Die Themen mehrerer Fächer in EINER Abfrage, je Fach in der Reihenfolge von
+ * `listTopics()`.
+ *
+ * Für Seiten, die mehrere Fächer nebeneinander zeigen. Eine Abfrage je Fach
+ * wären bei zwölf Fächern zwölf Wege zur Datenbank für dieselbe Seite. Dass je
+ * Fach dieselbe Reihenfolge und dieselben Felder herauskommen wie einzeln, ist
+ * keine Zusage nebenbei: beide Wege laufen durch `topicsWithCounts()` und
+ * sortieren dort mit denselben Schlüsseln, und ein Ausschnitt aus einer
+ * sortierten Liste steht in derselben Reihenfolge wie die Liste.
+ *
+ * Zusammengelegte Themen bleiben draußen, genau wie bei `listTopics()` ohne
+ * `includeMerged` — sie sind Schreibweisen und keine eigenen Themen.
+ *
+ * Jedes genannte Fach steht in der Antwort, auch eines ohne ein einziges Thema
+ * und auch eines, das es gar nicht gibt: dann mit leerer Liste. Ein fehlender
+ * Schlüssel wäre von „keine Themen" nicht zu unterscheiden, und der Aufrufer
+ * müsste raten, ob er nichts bekommen hat oder nichts da war.
+ */
+export async function listTopicsForSubjects(
+  userId: string,
+  subjectIds: string[],
+): Promise<Map<string, TopicItem[]>> {
+  const bySubject = new Map<string, TopicItem[]>();
+  // Die Reihenfolge bleibt die des Aufrufers, jedes Fach steht genau einmal da.
+  for (const subjectId of subjectIds) bySubject.set(subjectId, []);
+
+  // Eine kaputte id quittierte Postgres mit einem Typfehler. Sie bleibt aus der
+  // Abfrage heraus und steht trotzdem mit leerer Liste in der Antwort.
+  const ids = [...bySubject.keys()].filter(isId);
+  if (ids.length === 0) return bySubject;
+
+  const rows = await topicsWithCounts(
+    userId,
+    inArray(subjectTopics.subjectId, ids),
+    isNull(subjectTopics.mergedInto),
+  );
+
+  // Ein fremdes Fach hat keine Themen mit dieser userId — sein Schlüssel bleibt
+  // stehen, seine Liste bleibt leer.
+  for (const topic of rows) bySubject.get(topic.subjectId)?.push(topic);
+
+  return bySubject;
 }
 
 /**
@@ -178,6 +238,14 @@ export async function listTopics(
  * Treffer auf ein anderes Thema, kommt dieses zurück. Ein Titel ohne Fachwort
  * wird abgelehnt und nicht stillschweigend angelegt — „Übungen" ist kein
  * Thema, sondern das, was man damit macht.
+ *
+ * **Was zurückkommt, ist immer ein eigenständiges Thema und nie ein Alias.**
+ * Beide Zweige halten das: eine frisch angelegte Zeile ist noch in keine andere
+ * gelegt, und eine gefundene geht in `ensureVocabulary()` durch
+ * `resolveTopic()`. Getragen wird die Zusage also von `ensureVocabulary()`, und
+ * sie gilt für `ensureTopics()` genauso — dort steht sie noch einmal, weil sich
+ * @/lib/materials darauf stützt. Wer `ensureVocabulary()` ändert, hält sie oder
+ * geht beide Wege durch.
  */
 export async function ensureTopic(
   userId: string,
@@ -187,14 +255,51 @@ export async function ensureTopic(
 ): Promise<SubjectTopic | null> {
   if (!(await ownsSubject(userId, subjectId))) return null;
 
-  const origin =
-    options?.origin && isOrigin(options.origin) ? options.origin : "klausur";
-  const seenAt =
-    options?.seenAt && isCalendarDate(options.seenAt)
-      ? options.seenAt
-      : todayInBerlin();
+  const { origin, seenAt } = topicDefaults(options);
 
   return ensureVocabulary(userId, subjectId, title, origin, seenAt);
+}
+
+/**
+ * Dasselbe für mehrere Titel desselben Fachs: die Antworten stehen in der
+ * Reihenfolge der Titel, mit einem `null` an jeder Stelle, aus der kein Thema
+ * wird.
+ *
+ * Der einzige Unterschied zu `ensureTopic()` je Titel ist die Fachprüfung. Sie
+ * hängt allein am Fach und fällt für alle Titel gleich aus; einmal gefragt
+ * statt vierzigmal sind bei einem Blatt voller Themen neununddreißig Wege zur
+ * Datenbank weniger, die alle dieselbe Antwort geholt hätten.
+ *
+ * Angelegt wird trotzdem ein Titel nach dem anderen und nicht alle zugleich:
+ * zwei Schreibweisen können denselben Schlüssel treffen, und dann soll die
+ * zweite das Thema der ersten bekommen. Genau das tut `ensureVocabulary()`
+ * über seinen Konflikt-Zweig — aber nur, wenn die erste schon geschrieben hat.
+ *
+ * **Was zurückkommt, ist immer ein eigenständiges Thema und nie ein Alias** —
+ * dieselbe Zusage wie bei `ensureTopic()`, und aus demselben Grund: beide gehen
+ * durch `ensureVocabulary()`, das eine gefundene Zeile über `resolveTopic()`
+ * schickt. Genau darauf stützt sich `setMaterialTopics()` in @/lib/materials
+ * und spart je Thema eine Abfrage. Wer hier den Rumpf ändert — etwa auf einen
+ * gebündelten Insert —, hält die Zusage oder löst beim Aufrufer selbst auf;
+ * sonst stünden Alias-ids in `material_topics`, und die Regel im Kopf dieser
+ * Datei wäre gebrochen.
+ */
+export async function ensureTopics(
+  userId: string,
+  subjectId: string,
+  titles: string[],
+  options?: { origin?: TopicOrigin; seenAt?: string },
+): Promise<(SubjectTopic | null)[]> {
+  if (!(await ownsSubject(userId, subjectId))) return titles.map(() => null);
+
+  const { origin, seenAt } = topicDefaults(options);
+  const found: (SubjectTopic | null)[] = [];
+
+  for (const title of titles) {
+    found.push(await ensureVocabulary(userId, subjectId, title, origin, seenAt));
+  }
+
+  return found;
 }
 
 /**
@@ -514,10 +619,15 @@ export async function seedTopicsFromExams(userId: string): Promise<SeedResult> {
  *
  * `count(distinct exam_id)`, damit zwei gleich benannte Posten derselben
  * Prüfung nicht zu zwei Klausuren werden. Der Verbund über `exams` filtert
- * zusätzlich nach Nutzer und Fach — gezählt wird nur, was wirklich zu diesem
- * Fach gehört.
+ * zusätzlich nach Nutzer und bindet das Fach der Prüfung an das Fach der
+ * Vokabel — gezählt wird nur, was wirklich zu diesem Fach gehört.
+ *
+ * `scope` sagt, um welche Fächer es überhaupt geht: um ein einzelnes bei
+ * `listTopics()`, um mehrere bei `listTopicsForSubjects()`. Es ist dieselbe
+ * Bedingung, die auch die äußere Abfrage einschränkt — die Zählung soll nicht
+ * über Zeilen laufen, die danach ohnehin niemand ansieht.
  */
-function examCounts(userId: string, subjectId: string) {
+function examCounts(userId: string, scope: SQL) {
   const target = sql`coalesce(${subjectTopics.mergedInto}, ${subjectTopics.id})`;
 
   return db
@@ -534,51 +644,110 @@ function examCounts(userId: string, subjectId: string) {
       and(
         eq(exams.id, examTopics.examId),
         eq(exams.userId, userId),
-        eq(exams.subjectId, subjectId),
+        eq(exams.subjectId, subjectTopics.subjectId),
       ),
     )
-    .where(
-      and(
-        eq(subjectTopics.userId, userId),
-        eq(subjectTopics.subjectId, subjectId),
-      ),
-    )
+    .where(and(eq(subjectTopics.userId, userId), scope))
     .groupBy(target)
     .as("exam_counts");
 }
 
 /**
- * Themen samt Klausurzahl in einer einzigen Abfrage. Eine Zählung pro Thema
- * wäre bei dreißig Themen dreißig Wege zur Datenbank für dieselbe Liste.
+ * Dieselbe Zählung für die abfotografierten Blätter — Zeile für Zeile nach
+ * demselben Muster wie `examCounts()`, und aus denselben Gründen.
+ *
+ * Gruppiert wird wieder auf das eigenständige Thema: die Blätter einer
+ * zusammengelegten Schreibweise zählen beim Ziel mit. Das ist die Regel aus
+ * dem Kopf dieser Datei, hier als `coalesce` in SQL statt als `resolveTopic()`
+ * je Thema — dreißig Themen wären sonst dreißig zusätzliche Abfragen.
+ *
+ * `count(distinct material_id)`, damit ein Blatt, an dem nach einer
+ * Zusammenlegung beide Schreibweisen hängen, nicht als zwei Blätter zählt.
+ * Der Verbund über `materials` filtert zusätzlich nach Nutzer und bindet das
+ * Fach des Blattes an das Fach der Vokabel — gezählt wird nur, was wirklich zu
+ * diesem Fach gehört. Über die App kann ein Blatt gar kein Thema aus einem
+ * anderen Fach tragen (`updateMaterial()` löst die Paarungen beim Fachwechsel
+ * auf); die Bedingung steht trotzdem da, damit eine von Hand geschriebene
+ * Zeile die Zahl nicht aufbläht.
+ *
+ * Die Schlüsselspalte heißt hier `material_topic_id` und nicht wie drüben
+ * `topic_id`. Das ist kein Geschmack: beide Zählungen hängen in derselben
+ * Abfrage als LEFT JOIN am selben `subject_topics`, und Drizzle schreibt die
+ * Bedingung eines Verbunds auf eine Unterabfrage OHNE deren Namen davor —
+ * `on "topic_id" = "subject_topics"."id"`. Hießen beide Spalten gleich, wüsste
+ * Postgres nicht, welche gemeint ist, und wiese die Abfrage mit
+ * „column reference \"topic_id\" is ambiguous" zurück. Wer hier umbenennt,
+ * benennt drüben mit um.
+ */
+function materialCounts(userId: string, scope: SQL) {
+  const target = sql`coalesce(${subjectTopics.mergedInto}, ${subjectTopics.id})`;
+
+  return db
+    .select({
+      topicId: target.as("material_topic_id"),
+      materialCount:
+        sql<number>`cast(count(distinct ${materialTopics.materialId}) as int)`.as(
+          "material_count",
+        ),
+    })
+    .from(materialTopics)
+    .innerJoin(
+      subjectTopics,
+      eq(subjectTopics.id, materialTopics.subjectTopicId),
+    )
+    .innerJoin(
+      materials,
+      and(
+        eq(materials.id, materialTopics.materialId),
+        eq(materials.userId, userId),
+        eq(materials.subjectId, subjectTopics.subjectId),
+      ),
+    )
+    .where(and(eq(subjectTopics.userId, userId), scope))
+    .groupBy(target)
+    .as("material_counts");
+}
+
+/**
+ * Themen samt Klausur- und Blattzahl in einer einzigen Abfrage. Eine Zählung
+ * pro Thema wäre bei dreißig Themen dreißig Wege zur Datenbank für dieselbe
+ * Liste; zwei getrennte Listen wären zwei Wege für dieselbe Zeile.
  *
  * Sortiert wird nach dem zuletzt gesehenen Tag; bei Gleichstand entscheidet der
  * Titel, damit die Reihenfolge zwischen zwei Aufrufen nicht springt.
+ *
+ * `scope` grenzt die Fächer ein, `extra` alles Weitere (Zusammenlegungen,
+ * Zeitfenster). Der gemeinsame Rumpf ist der Grund, warum `listTopics()` und
+ * `listTopicsForSubjects()` Fach für Fach dasselbe liefern.
  */
 async function topicsWithCounts(
   userId: string,
-  subjectId: string,
+  scope: SQL,
   extra: SQL | undefined,
 ): Promise<TopicItem[]> {
-  const counts = examCounts(userId, subjectId);
+  const counts = examCounts(userId, scope);
+  const sheets = materialCounts(userId, scope);
 
   const rows = await db
-    .select({ topic: subjectTopics, examCount: counts.examCount })
+    .select({
+      topic: subjectTopics,
+      examCount: counts.examCount,
+      materialCount: sheets.materialCount,
+    })
     .from(subjectTopics)
     .leftJoin(counts, eq(counts.topicId, subjectTopics.id))
-    .where(
-      and(
-        eq(subjectTopics.userId, userId),
-        eq(subjectTopics.subjectId, subjectId),
-        extra,
-      ),
-    )
+    .leftJoin(sheets, eq(sheets.topicId, subjectTopics.id))
+    .where(and(eq(subjectTopics.userId, userId), scope, extra))
     .orderBy(desc(subjectTopics.lastSeenAt), asc(subjectTopics.title));
 
-  // Der äußere Verbund ist ein LEFT JOIN: ein Thema ohne jede Klausur hat
-  // keine Zeile in der Zählung und kommt als null zurück — das ist die Null.
+  // Beide Verbünde sind LEFT JOINs: ein Thema ohne jede Klausur und ein Thema
+  // ohne jedes Blatt haben keine Zeile in ihrer Zählung und kommen als null
+  // zurück — das ist die jeweilige Null. Ein Thema kann in der einen Zählung
+  // stehen und in der anderen fehlen; deshalb zwei Verbünde und nicht einer.
   return rows.map((row) => ({
     ...row.topic,
     examCount: Number(row.examCount ?? 0),
+    materialCount: Number(row.materialCount ?? 0),
   }));
 }
 
@@ -604,6 +773,28 @@ function topicCandidate(
   if (!matchKey) return null;
 
   return { title: cleaned, matchKey };
+}
+
+/**
+ * Herkunft und „zuletzt gesehen", wie `ensureTopic()` und `ensureTopics()` sie
+ * verstehen: was nicht als Herkunft vorgesehen oder kein Kalendertag ist, fällt
+ * auf die Vorgabe zurück, statt so in die Spalte zu geraten.
+ *
+ * Beide Wege fragen hier, damit ein Titel einzeln und im Bündel unter denselben
+ * Werten landet.
+ */
+function topicDefaults(options?: { origin?: TopicOrigin; seenAt?: string }): {
+  origin: TopicOrigin;
+  seenAt: string;
+} {
+  return {
+    origin:
+      options?.origin && isOrigin(options.origin) ? options.origin : "klausur",
+    seenAt:
+      options?.seenAt && isCalendarDate(options.seenAt)
+        ? options.seenAt
+        : todayInBerlin(),
+  };
 }
 
 /**
@@ -642,6 +833,8 @@ async function ensureVocabulary(
     })
     .returning();
 
+  // Eine eben erst angelegte Zeile ist noch in keine andere gelegt und damit
+  // schon aufgelöst — hier hält der erste Zweig die Zusage von `ensureTopic()`.
   if (created) return created;
 
   const existing = await findByKey(userId, subjectId, candidate.matchKey);

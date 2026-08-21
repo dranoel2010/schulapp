@@ -306,8 +306,8 @@ export function SubjectDangerZone({
         </h2>
         <p className="text-sm text-muted">
           {archived
-            ? `${subjectName} ist archiviert und taucht nirgends mehr auf. Alles, was daran hängt, ist aber noch da.`
-            : `Archivieren blendet ${subjectName} aus dem Alltag aus — Noten und Termine bleiben erhalten. Das ist der richtige Weg für ein abgewähltes Fach.`}
+            ? `${subjectName} ist archiviert: es zählt nicht mehr im Schnitt und wird nirgends mehr vorgeschlagen. Alles, was daran hängt — Noten, Termine, Stunden und Blätter —, ist weiter da und sichtbar.`
+            : `Archivieren blendet ${subjectName} aus dem Alltag aus — Noten, Termine und Blätter bleiben erhalten. Das ist der richtige Weg für ein abgewähltes Fach.`}
         </p>
         <form action={archiveAction}>
           <SubmitButton variant="secondary">
@@ -320,10 +320,18 @@ export function SubjectDangerZone({
 
       {confirming ? (
         <div className="space-y-3 rounded-control border border-danger/40 bg-danger-soft p-3.5">
+          {/* Die Aufzählung gibt sich als vollständig — dann muss sie es auch
+              sein. `materials.subjectId` hängt mit „cascade“ am Fach, über
+              `material_pages` fallen also auch die Aufnahmen weg. Sie stehen
+              zuletzt und mit eigenem Satz, weil sie das Einzige sind, was sich
+              nicht wiederbeschaffen lässt: eine Note tippt man neu ein, eine
+              Tafel von letzter Woche fotografiert man nicht noch einmal ab. */}
           <p className="text-sm text-foreground">
             {subjectName} wirklich löschen? Damit ist das Fach weg — und mit ihm
             sofort alle Klausuren samt Lernplan, alle Stundenplan-Einträge, alle
-            Hausaufgaben und alle Noten, die daran hängen. Rückgängig geht das
+            Hausaufgaben, alle Noten und alle Blätter, die daran hängen. Mit den
+            Blättern gehen auch ihre Aufnahmen, und ein zweites Mal abfotografieren
+            lässt sich eine Tafel von letzter Woche nicht. Rückgängig geht das
             nicht. Wer nur ein abgewähltes Fach loswerden will, archiviert es:
             dann bleiben die Noten für den Schnitt vergangener Halbjahre da.
           </p>

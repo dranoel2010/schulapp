@@ -1,16 +1,76 @@
 import { relations } from "drizzle-orm";
 import {
   boolean,
+  customType,
   date,
   index,
   integer,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+
+/**
+ * Rohe Bytes als `bytea` — die Spalte, die drizzle-orm nicht mitbringt.
+ *
+ * `drizzle-orm/pg-core` hat für jeden Postgres-Typ eine eigene Spalte, nur für
+ * rohe Bytes nicht. Der vorgesehene Weg dorthin ist `customType`, und was er
+ * ausgleichen muss, sind die beiden Treiber: PGlite reicht beim Lesen ein
+ * Uint8Array herauf, postgres-js einen Node-Buffer aus einem gemeinsam
+ * genutzten Pool. Dessen `byteOffset` ist bei kleinen Werten nicht null —
+ * gemessen: 21272 bei 64 Bytes. Deshalb wird der Blick auf die Bytes immer mit
+ * Offset und Länge gebaut. Wer stattdessen `value.buffer` allein nähme,
+ * lieferte bei einem Vorschaubild den halben Pool aus, also fremden Speicher.
+ * Kopiert wird dabei nichts, es entsteht nur ein zweiter Blick.
+ *
+ * Der Zeichenketten-Zweig ist der Fallback, falls ein Treiber die Textform
+ * "\x2a3f…" durchreicht, statt sie selbst zu lesen. Heute tut das keiner von
+ * beiden; der Zweig kostet nichts und macht die Spalte gegen einen
+ * Treiberwechsel unempfindlich.
+ *
+ * `Uint8Array<ArrayBuffer>` statt einfach `Uint8Array` ist keine Ziererei,
+ * sondern die Bedingung dafür, dass `new Response(page.image)` im Route
+ * Handler ohne Umtypen durchgeht: `BodyInit` verlangt seit TypeScript 5.7 ein
+ * `ArrayBufferView<ArrayBuffer>`, und das voreingestellte `Uint8Array` ist
+ * `Uint8Array<ArrayBufferLike>` — der wird abgelehnt, ein Node-Buffer
+ * ebenfalls.
+ *
+ * `toDriver` gibt den Wert unverändert weiter: beide Treiber erkennen ein
+ * Uint8Array von selbst als `bytea`. Ein blanker ArrayBuffer wird dagegen von
+ * keinem der beiden erkannt und liefe als Text in die Spalte — deshalb geht
+ * hier ein View hinein und nie ein Puffer.
+ */
+const bytea = customType<{
+  data: Uint8Array<ArrayBuffer>;
+  driverData: Uint8Array | string;
+}>({
+  dataType() {
+    return "bytea";
+  },
+  toDriver(value) {
+    return value;
+  },
+  fromDriver(value) {
+    if (typeof value === "string") {
+      const hex = value.startsWith("\\x") ? value.slice(2) : value;
+      const bytes = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < bytes.length; i += 1) {
+        bytes[i] = Number.parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+      }
+      return bytes;
+    }
+
+    return new Uint8Array(
+      value.buffer as ArrayBuffer,
+      value.byteOffset,
+      value.byteLength,
+    );
+  },
+});
 
 /**
  * Ein Nutzer. Die App ist für eine Person gedacht, die Tabelle hält uns aber
@@ -407,6 +467,164 @@ export const pushSubscriptions = pgTable(
   (t) => [unique("push_subscriptions_endpoint_key").on(t.endpoint)],
 );
 
+/**
+ * Ein abfotografiertes Blatt: das Arbeitsblatt aus dem Unterricht, die
+ * Mitschrift, die Kopie mit den Aufgaben.
+ *
+ * Ein Blatt gehört zu genau einem Fach — ohne Fach wäre es ein Foto in der
+ * Galerie und nichts, was die App wiederfindet. Themen kommen beliebig viele
+ * dazu, aber keins muss.
+ *
+ * `capturedOn` ist ein reines Kalenderdatum als Zeichenkette ("2026-09-14"),
+ * dieselbe Entscheidung wie bei Prüfungen, Hausaufgaben und Noten: ein Blatt
+ * wird an einem Schultag ausgeteilt, nicht zu einer Uhrzeit in einer Zeitzone.
+ * Es ist ausdrücklich nicht der Zeitpunkt der Aufnahme — wer am Abend
+ * nachfotografiert, was er morgens bekommen hat, kann den Tag richtigstellen.
+ * `createdAt` hält daneben fest, wann die App das Blatt bekommen hat; das ist
+ * eine andere Frage und deshalb eine andere Spalte.
+ *
+ * Es gibt bewusst keine Spalte für die Art des Blattes. Das Konzept nennt
+ * keine, und jede Spalte muss sich begründen lassen — "Arbeitsblatt oder
+ * Mitschrift?" ist eine Frage, die im Unterricht Zeit kostet und keine
+ * Antwort trägt, nach der später jemand sucht.
+ */
+export const materials = pgTable(
+  "materials",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    /** Wie das Blatt in der Ablage heißt, z.B. "Kettenregel Übungen" */
+    title: text("title").notNull(),
+    /** Der Schultag, an dem es ausgeteilt wurde */
+    capturedOn: date("captured_on", { mode: "string" }).notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("materials_user_captured_idx").on(t.userId, t.capturedOn),
+    index("materials_subject_idx").on(t.subjectId),
+    // Die Startseite fragt bei jedem Aufruf von "/" nach den sechs zuletzt
+    // aufgenommenen Blättern — `where user_id = ? order by created_at desc
+    // limit 6`. Ohne diesen Index liest Postgres dafür alle Blätter des
+    // Nutzers und sortiert sie, für sechs Zeilen. Der Index über
+    // (user_id, captured_on) trägt das nicht: er sortiert nach dem Schultag,
+    // und das ist ausdrücklich eine andere Spalte als der Zeitpunkt der
+    // Aufnahme.
+    index("materials_user_created_idx").on(t.userId, t.createdAt),
+  ],
+);
+
+/**
+ * Eine Seite eines Blattes — das Foto selbst.
+ *
+ * **Die Bytes liegen in der Datenbank und nicht in einem Speicherdienst.** Ein
+ * Ort, ein Backup: `npm run db:backup` nimmt die Fotos mit, ohne davon zu
+ * wissen. Kein zusätzlicher Dienst, kein Token, keine Adresse, die abläuft —
+ * und lokal auf PGlite läuft derselbe Code wie in der Cloud auf Postgres. Das
+ * ist auch die Zusage, die in der Seitenspalte steht: alle Daten liegen auf
+ * deinem eigenen Server. Ein Blatt wiegt nach dem Verkleinern im Browser rund
+ * 200 bis 300 KB; ein Schuljahr voller Blätter bleibt damit im
+ * zweistelligen Megabyte-Bereich und ist für eine Datenbank nichts.
+ *
+ * **`image` und `thumb` stehen getrennt da, und das ist der Grund für die
+ * zweite Spalte:** die Ablage zeigt bis zu zweihundert Vorschauen auf einmal —
+ * `LIST_LIMIT` in @/lib/materials, und jede geholte Zeile bekommt ihre Kachel.
+ * Als Vorschauen zu je rund 15 KB sind das rund 3 MB. Mit nur einer Spalte
+ * müsste dieselbe Seite zweihundert Vollbilder zu je rund 250 KB laden und im
+ * Browser herunterrechnen: rund 50 MB für Bilder, die 320 Pixel breit
+ * angezeigt werden. Gemessen: fünfzehn Vorschaubilder zu lesen dauert 9 ms,
+ * ein einziges Vollbild 14 ms. Daraus folgt die Regel für jede Abfrage in
+ * @/lib/materials: für Listen niemals `image` mitselektieren.
+ *
+ * `width` und `height` sind die des Vollbildes und stehen dabei, damit die
+ * Seite den Platz reservieren kann, bevor das Bild da ist — sonst springt die
+ * ganze Ablage beim Laden.
+ *
+ * "cascade" ist hier die richtige Wahl, anders als bei den Klausurthemen. An
+ * einem Foto hängt keine Geschichte: kein Lernblock, keine Note, kein
+ * abgehakter Termin. Wer das Blatt löscht, meint das Foto mit — es allein
+ * stehen zu lassen ergäbe eine Seite ohne Blatt, die niemand mehr zuordnen
+ * kann.
+ */
+export const materialPages = pgTable(
+  "material_pages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => materials.id, { onDelete: "cascade" }),
+    /** Reihenfolge innerhalb des Blattes, beginnend bei 0 */
+    sortOrder: integer("sort_order").notNull().default(0),
+    /**
+     * Das Format — für Vollbild UND Vorschau. Eine Spalte für beide Blobs, weil
+     * beide aus demselben Canvas fallen und deshalb nie auseinandergehen
+     * können. Wer diese Zeile über einen anderen Weg als das Formular befüllt,
+     * muss das einhalten: unter zwei Formaten läge `/api/material/<id>/vorschau`
+     * über seine eigenen Bytes, und weil dort `nosniff` steht, weigert sich der
+     * Browser zu raten und zeigt ein kaputtes Bild. Geprüft wird es an der Tür,
+     * in `readPage()` in src/app/(app)/material/actions.ts.
+     */
+    mimeType: text("mime_type").notNull().default("image/jpeg"),
+    /** Maße des Vollbildes, nicht der Vorschau */
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    /** Größe des Vollbildes in Bytes, für die ehrliche Anzeige "248 KB" */
+    byteSize: integer("byte_size").notNull(),
+    /** Das Blatt, lange Kante 1600px */
+    image: bytea("image").notNull(),
+    /** Dasselbe Blatt, lange Kante 320px — für Listen */
+    thumb: bytea("thumb").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("material_pages_material_idx").on(t.materialId, t.sortOrder)],
+);
+
+/**
+ * Welche Themen auf einem Blatt stehen.
+ *
+ * Der Verweis geht auf `subject_topics`, also auf das Vokabular des Fachs, und
+ * ausdrücklich nicht auf freien Text. Freier Text hieße: "Kettenregel" auf dem
+ * einen Blatt und "kettenregel " auf dem nächsten sind zwei Themen, und die
+ * Frage "was habe ich zur Kettenregel?" findet die Hälfte. Über das Vokabular
+ * ist es ein Eintrag, der sich umbenennen und zusammenlegen lässt — und
+ * dieselben Themen, aus denen auch die Klausuren schöpfen. Genau dafür wurde
+ * `subject_topics` in Stufe 1 gebaut.
+ *
+ * Der zusammengesetzte Primärschlüssel ist die ganze Zeile: dieses Thema, auf
+ * diesem Blatt, einmal. Es gibt hier nichts weiter festzuhalten — keine
+ * Reihenfolge, kein Datum, keinen Zustand. Deshalb trägt die Zeile auch keine
+ * Geschichte, und deshalb dürfen beide Fremdschlüssel "cascade" tragen: fällt
+ * das Blatt oder das Thema weg, ist die Paarung sinnlos und nicht etwa
+ * verloren.
+ */
+export const materialTopics = pgTable(
+  "material_topics",
+  {
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => materials.id, { onDelete: "cascade" }),
+    subjectTopicId: uuid("subject_topic_id")
+      .notNull()
+      .references(() => subjectTopics.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({
+      name: "material_topics_pk",
+      columns: [t.materialId, t.subjectTopicId],
+    }),
+    index("material_topics_topic_idx").on(t.subjectTopicId),
+  ],
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   subjects: many(subjects),
@@ -416,6 +634,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   homework: many(homework),
   grades: many(grades),
   subjectTopics: many(subjectTopics),
+  materials: many(materials),
   pushSubscriptions: many(pushSubscriptions),
 }));
 
@@ -430,6 +649,7 @@ export const subjectsRelations = relations(subjects, ({ one, many }) => ({
   homework: many(homework),
   grades: many(grades),
   topics: many(subjectTopics),
+  materials: many(materials),
 }));
 
 export const examsRelations = relations(exams, ({ one, many }) => ({
@@ -460,6 +680,7 @@ export const subjectTopicsRelations = relations(
       references: [subjects.id],
     }),
     examTopics: many(examTopics),
+    materialTopics: many(materialTopics),
   }),
 );
 
@@ -499,6 +720,34 @@ export const gradesRelations = relations(grades, ({ one }) => ({
   }),
 }));
 
+export const materialsRelations = relations(materials, ({ one, many }) => ({
+  user: one(users, { fields: [materials.userId], references: [users.id] }),
+  subject: one(subjects, {
+    fields: [materials.subjectId],
+    references: [subjects.id],
+  }),
+  pages: many(materialPages),
+  topics: many(materialTopics),
+}));
+
+export const materialPagesRelations = relations(materialPages, ({ one }) => ({
+  material: one(materials, {
+    fields: [materialPages.materialId],
+    references: [materials.id],
+  }),
+}));
+
+export const materialTopicsRelations = relations(materialTopics, ({ one }) => ({
+  material: one(materials, {
+    fields: [materialTopics.materialId],
+    references: [materials.id],
+  }),
+  subjectTopic: one(subjectTopics, {
+    fields: [materialTopics.subjectTopicId],
+    references: [subjectTopics.id],
+  }),
+}));
+
 export const pushSubscriptionsRelations = relations(
   pushSubscriptions,
   ({ one }) => ({
@@ -530,6 +779,11 @@ export type SubjectTopic = typeof subjectTopics.$inferSelect;
 export type NewSubjectTopic = typeof subjectTopics.$inferInsert;
 export type Grade = typeof grades.$inferSelect;
 export type NewGrade = typeof grades.$inferInsert;
+export type Material = typeof materials.$inferSelect;
+export type NewMaterial = typeof materials.$inferInsert;
+export type MaterialPage = typeof materialPages.$inferSelect;
+export type NewMaterialPage = typeof materialPages.$inferInsert;
+export type MaterialTopic = typeof materialTopics.$inferSelect;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 
 /** Art einer Prüfung */
@@ -546,9 +800,10 @@ export type StudyBlockStatus = "open" | "done" | "skipped";
 export type GradeKind = "schriftlich" | "muendlich";
 
 /**
- * Woher ein Fach-Thema zuerst kam. "blatt" gibt es erst, wenn die Kamera
- * gebaut ist — der Wert steht schon hier, damit die Spalte sich später nicht
- * ändern muss.
+ * Woher ein Fach-Thema zuerst kam. Alle drei Werte kommen vor: "klausur" aus
+ * den Themen einer eingetragenen Prüfung, "manuell" aus der Themenpflege und
+ * "blatt" von einem abfotografierten Blatt — geschrieben beim Aufnehmen in
+ * `setMaterialTopics()` in @/lib/materials.
  */
 export type TopicOrigin = "klausur" | "manuell" | "blatt";
 

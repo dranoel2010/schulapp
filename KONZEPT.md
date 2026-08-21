@@ -141,11 +141,53 @@ einer Note nicht mehr zu schaffen.
    Lernstoff. In Stufen:
    1. ~~**Themen-Vokabular** — jedes Fach führt seine Themen, Klausuren greifen
       daraus, Pflege unter `/faecher/<id>/themen`~~ **fertig**
-   2. **Kamera und Ablage** — Blätter aufnehmen, speichern, Fach und Thema
-      zuordnen. Ohne KI, und für sich schon nützlich
+   2. ~~**Kamera und Ablage** — Blätter aufnehmen, speichern, Fach und Thema
+      zuordnen. Ohne KI, und für sich schon nützlich~~ **fertig**
    3. **Eingangskorb** — Vorschläge, die man bestätigt, mit vollem Handformular
    4. **Web MCP** — die App bietet ihre Fähigkeiten als Tools an, ein Agent in
       Claude benutzt sie
+
+## Die Ablage
+
+Ein **Blatt** ist ein abfotografiertes Stück Papier: ein Arbeitsblatt, ein
+Tafelbild, eine Kopie. Es hat ein Fach, ein Datum, einen Titel, eine Notiz und
+beliebig viele Themen aus dem Vokabular seines Fachs — dieselben Themen, aus
+denen auch die Klausuren schöpfen. Ein Blatt kann mehrere Seiten haben.
+
+```
+Fach ─── Blatt ──┬── Seite    Reihenfolge, Maße, Vollbild, Vorschau
+                 └── Thema    Verweis ins Vokabular des Fachs
+```
+
+**Die Fotos liegen in der Datenbank**, als `bytea` neben allen anderen Daten.
+Ein Ort statt zweier: die Sicherung deckt sie mit ab, es braucht keinen zweiten
+Dienst und kein zweites Token, und lokal wie in der Cloud läuft derselbe Code.
+Das passt zu dem, was die App über sich behauptet — alle Daten liegen auf dem
+eigenen Server.
+
+Damit das trägt, wird **schon im Browser verkleinert**: lange Kante 1600 Pixel
+als JPEG, dazu eine Vorschau mit 320 Pixeln. Ein Blatt wiegt danach rund 250 KB
+statt mehrerer Megabyte, ein Schuljahr also grob 50 bis 120 MB. Der Server
+braucht dadurch keine Bildbibliothek, und jede Anfrage trägt genau eine Seite —
+mehrere Bilder in einem Zug würden jede Größengrenze sprengen, die ein
+Funktionsaufruf in der Cloud hat.
+
+Die **Vorschau ist eine eigene Spalte** und kein zurechtgeschnittenes Vollbild.
+Die Ablage zeigt bis zu zweihundert Bilder auf einmal; als Vorschauen sind das
+rund 3 MB, in voller Größe wären es rund 50 MB.
+
+Ausgeliefert werden die Bilder über eine eigene Adresse je Seite
+(`/api/material/<seite>`), die Sitzung und Besitzer prüft. Sie darf hart
+zwischengespeichert werden, weil die Bytes einer Seite sich nie ändern: ein
+neues Foto ist eine neue Zeile mit einer neuen Adresse. Aber nur privat — kein
+geteilter Cache hebt ein fremdes Schulblatt auf.
+
+**Aufgenommen wird am Handy links.** Die Startseite hat dort drei wischbare
+Seiten: Kamera, Kachelmenü, Tagesspur. Der Weg zum Auslöser ist die
+Wischrichtung, in der nicht der Tagesablauf steht. Vorgeschlagen wird das Fach
+der Stunde, die gerade läuft — aber nur, wenn es die App wirklich weiß und das
+Fach nicht abgewählt ist. Ein falsch vorbelegtes Fach rutscht unbemerkt durch,
+und ein Blatt im falschen Fach findet später niemand wieder.
 
 ## Wie die KI angeschlossen wird
 
@@ -183,6 +225,16 @@ die Claude-App — dort steht kein Bash und kein Zugriff auf das Repo daneben.
   die Rechnung)
 - Offline **schreiben** (Hausaufgabe im Schulnetz ohne Empfang eintragen) —
   bewusst später, erst wird offline nur gelesen
+- Die Ablage lässt sich offline nicht **durchsehen**: der Service Worker lässt
+  `/api/material/…` unangetastet, weil ein Bildcache anders altert als eine
+  Seite und weil ein Schulblatt nicht versehentlich liegenbleiben soll. Ein
+  Blatt, das man schon einmal geöffnet hat, erscheint offline trotzdem — es
+  liegt dann im gewöhnlichen Cache des Browsers, in den `private, max-age=1
+  Jahr, immutable` es gelegt hat. Verlassen kann man sich darauf nicht: was
+  noch nie offen war, bleibt leer, und wann der Browser diesen Cache räumt,
+  entscheidet er allein. Wer die Blätter im Bus ohne Empfang durchsehen will,
+  braucht dafür eine eigene Entscheidung — welche Blätter, wie lange, und wann
+  sie wieder gehen
 - Erinnerung an fällige Hausaufgaben per Push — der Lernplan hat sie schon,
   die Aufgaben noch nicht
 - Vertretung und Ausfall einer einzelnen Stunde — der Wochenplan ist fest,

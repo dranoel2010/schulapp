@@ -9,7 +9,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { TOPIC_MAX_LENGTH } from "@/lib/topics";
+import { TOPIC_MAX_LENGTH, topicKey } from "@/lib/topics";
 
 /**
  * Die Themenliste einer Prüfung.
@@ -32,10 +32,18 @@ export type TopicInputProps = {
   "aria-invalid"?: true;
 };
 
-/** Groß- und Kleinschreibung macht kein zweites Thema. */
+/**
+ * Groß- und Kleinschreibung macht kein zweites Thema — gefaltet wird über
+ * `topicKey()` aus @/lib/topics und nicht mehr mit einem eigenen
+ * `toLocaleLowerCase("de")`, weil genau diese Funktion auch auf dem Server
+ * entscheidet, was ein zweiter Posten derselben Klausur ist (`normalizeTopics()`
+ * und der Abgleich in `setTopics()`). Wird die Faltung dort später erweitert,
+ * urteilt das Formular sofort mit; vorher hätte dasselbe Themenpaar hier als
+ * zwei und beim Speichern als eines gezählt.
+ */
 function isKnown(topics: string[], title: string): boolean {
-  const key = title.toLocaleLowerCase("de");
-  return topics.some((topic) => topic.toLocaleLowerCase("de") === key);
+  const key = topicKey(title);
+  return topics.some((topic) => topicKey(topic) === key);
 }
 
 export function TopicInput({

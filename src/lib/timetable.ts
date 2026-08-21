@@ -223,7 +223,10 @@ export function isDefaultPeriods(
  * vor: der der Stunde gewinnt, der des Fachs ist die Vorgabe.
  */
 export type LessonWithSubject = Lesson & {
-  subject: Pick<Subject, "id" | "name" | "short" | "color" | "room" | "teacher">;
+  subject: Pick<
+    Subject,
+    "id" | "name" | "short" | "color" | "room" | "teacher" | "archived"
+  >;
 };
 
 /** Alles, was das Wochenraster zum Zeichnen braucht. */
@@ -504,6 +507,14 @@ const subjectFields = {
   room: subjects.room,
   /** Steht in der Tagesspur hinter dem Raum: "A203 · Fr. Bergmann". */
   teacher: subjects.teacher,
+  /**
+   * Das Raster zeigt die Stunden abgewählter Fächer weiter an — sie
+   * verschwinden nicht, nur weil das Fach zugemacht wurde. Wer aus einer
+   * Stunde einen Vorschlag ableitet, muss das aber wissen können:
+   * `captureSubject()` in @/lib/home schlägt kein archiviertes Fach vor, und
+   * ohne diese Spalte könnte es das gar nicht erkennen.
+   */
+  archived: subjects.archived,
 };
 
 async function ownsSubject(userId: string, subjectId: string): Promise<boolean> {

@@ -19,6 +19,39 @@ const nextConfig: NextConfig = {
     "172.16.*.*",
     "*.local",
   ],
+
+  /**
+   * Wie groß eine Server Action werden darf.
+   *
+   * Voreingestellt ist ein Megabyte, und daran scheiterte jede Aufnahme. Eine
+   * Anfrage trägt genau eine Seite: das Vollbild mit rund 250 KB, dazu die
+   * Vorschau mit rund 15 KB und ein paar Formularfelder.
+   *
+   * Die Zahl gilt für den ganzen Body samt multipart-Rahmen, nicht für die
+   * Dateien allein — und sie muss deshalb über allem liegen, was der Prüfer der
+   * Action überhaupt durchlässt. Der lässt je Anfrage ein Vollbild bis
+   * MAX_PAGE_BYTES (3 MB) und eine Vorschau bis MAX_THUMB_BYTES (400 KB) zu,
+   * beide aus @/lib/images. Zusammen sind das 3,4 MB, und die 600 KB Rest
+   * tragen den multipart-Rahmen und die Felder — die vier Megabyte hier sind
+   * also die Decke über der Summe und nicht über einer der beiden Zahlen.
+   * (Lägen beide Blobs bei 3 MB, wären 6 MB möglich: Next bräche die Anfrage
+   * ab, bevor die Action läuft, und der Nutzer läse einen Satz über seine
+   * Verbindung, obwohl der Server sie abgewiesen hat.)
+   *
+   * Erreicht wird der Rand über die Oberfläche nicht: das Vollbild prüft der
+   * Auslöser schon im Browser gegen MAX_PAGE_BYTES, bevor etwas losgeschickt
+   * wird, und die Vorschau entsteht daneben aus demselben Canvas mit 320 Pixel
+   * langer Kante — rund 15 KB. Schlägt der Rand doch einmal an, bricht
+   * Next die Anfrage mit Status 413 ab; die Action läuft dann gar nicht erst,
+   * der Abbruch kommt beim Auslöser als Ausnahme an, und `callAction()` in
+   * @/components/material/capture-button fängt sie und schreibt einen Satz
+   * unter den Knopf statt eine Fehlermeldung quer über den Bildschirm.
+   */
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "4mb",
+    },
+  },
 };
 
 export default nextConfig;

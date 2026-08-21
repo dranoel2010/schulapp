@@ -47,7 +47,7 @@ npm run build && npm run start
 | `npm run db:push` | Schemaänderungen in die Datenbank übertragen |
 | `npm run db:studio` | Datenbank im Browser ansehen |
 | `npm run db:backup` | Kopie der lokalen Datenbank nach `.backups/` |
-| `npm test` | Tests der reinen Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala |
+| `npm test` | 253 Tests in 52 Suiten — die reine Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala, Themen-Titel, Bildmaße, die Zahlen der Startseite und das Formular der Ablage |
 | `npm run lint` | ESLint |
 
 ## Aufbau
@@ -57,8 +57,8 @@ src/
   app/
     (auth)/         Einrichtung und Anmeldung — ohne Navigation
     (app)/          alles hinter der Anmeldung
-      page.tsx        Start: am Handy Kachelmenü und Tagesspur, am
-                      Rechner das Dashboard
+      page.tsx        Start: am Handy drei wischbare Seiten — Kamera,
+                      Kachelmenü, Tagesspur —, am Rechner das Dashboard
       stundenplan/    das Wochenraster Mo–Fr; ein Feld antippen
                       bearbeitet es, zeiten/ stellt das Stundenraster ein
       hausaufgaben/   Liste zum Abhaken, anlegen und ändern
@@ -66,18 +66,27 @@ src/
       klausuren/      Termine eintragen und ändern
       noten/          Schnitt je Fach und gesamt, eintragen und ändern;
                       fach/ zeigt ein Fach mit allen seinen Noten
+      material/       die Ablage: abfotografierte Blätter mit Fach, Themen
+                      und Datum; [id] zeigt eins mit allen seinen Seiten
       faecher/        Fächer mit Farbe, Kürzel und Gewichtung
       einstellungen/  Erinnerungen, Darstellung, Konto
+    api/
+      material/       liefert die Bilder aus: /api/material/<seite> das
+                      Vollbild, .../vorschau die Vorschau
+      push/, cron/    Anmeldung der Geräte und der stündliche Anstoß
     layout.tsx      Wurzel: Schriften, Metadaten, Service Worker,
                     hell/dunkel
     manifest.ts     PWA-Manifest
   components/
     ui/             Bausteine: Button, Input, Field, Card, EmptyState
     nav/            Navigation
-    home/           die drei Ansichten der Startseite
+    home/           die vier Ansichten der Startseite: Kamera, Kachelmenü
+                    und Tagesspur am Handy, Dashboard am Rechner
     study/          Lernblock und Nachfrage bei verpassten Tagen
     homework/       das Kästchen zum Abhaken, überall gleich
     grades/         die Fachzeile mit Schnitt, Balken und Fachfarbe
+    material/       der Auslöser: Kamera öffnen, Bild verkleinern,
+                    Seite für Seite hochladen
   db/
     schema.ts       Datenmodell (Vertrag — Änderungen hier betreffen alles)
     index.ts        Datenbankverbindung
@@ -90,16 +99,24 @@ src/
     dates.ts        Kalenderdaten "YYYY-MM-DD", Rechnen in UTC
     study-plan.ts   Lernplan-Generator (reine Rechnung, getestet)
     exams.ts        Datenzugriff für Prüfungen, Themen, Lernblöcke
+    topics.ts       Themen-Titel putzen und falten — dieselbe Schreibweise
+                    zweimal ist dasselbe Thema (reine Rechnung, getestet)
+    subject-topics.ts  Datenzugriff für das Themen-Vokabular eines Fachs:
+                    anlegen, umbenennen, zusammenlegen, wieder trennen
     timetable.ts    Stundenraster und Wochenplan, dazu die Wochentags-
                     und Kalenderwochen-Rechnung (getestet)
     homework.ts     Datenzugriff für Hausaufgaben
     due-label.ts    „heute“, „Do“, „24.9.“ — die Fälligkeit in Kurzform
     push.ts         Push-Nachrichten an die angemeldeten Geräte
-    home.ts         die Zahlen der Startseite, einmal geladen für
-                    Kachelmenü, Tagesspur und Dashboard
+    home.ts         die Zahlen der Startseite, einmal geladen für Kamera-
+                    Seite, Kachelmenü, Tagesspur und Dashboard (getestet)
     grade-scale.ts  die Notenskala 1+ bis 6 und alles, was man damit
                     ausrechnet — Schnitt, Gewichtung, Ziel (getestet)
     grades.ts       Datenzugriff für Noten und die Schnitte je Fach
+    images.ts       auf welche Maße ein Foto verkleinert wird und wie
+                    eine Dateigröße auf Deutsch heißt (getestet)
+    materials.ts    Datenzugriff für die Blätter, ihre Seiten und die
+                    Themen daran; Titelvorschlag und Formular getestet
     theme.ts        hell, dunkel oder dem Gerät überlassen
 ```
 
@@ -118,6 +135,23 @@ Die Uhrzeiten stehen nicht im Raster, sondern im Stundenraster unter
 sich aus zur nächsten Stunde ihres Fachs fällig, und eine heute fällige
 Aufgabe erscheint in der Tagesspur in der Zeile dieser Stunde. Genau deshalb
 wurden beide in derselben Phase gebaut.
+
+**Die Kamera ist eine Wischgeste weit weg.** Am Handy hat die Startseite drei
+Seiten: links die Kamera, in der Mitte das Kachelmenü, rechts die Tagesspur.
+Der Weg zum Auslöser ist damit die Wischrichtung, in der nicht der Tagesablauf
+steht — im Unterricht bleiben für ein Arbeitsblatt zwei Sekunden. Das
+Kachelraster hat deshalb keine siebte Kachel bekommen: es passt so, wie es ist,
+auf einen Bildschirm.
+
+**Die Blätter liegen in der Datenbank, nicht in einem Speicherdienst.** Ein
+Foto steht als `bytea` neben allen anderen Daten; `npm run db:backup` sichert
+es mit, es braucht keinen zweiten Zugang und kein Token, und lokal wie in der
+Cloud läuft derselbe Code. Verkleinert wird schon im Browser — lange Kante
+1600px als JPEG, dazu eine Vorschau mit 320px. Ein Blatt wiegt danach rund 250
+KB statt mehrerer Megabyte, jede Anfrage trägt genau eine Seite, und der Server
+braucht keine Bildbibliothek. Die Vorschau steht als eigene Spalte daneben,
+weil die Ablage bis zu zweihundert Bilder auf einmal zeigt: als Vorschauen
+sind das rund 3 MB, als Vollbilder wären es rund 50 MB.
 
 **Die Noten rechnen ehrlich.** Der Fachschnitt besteht aus zwei Töpfen,
 schriftlich und mündlich, gewichtet nach dem, was am Fach eingestellt ist. Ist
@@ -141,9 +175,25 @@ DATABASE_URL=postgres://user:pass@host/db
 ```
 
 Nach Änderungen an `src/db/schema.ts` immer `npm run db:push` ausführen. Zuletzt
-kamen mit den Themen die Tabelle `subject_topics` und eine Spalte an
-`exam_topics` dazu — ohne Push bleibt der Themenbereich mit einem
-Datenbankfehler stehen.
+kamen mit der Ablage die drei Tabellen `materials`, `material_pages` und
+`material_topics` dazu. **Ohne Push bleibt nicht nur der Materialbereich
+stehen, sondern die ganze Startseite** — sie lädt die letzten Blätter mit.
+
+> Bricht `db:push` wegen der Rückfrage unten ab, liegt dieselbe Änderung als
+> reines SQL bereit:
+>
+> ```bash
+> npx tsx scripts/sql-einspielen.ts scripts/material-tabellen.sql
+> ```
+>
+> Sie ist rein additiv (nur `CREATE TABLE`, die Fremdschlüssel der neuen
+> Tabellen und `CREATE INDEX`) und wörtlich aus dem Schema erzeugt — ein
+> späteres `db:push` sieht danach keinen Unterschied. Der Server muss dafür aus
+> sein, und das Skript weist jede Datei zurück, in der eine Anweisung mit
+> `drop`, `truncate`, `delete` oder `update` **beginnt** oder in der irgendwo
+> ein `DROP TABLE`, `DROP COLUMN` und ihresgleichen steht. Geprüft wird pro
+> Anweisung und erst, nachdem alle Kommentare entfernt sind — `ON DELETE
+> cascade` in einem Fremdschlüssel darf deshalb durch.
 
 > **Vorsicht bei einer Rückfrage von `db:push`.** Das Werkzeug kann anbieten,
 > die Tabelle `lessons` zu leeren, weil es den eindeutigen Schlüssel
@@ -156,11 +206,20 @@ Datenbankfehler stehen.
 
 Die lokale Datenbank ist bewusst nicht in Git (`.data/` ist ignoriert).
 
-**Ein Prozess auf einmal.** PGlite öffnet die Datenbankdatei exklusiv. Läuft der
+**Ein Prozess auf einmal — und das ist keine Empfehlung.** Läuft der
 Entwicklungsserver, arbeiten `npm run db:push`, `npm run db:studio` oder eigene
-Skripte auf einem Stand, den der Server nicht sieht — und umgekehrt. Also erst
-den Server stoppen, dann die Datenbank anfassen. In der Cloud mit einem echten
-Postgres entfällt das.
+Skripte auf einem Stand, den der Server nicht sieht: was sie schreiben, kommt
+bei ihm nie an. Schlimmer ist der Rückweg. Am 21.8.2026 hat ein Skript
+nebenher eine Sitzung eingetragen, während der Server lief; danach ließ sich
+`.data/pglite` gar nicht mehr öffnen (`RuntimeError: Aborted()`), und es half
+nur die Sicherung. Also **erst den Server stoppen, dann die Datenbank
+anfassen** — ohne Ausnahme, auch für eine einzelne Zeile. In der Cloud mit
+einem echten Postgres entfällt das.
+
+> Nach `Strg-C` bleibt in `.data/pglite` eine `postmaster.pid` liegen: `next
+> dev` beendet sich, ohne PGlite noch zu schließen. Das allein ist harmlos —
+> eine Kopie mit dieser Datei öffnet sich beim nächsten Mal anstandslos. Sie zu
+> löschen repariert deshalb auch nichts, wenn wirklich etwas kaputt ist.
 
 **Den Server geordnet beenden.** Mit `Strg-C` im Terminal. Wird der Prozess hart
 abgeschossen (`kill`, `pkill` ohne Signal), kann PGlite ohne gültigen Prüfpunkt
@@ -236,5 +295,14 @@ Die Übersicht zeigt den Gesamtschnitt und je Fach den Schnitt, aufgeteilt in
 schriftlich und mündlich; ein Fach antippen führt zu seinen einzelnen Noten und
 zur Frage „was brauche ich noch für eine 2?".
 
-Alles steht auch auf der Startseite: als Kachel, in der Tagesspur und im
-Dashboard. Damit sind die vier geplanten Ausbaustufen aus KONZEPT.md gebaut.
+**Material** — Blätter abfotografieren und wiederfinden. Der Auslöser sitzt am
+Handy eine Wischgeste links vom Kachelmenü und schlägt das Fach der Stunde vor,
+die gerade läuft. Ein Blatt trägt mehrere Seiten, ein Fach, ein Datum, eine
+Notiz und beliebig viele Themen aus dem Vokabular seines Fachs. Die Ablage
+unter *Material* filtert nach Fach.
+
+Alles steht auch auf der Startseite: als Kachel, in der Tagesspur, auf der
+Kameraseite und im Dashboard. Damit sind die vier geplanten Ausbaustufen aus
+KONZEPT.md gebaut und von der fünften die ersten beiden Stufen — das
+Themen-Vokabular und die Ablage. Was noch fehlt, ist der Eingangskorb und der
+Weg für einen Agenten (Web MCP).

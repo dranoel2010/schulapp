@@ -3,7 +3,13 @@ import { describe, it } from "node:test";
 
 import type { Exam, Period, StudyBlock, Subject, Weekday } from "@/db/schema";
 import type { TodayBlock } from "@/lib/exams";
-import { dayLine, findNextLesson, type HomeData } from "@/lib/home";
+import {
+  captureSubject,
+  dayLine,
+  findNextLesson,
+  type HomeData,
+  type NextLesson,
+} from "@/lib/home";
 import {
   DEFAULT_PERIODS,
   WEEKDAYS,
@@ -30,6 +36,7 @@ const SUBJECT: LessonWithSubject["subject"] = {
   color: "indigo",
   room: "A203",
   teacher: "Fr. Bergmann",
+  archived: false,
 };
 
 /** Das Raster, wie ensurePeriods es anlegt — hier auf `count` Zeilen gekürzt. */
@@ -43,17 +50,50 @@ function periodRows(count = 4): Period[] {
   }));
 }
 
-function lesson(weekday: Weekday, period: number): LessonWithSubject {
+/**
+ * Ein zweites Fach: nur so lässt sich prüfen, welche der beiden Stunden ein
+ * Vorschlag meint. Mit einem einzigen Fach sähe jede Antwort gleich aus.
+ */
+const OTHER: LessonWithSubject["subject"] = {
+  id: "s-de",
+  name: "Deutsch",
+  short: "De",
+  color: "amber",
+  room: "B105",
+  teacher: "Hr. Kranz",
+  archived: false,
+};
+
+/**
+ * Ein abgewähltes Fach, dessen Stunde noch im Wochenraster steht. Genau diese
+ * Lage entsteht beim Archivieren: das Fach geht aus dem Alltag, seine Stunden
+ * bleiben — und der Vorschlag darf sie trotzdem nicht aufgreifen.
+ */
+const ARCHIVED: LessonWithSubject["subject"] = {
+  id: "s-la",
+  name: "Latein",
+  short: "La",
+  color: "rose",
+  room: "C007",
+  teacher: "Hr. Vogt",
+  archived: true,
+};
+
+function lesson(
+  weekday: Weekday,
+  period: number,
+  subject: LessonWithSubject["subject"] = SUBJECT,
+): LessonWithSubject {
   return {
     id: `l${weekday}-${period}`,
     userId: USER,
-    subjectId: SUBJECT.id,
+    subjectId: subject.id,
     weekday,
     period,
     room: null,
     note: null,
     createdAt: STAMP,
-    subject: SUBJECT,
+    subject,
   };
 }
 
@@ -189,6 +229,11 @@ function homeData(overrides: Partial<HomeData> = {}): HomeData {
     userName: "Leo",
     today: MONDAY,
     subjectCount: 3,
+    // Die Fächerliste bleibt leer: dayLine, captureSubject und findNextLesson
+    // lesen sie nicht — sie hängt an HomeData für die Kamera-Seite. Drei
+    // erfundene Fächer neben `subjectCount: 3` zu stellen hieße nur, eine Zahl
+    // zweimal zu behaupten.
+    subjects: [],
     todayBlocks: [],
     todayOpenMinutes: 0,
     todayDoneCount: 0,
@@ -213,6 +258,7 @@ function homeData(overrides: Partial<HomeData> = {}): HomeData {
       latest: null,
       perSubject: [],
     },
+    materials: [],
     ...overrides,
   };
 }
@@ -262,5 +308,153 @@ describe("dayLine", () => {
       dayLine(homeData({ hasTimetable: true })),
       "keine Stunde, kein Lernblock",
     );
+  });
+});
+
+/** Eine nächste Stunde, so wie `findNextLesson` sie zurückgibt. */
+function nextLessonOf(
+  entry: LessonWithSubject,
+  startsAt: string,
+  isToday: boolean,
+  date = MONDAY,
+): NextLesson {
+  return { lesson: entry, startsAt, date, isToday };
+}
+
+describe("captureSubject", () => {
+  it("nimmt das Fach der Stunde, die gerade läuft", () => {
+    // 08:20 liegt mitten in der ersten Stunde. Dass die zweite als nächste
+    // gemeldet ist, ändert daran nichts — vorgeschlagen wird, worin man sitzt.
+    const subject = captureSubject(
+      homeData({
+        hasTimetable: true,
+        todayLessons: [lesson(1, 1), lesson(1, 2, OTHER)],
+        nextLesson: nextLessonOf(lesson(1, 2, OTHER), "08:50", true),
+      }),
+      "08:20",
+    );
+
+    assert.equal(subject?.name, "Mathematik");
+  });
+
+  it("zählt den Beginn zur Stunde", () => {
+    // Um Punkt 08:00 sitzt man schon drin — anders als bei der Frage nach der
+    // nächsten Stunde, für die genau dieselbe Stunde dann keine mehr ist.
+    const subject = captureSubject(
+      homeData({
+        hasTimetable: true,
+        todayLessons: [lesson(1, 1), lesson(1, 2, OTHER)],
+        nextLesson: nextLessonOf(lesson(1, 2, OTHER), "08:50", true),
+      }),
+      "08:00",
+    );
+
+    assert.equal(subject?.name, "Mathematik");
+  });
+
+  it("zählt das Ende nicht mehr zur Stunde", () => {
+    // Um Punkt 08:45 ist Mathe vorbei und Deutsch noch nicht angefangen. In
+    // der Pause zählt, was gleich kommt: das Blatt wird meist erst getippt,
+    // wenn man wieder sitzt.
+    const subject = captureSubject(
+      homeData({
+        hasTimetable: true,
+        todayLessons: [lesson(1, 1), lesson(1, 2, OTHER)],
+        nextLesson: nextLessonOf(lesson(1, 2, OTHER), "08:50", true),
+      }),
+      "08:45",
+    );
+
+    assert.equal(subject?.name, "Deutsch");
+  });
+
+  it("nimmt die Stunde, die heute noch kommt", () => {
+    const subject = captureSubject(
+      homeData({
+        hasTimetable: true,
+        todayLessons: [lesson(1, 3, OTHER)],
+        nextLesson: nextLessonOf(lesson(1, 3, OTHER), "09:55", true),
+      }),
+      "08:00",
+    );
+
+    assert.equal(subject?.name, "Deutsch");
+    assert.equal(subject?.short, "De");
+  });
+
+  it("schlägt nichts vor, wenn heute keine Stunde mehr kommt", () => {
+    // Die nächste Stunde ist die von nächster Woche. Ein Fach von einem
+    // anderen Tag wäre geraten — und ein falsch vorbelegtes Fach rutscht
+    // unbemerkt durch, während ein leeres Feld eine Antwort verlangt.
+    const subject = captureSubject(
+      homeData({
+        hasTimetable: true,
+        todayLessons: [lesson(1, 1)],
+        nextLesson: nextLessonOf(lesson(1, 1), "08:00", false, "2026-09-21"),
+      }),
+      "15:00",
+    );
+
+    assert.equal(subject, null);
+  });
+
+  it("schlägt ohne Stundenplan nichts vor", () => {
+    assert.equal(captureSubject(homeData(), "10:00"), null);
+  });
+
+  it("übergeht eine Stunde ohne Zeile im Raster", () => {
+    // Das Raster hat vier Zeilen, die Stunde steht in der neunten: ob sie
+    // gerade läuft, lässt sich nicht sagen — also sagt die App es nicht.
+    const subject = captureSubject(
+      homeData({ hasTimetable: true, todayLessons: [lesson(1, 9)] }),
+      "08:00",
+    );
+
+    assert.equal(subject, null);
+  });
+
+  it("schlägt kein abgewähltes Fach vor, auch wenn seine Stunde läuft", () => {
+    // Archivieren löscht keine Stunde — sie bleibt im Wochenraster stehen.
+    // Vorgeschlagen werden darf sie deshalb trotzdem nicht: ein Blatt in einem
+    // zugemachten Fach findet später niemand wieder.
+    const subject = captureSubject(
+      homeData({
+        hasTimetable: true,
+        todayLessons: [lesson(1, 1, ARCHIVED)],
+        nextLesson: nextLessonOf(lesson(1, 1, ARCHIVED), "08:00", true),
+      }),
+      "08:20",
+    );
+
+    assert.equal(subject, null);
+  });
+
+  it("überspringt das abgewählte Fach und nimmt die Stunde danach", () => {
+    // Die laufende Stunde gehört einem abgewählten Fach, die nächste nicht.
+    // Dann greift dieselbe Regel wie in der Pause: vorgeschlagen wird, was
+    // heute noch kommt.
+    const subject = captureSubject(
+      homeData({
+        hasTimetable: true,
+        todayLessons: [lesson(1, 1, ARCHIVED), lesson(1, 2, OTHER)],
+        nextLesson: nextLessonOf(lesson(1, 2, OTHER), "08:50", true),
+      }),
+      "08:20",
+    );
+
+    assert.equal(subject?.id, OTHER.id);
+  });
+
+  it("schlägt nichts vor, wenn nur noch ein abgewähltes Fach kommt", () => {
+    const subject = captureSubject(
+      homeData({
+        hasTimetable: true,
+        todayLessons: [lesson(1, 3, ARCHIVED)],
+        nextLesson: nextLessonOf(lesson(1, 3, ARCHIVED), "09:55", true),
+      }),
+      "08:00",
+    );
+
+    assert.equal(subject, null);
   });
 });
