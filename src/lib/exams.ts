@@ -37,7 +37,14 @@ import {
  * ausschließlich in @/lib/dates.
  */
 
-const EXAM_KINDS = ["klausur", "test", "referat", "muendlich"] as const;
+/**
+ * Die vier Arten von Prüfung. Exportiert, weil das Prüfschema der Klausuren
+ * nicht die einzige Tür ist, durch die eine Art hereinkommt: der Eingangskorb
+ * nimmt sie in einem Vorschlag entgegen (@/lib/proposals). Zwei Listen wären
+ * zwei Stellen, an denen die App an einer Tür annimmt, was sie an einer
+ * anderen ablehnt.
+ */
+export const EXAM_KINDS = ["klausur", "test", "referat", "muendlich"] as const;
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

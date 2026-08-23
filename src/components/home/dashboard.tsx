@@ -159,7 +159,7 @@ export function HomeDashboard({ data }: { data: HomeData }) {
 
         <div className="flex min-h-0 flex-col gap-4">
           <SubjectsCard count={data.subjectCount} />
-          <MaterialCard sheets={data.materials} />
+          <MaterialCard sheets={data.materials} waiting={data.openProposals} />
           <AverageCard grades={data.grades} />
         </div>
       </div>
@@ -606,8 +606,23 @@ function SubjectsCard({ count }: { count: number }) {
  * Wie viele Blätter insgesamt in der Ablage liegen, steht hier bewusst nicht:
  * die Startseite lädt nur die letzten paar, sie kennt die Gesamtzahl gar nicht.
  * Eine Zahl, die niemand gezählt hat, gehört nicht auf den Bildschirm.
+ *
+ * **Der Eingangskorb steht in dieser Karte und bekommt keine eigene.** Was
+ * dort liegt, ist ein Vorschlag zu einem Blatt — dieselbe Sache, einen Schritt
+ * weiter. Und er steht nur da, wenn wirklich etwas wartet: eine Zeile „0
+ * Vorschläge“ wäre eine tägliche Meldung darüber, dass nichts passiert ist.
+ *
+ * Verlinkt und nicht entschieden: von hier führt ein Weg in den Korb, und
+ * dort steht das Blatt daneben und das Formular darunter. Ein „Übernehmen“ auf
+ * der Startseite wäre genau die Abkürzung, die es nicht geben soll.
  */
-function MaterialCard({ sheets }: { sheets: Sheet[] }) {
+function MaterialCard({
+  sheets,
+  waiting,
+}: {
+  sheets: Sheet[];
+  waiting: number;
+}) {
   const shown = sheets.slice(0, MATERIAL_LIMIT);
 
   return (
@@ -623,6 +638,20 @@ function MaterialCard({ sheets }: { sheets: Sheet[] }) {
           </Link>
         ) : null}
       </div>
+
+      {waiting > 0 ? (
+        <Link
+          href="/eingang"
+          className="mt-3 flex items-center justify-between gap-2 rounded-control bg-accent-soft px-3 py-2 text-[13px] font-medium text-accent transition-colors hover:bg-border"
+        >
+          <span className="truncate">
+            {waiting === 1
+              ? "Ein Vorschlag im Eingangskorb"
+              : `${waiting} Vorschläge im Eingangskorb`}
+          </span>
+          <span aria-hidden="true">→</span>
+        </Link>
+      ) : null}
 
       {shown.length === 0 ? (
         <>

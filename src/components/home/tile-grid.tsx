@@ -251,6 +251,38 @@ export function HomeTiles({ data }: { data: HomeData }) {
         </div>
       </header>
 
+      {/* Der Eingangskorb bekommt keine siebte Kachel: das Raster ist eigens
+          auf sechs getrimmt, damit es auf einen Bildschirm passt, und eine
+          Kachel, die an den meisten Tagen „0“ zeigt, wäre den Platz nicht
+          wert. Er meldet sich stattdessen dann, wenn etwas liegt — als
+          schmaler Streifen über den Kacheln, der wegbleibt, sobald der Korb
+          leer ist. Ehrlichkeit vor Vollständigkeit, dieselbe Regel wie bei den
+          Kacheln selbst.
+
+          Ohne Fächer kann es keine Blätter geben und damit auch keine
+          Vorschläge — die beiden Hinweise stehen deshalb nie zugleich da. */}
+      {data.openProposals > 0 ? (
+        <Link
+          href="/eingang"
+          className="mx-[14px] mb-[10px] flex items-center justify-between gap-3 rounded-[20px] bg-accent-soft px-[18px] py-[14px] transition-colors duration-150 hover:bg-border"
+        >
+          <span className="min-w-0">
+            <span className="block text-[15px] font-medium text-accent">
+              {data.openProposals === 1
+                ? "Ein Vorschlag wartet"
+                : `${data.openProposals} Vorschläge warten`}
+            </span>
+            <span className="mt-0.5 block text-[14px] leading-snug text-accent opacity-[0.85]">
+              Im Eingangskorb — nichts davon steht in der App, bis du es
+              übernimmst.
+            </span>
+          </span>
+          <span aria-hidden="true" className="shrink-0 text-[18px] text-accent">
+            →
+          </span>
+        </Link>
+      ) : null}
+
       {/* Ohne Fächer hängt alles andere in der Luft — dann steht der Weg
           dorthin vorn und das Raster tritt zurück. Der seitliche Rand ist der
           des Rasters, damit der Hinweis auf einer Linie mit den Kacheln steht. */}

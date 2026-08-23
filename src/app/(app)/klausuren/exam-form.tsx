@@ -234,6 +234,21 @@ export type ExamFormProps = {
   topicSuggestions?: Record<string, TopicItem[]>;
   /** Beim Bearbeiten die Vorbelegung, beim Anlegen leer. */
   exam?: Exam;
+  /**
+   * Vorbelegung für eine Prüfung, die es noch nicht gibt.
+   *
+   * Der Eingangskorb füllt dieses Formular aus einem Vorschlag vor. Das ist
+   * ausdrücklich etwas anderes als `exam`: dort steht eine gespeicherte
+   * Prüfung, und daran hängt alles, was das Formular über das Bearbeiten sagt
+   * — der aufgeklappte Planungsteil, das erlaubte früheste Datum, der Satz
+   * „der Lernplan wird neu verteilt“. Nichts davon trifft auf einen Vorschlag
+   * zu; er ist eine leere Prüfung mit ein paar ausgefüllten Feldern.
+   *
+   * Vorlauf und Tagesbudget stehen bewusst nicht darin: das ist eine
+   * Entscheidung über das eigene Lernen und nichts, was auf einem Blatt steht.
+   * Sie behalten ihre Vorgaben, so wie beim Anlegen von Hand.
+   */
+  defaults?: Partial<Pick<Exam, "subjectId" | "kind" | "date" | "title">>;
   /** Die Themen der Prüfung in ihrer Reihenfolge. */
   topics?: string[];
   submitLabel: string;
@@ -246,16 +261,19 @@ export function ExamForm({
   today,
   topicSuggestions = {},
   exam,
+  defaults,
   topics: savedTopics = [],
   submitLabel,
   cancelHref,
 }: ExamFormProps) {
   const [subjectId, setSubjectId] = useState(
-    exam?.subjectId ?? subjects[0]?.id ?? "",
+    exam?.subjectId ?? defaults?.subjectId ?? subjects[0]?.id ?? "",
   );
-  const [kind, setKind] = useState<string>(exam?.kind ?? "klausur");
-  const [date, setDate] = useState(exam?.date ?? "");
-  const [title, setTitle] = useState(exam?.title ?? "");
+  const [kind, setKind] = useState<string>(
+    exam?.kind ?? defaults?.kind ?? "klausur",
+  );
+  const [date, setDate] = useState(exam?.date ?? defaults?.date ?? "");
+  const [title, setTitle] = useState(exam?.title ?? defaults?.title ?? "");
   const [topics, setTopics] = useState<string[]>(savedTopics);
   const [leadDays, setLeadDays] = useState(
     String(exam?.leadDays ?? DEFAULT_LEAD_DAYS),

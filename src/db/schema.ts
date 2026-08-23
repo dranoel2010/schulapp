@@ -1,15 +1,17 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   customType,
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
@@ -625,6 +627,200 @@ export const materialTopics = pgTable(
   ],
 );
 
+/**
+ * Ein Vorschlag im Eingangskorb — das, was ein Agent aus einem Blatt gelesen
+ * hat und was erst ein Mensch übernimmt.
+ *
+ * **Jeder Vorschlag hängt an einem Blatt, und zwar zwingend.** Das ist keine
+ * Sparsamkeit beim Fremdschlüssel, sondern die Aussage der Stufe: aus den
+ * Blättern wird Lernstoff. Ein Agent schlägt nichts vor, was er sich ausgedacht
+ * hat, sondern nur, was auf einem Stück Papier stand, das der Nutzer selbst
+ * fotografiert hat. Nebenbei räumt „cascade“ damit von selbst auf — wer ein
+ * Blatt löscht, will die Vorschläge dazu nicht behalten.
+ *
+ * **`payload` ist eine jsonb-Spalte, und das ist die eine Stelle im Schema, an
+ * der eine Sammelspalte richtig ist.** Sonst gilt hier: jede Spalte muss sich
+ * begründen lassen. Eine Spalte begründet sich dadurch, dass nach ihr gefragt
+ * oder über sie eine Zusage gegeben wird — ein Index, ein Fremdschlüssel, eine
+ * Bedingung. Auf den Inhalt eines Vorschlags trifft nichts davon zu: er wird
+ * genau einmal gelesen, als Ganzes, von dem Formular, das ihn in einen echten
+ * Datensatz verwandelt. Und seine Form hängt an `kind`. Drei Arten mit eigenen
+ * Spalten wären ein Dutzend Spalten, von denen bei jeder Zeile zwei Drittel
+ * leer stehen, und jede vierte Art hieße: Schemaänderung. Was in der Spalte
+ * stehen darf, steht als zod-Schema in @/lib/proposals — geprüft wird beim
+ * Anlegen und noch einmal beim Lesen, denn was gestern hineinpasste, muss nach
+ * einer Änderung nicht mehr passen.
+ *
+ * `fingerprint` ist der Abdruck aus Art, Blatt und Inhalt. Der eindeutige
+ * Index darüber gilt nur für offene Vorschläge (`WHERE status = 'offen'`) und
+ * macht daraus eine Zusage der Datenbank: **derselbe Vorschlag steht kein
+ * zweites Mal im Korb.** Ein Agent, der dasselbe Blatt zweimal liest, füllt
+ * damit nicht den Eingangskorb. Verworfen oder übernommen zählt der Abdruck
+ * nicht mehr mit — dann darf derselbe Vorschlag wiederkommen, denn dann ist er
+ * eine neue Frage an einen Menschen, der schon einmal geantwortet hat.
+ *
+ * **Entschieden wird nie gelöscht, nur beiseitegelegt** — dieselbe Regel wie
+ * bei den Hausaufgaben. `status` und `decidedAt` gehören zusammen: der Zustand
+ * sagt, was entschieden wurde, der Zeitpunkt, wann. Aus beidem liest die Liste
+ * ab, was heute schon durch den Korb gegangen ist.
+ */
+export const proposals = pgTable(
+  "proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Das Blatt, aus dem der Vorschlag gelesen wurde */
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => materials.id, { onDelete: "cascade" }),
+    /** themen | hausaufgabe | klausur — bestimmt die Form von `payload` */
+    kind: text("kind").notNull(),
+    /** agent | manuell — wer den Vorschlag in den Korb gelegt hat */
+    source: text("source").notNull().default("agent"),
+    /** offen | uebernommen | verworfen */
+    status: text("status").notNull().default("offen"),
+    /** Der Vorschlag selbst, in der Form seiner Art. Siehe @/lib/proposals. */
+    payload: jsonb("payload").notNull(),
+    /** Ein Satz dazu, warum — vom Agenten geschrieben, oder leer */
+    reason: text("reason"),
+    /** Art, Blatt und Inhalt als ein Wort; siehe `fingerprintOf()` */
+    fingerprint: text("fingerprint").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /** Wann übernommen oder verworfen wurde; leer heißt: steht noch offen */
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+  },
+  (t) => [
+    // Der Korb fragt immer dasselbe: was ist offen, das Neueste zuerst.
+    index("proposals_user_status_idx").on(t.userId, t.status, t.createdAt),
+    // Die Blattseite zeigt die Vorschläge zu genau diesem Blatt.
+    index("proposals_material_idx").on(t.materialId),
+    uniqueIndex("proposals_open_key")
+      .on(t.userId, t.fingerprint)
+      .where(sql`${t.status} = 'offen'`),
+  ],
+);
+
+/**
+ * Ein OAuth-Client, der den MCP-Endpunkt benutzen darf — in der Praxis genau
+ * einer: Claude.
+ *
+ * Die Zeile entsteht nicht von Hand, sondern wenn Claude sich selbst anmeldet
+ * (Dynamic Client Registration, RFC 7591). Das ist der Weg, den die Claude-App
+ * geht: der Nutzer trägt dort nur die Adresse des Servers ein, alles Weitere
+ * handeln die beiden Seiten unter sich aus.
+ *
+ * **Es gibt keine Spalte für ein Client-Geheimnis, und das ist Absicht.** Ein
+ * Geheimnis, das eine App auf fremder Infrastruktur aufbewahrt, ist keines;
+ * OAuth 2.1 nennt so einen Client „public“ und sichert den Tausch stattdessen
+ * über PKCE ab — der Code lässt sich nur mit dem Verifier einlösen, den derselbe
+ * Client sich vorher ausgedacht hat. Dazu kommt, dass der Code an genau diese
+ * `redirect_uris` gebunden ist und nur einmal gilt. Ein Geheimnis obendrauf
+ * würde nichts absichern, was nicht schon abgesichert ist, aber eine weitere
+ * Sache, die man verlieren kann.
+ */
+export const oauthClients = pgTable(
+  "oauth_clients",
+  {
+    /** Die vergebene client_id — zufällig, kein UUID-Format vorgeschrieben */
+    id: text("id").primaryKey(),
+    /** Wie der Client sich nennt, z.B. "Claude" */
+    name: text("name").notNull(),
+    /** Erlaubte Rücksprungadressen als JSON-Array von Zeichenketten */
+    redirectUris: jsonb("redirect_uris").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
+
+/**
+ * Ein ausgestellter Autorisierungscode: die halbe Minute zwischen „Erlauben“
+ * und dem Token.
+ *
+ * Der Code ist der Primärschlüssel, und das trägt die wichtigste Zusage: er
+ * gilt genau einmal. Eingelöst wird er, indem die Zeile gelöscht wird — was
+ * nicht gelöscht werden konnte, weil es die Zeile nicht mehr gab, war ein
+ * zweiter Versuch und bekommt nichts.
+ *
+ * `codeChallenge` ist die PKCE-Prüfsumme des Clients (S256). `resource` ist die
+ * Adresse, für die das Token gelten soll (RFC 8707) — sie wandert von hier in
+ * das Token und wird am MCP-Endpunkt gegen dessen eigene Adresse geprüft. Ohne
+ * diese Bindung wäre ein Token, das für einen fremden Server ausgestellt wurde,
+ * hier gültig.
+ */
+export const oauthCodes = pgTable(
+  "oauth_codes",
+  {
+    code: text("code").primaryKey(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Genau die Adresse, mit der der Code angefordert wurde */
+    redirectUri: text("redirect_uri").notNull(),
+    /** PKCE, Verfahren S256 — ein anderes nimmt der Server nicht an */
+    codeChallenge: text("code_challenge").notNull(),
+    /** Wofür das Token gelten soll (RFC 8707), sonst leer */
+    resource: text("resource"),
+    scope: text("scope").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("oauth_codes_expires_idx").on(t.expiresAt)],
+);
+
+/**
+ * Ein ausgestelltes Token, Zugriff und Erneuerung in einer Tabelle.
+ *
+ * Beide sind dasselbe Ding — eine Zeichenkette, die auf einen Nutzer, einen
+ * Client und eine Adresse zeigt und irgendwann abläuft. Sie unterscheiden sich
+ * in einem Wort und in der Frist; zwei Tabellen dafür wären zweimal dieselben
+ * sechs Spalten. Deshalb `kind`.
+ *
+ * Das Token steht im Klartext da, so wie das Sitzungs-Token in `sessions`. Ein
+ * Hash wäre hier keine Härtung, sondern Schmuck: wer die Tabelle lesen kann,
+ * liest daneben die Blätter, die Noten und den Stundenplan — ein Token für
+ * dieselbe Datenbank ist dann nichts mehr wert.
+ *
+ * Eine Erneuerung ersetzt das alte Refresh-Token durch ein neues und wirft das
+ * alte weg (Rotation). Dadurch ist ein abgegriffenes Refresh-Token nach der
+ * nächsten Erneuerung wertlos.
+ */
+export const oauthTokens = pgTable(
+  "oauth_tokens",
+  {
+    token: text("token").primaryKey(),
+    /** access | refresh */
+    kind: text("kind").notNull(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    scope: text("scope").notNull(),
+    /** Die Adresse, für die das Token gilt (RFC 8707) */
+    resource: text("resource"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("oauth_tokens_user_idx").on(t.userId),
+    // Abgelaufenes wird beim Aufräumen über diese Spalte gesucht.
+    index("oauth_tokens_expires_idx").on(t.expiresAt),
+  ],
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   subjects: many(subjects),
@@ -635,6 +831,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   grades: many(grades),
   subjectTopics: many(subjectTopics),
   materials: many(materials),
+  proposals: many(proposals),
   pushSubscriptions: many(pushSubscriptions),
 }));
 
@@ -728,6 +925,7 @@ export const materialsRelations = relations(materials, ({ one, many }) => ({
   }),
   pages: many(materialPages),
   topics: many(materialTopics),
+  proposals: many(proposals),
 }));
 
 export const materialPagesRelations = relations(materialPages, ({ one }) => ({
@@ -758,6 +956,35 @@ export const pushSubscriptionsRelations = relations(
   }),
 );
 
+export const proposalsRelations = relations(proposals, ({ one }) => ({
+  user: one(users, { fields: [proposals.userId], references: [users.id] }),
+  material: one(materials, {
+    fields: [proposals.materialId],
+    references: [materials.id],
+  }),
+}));
+
+export const oauthClientsRelations = relations(oauthClients, ({ many }) => ({
+  codes: many(oauthCodes),
+  tokens: many(oauthTokens),
+}));
+
+export const oauthCodesRelations = relations(oauthCodes, ({ one }) => ({
+  client: one(oauthClients, {
+    fields: [oauthCodes.clientId],
+    references: [oauthClients.id],
+  }),
+  user: one(users, { fields: [oauthCodes.userId], references: [users.id] }),
+}));
+
+export const oauthTokensRelations = relations(oauthTokens, ({ one }) => ({
+  client: one(oauthClients, {
+    fields: [oauthTokens.clientId],
+    references: [oauthClients.id],
+  }),
+  user: one(users, { fields: [oauthTokens.userId], references: [users.id] }),
+}));
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
@@ -785,6 +1012,11 @@ export type MaterialPage = typeof materialPages.$inferSelect;
 export type NewMaterialPage = typeof materialPages.$inferInsert;
 export type MaterialTopic = typeof materialTopics.$inferSelect;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type Proposal = typeof proposals.$inferSelect;
+export type NewProposal = typeof proposals.$inferInsert;
+export type OauthClient = typeof oauthClients.$inferSelect;
+export type OauthCode = typeof oauthCodes.$inferSelect;
+export type OauthToken = typeof oauthTokens.$inferSelect;
 
 /** Art einer Prüfung */
 export type ExamKind = "klausur" | "test" | "referat" | "muendlich";
@@ -809,3 +1041,23 @@ export type TopicOrigin = "klausur" | "manuell" | "blatt";
 
 /** Wochentag im Stundenplan: 1 = Montag … 5 = Freitag */
 export type Weekday = 1 | 2 | 3 | 4 | 5;
+
+/**
+ * Was ein Vorschlag vorschlägt. Die Art bestimmt die Form von
+ * `proposals.payload` und das Formular, mit dem er übernommen wird — beides
+ * steht in @/lib/proposals.
+ */
+export type ProposalKind = "themen" | "hausaufgabe" | "klausur";
+
+/**
+ * Wer den Vorschlag in den Korb gelegt hat. „manuell“ ist kein Kuriosum,
+ * sondern die Regel des Projekts: alles, was der Agent kann, muss auch von Hand
+ * gehen — sonst hinge der Eingangskorb daran, dass ein Agent angeschlossen ist.
+ */
+export type ProposalSource = "agent" | "manuell";
+
+/** Zustand eines Vorschlags. Entschiedenes bleibt stehen, es wird nur ruhig. */
+export type ProposalStatus = "offen" | "uebernommen" | "verworfen";
+
+/** Art eines OAuth-Tokens: das kurze zum Zugreifen, das lange zum Erneuern. */
+export type OauthTokenKind = "access" | "refresh";

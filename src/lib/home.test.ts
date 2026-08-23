@@ -259,6 +259,10 @@ function homeData(overrides: Partial<HomeData> = {}): HomeData {
       perSubject: [],
     },
     materials: [],
+    // Ein leerer Eingangskorb: die geprüften Funktionen lesen ihn nicht, aber
+    // HomeData verlangt die Zahl — und eine ausgedachte gehörte nicht in eine
+    // Vorgabe, die von „nichts eingetragen“ ausgeht.
+    openProposals: 0,
     ...overrides,
   };
 }

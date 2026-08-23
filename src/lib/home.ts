@@ -18,6 +18,7 @@ import {
   type HomeworkItem,
 } from "@/lib/homework";
 import { listMaterialCards, type MaterialCard } from "@/lib/materials";
+import { countOpenProposals } from "@/lib/proposals";
 import { listSubjects } from "@/lib/subjects";
 import {
   isSchoolDay,
@@ -135,6 +136,16 @@ export type HomeData = {
    * dass hier niemand liest, was gar nicht geladen wurde.
    */
   materials: MaterialCard[];
+  /**
+   * Wie viele Vorschläge im Eingangskorb auf eine Antwort warten.
+   *
+   * Nur die Zahl und nicht die Vorschläge selbst: die Startseite zeigt keinen
+   * einzigen davon. Sie sagt, dass etwas liegt, und führt hin — entschieden
+   * wird im Korb, wo das Blatt danebensteht und das Formular darunter. Eine
+   * Karte, die man von der Startseite aus wegtippen könnte, wäre genau die
+   * Abkürzung, die es hier nicht geben soll.
+   */
+  openProposals: number;
 };
 
 export async function loadHomeData(
@@ -160,6 +171,7 @@ export async function loadHomeData(
     homeworkCounts,
     grades,
     materials,
+    openProposals,
   ] = await Promise.all([
     db
       .select({ value: count() })
@@ -178,6 +190,7 @@ export async function loadHomeData(
     openHomeworkCount(userId, today),
     gradeSummary(userId),
     listMaterialCards(userId, { limit: RECENT_MATERIALS, order: "aufnahme" }),
+    countOpenProposals(userId),
   ]);
 
   const upcoming = exams.filter((exam) => exam.date >= today);
@@ -209,6 +222,7 @@ export async function loadHomeData(
     homeworkCounts,
     grades,
     materials,
+    openProposals,
   };
 }
 

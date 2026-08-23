@@ -13,7 +13,7 @@ import type { ReactNode } from "react";
  * für den Inhalt frei.
  *
  * Ab Tablet-Breite bleibt die schmale Seitenspalte links. Dort stehen alle
- * neun Bereiche der App.
+ * zehn Bereiche der App.
  *
  * Lernen und Klausuren sind zwei Bereiche, nicht einer: unter "Lernen" steht
  * der Lernplan zum Abhaken, unter "Klausuren" werden die Termine verwaltet.
@@ -61,6 +61,10 @@ function NavIcon({
  * ein Blatt wird im Unterricht abfotografiert, an jedem Schultag, so wie eine
  * Aufgabe aufgeschrieben wird. Dass es später nach Fach und Thema sortiert
  * dasteht, macht es noch nicht zur Verwaltung.
+ *
+ * Der Eingangskorb steht direkt hinter dem Material, weil er daran hängt: was
+ * dort liegt, ist ein Vorschlag zu einem Blatt. Er ist der zweite Halt auf
+ * demselben Weg — erst fotografieren, dann entscheiden, was daraus wird.
  *
  * Die Noten stehen hinter den Klausuren und vor den Fächern: sie sind das
  * Ergebnis der Prüfungen und hängen an den Fächern — genau dazwischen also.
@@ -119,6 +123,19 @@ const ITEMS: NavItem[] = [
       <>
         <path d="M8.25 4.25h7.5A1.75 1.75 0 0 1 17.5 6v9.5" />
         <rect x="4.5" y="7" width="11.5" height="12.75" rx="1.75" />
+      </>
+    ),
+  },
+  {
+    href: "/eingang",
+    label: "Eingangskorb",
+    // Ein Ablagefach mit einem Blatt, das hineinfällt. Kein Briefumschlag —
+    // hier kommt keine Post an, sondern es liegt etwas bereit; und kein
+    // Häkchen, das steht schon zweimal in dieser Leiste.
+    icon: (
+      <>
+        <path d="M3.5 13.5h4l1.5 2.5h6l1.5-2.5h4" />
+        <path d="M3.5 13.5 6 5.5h12l2.5 8v5a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5z" />
       </>
     ),
   },
@@ -255,6 +272,8 @@ const SECTION_TITLES: Record<string, string> = {
   "/hausaufgaben": "Hausaufgaben",
   "/hausaufgaben/neu": "Neue Aufgabe",
   "/material": "Material",
+  "/eingang": "Eingangskorb",
+  "/eingang/neu": "Neuer Vorschlag",
   "/noten": "Noten",
   "/noten/neu": "Neue Note",
   "/faecher": "Fächer",
@@ -292,6 +311,10 @@ function sectionTitle(pathname: string): string | null {
   // wohin es gehört. "Blatt bearbeiten" verspräche einen Bildbearbeiter —
   // hier steht das Blatt selbst im Mittelpunkt.
   if (pathname.startsWith("/material/")) return "Blatt";
+  // Ein Vorschlag antippen heißt: das Formular ansehen, das ihn übernehmen
+  // würde. „Vorschlag bearbeiten“ verspräche, dass man am Vorschlag selbst
+  // etwas ändert — geändert wird das, was daraus entsteht.
+  if (pathname.startsWith("/eingang/")) return "Vorschlag";
   // Ein Fach unter den Noten ist keine Bearbeitung, sondern die Liste seiner
   // Noten — deshalb steht dort der Bereichsname und nicht "bearbeiten".
   if (pathname.startsWith("/noten/fach/")) return "Noten";

@@ -142,6 +142,41 @@ export function nextLessonDate(
   return best === null ? null : addDays(from, best);
 }
 
+/**
+ * Für jedes Fach der Tag seiner nächsten Stunde — die Vorbelegung von
+ * „fällig zur nächsten Stunde“.
+ *
+ * `nextLessonDate()` lässt den heutigen Tag bewusst aus: aufgegeben wird in
+ * der Stunde, fällig ist es beim nächsten Mal. Fächer ohne Stunde im Plan
+ * tauchen gar nicht erst auf — für sie greift der Rückfall im Formular.
+ *
+ * Sie steht hier und nicht neben dem Formular, weil zwei Seiten dieselbe
+ * Vorbelegung brauchen: „Neue Aufgabe“ und der Eingangskorb, wenn er einen
+ * Aufgaben-Vorschlag ohne Tag übernimmt. Zwei Rechnungen wären zwei Antworten
+ * auf dieselbe Frage.
+ */
+export function nextLessonPerSubject(
+  lessons: readonly LessonWithSubject[],
+  today: string,
+): Record<string, string> {
+  const weekdays = new Map<string, number[]>();
+
+  for (const lesson of lessons) {
+    const days = weekdays.get(lesson.subjectId);
+    if (days) days.push(lesson.weekday);
+    else weekdays.set(lesson.subjectId, [lesson.weekday]);
+  }
+
+  const dates: Record<string, string> = {};
+
+  for (const [subjectId, days] of weekdays) {
+    const date = nextLessonDate(today, days);
+    if (date) dates[subjectId] = date;
+  }
+
+  return dates;
+}
+
 /** Ein Block im Plan: eine einzelne Stunde oder eine zusammengefasste Doppelstunde. */
 export type LessonBlock<T> = { from: number; to: number; lesson: T };
 
