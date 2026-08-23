@@ -153,6 +153,31 @@ export default async function TimetablePage() {
               </span>
             ) : null}
           </Link>
+
+          {/* Nur zeigen, wenn es etwas umzutragen gibt. Wer keinen
+              Epochenunterricht hat, soll hier keinen Knopf sehen, der ihm
+              nichts sagt — an einer Regelschule wechselt der Plan nicht alle
+              paar Wochen das Fach. */}
+          {hasLessons ? (
+            <Link
+              href="/stundenplan/epoche"
+              className="-mt-3 inline-flex min-h-11 items-center gap-1.5 self-start text-sm text-muted transition-colors hover:text-foreground"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                className="size-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M4 8h12l-2.5-2.5M20 16H8l2.5 2.5" />
+              </svg>
+              Epoche wechseln
+            </Link>
+          ) : null}
         </>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, eq, gt, or } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/db";
@@ -527,4 +527,130 @@ async function ownsSubject(userId: string, subjectId: string): Promise<boolean> 
     .limit(1);
 
   return subject !== undefined;
+}
+
+/* ==========================================================================
+   Epochenwechsel
+
+   An einer Waldorfschule liegt der Hauptunterricht jeden Morgen auf derselben
+   Stunde und wechselt alle paar Wochen das Fach: erst Mathematik-Epoche, dann
+   Deutsch-Epoche. Im Wochenraster heißt das, dieselben fünf bis acht Felder
+   von Hand umzutragen, zehnmal im Schuljahr.
+
+   Bewusst OHNE eigene Tabelle und ohne ein Kennzeichen „diese Stunde ist
+   Epoche" an `lessons`. Ein solches Kennzeichen müsste gepflegt werden und
+   wäre nach dem ersten Wechsel die zweite Wahrheit neben dem Plan selbst.
+   Stattdessen sagt der Mensch bei jedem Wechsel, welche Felder mitwandern —
+   die Frage steht ohnehin an, und die Antwort ist am Bildschirm abzulesen
+   statt geraten. Denn nicht jede Stunde eines Fachs gehört zur Epoche: neben
+   dem Hauptunterricht stehen oft noch Fachstunden desselben Fachs, und die
+   bleiben.
+   ========================================================================== */
+
+/** Ein Feld im Raster, wie das Formular es als Wert eines Hakens trägt. */
+export type Slot = { weekday: number; period: number };
+
+/** "3-1" für Mittwoch, 1. Stunde. Getrennt wird an dem einen Bindestrich. */
+export function slotKey(weekday: number, period: number): string {
+  return `${weekday}-${period}`;
+}
+
+/**
+ * Liest die angehakten Felder zurück, die `slotKey()` geschrieben hat.
+ *
+ * Alles, was nicht wie „Zahl-Zahl" aussieht oder außerhalb des Rasters liegt,
+ * fällt still weg statt den Wechsel abzubrechen: die Werte kommen aus einem
+ * Formular, und ein Abbruch mit Fehlermeldung wäre die falsche Antwort auf
+ * einen Haken, den es nicht geben kann. Dubletten fallen ebenfalls weg —
+ * zweimal dasselbe Feld ist einmal dasselbe Feld.
+ *
+ * `maxPeriod` kommt von außen, weil das Raster einstellbar ist: was gestern
+ * die 9. Stunde war, kann heute außerhalb liegen.
+ */
+export function parseSlotKeys(
+  values: readonly string[],
+  maxPeriod: number,
+): Slot[] {
+  const seen = new Set<string>();
+  const slots: Slot[] = [];
+
+  for (const value of values) {
+    const match = /^(\d+)-(\d+)$/.exec(String(value).trim());
+    if (!match) continue;
+
+    const weekday = Number(match[1]);
+    const period = Number(match[2]);
+
+    if (!isPlanWeekday(weekday)) continue;
+    if (!Number.isInteger(period) || period < 1 || period > maxPeriod) continue;
+
+    const key = slotKey(weekday, period);
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    slots.push({ weekday, period });
+  }
+
+  return slots;
+}
+
+/**
+ * Trägt die genannten Felder von einem Fach auf ein anderes um.
+ *
+ * Zwei Bedingungen stehen in der WHERE-Klausel und nicht im aufrufenden Code.
+ * Erstens die userId, wie überall hier. Zweitens das ALTE Fach: umgetragen
+ * wird nur, was beim Absenden noch das alte Fach trägt. Wer das Formular
+ * offen liegen lässt und daneben eine Stunde ändert, überschreibt sie damit
+ * nicht — der Wechsel fasst dann ein Feld weniger an, statt eine fremde
+ * Änderung zu verschlucken.
+ *
+ * Gibt zurück, wie viele Felder wirklich umgetragen wurden. Die Zahl kann
+ * kleiner sein als die Zahl der Haken, und genau das soll die Oberfläche
+ * sagen dürfen.
+ */
+export async function switchEpoch(
+  userId: string,
+  fromSubjectId: string,
+  toSubjectId: string,
+  slots: readonly Slot[],
+): Promise<number> {
+  if (slots.length === 0) return 0;
+
+  if (!isId(fromSubjectId) || !isId(toSubjectId)) {
+    throw new Error("Dieses Fach gibt es nicht.");
+  }
+
+  // Beide Fächer müssen dem Nutzer gehören. Das alte auch: sonst ließe sich
+  // über ein fremdes Fach herausfinden, welche Stunden es gibt.
+  const [ownsFrom, ownsTo] = await Promise.all([
+    ownsSubject(userId, fromSubjectId),
+    ownsSubject(userId, toSubjectId),
+  ]);
+
+  if (!ownsFrom || !ownsTo) {
+    throw new Error("Dieses Fach gibt es nicht.");
+  }
+
+  if (fromSubjectId === toSubjectId) return 0;
+
+  const treffer = await db
+    .update(lessons)
+    .set({ subjectId: toSubjectId })
+    .where(
+      and(
+        eq(lessons.userId, userId),
+        eq(lessons.subjectId, fromSubjectId),
+        or(
+          ...slots.map((slot) =>
+            and(
+              eq(lessons.weekday, slot.weekday as Weekday),
+              eq(lessons.period, slot.period),
+            ),
+          ),
+        ),
+      ),
+    )
+    .returning({ id: lessons.id });
+
+  return treffer.length;
 }

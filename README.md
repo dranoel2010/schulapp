@@ -47,7 +47,7 @@ npm run build && npm run start
 | `npm run db:push` | Schemaänderungen in die Datenbank übertragen |
 | `npm run db:studio` | Datenbank im Browser ansehen |
 | `npm run db:backup` | Kopie der lokalen Datenbank nach `.backups/` |
-| `npm test` | 309 Tests in 56 Suiten — die reine Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala, Themen-Titel, Bildmaße, die Zahlen der Startseite, das Formular der Ablage, die Vorbelegung aus einem Vorschlag und die Verteilung der Fehlermeldungen |
+| `npm test` | 318 Tests in 58 Suiten — die reine Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala, Themen-Titel, Bildmaße, die Zahlen der Startseite, das Formular der Ablage, die Vorbelegung aus einem Vorschlag, die Verteilung der Fehlermeldungen und die angehakten Felder des Epochenwechsels |
 | `npm run lint` | ESLint |
 
 ## Aufbau
@@ -60,7 +60,8 @@ src/
       page.tsx        Start: am Handy drei wischbare Seiten — Kamera,
                       Kachelmenü, Tagesspur —, am Rechner das Dashboard
       stundenplan/    das Wochenraster Mo–Fr; ein Feld antippen
-                      bearbeitet es, zeiten/ stellt das Stundenraster ein
+                      bearbeitet es, zeiten/ stellt das Stundenraster ein,
+                      epoche/ trägt den Hauptunterricht auf ein anderes Fach um
       hausaufgaben/   Liste zum Abhaken, anlegen und ändern
       lernen/         der Lernplan — abhaken, Fortschritt, Countdown
       klausuren/      Termine eintragen und ändern
@@ -340,7 +341,10 @@ Lernblöcke, Countdown, Nachfrage bei verpassten Lerntagen, tägliche Erinnerung
 per Push.
 
 **Stundenplan** — festes Wochenraster Mo–Fr, ein Feld antippen bearbeitet es,
-das Stundenraster ist einstellbar (1 bis 12 Stunden).
+das Stundenraster ist einstellbar (1 bis 12 Stunden). Für Waldorfschulen trägt
+*Epoche wechseln* den Hauptunterricht in einem Zug auf ein anderes Fach um,
+statt Feld für Feld: man hakt die Stunden ab, die mitwandern sollen, und die
+Fachstunden desselben Fachs bleiben stehen.
 
 **Hausaufgaben** — Liste zum Abhaken, überfällige zuerst, eine neue Aufgabe ist
 von sich aus zur nächsten Stunde ihres Fachs fällig. Abgehaktes bleibt vierzehn

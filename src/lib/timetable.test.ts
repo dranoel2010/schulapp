@@ -9,8 +9,10 @@ import {
   isoWeekNumber,
   mergeDoubleLessons,
   nextLessonDate,
+  parseSlotKeys,
   periodLabel,
   periodTimes,
+  slotKey,
   weekdayOf,
 } from "@/lib/timetable";
 
@@ -275,5 +277,67 @@ describe("isDefaultPeriods", () => {
       false,
     );
     assert.equal(isDefaultPeriods([]), false);
+  });
+});
+
+describe("slotKey", () => {
+  it("schreibt Wochentag und Stunde mit einem Bindestrich", () => {
+    assert.equal(slotKey(3, 1), "3-1");
+    assert.equal(slotKey(5, 12), "5-12");
+  });
+
+  it("ist die Umkehrung von parseSlotKeys", () => {
+    const slots = [
+      { weekday: 1, period: 1 },
+      { weekday: 5, period: 12 },
+    ];
+    const keys = slots.map((s) => slotKey(s.weekday, s.period));
+    assert.deepEqual(parseSlotKeys(keys, 12), slots);
+  });
+});
+
+describe("parseSlotKeys", () => {
+  it("liest gültige Felder in der gegebenen Reihenfolge", () => {
+    assert.deepEqual(parseSlotKeys(["1-1", "5-2"], 8), [
+      { weekday: 1, period: 1 },
+      { weekday: 5, period: 2 },
+    ]);
+  });
+
+  it("wirft Dubletten weg — zweimal dasselbe Feld ist einmal dasselbe Feld", () => {
+    assert.deepEqual(parseSlotKeys(["2-3", "2-3"], 8), [
+      { weekday: 2, period: 3 },
+    ]);
+  });
+
+  it("übergeht, was kein Feld sein kann, statt abzubrechen", () => {
+    assert.deepEqual(
+      parseSlotKeys(["", "x", "1", "1-", "-1", "1-2-3", "0-1", "6-1", "1-0"], 8),
+      [],
+    );
+  });
+
+  it("lässt nur Montag bis Freitag durch", () => {
+    assert.deepEqual(
+      parseSlotKeys(["1-1", "2-1", "3-1", "4-1", "5-1", "6-1", "7-1"], 8).map(
+        (s) => s.weekday,
+      ),
+      [1, 2, 3, 4, 5],
+    );
+  });
+
+  it("misst die Stunde am übergebenen Raster, nicht an einer festen Zahl", () => {
+    // Wer sein Raster verkleinert, während das Formular offen liegt, soll den
+    // Wechsel nicht auf eine Stunde anwenden, die es nicht mehr gibt.
+    assert.deepEqual(parseSlotKeys(["1-9"], 8), []);
+    assert.deepEqual(parseSlotKeys(["1-9"], 9), [{ weekday: 1, period: 9 }]);
+  });
+
+  it("nimmt Leerzeichen am Rand hin", () => {
+    assert.deepEqual(parseSlotKeys([" 4-2 "], 8), [{ weekday: 4, period: 2 }]);
+  });
+
+  it("gibt bei leerer Eingabe eine leere Liste", () => {
+    assert.deepEqual(parseSlotKeys([], 8), []);
   });
 });

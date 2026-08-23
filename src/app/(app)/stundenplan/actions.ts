@@ -11,9 +11,11 @@ import {
   lessonInputSchema,
   listPeriods,
   MAX_PERIOD,
+  parseSlotKeys,
   PeriodsInUseError,
   savePeriods,
   saveLesson,
+  switchEpoch,
   type PeriodRow,
 } from "@/lib/timetable";
 
@@ -21,6 +23,7 @@ import type {
   LessonFieldErrors,
   LessonFormState,
 } from "./[tag]/[stunde]/lesson-form";
+import type { EpochFormState } from "./epoche/epoch-form";
 import type {
   PeriodFieldErrors,
   PeriodFormState,
@@ -218,5 +221,76 @@ export async function savePeriodsAction(
   revalidatePath("/");
   revalidatePath("/stundenplan");
   revalidatePath("/stundenplan/zeiten");
+  redirect("/stundenplan");
+}
+
+/**
+ * Den Hauptunterricht in einem Zug auf ein anderes Fach umtragen.
+ *
+ * Welche Felder mitwandern, entscheidet der Mensch am Formular und nicht eine
+ * Regel hier — die Begründung steht an `switchEpoch()` in @/lib/timetable.
+ *
+ * Aufgefrischt wird großzügig: der Wochenplan steht auch auf der Startseite,
+ * und jedes umgetragene Feld hat seine eigene Adresse.
+ */
+export async function switchEpochAction(
+  _state: EpochFormState,
+  formData: FormData,
+): Promise<EpochFormState> {
+  const user = await requireUser();
+
+  const fromSubjectId = String(formData.get("fromSubjectId") ?? "");
+  const toSubjectId = String(formData.get("toSubjectId") ?? "");
+
+  if (!toSubjectId) {
+    return { errors: { toSubjectId: "Welches Fach kommt jetzt?" } };
+  }
+
+  if (fromSubjectId === toSubjectId) {
+    return {
+      errors: { toSubjectId: "Das ist dasselbe Fach — dann gibt es nichts umzutragen." },
+    };
+  }
+
+  // Archivierte Fächer zählen mit: ein Fach, das im Plan steht, darf auch
+  // dann weichen, wenn es zugemacht wurde.
+  const subjects = await listSubjects(user.id, { includeArchived: true });
+  const kennt = (id: string) => subjects.some((subject) => subject.id === id);
+
+  if (!kennt(fromSubjectId)) {
+    return { errors: { fromSubjectId: "Dieses Fach gibt es nicht mehr." } };
+  }
+  if (!kennt(toSubjectId)) {
+    return { errors: { toSubjectId: "Dieses Fach gibt es nicht mehr." } };
+  }
+
+  // Das Raster kann kürzer geworden sein, während das Formular offen war —
+  // dann fallen Haken auf Stunden weg, die es nicht mehr gibt.
+  const periods = await listPeriods(user.id);
+  const slots = parseSlotKeys(formData.getAll("slots").map(String), periods.length);
+
+  if (slots.length === 0) {
+    return { errors: { slots: "Hak wenigstens eine Stunde an." } };
+  }
+
+  const umgetragen = await switchEpoch(
+    user.id,
+    fromSubjectId,
+    toSubjectId,
+    slots,
+  );
+
+  if (umgetragen === 0) {
+    return {
+      message:
+        "Keine dieser Stunden trägt noch das alte Fach. Vermutlich wurde der Plan nebenher geändert — sieh im Wochenraster nach.",
+    };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/stundenplan");
+  for (const slot of slots) {
+    revalidatePath(`/stundenplan/${slot.weekday}/${slot.period}`);
+  }
   redirect("/stundenplan");
 }

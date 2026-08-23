@@ -249,6 +249,7 @@ export function AppNav({ userName }: AppNavProps) {
 const SECTION_TITLES: Record<string, string> = {
   "/stundenplan": "Stundenplan",
   "/stundenplan/zeiten": "Stundenzeiten",
+  "/stundenplan/epoche": "Epoche wechseln",
   "/lernen": "Lernen",
   "/klausuren": "Klausuren",
   "/klausuren/neu": "Neue Klausur",
