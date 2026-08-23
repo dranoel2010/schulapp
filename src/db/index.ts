@@ -29,8 +29,44 @@ function createDatabase(): Database {
 }
 
 /**
- * Beim Neuladen im Entwicklungsmodus würde sonst jedes Mal eine neue
- * Verbindung entstehen, bis die Datei gesperrt ist.
+ * Die eine Verbindung des ganzen Prozesses — an `globalThis` und nicht nur an
+ * diesem Modul.
+ *
+ * Ein Modul einmal pro Prozess: das klingt selbstverständlich und ist es
+ * nicht. Next bündelt Seiten und Route Handler getrennt; dieselbe Datei kann
+ * dadurch in zwei Bündeln landen und wird dann **zweimal ausgewertet**, mit je
+ * eigenem `instance`. Beim Bauen kommen die Worker dazu. `globalThis` ist der
+ * einzige Ort, den sich alle teilen.
+ *
+ * **Das galt bis hierher nur in der Entwicklung**, und das war ein Fehler mit
+ * Ansage. Der Wächter `process.env.NODE_ENV !== "production"` ist die überall
+ * abgeschriebene Formel gegen leckende Verbindungen beim Hot Reload — dort
+ * geht es darum, dass sich die EINE Instanz über Neuladen hinweg rettet. Hier
+ * beantwortet dieselbe Zeile eine ganz andere Frage, nämlich: gibt es die
+ * Instanz überhaupt nur einmal. Im Produktionsbau (`npm run start`) fiel die
+ * Antwort damit auf „nein":
+ *
+ * - Die Seiten öffneten `.data/pglite` in ihrem Bündel,
+ * - `/api/material/<seite>` öffnete dasselbe Verzeichnis in seinem — ein
+ *   zweites PGlite auf denselben Dateien.
+ *
+ * PGlite liest sein Verzeichnis beim Öffnen in einen eigenen Speicher ein.
+ * Die zweite Instanz sah deshalb einen Stand von vorhin: **jede Anfrage nach
+ * einem Blattbild antwortete „Dieses Blatt gibt es nicht mehr" (404)**, während
+ * die Ablage daneben genau dieses Blatt auflistete. In der Ablage, auf der
+ * Startseite und im Eingangskorb stand an jeder Stelle, an der ein Foto
+ * hingehört, das kaputte Bildsymbol — und weil es in `next dev` nicht
+ * passiert, fiel es beim Entwickeln nie auf.
+ *
+ * Gefährlicher als die 404 ist die andere Hälfte: zwei PGlite-Instanzen auf
+ * denselben Dateien sind genau der Zustand, den das README als das beschreibt,
+ * was diese Datenbank schon einmal unrettbar zerstört hat. Dort steht er als
+ * „zwei Prozesse"; einer reicht, wenn er das Modul zweimal auswertet.
+ *
+ * Gegen ein echtes Postgres (DATABASE_URL) wäre eine zweite Auswertung nur ein
+ * zweiter Verbindungspool — teuer, nicht tödlich. Die Zeile hilft also dort,
+ * wo sie muss, und schadet nirgends: Hot Reload gibt es im Produktionsbau
+ * nicht, an dem es sonst zu retten gäbe.
  */
 const globalForDb = globalThis as unknown as { __schulappDb?: Database };
 
@@ -39,9 +75,7 @@ let instance: Database | undefined;
 function getDatabase(): Database {
   if (!instance) {
     instance = globalForDb.__schulappDb ?? createDatabase();
-    if (process.env.NODE_ENV !== "production") {
-      globalForDb.__schulappDb = instance;
-    }
+    globalForDb.__schulappDb = instance;
   }
   return instance;
 }

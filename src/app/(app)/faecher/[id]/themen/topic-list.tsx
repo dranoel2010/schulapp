@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
@@ -113,21 +114,59 @@ function newest(...states: TopicActionState[]): TopicActionState {
  * „3 Klausuren · 2 Blätter" statt eines Satzes. Was bei 0 steht, wird
  * weggelassen und nicht als Null hingeschrieben — ein Thema ohne Klausur hat
  * keine 0, es hat noch keine.
+ *
+ * Die Blattzahl ist ein Weg: sie führt in die Ablage, gefiltert auf genau
+ * dieses Thema. Das ist die Antwort auf „was habe ich dazu?", und sie stand
+ * bisher nur als Zahl da. Die Klausurzahl bleibt Text — es gibt keine Liste,
+ * die auf „die Klausuren zu diesem Thema" gefiltert wäre, und ein Link, der
+ * irgendwohin in die Nähe führt, ist schlechter als keiner.
+ *
+ * Verlinkt wird nur, was größer als 0 ist. „0 Blätter“ steht ohnehin nicht da
+ * (siehe oben), und ein Weg zu einer leeren Liste wäre eine Sackgasse.
+ *
+ * Der Link steckt in einem <summary>, und das ist erlaubt: ein <summary> ist
+ * kein <a>, verschachtelte Links entstehen hier also keine. Beim Antippen
+ * gewinnt der Link — von zwei ineinanderliegenden bedienbaren Elementen führt
+ * das innere seine Handlung aus —, die Zeile klappt darunter nicht zusätzlich
+ * auf. Für die eingerückten Schreibweisen stellt sich die Frage gar nicht:
+ * `AliasRow` zeigt überhaupt keine Zahlen, sondern nur, worauf sie zeigt.
  */
-function usageLabel(examCount: number, materialCount: number): string {
-  const teile: string[] = [];
-
-  if (examCount > 0) {
-    teile.push(examCount === 1 ? "1 Klausur" : `${examCount} Klausuren`);
+function UsageLabel({
+  topicId,
+  examCount,
+  materialCount,
+}: {
+  topicId: string;
+  examCount: number;
+  materialCount: number;
+}) {
+  if (examCount === 0 && materialCount === 0) {
+    return (
+      <span className="shrink-0 text-sm text-muted">noch nirgends benutzt</span>
+    );
   }
 
-  if (materialCount > 0) {
-    teile.push(materialCount === 1 ? "1 Blatt" : `${materialCount} Blätter`);
-  }
+  return (
+    <span className="flex shrink-0 items-center gap-1.5 text-sm text-muted">
+      {examCount > 0 ? (
+        <span>{examCount === 1 ? "1 Klausur" : `${examCount} Klausuren`}</span>
+      ) : null}
 
-  if (teile.length === 0) return "noch nirgends benutzt";
+      {examCount > 0 && materialCount > 0 ? <span>·</span> : null}
 
-  return teile.join(" · ");
+      {materialCount > 0 ? (
+        // Die Fingerfläche steht in der Zeile und nicht darüber hinaus:
+        // min-h-11 in einer Zeile von min-h-16 macht sie nicht höher, ist aber
+        // groß genug, um den Link neben dem Aufklappen zu treffen.
+        <Link
+          href={`/material?thema=${topicId}`}
+          className="inline-flex min-h-11 items-center text-accent underline-offset-2 transition-colors hover:text-accent-hover hover:underline"
+        >
+          {materialCount === 1 ? "1 Blatt" : `${materialCount} Blätter`}
+        </Link>
+      ) : null}
+    </span>
+  );
 }
 
 /** Knopf, der von selbst merkt, dass sein Formular gerade läuft. */
@@ -270,9 +309,11 @@ function TopicItemRow({
           <span className="min-w-0 flex-1 truncate font-medium text-foreground">
             {topic.title}
           </span>
-          <span className="shrink-0 text-sm text-muted">
-            {usageLabel(topic.examCount, topic.materialCount)}
-          </span>
+          <UsageLabel
+            topicId={topic.id}
+            examCount={topic.examCount}
+            materialCount={topic.materialCount}
+          />
         </summary>
 
         <div className="space-y-5 border-t border-border px-4 py-4">

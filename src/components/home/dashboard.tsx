@@ -159,7 +159,7 @@ export function HomeDashboard({ data }: { data: HomeData }) {
 
         <div className="flex min-h-0 flex-col gap-4">
           <SubjectsCard count={data.subjectCount} />
-          <MaterialCard sheets={data.materials} />
+          <MaterialCard sheets={data.materials} inboxCount={data.inboxCount} />
           <AverageCard grades={data.grades} />
         </div>
       </div>
@@ -607,7 +607,13 @@ function SubjectsCard({ count }: { count: number }) {
  * die Startseite lädt nur die letzten paar, sie kennt die Gesamtzahl gar nicht.
  * Eine Zahl, die niemand gezählt hat, gehört nicht auf den Bildschirm.
  */
-function MaterialCard({ sheets }: { sheets: Sheet[] }) {
+function MaterialCard({
+  sheets,
+  inboxCount,
+}: {
+  sheets: Sheet[];
+  inboxCount: number;
+}) {
   const shown = sheets.slice(0, MATERIAL_LIMIT);
 
   return (
@@ -623,6 +629,28 @@ function MaterialCard({ sheets }: { sheets: Sheet[] }) {
           </Link>
         ) : null}
       </div>
+
+      {/* Der Korb steht über der Liste und nicht darunter: unter ihr stünde er
+          als Nachtrag zu den letzten Blättern, dabei ist er das Einzige in
+          dieser Karte, das etwas von einem will. Nur wenn wirklich etwas darin
+          liegt — ein Weg zu einer leeren Liste ist kein Weg.
+
+          Die Zahl ist gezählt und deshalb erlaubt. Der Absatz über dieser
+          Karte hält fest, dass hier NICHT steht, wie viele Blätter insgesamt
+          in der Ablage liegen: die Startseite holt nur die letzten paar und
+          kennt die Gesamtzahl nicht. Für den Korb gilt das nicht — er wird mit
+          `countInbox()` gezählt, mit derselben Bedingung, nach der der Korb
+          selbst seine Zeilen holt. */}
+      {inboxCount > 0 ? (
+        <Link
+          href="/material/eingang"
+          className="mt-2 inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-accent hover:underline"
+        >
+          {inboxCount === 1
+            ? "1 Blatt im Eingangskorb"
+            : `${inboxCount} Blätter im Eingangskorb`}
+        </Link>
+      ) : null}
 
       {shown.length === 0 ? (
         <>

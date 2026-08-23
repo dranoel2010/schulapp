@@ -255,6 +255,8 @@ const SECTION_TITLES: Record<string, string> = {
   "/hausaufgaben": "Hausaufgaben",
   "/hausaufgaben/neu": "Neue Aufgabe",
   "/material": "Material",
+  "/material/eingang": "Eingangskorb",
+  "/material/eingang/neu": "Vorschlag anlegen",
   "/noten": "Noten",
   "/noten/neu": "Neue Note",
   "/faecher": "Fächer",
@@ -288,6 +290,12 @@ function sectionTitle(pathname: string): string | null {
   }
   if (pathname.startsWith("/faecher/")) return "Fach bearbeiten";
   if (pathname.startsWith("/hausaufgaben/")) return "Aufgabe bearbeiten";
+  // Der Eingangskorb hat eine echte Unterseite: einen einzelnen Vorschlag.
+  // Sie muss VOR der Regel darunter stehen — die zieht sonst jede Adresse
+  // unter /material/ nach "Blatt", und über einem Vorschlag stünde dann in der
+  // Kopfzeile der Name einer ganz anderen Sache. Dieselbe Reihenfolge gilt
+  // schon bei den Themen eines Fachs, ein paar Zeilen weiter oben.
+  if (pathname.startsWith("/material/eingang/")) return "Vorschlag";
   // Ein Blatt antippen heißt: die Seiten ansehen und nebenbei richtigstellen,
   // wohin es gehört. "Blatt bearbeiten" verspräche einen Bildbearbeiter —
   // hier steht das Blatt selbst im Mittelpunkt.

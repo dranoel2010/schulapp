@@ -176,26 +176,65 @@ export function CapturePane({ data }: { data: HomeData }) {
           )}
         </section>
 
-        {/* Der leise Weg in die Ablage steht am Ende: hier wird aufgenommen,
-            gesucht wird dort. */}
-        <Link
-          href="/material"
-          className="-mx-[4px] mt-auto inline-flex min-h-11 items-center gap-1.5 self-start px-[4px] text-[14px] text-muted transition-colors hover:text-foreground"
-        >
-          Zur Ablage
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            className="size-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        {/* Die beiden Wege von hier weg stehen am Ende, nebeneinander: hier
+            wird aufgenommen, gesucht wird in der Ablage und aufgeräumt im
+            Korb.
+
+            Der Korb steht nur da, wenn wirklich etwas darin liegt. Ein leerer
+            Korb ist keine Aufgabe, und ein Weg zu einer leeren Liste wäre am
+            Handy eine von zwei Zeilen, die dort Platz haben. Die Zahl daneben
+            ist gezählt und nicht geschätzt — `countInbox()` fragt mit
+            derselben Bedingung, nach der der Korb selbst seine Zeilen holt.
+            Genau darin unterscheidet sie sich von der Gesamtzahl der Blätter,
+            die auf dieser Seite bewusst nirgends steht: die kennt die
+            Startseite gar nicht, sie holt nur die letzten sechs.
+
+            Anders als „Zur Ablage" trägt er die Akzentfarbe. Das ist keine
+            Zierde: der Korb ist das Einzige auf dieser Seite, das etwas von
+            einem will. */}
+        <div className="mt-auto flex flex-wrap items-center gap-x-[18px] gap-y-[2px]">
+          <Link
+            href="/material"
+            className="-mx-[4px] inline-flex min-h-11 items-center gap-1.5 px-[4px] text-[14px] text-muted transition-colors hover:text-foreground"
           >
-            <path d="m9 6 6 6-6 6" />
-          </svg>
-        </Link>
+            Zur Ablage
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              className="size-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m9 6 6 6-6 6" />
+            </svg>
+          </Link>
+
+          {data.inboxCount > 0 ? (
+            <Link
+              href="/material/eingang"
+              className="-mx-[4px] inline-flex min-h-11 items-center gap-1.5 px-[4px] text-[14px] font-medium text-accent transition-colors hover:text-foreground"
+            >
+              {data.inboxCount === 1
+                ? "1 Blatt im Eingangskorb"
+                : `${data.inboxCount} im Eingangskorb`}
+              <svg
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                className="size-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m9 6 6 6-6 6" />
+              </svg>
+            </Link>
+          ) : null}
+        </div>
       </div>
     </div>
   );

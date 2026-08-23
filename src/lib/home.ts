@@ -11,6 +11,7 @@ import {
   type TodayBlock,
 } from "@/lib/exams";
 import { gradeSummary, type GradeSummary } from "@/lib/grades";
+import { countInbox } from "@/lib/inbox";
 import {
   homeworkForRange,
   listHomework,
@@ -135,6 +136,31 @@ export type HomeData = {
    * dass hier niemand liest, was gar nicht geladen wurde.
    */
   materials: MaterialCard[];
+  /**
+   * Wie viele Blätter im Eingangskorb liegen — aufgenommen, aber noch nicht
+   * durchgesehen, oder mit einem Vorschlag, der auf eine Entscheidung wartet.
+   *
+   * Eine gezählte Zahl und keine geschätzte. Das ist hier der Unterschied, der
+   * sie überhaupt erlaubt: die Material-Karte des Dashboards schreibt
+   * ausdrücklich hin, dass sie NICHT sagt, wie viele Blätter insgesamt in der
+   * Ablage liegen — die Startseite holt nur die letzten sechs und kennt die
+   * Gesamtzahl gar nicht. Für den Korb gilt das nicht. `countInbox()` zählt
+   * ihn wirklich, und zwar mit **derselben Bedingung**, nach der der Korb
+   * selbst seine Zeilen holt — die beiden meinen also dieselbe Menge.
+   *
+   * Dieselbe Menge heißt nicht dieselbe Zahl: `listInbox()` deckelt bei
+   * `INBOX_LIMIT`, diese Zählung nicht. Über zweihundert wartenden Blättern
+   * nennt die Startseite deshalb die größere Zahl, und der Korb sagt an seiner
+   * Liste selbst, dass er an der Grenze steht. Das ist die richtige
+   * Reihenfolge — eine Zahl, die bei 200 stehen bliebe, verspräche, dass es
+   * nicht mehr sind.
+   *
+   * Sie steht in HomeData und nicht in den beiden Ansichten, aus demselben
+   * Grund wie `subjects`: hier läuft sie neben den anderen Abfragen, dort
+   * hinge sie hinter ihnen allen am kritischen Pfad von „/". Eine Zählung
+   * ohne Verbund und ohne Bilder ist das Billigste, was diese Seite tut.
+   */
+  inboxCount: number;
 };
 
 export async function loadHomeData(
@@ -160,6 +186,7 @@ export async function loadHomeData(
     homeworkCounts,
     grades,
     materials,
+    inboxCount,
   ] = await Promise.all([
     db
       .select({ value: count() })
@@ -178,6 +205,7 @@ export async function loadHomeData(
     openHomeworkCount(userId, today),
     gradeSummary(userId),
     listMaterialCards(userId, { limit: RECENT_MATERIALS, order: "aufnahme" }),
+    countInbox(userId),
   ]);
 
   const upcoming = exams.filter((exam) => exam.date >= today);
@@ -209,6 +237,7 @@ export async function loadHomeData(
     homeworkCounts,
     grades,
     materials,
+    inboxCount,
   };
 }
 

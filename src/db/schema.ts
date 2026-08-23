@@ -503,6 +503,27 @@ export const materials = pgTable(
     /** Der Schultag, an dem es ausgeteilt wurde */
     capturedOn: date("captured_on", { mode: "string" }).notNull(),
     note: text("note"),
+    /**
+     * Wann das Blatt durchgesehen wurde. Leer heißt: es liegt noch im
+     * Eingangskorb.
+     *
+     * Ein Zeitpunkt und kein Ja/Nein, aus demselben Grund wie bei den
+     * Hausaufgaben: ein Häkchen kann mit dem Rest der Zeile in Widerspruch
+     * geraten, ein Zeitpunkt nicht. Und die Frage "seit wann liegt das da?",
+     * die ein Eingangskorb beantworten muss, steht damit ohne eine zweite
+     * Spalte in der Zeile.
+     *
+     * Gesetzt wird die Spalte an drei Stellen, und alle drei heißen dasselbe —
+     * ein Mensch hat hingesehen: beim Abhaken im Eingangskorb, beim Speichern
+     * des Blattformulars und beim Übernehmen eines Vorschlags. Zurückgenommen
+     * wird sie über "wieder in den Eingangskorb"; gelöscht wird dabei nichts,
+     * die Spalte geht nur wieder auf leer.
+     *
+     * Ausdrücklich NICHT gesetzt wird sie beim Aufnehmen. Ein frisch
+     * ausgelöstes Foto heißt "Blatt vom 21.8." und trägt kein Thema — genau
+     * das ist der Zustand, für den der Korb da ist.
+     */
+    filedAt: timestamp("filed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -518,6 +539,13 @@ export const materials = pgTable(
     // und das ist ausdrücklich eine andere Spalte als der Zeitpunkt der
     // Aufnahme.
     index("materials_user_created_idx").on(t.userId, t.createdAt),
+    // Der Eingangskorb fragt `where user_id = ? and filed_at is null` und
+    // sortiert nach dem Zeitpunkt der Aufnahme. Ohne diesen Index liest
+    // Postgres dafür alle Blätter des Nutzers — und der Korb ist die Liste,
+    // die nach jeder Aufnahme neu geladen wird. Die Spalte steht hinten und
+    // nicht vorne: gefiltert wird auf einen einzigen Wert (leer), sortiert
+    // wird nach der Aufnahme.
+    index("materials_user_filed_idx").on(t.userId, t.filedAt, t.createdAt),
   ],
 );
 
@@ -625,6 +653,119 @@ export const materialTopics = pgTable(
   ],
 );
 
+/**
+ * Ein Vorschlag zu einem Blatt — der Eingangskorb.
+ *
+ * **Der Bestand wird nur durch die Bestätigung geschrieben, nie direkt.** Ein
+ * Vorschlag steht neben dem Blatt und nicht darin; er ändert nichts, bis ein
+ * Mensch ihn übernimmt, und dann geht er durch dieselbe Tür wie ein Formular
+ * (`materialInputSchema`, `updateMaterial()`, `setMaterialTopics()`). Das ist
+ * keine Vorsichtsmaßnahme, sondern die Bedingung des ganzen KI-Anschlusses:
+ * wer nicht vertrauenswürdige Blätter liest und gleichzeitig schreiben darf,
+ * ist über das Blatt selbst angreifbar.
+ *
+ * **Jede Spalte ist optional, und das ist die Aussage der Tabelle:** ein
+ * Vorschlag schlägt vor, was er weiß, und schweigt über den Rest. Wer nur
+ * Themen erkennt, muss keinen Titel erfinden. Leer heißt an jeder Spalte
+ * dasselbe — "dazu sage ich nichts, es bleibt, wie es am Blatt steht"; was
+ * daraus im Formular wird, entscheidet `prefillFromProposal()` in
+ * @/lib/inbox, an einer Stelle und nicht an vier.
+ *
+ * `origin` hält fest, woher der Vorschlag kam: "manuell" von Hand über die
+ * Oberfläche, "agent" von einem Agenten. Die Spalte ist keine Statistik. Ein
+ * Vorschlag vom Agenten ist aus dem Inhalt eines Blattes abgeleitet, also aus
+ * etwas, das die App nicht geschrieben hat; einer von Hand nicht. Auf dem
+ * Bildschirm steht deshalb, welcher von beiden gerade vor einem liegt — das
+ * ist der ganze Zweck. Nebenbei hält sie den Weg offen, auf dem die App später
+ * selbst ein Modell fragt: dieser Weg wäre bloß ein weiterer Schreiber auf
+ * diese Tabelle, und der Korb müsste sich dafür nicht ändern.
+ *
+ * **Es gibt keinen Zustand "übernommen" oder "verworfen".** Eine Zeile in
+ * dieser Tabelle ist ein offener Vorschlag, sonst nichts — entschieden heißt
+ * hier: die Zeile ist weg. Ein Vorschlag ist ein Entwurf eines Formulars und
+ * kein Vorgang; was aus ihm wurde, steht danach am Blatt, und das Blatt ist
+ * die Sache, die Geschichte trägt. Mit einem Zustand müsste jede Abfrage des
+ * Korbs danach filtern, und die Tabelle liefe mit toten Entwürfen voll, die
+ * niemand mehr liest. Wer wissen will, was der Agent gesagt hat, sieht es beim
+ * Übernehmen: das Formular steht ausgefüllt da, Feld für Feld.
+ *
+ * Keine `userId` an der Zeile — sie hängt am Blatt, so wie bei
+ * `material_pages` und `material_topics`. Jede Abfrage hier verbindet deshalb
+ * über `materials` und filtert dort nach dem Nutzer; der Grund steht im Kopf
+ * von @/lib/materials.
+ */
+export const materialProposals = pgTable(
+  "material_proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => materials.id, { onDelete: "cascade" }),
+    /** manuell | agent — wer den Vorschlag geschrieben hat */
+    origin: text("origin").notNull().default("manuell"),
+    /**
+     * Das vorgeschlagene Fach. Leer heißt: das Fach des Blattes bleibt.
+     *
+     * "set null" und nicht "cascade", anders als am Blatt. Ein gelöschtes Fach
+     * nimmt sein Blatt mit, und mit dem Blatt geht auch der Vorschlag — das ist
+     * der häufige Fall und über `materialId` schon geregelt. Diese Spalte
+     * betrifft den seltenen anderen: der Vorschlag will das Blatt in ein
+     * ANDERES Fach schieben, und genau dieses andere wird gelöscht. Dann
+     * fällt der Fachvorschlag weg und der Rest der Zeile — Titel, Tag, Notiz,
+     * Themen — bleibt stehen. "cascade" nähme hier einen brauchbaren Vorschlag
+     * mit, weil ein Fach verschwand, das mit dem Blatt nie etwas zu tun hatte.
+     */
+    subjectId: uuid("subject_id").references(() => subjects.id, {
+      onDelete: "set null",
+    }),
+    /** Der vorgeschlagene Titel. Leer heißt: der Titel des Blattes bleibt. */
+    title: text("title"),
+    /** Der vorgeschlagene Schultag. Leer heißt: der Tag des Blattes bleibt. */
+    capturedOn: date("captured_on", { mode: "string" }),
+    /** Die vorgeschlagene Notiz. Leer heißt: die Notiz des Blattes bleibt. */
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("material_proposals_material_idx").on(t.materialId, t.createdAt)],
+);
+
+/**
+ * Ein vorgeschlagenes Thema — freier Text, kein Verweis ins Vokabular.
+ *
+ * Das ist der eine Punkt, an dem diese Tabelle von `material_topics` abweicht,
+ * und er ist beabsichtigt. Am Blatt steht ein Verweis auf `subject_topics`,
+ * damit "Kettenregel" und "kettenregel " dasselbe Thema sind. Ein Vorschlag
+ * kann aber ein Thema nennen, das es im Vokabular noch gar nicht gibt — das
+ * ist der Normalfall, wenn ein Agent ein Blatt liest. Müsste er dafür eine
+ * Vokabel anlegen, schriebe er in den Bestand, und zwar bevor irgendjemand
+ * zugestimmt hat.
+ *
+ * Aus dem Text wird eine Vokabel erst beim Übernehmen, über
+ * `setMaterialTopics()` und `ensureTopics()` — dieselbe Tür wie beim Tippen im
+ * Formular, mit derselben Prüfung auf ein Fachwort und derselben Faltung
+ * gleichbedeutender Schreibweisen. Was dabei durchfällt, sagt das Formular.
+ *
+ * `sortOrder`, damit die Chips in der Reihenfolge stehen, in der sie
+ * vorgeschlagen wurden. Bei Themen ist das keine Kosmetik: die ersten sind die
+ * naheliegenden.
+ */
+export const materialProposalTopics = pgTable(
+  "material_proposal_topics",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    proposalId: uuid("proposal_id")
+      .notNull()
+      .references(() => materialProposals.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [
+    index("material_proposal_topics_proposal_idx").on(t.proposalId, t.sortOrder),
+  ],
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   subjects: many(subjects),
@@ -728,6 +869,7 @@ export const materialsRelations = relations(materials, ({ one, many }) => ({
   }),
   pages: many(materialPages),
   topics: many(materialTopics),
+  proposals: many(materialProposals),
 }));
 
 export const materialPagesRelations = relations(materialPages, ({ one }) => ({
@@ -747,6 +889,31 @@ export const materialTopicsRelations = relations(materialTopics, ({ one }) => ({
     references: [subjectTopics.id],
   }),
 }));
+
+export const materialProposalsRelations = relations(
+  materialProposals,
+  ({ one, many }) => ({
+    material: one(materials, {
+      fields: [materialProposals.materialId],
+      references: [materials.id],
+    }),
+    subject: one(subjects, {
+      fields: [materialProposals.subjectId],
+      references: [subjects.id],
+    }),
+    topics: many(materialProposalTopics),
+  }),
+);
+
+export const materialProposalTopicsRelations = relations(
+  materialProposalTopics,
+  ({ one }) => ({
+    proposal: one(materialProposals, {
+      fields: [materialProposalTopics.proposalId],
+      references: [materialProposals.id],
+    }),
+  }),
+);
 
 export const pushSubscriptionsRelations = relations(
   pushSubscriptions,
@@ -784,6 +951,9 @@ export type NewMaterial = typeof materials.$inferInsert;
 export type MaterialPage = typeof materialPages.$inferSelect;
 export type NewMaterialPage = typeof materialPages.$inferInsert;
 export type MaterialTopic = typeof materialTopics.$inferSelect;
+export type MaterialProposal = typeof materialProposals.$inferSelect;
+export type NewMaterialProposal = typeof materialProposals.$inferInsert;
+export type MaterialProposalTopic = typeof materialProposalTopics.$inferSelect;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 
 /** Art einer Prüfung */
@@ -792,6 +962,16 @@ export type ExamKind = "klausur" | "test" | "referat" | "muendlich";
 export type StudyBlockKind = "learn" | "review";
 /** Zustand eines Lernblocks */
 export type StudyBlockStatus = "open" | "done" | "skipped";
+
+/**
+ * Wer einen Vorschlag geschrieben hat.
+ *
+ * "manuell" heißt: über die Oberfläche, von Hand. "agent" heißt: aus dem
+ * Inhalt eines Blattes abgeleitet — also aus etwas, das die App nicht
+ * geschrieben hat. Warum dieser Unterschied auf dem Bildschirm steht, sagt der
+ * Kommentar an `materialProposals`.
+ */
+export type ProposalOrigin = "manuell" | "agent";
 
 /**
  * Art einer Note. Schriftlich und mündlich sind die beiden Töpfe, aus denen

@@ -3,15 +3,47 @@ import { describe, it } from "node:test";
 
 import {
   addDays,
+  berlinDay,
   daysBetween,
   formatCountdown,
   formatGerman,
   germanShortParts,
+  isCalendarDate,
   isPast,
   timeInBerlin,
   todayInBerlin,
   weekdayIndex,
 } from "@/lib/dates";
+
+/**
+ * `berlinDay()` und `todayInBerlin()` rechnen dasselbe und heißen verschieden.
+ * Geprüft wird deshalb hier vor allem, dass sie sich nicht auseinander
+ * entwickeln — und der eine Fall, für den es den zweiten Namen gibt: ein
+ * Zeitpunkt, der ausdrücklich nicht „jetzt" ist.
+ */
+describe("berlinDay", () => {
+  it("rechnet in Berliner Zeit, nicht in UTC", () => {
+    // 23:30 UTC ist in Berlin schon der nächste Tag — im Sommer wie im Winter.
+    // Genau daran hängt, ob ein um halb eins nachts abgehaktes Blatt den
+    // richtigen Tag trägt.
+    assert.equal(berlinDay(new Date("2026-08-19T23:30:00Z")), "2026-08-20");
+    assert.equal(berlinDay(new Date("2026-01-01T23:30:00Z")), "2026-01-02");
+    assert.equal(berlinDay(new Date("2026-08-19T21:00:00Z")), "2026-08-19");
+  });
+
+  it("liefert einen Kalendertag, wie ihn isCalendarDate() annimmt", () => {
+    const tag = berlinDay(new Date("2026-02-28T12:00:00Z"));
+
+    assert.equal(tag, "2026-02-28");
+    assert.equal(isCalendarDate(tag), true);
+  });
+
+  it("ist mit todayInBerlin() dieselbe Rechnung", () => {
+    const jetzt = new Date("2026-08-19T23:30:00Z");
+
+    assert.equal(berlinDay(jetzt), todayInBerlin(jetzt));
+  });
+});
 
 describe("todayInBerlin", () => {
   it("liefert ein Datum im Format YYYY-MM-DD", () => {

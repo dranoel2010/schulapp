@@ -441,6 +441,18 @@ export type MaterialFormProps = {
   };
   /** Der heutige Kalendertag aus todayInBerlin(). */
   today: string;
+  /**
+   * Was auf dem Knopf steht. Ohne Angabe: „Änderungen speichern".
+   *
+   * Der Eingangskorb benutzt dasselbe Formular für die Bestätigung eines
+   * Vorschlags — das ist die Zusage aus KONZEPT.md, dass alles, was ein Agent
+   * vorschlägt, durch dieselbe Tür geht wie ein Formular. Dort heißt der
+   * Knopf aber nicht „speichern", sondern „übernehmen": man bestätigt einen
+   * Vorschlag, statt eine eigene Änderung abzulegen. Ein zweites Formular
+   * dafür wäre eine zweite Tür in den Bestand gewesen, und genau die soll es
+   * nicht geben — also ist es dieselbe, mit einer anderen Aufschrift.
+   */
+  submitLabel?: string;
 };
 
 export function MaterialForm({
@@ -449,6 +461,7 @@ export function MaterialForm({
   topicSuggestions,
   item,
   today,
+  submitLabel = "Änderungen speichern",
 }: MaterialFormProps) {
   const savedTopics = item.topics.map((topic) => topic.title);
 
@@ -648,7 +661,7 @@ export function MaterialForm({
 
       <div className="pt-2">
         <Button type="submit" loading={pending} className="w-full sm:w-auto">
-          Änderungen speichern
+          {submitLabel}
         </Button>
       </div>
     </form>

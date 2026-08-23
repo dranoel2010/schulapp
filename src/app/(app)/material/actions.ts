@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
+import { formErrors } from "@/lib/form-errors";
+import { markFiled } from "@/lib/inbox";
 import {
   MAX_PAGES,
   MAX_PAGE_BYTES,
@@ -18,13 +20,13 @@ import {
   deletePage,
   getMaterial,
   materialInputSchema,
+  ownsSubject,
   setMaterialTopics,
   updateMaterial,
   type MaterialFieldErrors,
   type MaterialFormState,
   type NewPage,
 } from "@/lib/materials";
-import { listSubjects } from "@/lib/subjects";
 
 /**
  * Die Server Actions der Ablage.
@@ -48,6 +50,15 @@ import { listSubjects } from "@/lib/subjects";
  * Material-Karte des Dashboards. Ohne das bliebe dort das Bild stehen, das vor
  * der Aufnahme galt, und der Nutzer müsste glauben, sie sei nicht angekommen.
  */
+
+/**
+ * Die Feldnamen, unter denen an diesem Formular eine Meldung stehen kann.
+ *
+ * `formErrors()` braucht sie als Typargument, damit der Compiler einen Tippfehler
+ * im Prüfschema bemerkt, statt eine Meldung unter ein Feld zu legen, das es auf
+ * dem Bildschirm nicht gibt.
+ */
+type MaterialErrorField = keyof MaterialFieldErrors & string;
 
 /** Was der Auslöser zurückbekommt: die id des Blattes oder einen Satz dazu. */
 export type CaptureResult = { ok: true; id: string } | { ok: false; message: string };
@@ -162,21 +173,6 @@ async function readPage(
   };
 }
 
-/** Aus den zod-Meldungen wird pro Feld die erste — mehr passt nicht unters Feld. */
-function fieldErrors(issues: { path: PropertyKey[]; message: string }[]) {
-  const errors: MaterialFieldErrors = {};
-
-  for (const issue of issues) {
-    const field = issue.path[0];
-    if (typeof field !== "string") continue;
-
-    const key = field as keyof MaterialFieldErrors;
-    if (!errors[key]) errors[key] = issue.message;
-  }
-
-  return errors;
-}
-
 /**
  * Beim Aufnehmen gibt es kein Feld, unter das eine Meldung passt — der
  * Auslöser hat nur einen Platz für einen Satz. Also den ersten.
@@ -188,24 +184,21 @@ function firstMessage(
   return issues[0]?.message ?? fallback;
 }
 
-/** Ein Fach, das es nicht (mehr) gibt, würde sonst als Ausnahme hochschlagen. */
-async function subjectMissing(
-  userId: string,
-  subjectId: string,
-): Promise<boolean> {
-  const subjects = await listSubjects(userId, { includeArchived: true });
-
-  return !subjects.some((subject) => subject.id === subjectId);
-}
-
 /**
- * Nach jeder Änderung: die Ablage, das Blatt selbst und die Startseite. Die
- * Startseite zeigt die letzten Blätter — ohne sie bliebe dort das alte
- * Vorschaubild stehen.
+ * Nach jeder Änderung: die Ablage, das Blatt selbst, die Startseite und der
+ * Eingangskorb.
+ *
+ * Die Startseite zeigt die letzten Blätter — ohne sie bliebe dort das alte
+ * Vorschaubild stehen. Der Korb steht mit dabei, weil jede Aufnahme genau
+ * dorthin ein Blatt legt (`filed_at` bleibt leer) und jedes Löschen eines
+ * herausnimmt; ohne ihn zeigte er beim Blättern zurück eine Liste von vorhin.
+ * Dieselben vier Adressen frischt `revalidateInbox()` drüben auf — was hier
+ * fehlte, stünde dort noch im Stand von vor der Änderung.
  */
 function revalidateMaterial(id?: string): void {
   revalidatePath("/");
   revalidatePath("/material");
+  revalidatePath("/material/eingang");
   if (id) revalidatePath(`/material/${id}`);
 }
 
@@ -240,7 +233,7 @@ export async function captureMaterialAction(
     };
   }
 
-  if (await subjectMissing(user.id, parsed.data.subjectId)) {
+  if (!(await ownsSubject(user.id, parsed.data.subjectId))) {
     return { ok: false, message: "Dieses Fach gibt es nicht mehr." };
   }
 
@@ -347,10 +340,13 @@ export async function updateMaterialAction(
   });
 
   if (!parsed.success) {
-    return { saves: state.saves, errors: fieldErrors(parsed.error.issues) };
+    return {
+      saves: state.saves,
+      ...formErrors<MaterialErrorField>(parsed.error.issues),
+    };
   }
 
-  if (await subjectMissing(user.id, parsed.data.subjectId)) {
+  if (!(await ownsSubject(user.id, parsed.data.subjectId))) {
     return {
       saves: state.saves,
       errors: { subjectId: "Dieses Fach gibt es nicht mehr." },
@@ -368,25 +364,49 @@ export async function updateMaterialAction(
       .getAll("themen")
       .filter((value): value is string => typeof value === "string");
 
-    const { verworfen, zusammengefallen } = await setMaterialTopics(
+    const { verworfen, zusammengefallen, umbenannt } = await setMaterialTopics(
       user.id,
       id,
       titles,
     );
 
+    // **Speichern heißt durchgesehen.** Das ist der dritte Ort, an dem
+    // `filed_at` gesetzt wird, und ohne ihn hätte der Eingangskorb ein Loch in
+    // seiner Hauptschleife: die Kamera schickt nach jeder Aufnahme genau
+    // hierher (siehe capture-button.tsx), hier bekommt das Blatt seinen Titel
+    // und seine Themen — und ohne diese Zeile stünde es danach trotzdem
+    // unverändert im Korb. Der Korb füllte sich bei jeder Auslösung und leerte
+    // sich auf dem Weg, den die App selbst anbietet, nie.
+    //
+    // Still ist das trotzdem nicht: umgeschaltet wird nur, wenn das Blatt
+    // wirklich noch wartete (`markFiled()` fasst einen gesetzten Zeitpunkt
+    // nicht noch einmal an), und genau dann steht es unten im Satz. Wer bloß
+    // eine Notiz an einem längst eingeordneten Blatt richtigstellt, liest
+    // deshalb nichts davon.
+    const abgehakt = await markFiled(user.id, id, true);
+
     revalidateMaterial(id);
 
     const saves = (state.saves ?? 0) + 1;
 
-    // Zusammengefallen ist kein Fehler, sondern Absicht: zwei Schreibweisen,
-    // ein Thema. Deshalb steht es in der ruhigen Bestätigung und nicht in Rot
-    // unter dem Feld — es erklärt bloß, warum ein Chip weniger dasteht.
+    // Drei Sorten Nachricht, und keine davon ist ein Fehler — deshalb stehen
+    // sie alle in der ruhigen Bestätigung und nicht in Rot unter einem Feld.
+    // „Zusammengefallen" erklärt, warum ein Chip weniger dasteht;
+    // „umbenannt", warum einer anders heißt, als er getippt wurde; und das
+    // Abhaken, warum das Blatt gleich aus dem Korb verschwindet.
     const notice = [
       "Gespeichert.",
       ...zusammengefallen.map(
         ({ getippt, thema }) =>
           `„${getippt}“ meint dasselbe Thema wie „${thema}“ — es steht einmal am Blatt.`,
       ),
+      ...umbenannt.map(
+        ({ getippt, thema }) =>
+          `„${getippt}“ führt dieses Fach als „${thema}“ — so steht es jetzt am Blatt.`,
+      ),
+      ...(abgehakt === "gesetzt"
+        ? ["Damit ist es durchgesehen und liegt nicht mehr im Eingangskorb."]
+        : []),
     ].join(" ");
 
     if (verworfen.length > 0) {

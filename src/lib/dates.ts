@@ -103,12 +103,21 @@ export function isCalendarDate(value: string): boolean {
 let berlinFormat: Intl.DateTimeFormat | null = null;
 
 /**
- * Das heutige Datum in Berlin. "sv-SE" ist der kürzeste Weg zu YYYY-MM-DD,
- * die schwedische Schreibweise entspricht genau ISO.
+ * Der Kalendertag, auf den ein Zeitpunkt in Berlin fällt. "sv-SE" ist der
+ * kürzeste Weg zu YYYY-MM-DD, die schwedische Schreibweise entspricht genau
+ * ISO.
  *
- * Der Zeitpunkt ist optional übergebbar, damit sich Tageswechsel testen lassen.
+ * Es gibt sie neben `todayInBerlin()`, obwohl beide dasselbe rechnen, und der
+ * Grund ist der Name. Fast alle Datumsspalten dieser App sind reine
+ * Kalendertage; die wenigen Zeitpunkte — `homework.completedAt`,
+ * `materials.filedAt` — werden trotzdem als Tag angezeigt. `todayInBerlin(x)`
+ * mit einem Zeitstempel von letzter Woche aufzurufen, funktioniert, liest sich
+ * aber als Fehler: „heute" ist es dann gerade nicht. Wer das umgeht, indem er
+ * sich in einer Seite ein eigenes `Intl.DateTimeFormat` baut, hat die Zeitzone
+ * ein zweites Mal hingeschrieben — und `toISOString()` statt dessen gäbe UTC,
+ * womit ein um 0:30 Uhr abgehaktes Blatt den Tag von gestern trüge.
  */
-export function todayInBerlin(now: Date = new Date()): string {
+export function berlinDay(instant: Date): string {
   berlinFormat ??= new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Europe/Berlin",
     year: "numeric",
@@ -116,7 +125,18 @@ export function todayInBerlin(now: Date = new Date()): string {
     day: "2-digit",
   });
 
-  return berlinFormat.format(now);
+  return berlinFormat.format(instant);
+}
+
+/**
+ * Das heutige Datum in Berlin.
+ *
+ * Der Zeitpunkt ist optional übergebbar, damit sich Tageswechsel testen lassen.
+ * Für einen Zeitpunkt, der ausdrücklich nicht „jetzt" ist, gibt es
+ * `berlinDay()` — dieselbe Rechnung unter dem Namen, der dann stimmt.
+ */
+export function todayInBerlin(now: Date = new Date()): string {
+  return berlinDay(now);
 }
 
 let berlinTime: Intl.DateTimeFormat | null = null;

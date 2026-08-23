@@ -3,14 +3,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CaptureButton } from "@/components/material/capture-button";
+import { ButtonLink } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
 import { subjectColor } from "@/lib/colors";
-import { formatGerman, todayInBerlin } from "@/lib/dates";
+import { berlinDay, formatGerman, todayInBerlin } from "@/lib/dates";
 import { MAX_PAGES, formatBytes } from "@/lib/images";
 import { getMaterial } from "@/lib/materials";
 import { listTopicsForSubjects } from "@/lib/subject-topics";
 import { listSubjects } from "@/lib/subjects";
 
+import { markFiledAction } from "../eingang/actions";
+import { SubmitButton } from "../eingang/proposal-form";
 import {
   deleteMaterialAction,
   deletePageAction,
@@ -43,6 +46,7 @@ import {
 export const metadata: Metadata = {
   title: "Blatt",
 };
+
 
 export default async function MaterialDetailPage({
   params,
@@ -125,6 +129,37 @@ export default async function MaterialDetailPage({
 
         <p className="mt-1 text-muted">{formatGerman(item.capturedOn)}</p>
 
+        {/* Die Themen dieses Blattes — hier zum Nachgehen und nicht zum
+            Ändern.
+
+            Dieselben Titel stehen unten im Formular noch einmal, und das ist
+            Absicht: dort sind sie die Angabe des Blattes und lassen sich
+            abwählen, hier sind sie der Weg zu allem anderen, was zu diesem
+            Thema herumliegt. Zwei verschiedene Handlungen dürfen nicht auf
+            demselben Chip liegen — ein Chip, der beim Antippen mal das Blatt
+            ändert und mal die Seite wechselt, ist nicht zu bedienen.
+
+            Deshalb steht diese Zeile oben im Kopf, bei dem, was das Blatt IST,
+            und nicht neben dem Formular, in dem man es umschreibt. Sie kostet
+            keine Abfrage: `item.topics` ist längst geladen.
+
+            Hat das Blatt kein Thema, steht hier nichts. Ein „keine Themen“
+            wäre ein Vorwurf an eine Stelle, an der man gerade nichts vorhat —
+            angeschrieben wird ein Blatt unten im Formular. */}
+        {item.topics.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {item.topics.map((topic) => (
+              <Link
+                key={topic.id}
+                href={`/material?thema=${topic.id}`}
+                className="inline-flex min-h-11 max-w-full items-center rounded-pill border border-border bg-surface px-3.5 text-sm text-muted transition-colors hover:border-border-strong hover:text-foreground"
+              >
+                <span className="truncate">{topic.title}</span>
+              </Link>
+            ))}
+          </div>
+        ) : null}
+
         {/* Die Zahl ist die Summe der Vollbilder — das, was die Seiten dieses
             Blattes wiegen, und nicht der Platz, den es in der Datenbank
             belegt. Zu jeder Seite liegt dort zusätzlich eine Vorschau
@@ -181,6 +216,52 @@ export default async function MaterialDetailPage({
         allArchived={active.length === 0}
         remaining={MAX_PAGES - item.pages.length}
       />
+
+      {/*
+        * Der Zustand des Blattes gegenüber dem Eingangskorb — und die beiden
+        * Wege, die es sonst nirgends gibt.
+        *
+        * Ohne diesen Abschnitt war ein durchgesehenes Blatt ohne offenen
+        * Vorschlag eine Sackgasse: der Korb zeigt es dann nicht mehr (er zeigt
+        * nur, was `filed_at` leer hat oder einen Vorschlag trägt), und damit
+        * gab es keinen Knopf mehr, der es zurückholt. Der steht jetzt hier, wo
+        * das Blatt selbst steht.
+        *
+        * „Vorschlag anlegen" gehört aus einem zweiten Grund hierher, und der
+        * ist eine Regel des Projekts: alles, was ein Agent kann, muss ich auch
+        * können. Ein Agent darf zu JEDEM Blatt einen Vorschlag schreiben, auch
+        * zu einem längst abgehakten; über den Korb ging das nur bei Blättern,
+        * die ohnehin darin lagen. Jetzt geht es überall dort, wo ein Blatt
+        * steht.
+        *
+        * Der Satz über den beiden Knöpfen sagt den Zustand und nicht die
+        * Handlung — die steht auf den Knöpfen. Bei einem Blatt, das noch
+        * wartet, sagt er außerdem, was das Speichern gleich tun wird: das
+        * Formular darüber hakt ab, und was still geschähe, gehört auf den
+        * Bildschirm, bevor es passiert.
+        */}
+      <section className="space-y-3 rounded-card border border-border bg-surface p-4 sm:p-5">
+        <p className="text-sm text-muted">
+          {item.filedAt
+            ? `Durchgesehen am ${formatGerman(berlinDay(item.filedAt))}.`
+            : "Dieses Blatt liegt noch im Eingangskorb. Speicherst du unten, gilt es als durchgesehen."}
+        </p>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {item.filedAt ? (
+            <form action={markFiledAction.bind(null, item.id, false)}>
+              <SubmitButton>Wieder in den Eingangskorb</SubmitButton>
+            </form>
+          ) : null}
+
+          <ButtonLink
+            href={`/material/eingang/neu?blatt=${item.id}`}
+            variant="secondary"
+          >
+            Vorschlag anlegen
+          </ButtonLink>
+        </div>
+      </section>
 
       <MaterialForm
         action={updateMaterialAction.bind(null, item.id)}

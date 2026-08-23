@@ -47,7 +47,7 @@ npm run build && npm run start
 | `npm run db:push` | Schemaänderungen in die Datenbank übertragen |
 | `npm run db:studio` | Datenbank im Browser ansehen |
 | `npm run db:backup` | Kopie der lokalen Datenbank nach `.backups/` |
-| `npm test` | 253 Tests in 52 Suiten — die reine Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala, Themen-Titel, Bildmaße, die Zahlen der Startseite und das Formular der Ablage |
+| `npm test` | 309 Tests in 56 Suiten — die reine Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala, Themen-Titel, Bildmaße, die Zahlen der Startseite, das Formular der Ablage, die Vorbelegung aus einem Vorschlag und die Verteilung der Fehlermeldungen |
 | `npm run lint` | ESLint |
 
 ## Aufbau
@@ -67,7 +67,9 @@ src/
       noten/          Schnitt je Fach und gesamt, eintragen und ändern;
                       fach/ zeigt ein Fach mit allen seinen Noten
       material/       die Ablage: abfotografierte Blätter mit Fach, Themen
-                      und Datum; [id] zeigt eins mit allen seinen Seiten
+                      und Datum; [id] zeigt eins mit allen seinen Seiten,
+                      eingang/ ist der Eingangskorb — was noch keiner
+                      durchgesehen hat, und die Vorschläge dazu
       faecher/        Fächer mit Farbe, Kürzel und Gewichtung
       einstellungen/  Erinnerungen, Darstellung, Konto
     api/
@@ -116,7 +118,13 @@ src/
     images.ts       auf welche Maße ein Foto verkleinert wird und wie
                     eine Dateigröße auf Deutsch heißt (getestet)
     materials.ts    Datenzugriff für die Blätter, ihre Seiten und die
-                    Themen daran; Titelvorschlag und Formular getestet
+                    Themen daran, dazu der Filter nach einem Thema;
+                    Titelvorschlag und Formular getestet
+    inbox.ts        der Eingangskorb: was noch keiner durchgesehen hat, die
+                    Vorschläge dazu und die Vorbelegung des Handformulars
+                    daraus (getestet)
+    form-errors.ts  wo eine zod-Meldung landet — unter ihrem Feld oder über
+                    dem ganzen Formular (getestet)
     theme.ts        hell, dunkel oder dem Gerät überlassen
 ```
 
@@ -153,6 +161,31 @@ braucht keine Bildbibliothek. Die Vorschau steht als eigene Spalte daneben,
 weil die Ablage bis zu zweihundert Bilder auf einmal zeigt: als Vorschauen
 sind das rund 3 MB, als Vollbilder wären es rund 50 MB.
 
+**Der Eingangskorb ist die einzige Tür in den Bestand.** Ein frisch
+aufgenommenes Blatt heißt „Blatt vom 21.8." und trägt kein Thema — es liegt im
+Korb (`materials.filed_at` ist leer), bis jemand hingesehen hat. Daneben liegen
+Vorschläge: ein Fach, ein Titel, ein Tag, eine Notiz, Themen — jedes Feld darf
+fehlen, und leer heißt überall „das bleibt, wie es am Blatt steht" — mit einer
+Ausnahme: wechselt ein Vorschlag das Fach, fallen die Themen des Blattes weg,
+weil sie dem Vokabular des alten Fachs gehören. Ein
+Vorschlag ändert nichts. Übernehmen heißt: dasselbe Handformular wie überall
+sonst, vorbelegt und Feld für Feld änderbar, und erst der Knopf darunter
+schreibt — durch dieselbe Prüfung (`materialInputSchema`) und dieselbe
+Datenschicht wie ein von Hand ausgefülltes Formular. Deshalb lässt sich alles,
+was ein Agent später vorschlagen wird, heute schon von Hand anlegen und ändern;
+alle Vorschläge, die es gibt, sind genau so entstanden.
+
+**„Was habe ich zur Kettenregel?"** beantwortet die Ablage: `?thema=…` neben
+`?fach=…`, eine zweite Chip-Zeile mit den Themen des gewählten Fachs, und die
+Themen eines Blattes sind im Kopf seiner Seite antippbar. Ein Thema gehört zu
+genau einem Fach — damit bestimmt das Thema das Fach, und wenn in der Adresse
+beides steht und sich widerspricht, gewinnt das Thema. Die Zahl in der
+Themenpflege („3 Blätter") und der Filter rechnen dabei mit demselben
+SQL-Ausdruck über `coalesce(merged_into, id)` — sie meinen also dieselbe Menge
+Blätter. Die Liste zeigt davon höchstens `LIST_LIMIT` und sagt es, wenn sie an
+dieser Grenze steht; die Zahl daneben ist ungedeckelt und damit die größere,
+sobald ein Thema über zweihundert Blätter trägt.
+
 **Die Noten rechnen ehrlich.** Der Fachschnitt besteht aus zwei Töpfen,
 schriftlich und mündlich, gewichtet nach dem, was am Fach eingestellt ist. Ist
 ein Topf noch leer, zählt er gar nicht — nicht als Vier und nicht als Null.
@@ -174,16 +207,18 @@ einem echten Postgres. Der Anwendungscode merkt davon nichts.
 DATABASE_URL=postgres://user:pass@host/db
 ```
 
-Nach Änderungen an `src/db/schema.ts` immer `npm run db:push` ausführen. Zuletzt
-kamen mit der Ablage die drei Tabellen `materials`, `material_pages` und
-`material_topics` dazu. **Ohne Push bleibt nicht nur der Materialbereich
+Nach Änderungen an `src/db/schema.ts` immer `npm run db:push` ausführen. Mit
+der Ablage kamen die drei Tabellen `materials`, `material_pages` und
+`material_topics` dazu, mit dem Eingangskorb die Spalte `materials.filed_at`
+und die beiden Tabellen `material_proposals` und `material_proposal_topics`. **Ohne Push bleibt nicht nur der Materialbereich
 stehen, sondern die ganze Startseite** — sie lädt die letzten Blätter mit.
 
 > Bricht `db:push` wegen der Rückfrage unten ab, liegt dieselbe Änderung als
 > reines SQL bereit:
 >
 > ```bash
-> npx tsx scripts/sql-einspielen.ts scripts/material-tabellen.sql
+> npx tsx scripts/sql-einspielen.ts scripts/material-tabellen.sql   # die Ablage
+> npx tsx scripts/sql-einspielen.ts scripts/eingangskorb-tabellen.sql
 > ```
 >
 > Sie ist rein additiv (nur `CREATE TABLE`, die Fremdschlüssel der neuen
@@ -299,10 +334,19 @@ zur Frage „was brauche ich noch für eine 2?".
 Handy eine Wischgeste links vom Kachelmenü und schlägt das Fach der Stunde vor,
 die gerade läuft. Ein Blatt trägt mehrere Seiten, ein Fach, ein Datum, eine
 Notiz und beliebig viele Themen aus dem Vokabular seines Fachs. Die Ablage
-unter *Material* filtert nach Fach.
+unter *Material* filtert nach Fach **und nach Thema**.
+
+**Eingangskorb** — unter *Material → Eingangskorb*. Darin liegt, was
+aufgenommen, aber noch nicht durchgesehen wurde, und jeder Vorschlag, der auf
+eine Entscheidung wartet. Abhaken, Vorschlag von Hand anlegen und ändern,
+verwerfen — und übernehmen, mit dem vollen Handformular und einer
+Gegenüberstellung dessen, was der Vorschlag am Blatt ändern würde. Der Weg
+dorthin steht in der Ablage immer und auf der Startseite dann, wenn wirklich
+etwas wartet.
 
 Alles steht auch auf der Startseite: als Kachel, in der Tagesspur, auf der
 Kameraseite und im Dashboard. Damit sind die vier geplanten Ausbaustufen aus
-KONZEPT.md gebaut und von der fünften die ersten beiden Stufen — das
-Themen-Vokabular und die Ablage. Was noch fehlt, ist der Eingangskorb und der
-Weg für einen Agenten (Web MCP).
+KONZEPT.md gebaut und von der fünften die ersten drei — das Themen-Vokabular,
+die Ablage und der Eingangskorb. Was noch fehlt, ist der Weg für einen Agenten
+(Web MCP). Wie er angestoßen wird, ist entschieden und steht in KONZEPT.md: von
+Hand, in der Claude-App.

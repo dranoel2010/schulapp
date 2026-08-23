@@ -259,6 +259,10 @@ function homeData(overrides: Partial<HomeData> = {}): HomeData {
       perSubject: [],
     },
     materials: [],
+    // Der Eingangskorb ist leer: dayLine, captureSubject und findNextLesson
+    // rechnen nicht mit ihm. Eine Zahl über null stünde hier als Behauptung
+    // über Blätter, die diese Vorgabe gar nicht hat (`materials: []`).
+    inboxCount: 0,
     ...overrides,
   };
 }

@@ -143,7 +143,8 @@ einer Note nicht mehr zu schaffen.
       daraus, Pflege unter `/faecher/<id>/themen`~~ **fertig**
    2. ~~**Kamera und Ablage** — Blätter aufnehmen, speichern, Fach und Thema
       zuordnen. Ohne KI, und für sich schon nützlich~~ **fertig**
-   3. **Eingangskorb** — Vorschläge, die man bestätigt, mit vollem Handformular
+   3. ~~**Eingangskorb** — Vorschläge, die man bestätigt, mit vollem
+      Handformular~~ **fertig**
    4. **Web MCP** — die App bietet ihre Fähigkeiten als Tools an, ein Agent in
       Claude benutzt sie
 
@@ -182,12 +183,93 @@ zwischengespeichert werden, weil die Bytes einer Seite sich nie ändern: ein
 neues Foto ist eine neue Zeile mit einer neuen Adresse. Aber nur privat — kein
 geteilter Cache hebt ein fremdes Schulblatt auf.
 
+**„Was habe ich zur Kettenregel?" ist eine Frage an die Ablage.** Sie filtert
+deshalb nicht nur nach Fach, sondern auch nach Thema (`?thema=…` neben
+`?fach=…`): unter der Fach-Zeile steht eine zweite Chip-Zeile mit den Themen
+des gewählten Fachs, und die Themen eines Blattes sind im Kopf seiner Seite
+antippbar. Ein Thema gehört zu genau einem Fach — damit ist die Frage
+vollständig gestellt, das Fach steckt in ihr schon drin, und wenn in der
+Adresse beides steht und sich widerspricht, gewinnt das Thema.
+
+Gezeigt werden nur Themen, unter denen auch etwas liegt; ein Chip auf eine
+leere Liste ist eine Sackgasse. Und die Zahl in der Themenpflege („3 Blätter")
+und die Länge der gefilterten Liste rechnen mit **demselben** SQL-Ausdruck über
+`coalesce(merged_into, id)` — sonst sagte die eine Ansicht drei und die andere
+zeigte eines, und von außen wäre nicht zu sehen, welche lügt.
+
 **Aufgenommen wird am Handy links.** Die Startseite hat dort drei wischbare
 Seiten: Kamera, Kachelmenü, Tagesspur. Der Weg zum Auslöser ist die
 Wischrichtung, in der nicht der Tagesablauf steht. Vorgeschlagen wird das Fach
 der Stunde, die gerade läuft — aber nur, wenn es die App wirklich weiß und das
 Fach nicht abgewählt ist. Ein falsch vorbelegtes Fach rutscht unbemerkt durch,
 und ein Blatt im falschen Fach findet später niemand wieder.
+
+## Der Eingangskorb
+
+Ein frisch ausgelöstes Foto heißt „Blatt vom 21.8." und trägt kein Thema. Es
+ist damit gespeichert und wiederauffindbar, aber noch nicht eingeordnet — und
+genau dieser Zustand ist der Korb. Am Blatt steht dafür ein **Zeitpunkt und
+kein Häkchen** (`filed_at`), aus demselben Grund wie bei den Hausaufgaben: ein
+Häkchen kann mit dem Rest der Zeile in Widerspruch geraten, ein Zeitpunkt
+nicht — und „seit wann liegt das da?" ist ohne eine zweite Spalte beantwortet.
+Gesetzt wird er an drei Stellen, und alle drei heißen dasselbe: ein Mensch hat
+hingesehen. Abhaken im Korb, Speichern am Blattformular, Übernehmen eines
+Vorschlags. Zurücknehmen geht auch; die Spalte geht dann wieder auf leer, und
+gelöscht wird dabei nichts.
+
+Daneben liegen **Vorschläge**. Ein Vorschlag ist der Entwurf eines
+Blattformulars: Fach, Titel, Tag, Notiz, Themen — **jedes Feld darf leer
+bleiben, und leer heißt überall dasselbe**, nämlich „dazu sage ich nichts, es
+bleibt, wie es am Blatt steht". Wer nur die Themen erkennt, muss keinen Titel
+erfinden.
+
+```
+Blatt ─── Vorschlag ─── Thema   freier Text, noch kein Verweis ins Vokabular
+             Herkunft (von Hand | vom Agenten)
+             Fach, Titel, Tag, Notiz — jedes einzeln, jedes darf fehlen
+```
+
+**Eine Ausnahme hat „leer heißt: es bleibt".** Wechselt ein Vorschlag das
+Fach und schweigt zu den Themen, fallen die Themen des Blattes trotzdem weg.
+Sie gehören dem Vokabular des alten Fachs — „Kettenregel" ist ein Thema von
+Mathematik —, und stehenzulassen hieße, sie im neuen Fach neu anzulegen: ein
+Fachwort in Physik, das dort nie jemand getippt hat, und Themen lassen sich
+nirgends löschen. Dieselbe Entscheidung trifft das Blattformular schon, nur
+sichtbarer: dort leert ein Fachwechsel die Chips vor den Augen. Nennt der
+Vorschlag eigene Themen, gelten die — auch im neuen Fach; dann ist es keine
+Mitnahme, sondern eine Aussage, und sie steht in der Gegenüberstellung.
+
+Die Themen eines Vorschlags sind **freier Text** und ausdrücklich kein Verweis
+ins Vokabular. Am Blatt ist es einer, damit „Kettenregel" und „kettenregel "
+dasselbe Thema sind. Ein Vorschlag darf aber ein Thema nennen, das es im
+Vokabular noch gar nicht gibt — beim Lesen eines Blattes ist das der Normalfall.
+Müsste er dafür eine Vokabel anlegen, schriebe er in den Bestand, und zwar
+bevor jemand zugestimmt hat. Aus Text wird eine Vokabel erst beim Übernehmen,
+durch dieselbe Tür wie beim Tippen im Formular.
+
+**Er ändert nichts.** Übernehmen heißt: dasselbe Handformular wie überall
+sonst, mit den Werten des Vorschlags vorbelegt, Feld für Feld änderbar — und
+erst der Knopf darunter schreibt, durch dieselbe Prüfung und dieselbe
+Datenschicht wie ein von Hand ausgefülltes Formular. Es gibt keine zweite Tür
+in den Bestand. Daneben steht, was der Vorschlag am Blatt ändern würde,
+gegenübergestellt; ändert er nichts, sagt die Seite auch das.
+
+Ein Vorschlag trägt seine **Herkunft** — von Hand oder von einem Agenten. Das
+ist keine Statistik. Ein Vorschlag vom Agenten ist aus dem Inhalt eines Blattes
+abgeleitet, also aus etwas, das die App nicht geschrieben hat; er wird deshalb
+als solcher angeschrieben, bevor man ihn bestätigt.
+
+**Es gibt keinen Zustand „übernommen" oder „verworfen".** Eine Zeile in der
+Vorschlagstabelle ist ein offener Vorschlag, sonst nichts — entschieden heißt:
+die Zeile ist weg. Ein Entwurf trägt keine Geschichte; was aus ihm wurde, steht
+danach am Blatt, und das Blatt ist die Sache, die Geschichte trägt. Mit einem
+Zustand liefe die Tabelle mit toten Entwürfen voll, die niemand mehr liest, und
+jede Abfrage des Korbs müsste darum herumfiltern.
+
+Heute gibt es keinen Agenten, also entstehen **alle Vorschläge von Hand**. Das
+ist keine Übungsaufgabe: es ist der Beweis, dass die Tür trägt, bevor jemand
+hindurchgeht. Dieselbe Regel gilt schon bei der Themenpflege, und sie gilt hier
+weiter.
 
 ## Wie die KI angeschlossen wird
 
@@ -199,6 +281,45 @@ ruft nie ein Modell auf, er wird gerufen; deshalb kostet dieser Weg kein
 API-Guthaben, sondern läuft über das Abo. Die Tools sitzen dabei **neben** den
 Server Actions auf derselben `src/lib` und nicht darüber: eine Server Action
 endet mit `redirect()`, und das wirft intern — ein Tool bekäme nie ein Ergebnis.
+
+**Angestoßen wird der Agent von Hand, in der Claude-App.** Das ist entschieden,
+und zwar aus drei Gründen, von denen keiner der Preis ist. Ein Blatt kostet als
+Bild rund 4 500 Tokens; bei zweihundert Blättern im Schuljahr sind das ein bis
+drei Euro, je nach Modell. Über drei Euro entscheidet man nicht.
+
+Entschieden hat es dies:
+
+Erstens liegt dieser Weg ohnehin auf dem Weg. Die App bietet ihre Fähigkeiten
+als Tools an — das ist Stufe 4 und steht unabhängig davon fest, weil die Frage
+„was habe ich zur Kettenregel?" einen Agenten braucht, der lesen kann. Der
+Handgriff in der Claude-App ist genau dieser Weg plus die Gewohnheit, ihn zu
+gehen. Ein Aufruf aus der App heraus käme obendrauf und ersetzte nichts.
+
+Zweitens ließe sich der andere Weg gar nicht beurteilen, bevor dieser einmal
+gelaufen ist. Ob die Erkennung bei einer Handschrift taugt, weiß man erst,
+wenn man fünf Blätter durchgeschickt hat — und das kostet auf diesem Weg
+nichts. Taugt sie nicht, wäre ein Aufruf nach jeder Aufnahme das Gegenteil
+einer Erleichterung: er füllte den Korb mit Vorschlägen, die ohnehin von Hand
+nachgetippt werden.
+
+Drittens stimmt „sicherheitsseitig sind alle Wege gleich" nur für die
+Schreibrichtung. Dort gilt er ohne Abstriche: kein Vorschlag kommt ohne
+Bestätigung in den Bestand, egal wer ihn geschrieben hat. Für die Leserichtung
+gilt er nicht. Fragt die App selbst ein Modell, bekommt sie einen Schlüssel,
+der Geld ausgeben kann, und eine ausgehende Verbindung zu einem Dritten — und
+sie wird selbst zu der Stelle, die ein nicht vertrauenswürdiges Blatt einem
+Modell vorlegt. In der Claude-App ist der Schadensradius einer verunglückten
+Anweisung auf einem Blatt ein Chatverlauf.
+
+**Der andere Weg bleibt offen, und offen halten ihn genau zwei Zeilen.** Sollte
+sich der Handgriff als lästig erweisen, kommt ein Knopf an den Eingangskorb,
+der denselben Vorschlag von der App aus holt. Dafür muss sich am Korb nichts
+ändern: ein Vorschlag trägt seine Herkunft (`manuell` oder `agent`), und ein
+solcher Knopf wäre bloß ein weiterer Schreiber auf dieselbe Tabelle. Was
+ausdrücklich nicht kommt, ist der Aufruf nach jeder Aufnahme: er feuert im
+Unterricht, auf einer Verbindung, die es im Schulnetz oft nicht gibt, und
+bräuchte dafür eine Warteschlange und einen Fehlerzustand je Blatt — während
+ein Knopf den zweiten Versuch geschenkt bekommt.
 
 Zwei Regeln stehen darüber:
 
@@ -216,6 +337,12 @@ die Claude-App — dort steht kein Bash und kein Zugriff auf das Repo daneben.
 ## Offene Punkte
 
 - Fächerliste (kommt beim ersten Einrichten in der App)
+- **Ob die Erkennung bei der eigenen Handschrift taugt, ist noch nicht
+  gemessen.** Der Weg dorthin kostet nichts: fünf Blätter in die Claude-App,
+  hinsehen. Erst danach lässt sich sagen, ob ein Knopf „Vorschläge holen" an
+  der App überhaupt lohnt (siehe oben) — bei schlechter Erkennung wird ohnehin
+  jeder Vorschlag nachgetippt, und dann füllt ein automatischer Aufruf den Korb
+  mit Arbeit, statt sie abzunehmen.
 - **Die Oberstufe bringt zwei Änderungen auf einmal.** In der 11. gibt es Punkte
   0–15 statt Noten 1–6, und spätestens dann braucht die App Halbjahre: heute
   liegen alle Noten in einem Topf, und eine Themenliste über zwei Schuljahre

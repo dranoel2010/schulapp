@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
@@ -17,8 +17,8 @@ import {
   MAX_THUMB_BYTES,
   isAllowedMime,
 } from "@/lib/images";
-import { ensureTopics } from "@/lib/subject-topics";
-import { normalizeTopics } from "@/lib/topics";
+import { ensureTopics, resolveTopic } from "@/lib/subject-topics";
+import { normalizeTopics, topicKey } from "@/lib/topics";
 
 /**
  * Abfotografierte Blätter — Validierung und Datenzugriff.
@@ -156,6 +156,37 @@ export type MaterialFormState = {
 export type MaterialTopicRef = { id: string; title: string };
 
 /**
+ * Das Thema, nach dem die Ablage filtert — aufgelöst, benannt und einem Fach
+ * zugeordnet.
+ *
+ * Ein eigener Typ und nicht `MaterialTopicRef`, obwohl zwei der drei Felder
+ * gleich heißen: der Ref ist ein Chip UNTER einem Blatt, hier steht das eine
+ * Thema ÜBER der ganzen Liste. Nähme man denselben Typ, ließe sich das eine
+ * versehentlich für das andere einsetzen — und `subjectId` fehlte dem Ref
+ * ohnehin, obwohl die Chip-Zeile genau danach fragt.
+ */
+export type MaterialTopicFilter = {
+  /**
+   * Die id, nach der wirklich gefiltert wird — bei einer zusammengelegten
+   * Schreibweise das Ziel und nicht die angefragte Zeile.
+   *
+   * Die Oberfläche braucht genau diese und nicht die aus der Adresszeile: der
+   * Chip, der gerade gilt, trägt `aria-current`, und der wird über diese id
+   * gefunden. Käme die angefragte id zurück, stünde nach einem alten
+   * Lesezeichen eine volle Liste da und kein einziger Chip wäre hervorgehoben.
+   */
+  id: string;
+  /** Der Titel des Ziels, also die Schreibweise, die das Fach jetzt führt. */
+  title: string;
+  /**
+   * Das Fach, zu dem das Thema gehört. Die Ablage kann zugleich nach Fach
+   * gefiltert sein; erst damit lässt sich sagen, ob die beiden Filter
+   * überhaupt zusammenpassen.
+   */
+  subjectId: string;
+};
+
+/**
  * Was aus den getippten Themen eines Blattes geworden ist.
  *
  * Die Schlüssel sind deutsch wie die Sätze, die daraus auf dem Bildschirm
@@ -169,6 +200,23 @@ export type MaterialTopicResult = {
   verworfen: string[];
   /** Getippte Titel, die dieselbe Vokabel meinen wie ein früherer. */
   zusammengefallen: { getippt: string; thema: string }[];
+  /**
+   * Getippte Titel, die das Fach unter einer anderen Schreibweise schon führt
+   * — am Blatt steht danach die des Fachs.
+   *
+   * „Kettenregel Übungen" landet als „Kettenregel", wenn das Fach diese Zeile
+   * schon hat: `vocabularyKey()` faltet beide auf denselben Schlüssel, und
+   * `ensureVocabulary()` gibt die gespeicherte Zeile zurück, nicht die
+   * getippte. Ohne diese Liste fiele das zwischen den beiden anderen hindurch
+   * — `verworfen` greift nur ohne Fachwort, `zusammengefallen` nur bei ZWEI
+   * getippten Titeln auf derselben Vokabel. Ein einzelner Titel verschwände
+   * kommentarlos, und wer ihn getippt hat, fände ihn nirgends wieder.
+   *
+   * Nur, wenn der Unterschied über Rand und Groß-/Kleinschreibung hinausgeht:
+   * „kettenregel" zu „Kettenregel" ist keine Nachricht, sondern das, was jede
+   * Vokabelliste tut.
+   */
+  umbenannt: { getippt: string; thema: string }[];
 };
 
 /**
@@ -213,7 +261,20 @@ export type MaterialListItem = {
 export type MaterialCard = Omit<MaterialListItem, "topics">;
 
 /** Ein Blatt mit allen seinen Seiten. */
-export type MaterialDetail = MaterialListItem & { pages: MaterialPageInfo[] };
+export type MaterialDetail = MaterialListItem & {
+  pages: MaterialPageInfo[];
+  /**
+   * Wann das Blatt durchgesehen wurde; leer heißt: es liegt im Eingangskorb.
+   *
+   * Nur am Detail und nicht an jeder Zeile einer Liste. Die Ablage zeigt den
+   * Zustand nicht — sie ist die Suche, nicht die Arbeitsliste —, und die
+   * gemeinsame Feldliste aller Listen um eine Spalte zu erweitern, die
+   * zweihundertmal geholt und keinmal gelesen wird, wäre der falsche Preis.
+   * Die Detailseite braucht sie: dort steht, ob das Blatt noch wartet, und
+   * dort liegt der Weg zurück in den Korb.
+   */
+  filedAt: Date | null;
+};
 
 /**
  * Eine frisch aufgenommene Seite, so wie sie aus der Server Action kommt.
@@ -229,15 +290,43 @@ export type NewPage = {
   thumb: Uint8Array;
 };
 
-/** Wonach sortiert wird und wie viele Blätter höchstens herauskommen. */
+/**
+ * Wonach gefiltert und sortiert wird und wie viele Blätter höchstens
+ * herauskommen.
+ *
+ * `subjectId` und `topicId` dürfen zusammen gesetzt sein und wirken dann
+ * beide: „Mathematik" UND „Kettenregel". Sie schließen einander nicht aus,
+ * denn die Ablage filtert erst nach Fach und dann innerhalb des Fachs nach
+ * Thema — der zweite Filter dürfte den ersten nicht heimlich aufheben. Zeigt
+ * das Thema in ein anderes Fach als das gewählte, bleibt die Liste leer; das
+ * ist die ehrliche Antwort auf eine Frage, auf die es keine Blätter gibt, und
+ * nicht der Fehler eines von beiden.
+ *
+ * Beide Filter fallen bei einer kaputten, erfundenen oder fremden id auf eine
+ * LEERE Liste zurück und nicht auf die ungefilterte Ablage — der Grund steht
+ * an den beiden Zeilen in `listRows()`, die das tun.
+ */
 type ListOptions = {
   subjectId?: string;
+  /**
+   * Nur Blätter zu diesem Thema.
+   *
+   * Die id darf die einer zusammengelegten Schreibweise sein — ein alter Link,
+   * ein Lesezeichen aus der Zeit vor dem Aufräumen. Aufgelöst wird sie vor dem
+   * Filtern, gezeigt werden dann die Blätter des Ziels. Eine leere Liste wäre
+   * hier die falsche Antwort: die Blätter sind da, nur unter dem anderen
+   * Namen.
+   */
+  topicId?: string;
   limit?: number;
   order?: "schultag" | "aufnahme";
 };
 
 /**
  * Die Blätter samt ihren Themen, das neueste zuerst — für die Ablage.
+ *
+ * Gefiltert wird nach Fach und nach Thema, beides freiwillig und beides
+ * zusammen; was das im Einzelnen heißt, steht an `ListOptions`.
  *
  * Was „neueste" heißt, entscheidet `order` — und beide Antworten sind an je
  * einer Stelle die richtige:
@@ -284,6 +373,72 @@ export async function listMaterialCards(
   return listRows(userId, options);
 }
 
+/**
+ * Schlägt nach, welches Thema hinter einer id steckt — die eine Auflösung für
+ * den Themen-Filter.
+ *
+ * Die Oberfläche fragt hier, bevor sie überschreibt und hervorhebt: gibt es
+ * dieses Thema, wie heißt es jetzt, zu welchem Fach gehört es, und auf welche
+ * id ist es aufgelöst worden. `null` heißt: es gibt das Thema nicht, die id
+ * ist keine, oder sie gehört jemand anderem. Drei Fälle, eine Antwort — für
+ * den Nutzer sind sie dasselbe, und unterschieden würden sie nur, um einem
+ * Fremden zu verraten, welche ids es gibt.
+ *
+ * Aufgelöst wird mit `resolveTopic()` aus @/lib/subject-topics und nicht mit
+ * einer zweiten Fassung derselben Suche. Dort steht die Regel im Original:
+ * höchstens `MAX_ALIAS_HOPS` Schritte, und am Ende einer von Hand verbogenen
+ * Kette wird zurückgegeben, wo man steht, statt sich aufzuhängen. Zwei
+ * Fassungen wären genau die Art von Doppelung, bei der später zwei Türen
+ * verschieden entscheiden.
+ *
+ * **Aufgelöst wird EINMAL je Liste, hier, und nicht noch einmal in der
+ * Abfrage.** `listRows()` fragt diese Funktion am Anfang und vergleicht danach
+ * im SQL gegen genau diese eine id. Der andere Weg wäre, wie in `loadTopics()`
+ * mit einem `leftJoin` je Zeile aufzulösen — dort ist er richtig und hier
+ * falsch: dort trägt jedes Blatt seine eigenen Themen und die Auflösung muss
+ * Zeile für Zeile mitlaufen, hier steht EIN Thema fest und viele Blätter
+ * hängen daran. Ein Verbund, der bei jeder Zeile dieselbe Frage neu stellt,
+ * beantwortet sie zweihundertmal gleich. Und die Oberfläche braucht Titel und
+ * Fach ohnehin für den Chip — sie ruft dieselbe Funktion und baut sich keine
+ * zweite Auflösung.
+ *
+ * Zurück kommen drei Felder und nicht die ganze Zeile aus `subject_topics`.
+ * `matchKey`, `mergedInto` und `lastSeenAt` haben über einer Ablageliste
+ * nichts zu suchen: der Schlüssel ist nie zur Anzeige gedacht, und
+ * `mergedInto` lüde dazu ein, hinter dieser Auflösung noch einmal von Hand
+ * weiterzugehen.
+ *
+ * **Die Chip-Zeile über der Ablage kommt nicht von hier, sondern aus
+ * `listTopics()` in @/lib/subject-topics** — und die reicht dafür aus, ohne
+ * dass hier eine eigene Abfrage entstehen musste. Sie liefert je Thema
+ * `materialCount`; wer nur die Themen zeigen will, unter denen auch etwas
+ * liegt, nimmt die mit `materialCount > 0` und lässt den Rest weg. Ein Chip,
+ * der auf eine leere Liste führt, ist eine Sackgasse, und die Zahl daneben ist
+ * dieselbe, nach der der Filter hier sucht (siehe `materialIdsForTopic()`).
+ * Auch die beiden anderen Fragen beantwortet sie schon: zusammengelegte
+ * Schreibweisen bleiben ohne `includeMerged` draußen — sonst stünde derselbe
+ * Chip zweimal da, einmal unter dem alten und einmal unter dem neuen Namen —,
+ * und sortiert ist die Liste nach dem zuletzt gesehenen Tag, was für eine
+ * Chip-Zeile die richtige Reihenfolge ist: vorn steht, woran gerade gearbeitet
+ * wird. Eine eigene Funktion hier wäre eine zweite Wahrheit über dieselbe
+ * Menge gewesen.
+ *
+ * Eine Grenze hat die Zusage, und sie ist die alte: `listTopics()` zählt alle
+ * Blätter, die Liste zeigt höchstens `LIST_LIMIT`. Bei mehr als zweihundert
+ * Blättern zu einem einzigen Thema nennt der Chip also die größere Zahl — für
+ * diesen Fall steht unter der Ablage schon der Satz, dass die Liste an ihrer
+ * Grenze steht.
+ */
+export async function resolveMaterialTopic(
+  userId: string,
+  topicId: string,
+): Promise<MaterialTopicFilter | null> {
+  const topic = await resolveTopic(userId, topicId);
+  if (!topic) return null;
+
+  return { id: topic.id, title: topic.title, subjectId: topic.subjectId };
+}
+
 /** Ein einzelnes Blatt mit allen Seiten. */
 export async function getMaterial(
   userId: string,
@@ -292,7 +447,10 @@ export async function getMaterial(
   if (!isId(id)) return null;
 
   const [row] = await db
-    .select(MATERIAL_FIELDS)
+    // Die gemeinsame Feldliste plus die eine Spalte, die nur das Detail
+    // braucht — `filed_at`. Sie in `MATERIAL_FIELDS` zu legen hieße, sie in
+    // jeder Ablageliste mitzuholen, wo sie niemand liest.
+    .select({ ...MATERIAL_FIELDS, filedAt: materials.filedAt })
     .from(materials)
     .innerJoin(
       subjects,
@@ -326,7 +484,7 @@ export async function getMaterial(
     .where(eq(materialPages.materialId, id))
     .orderBy(asc(materialPages.sortOrder), asc(materialPages.createdAt));
 
-  return { ...item, pages };
+  return { ...item, pages, filedAt: row.filedAt };
 }
 
 /**
@@ -613,6 +771,11 @@ export async function deletePage(
  *
  * - `verworfen`: kein Fachwort. „Übungen" ist kein Thema, sondern das, was man
  *   damit macht — es wird nicht angelegt.
+ * - `umbenannt`: das Fach führt diese Vokabel schon unter einer anderen
+ *   Schreibweise, und die gilt. „Kettenregel Übungen" steht danach als
+ *   „Kettenregel" am Blatt — dieselbe Faltung wie oben, nur mit einer Zeile,
+ *   die es schon gab. Ohne diese Liste verschwände der getippte Titel zwischen
+ *   den beiden anderen hindurch.
  * - `zusammengefallen`: zwei getippte Titel meinen dieselbe Vokabel und stehen
  *   deshalb einmal am Blatt. „Kettenregel Übungen" fällt auf „Kettenregel", und
  *   das ist Absicht (siehe `vocabularyKey()` in @/lib/topics) — aber auf dem
@@ -635,7 +798,9 @@ export async function setMaterialTopics(
   titles: string[],
 ): Promise<MaterialTopicResult> {
   const material = await findMaterial(userId, materialId);
-  if (!material) return { gesetzt: [], verworfen: [], zusammengefallen: [] };
+  if (!material) {
+    return { gesetzt: [], verworfen: [], zusammengefallen: [], umbenannt: [] };
+  }
 
   const wishes = normalizeTopics(titles);
   const found = await ensureTopics(userId, material.subjectId, wishes, {
@@ -646,6 +811,7 @@ export async function setMaterialTopics(
   const gesetzt: string[] = [];
   const verworfen: string[] = [];
   const zusammengefallen: MaterialTopicResult["zusammengefallen"] = [];
+  const umbenannt: MaterialTopicResult["umbenannt"] = [];
   const wanted: string[] = [];
   const seen = new Map<string, string>();
 
@@ -665,6 +831,14 @@ export async function setMaterialTopics(
       continue;
     }
 
+    // Das Fach führt diese Vokabel schon, aber anders geschrieben. Verglichen
+    // wird mit `topicKey()` und nicht mit `!==`: Rand und Groß-/Kleinschreibung
+    // gleicht jede Vokabelliste an, das ist keine Nachricht. Gemeint ist der
+    // Fall, in dem aus „Kettenregel Übungen" ein „Kettenregel" wird.
+    if (topicKey(title) !== topicKey(topic.title)) {
+      umbenannt.push({ getippt: title, thema: topic.title });
+    }
+
     seen.set(topic.id, topic.title);
     wanted.push(topic.id);
     gesetzt.push(topic.title);
@@ -682,7 +856,7 @@ export async function setMaterialTopics(
     }
   });
 
-  return { gesetzt, verworfen, zusammengefallen };
+  return { gesetzt, verworfen, zusammengefallen, umbenannt };
 }
 
 /**
@@ -779,6 +953,23 @@ async function listRows(
   // ehrliche Antwort, nicht die ungefilterte Ablage.
   if (subjectId !== undefined && !isId(subjectId)) return [];
 
+  // Das Thema wird aufgelöst, bevor gefiltert wird: gefragt sein kann die id
+  // einer zusammengelegten Schreibweise, gemeint sind dann die Blätter des
+  // Ziels. Die Auflösung steht hier oben und nicht in der Abfrage darunter —
+  // warum, steht an `resolveMaterialTopic()`.
+  //
+  // Gefragt wird nur, wenn überhaupt nach Thema gefiltert werden soll: die
+  // Startseite und die Kamera-Seite zahlen für diesen Filter nichts.
+  const wanted = options?.topicId;
+  const topic =
+    wanted === undefined ? null : await resolveMaterialTopic(userId, wanted);
+
+  // Ein Thema, das es nicht gibt, hat keine Blätter — dieselbe leere Liste wie
+  // oben beim Fach und aus demselben Grund. Anders als dort reicht dafür keine
+  // Formprüfung: eine id kann tadellos aussehen und trotzdem zu einem
+  // gelöschten oder fremden Thema gehören.
+  if (wanted !== undefined && topic === null) return [];
+
   const rows = await db
     .select(MATERIAL_FIELDS)
     .from(materials)
@@ -790,6 +981,20 @@ async function listRows(
       and(
         eq(materials.userId, userId),
         subjectId ? eq(materials.subjectId, subjectId) : undefined,
+        // Das Fach des Themas — die zweite Hälfte der Bedingung, die drüben in
+        // `materialCounts()` als Verbund auf `materials` steht: gezählt und
+        // gezeigt wird nur, was wirklich in dem Fach liegt, zu dem die Vokabel
+        // gehört. Nach der Auflösung steht dieses Fach fest, also genügt hier
+        // ein Vergleich gegen eine bekannte id.
+        //
+        // Steht daneben schon ein anderes Fach aus `subjectId`, widersprechen
+        // sich die beiden und die Liste bleibt leer. Das ist kein Unfall,
+        // sondern die Antwort auf „Kettenregel in Physik": danach gibt es
+        // keine Blätter.
+        topic ? eq(materials.subjectId, topic.subjectId) : undefined,
+        topic
+          ? inArray(materials.id, materialIdsForTopic(userId, topic))
+          : undefined,
       ),
     )
     .orderBy(
@@ -800,6 +1005,73 @@ async function listRows(
     .limit(clampLimit(options?.limit));
 
   return decorate(userId, rows);
+}
+
+/**
+ * Die Unterabfrage hinter dem Themen-Filter: die ids aller Blätter, an denen
+ * dieses Thema hängt — einschließlich der Schreibweisen, die in es
+ * zusammengelegt wurden.
+ *
+ * **Hier steht dieselbe Regel wie in `materialCounts()` in
+ * @/lib/subject-topics, und sie muss dieselbe bleiben.** Dort wird über
+ * `coalesce(merged_into, id)` gruppiert und gezählt — das ergibt die Zahl, die
+ * in der Themenpflege unter dem Thema steht („3 Blätter"). Hier wird über
+ * denselben Ausdruck gefiltert — das ergibt die Liste, die der Filter zeigt.
+ * Rechneten die beiden verschieden, sagte die Pflegeansicht drei und die
+ * Ablage zeigte eines, und von außen wäre nicht zu sehen, welche der beiden
+ * Zahlen lügt. Wer dort etwas ändert, ändert hier mit; der Ausdruck ist
+ * absichtlich Zeichen für Zeichen derselbe.
+ *
+ * Mitgezogen sind aus demselben Grund die beiden Einschränkungen von drüben:
+ * das Thema gehört dem Nutzer, und es zählt nur innerhalb seines eigenen
+ * Fachs. Die zweite steht dort als Verbund auf `materials`
+ * (`materials.subject_id = subject_topics.subject_id`) und hier zweigeteilt —
+ * einmal an der Vokabel und einmal am Blatt in `listRows()` —, weil das Fach
+ * nach der Auflösung feststeht und `materials` dadurch aus dieser Abfrage
+ * ganz herausfällt. Über die App kann ein Blatt ohnehin kein Thema aus einem
+ * fremden Fach tragen (`updateMaterial()` löst die Paarungen beim Fachwechsel
+ * auf); die Bedingung steht trotzdem da, damit eine von Hand geschriebene
+ * Zeile die Liste nicht länger macht als die Zahl daneben.
+ *
+ * **`IN (Unterabfrage)` und nicht `distinct` auf einem Verbund.** Irgendetwas
+ * muss es sein: hängen nach einer Zusammenlegung beide Schreibweisen an
+ * demselben Blatt, träfe ein schlichter Verbund es zweimal, und das Blatt
+ * stünde doppelt in der Ablage — drüben verhindert das `count(distinct …)`.
+ * Schlimmer noch, `limit` zählte dann Paarungen statt Blätter und schnitte
+ * mitten in die Dubletten hinein: zweihundert gefragt, hundertneunzig
+ * verschiedene bekommen, und der Hinweis „hier ist die Grenze" stünde unter
+ * einer Liste, die gar nicht voll ist. Gegen `distinct` sprechen zwei Dinge:
+ *
+ * - Es räumt hinterher weg, was der Verbund vorher angerichtet hat — erst
+ *   vervielfachen, dann sortieren, dann Dubletten wegwerfen. Die Unterabfrage
+ *   vervielfacht nicht: sie beantwortet nur „hängt daran etwas?", und Postgres
+ *   darf beim ersten Treffer aufhören. Sie sieht `material_topics` dabei über
+ *   `subject_topic_id` an — die Spalte, auf der `material_topics_topic_idx`
+ *   liegt, und der einzige Grund, aus dem es diesen Index gibt.
+ * - `select distinct` verlangt in Postgres, dass jeder Ausdruck aus dem
+ *   `order by` auch in der Feldliste steht — nachgemessen, die Abfrage kommt
+ *   sonst gar nicht durch: „for SELECT DISTINCT, ORDER BY expressions must
+ *   appear in select list". Sortiert wird hier nach `materials.created_at`,
+ *   und die Spalte steht bewusst nicht in `MATERIAL_FIELDS`. Die Ablage müsste
+ *   sie also mitholen — und mit ihr jede andere Liste, denn die Feldliste ist
+ *   eine gemeinsame. Ein Filter, der die Form aller Abfragen ändert, ist zu
+ *   teuer für das, was er tut.
+ */
+function materialIdsForTopic(userId: string, topic: MaterialTopicFilter) {
+  const target = sql`coalesce(${subjectTopics.mergedInto}, ${subjectTopics.id})`;
+
+  return db
+    .select({ materialId: materialTopics.materialId })
+    .from(materialTopics)
+    .innerJoin(
+      subjectTopics,
+      and(
+        eq(subjectTopics.id, materialTopics.subjectTopicId),
+        eq(subjectTopics.userId, userId),
+        eq(subjectTopics.subjectId, topic.subjectId),
+        eq(target, topic.id),
+      ),
+    );
 }
 
 /**
@@ -1038,7 +1310,26 @@ async function findMaterial(
 }
 
 /** Gehört das Fach diesem Nutzer? Ohne das legt sich ein Blatt ins Leere. */
-async function ownsSubject(userId: string, subjectId: string): Promise<boolean> {
+/**
+ * Gehört dieses Fach dem Nutzer? Eine kaputte oder fremde id heißt nein.
+ *
+ * Exportiert, weil beide `actions.ts` dieselbe Frage stellen, bevor sie ein
+ * Fach in eine Zeile schreiben, und sie vorher jede für sich beantwortet
+ * haben — über `listSubjects(…, { includeArchived: true })` und einen Vergleich
+ * in JavaScript. Das war zweimal derselbe Satz und dreimal zu teuer: es holte
+ * alle Fächer samt Farbe, Lehrkraft und Gewichtung, um eine id zu suchen. Hier
+ * steht eine Abfrage auf `subjects_user_idx`, die eine Spalte liest.
+ *
+ * **Archivierte Fächer zählen mit**, und das ist keine Nachlässigkeit: ein
+ * Blatt darf in einem abgewählten Fach liegen bleiben — was fotografiert
+ * wurde, ist fotografiert —, und weder das Blattformular noch die Bestätigung
+ * eines Vorschlags soll es dort herausdrängen. Wer nur aktive Fächer meint,
+ * fragt `listSubjects()`.
+ */
+export async function ownsSubject(
+  userId: string,
+  subjectId: string,
+): Promise<boolean> {
   if (!isId(subjectId)) return false;
 
   const [subject] = await db
