@@ -31,21 +31,40 @@ jobs:
     steps:
       - name: Erinnerungs-Route aufrufen
         env:
-          # Secret und Variable dürfen sie überschreiben; fehlen beide, gilt die
-          # Adresse der laufenden App. Leer kann sie dadurch nicht mehr sein.
-          APP_URL: ${{ secrets.APP_URL || vars.APP_URL || 'https://schulapp-teal.vercel.app' }}
+          # Secret und Variable dürfen sie überschreiben; unten wird der Wert
+          # geprüft und, wenn er keine Adresse ist, verworfen.
+          APP_URL_ROH: ${{ secrets.APP_URL || vars.APP_URL || '' }}
+          APP_URL_VORGABE: https://schulapp-teal.vercel.app
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail
 
-          # Lieber ein Satz als curls Exit 3. Ohne diese Prüfung ruft curl
-          # "/api/cron/reminders" ohne Host auf und bricht mit "URL fehlerhaft"
-          # ab — im Protokoll steht dann nur "Process completed with exit code
-          # 3", und man sucht den Fehler im Workflow statt in einem leeren Wert.
-          if [ -z "${APP_URL}" ]; then
-            echo "::error::APP_URL ist leer. Erwartet wird die Adresse der App, ohne Schrägstrich am Ende."
-            exit 1
+          # Die Adresse wird geprüft, statt ihr zu glauben.
+          #
+          # Am 23.8.2026 stand in APP_URL etwas, das keine Adresse war. Der Lauf
+          # starb mit "Process completed with exit code 3" — curls Code für
+          # "URL fehlerhaft" —, und weil ein Secret im Protokoll maskiert wird,
+          # war nicht zu sehen, woran es lag. Ein Rückfallwert allein half
+          # nicht: ein gesetztes, aber kaputtes Secret ist nicht leer und
+          # gewinnt gegen jede Vorgabe.
+          #
+          # Deshalb: Leerzeichen und Zeilenumbrüche weg, Schrägstriche am Ende
+          # weg, und wer danach nicht wie "https://…" aussieht, wird verworfen.
+          # Ein falsch gefülltes Secret kann die Erinnerung damit nicht mehr
+          # stilllegen — es kostet höchstens eine Warnung.
+          APP_URL=$(printf '%s' "${APP_URL_ROH}" | tr -d '[:space:]' | sed 's:/*$::')
+
+          if [ -n "${APP_URL}" ] && ! printf '%s' "${APP_URL}" | grep -qE '^https?://[A-Za-z0-9.-]+'; then
+            echo "::warning::APP_URL ist gesetzt, sieht aber nicht wie eine Adresse aus (erwartet: https://…). Der Wert wird ignoriert."
+            APP_URL=""
           fi
+
+          if [ -z "${APP_URL}" ]; then
+            APP_URL="${APP_URL_VORGABE}"
+          fi
+
+          echo "Rufe auf: ${APP_URL}/api/cron/reminders"
+
           if [ -z "${CRON_SECRET}" ]; then
             echo "::error::CRON_SECRET ist leer. Es gehört unter Settings → Secrets and variables → Actions als *Repository secret* — nicht als Environment secret."
             exit 1
