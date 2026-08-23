@@ -195,17 +195,28 @@ fehlt, steht ein Strich und keine geschätzte.
 
 ## Datenbank
 
-Lokal läuft **PGlite**: ein echtes Postgres, das als Datei unter `.data/pglite`
-im Projekt liegt. Kein Server, keine Installation, und trotzdem dieselbe
-SQL-Sprache wie später in der Cloud.
+**Seit dem 23.8.2026 liegt die Datenbank in der Cloud** — ein Postgres bei Neon
+in Frankfurt. Die App läuft unter `schulapp-teal.vercel.app`, und `DATABASE_URL`
+steht sowohl in der Vercel-Umgebung als auch lokal in `.env.local`.
 
-Sobald `DATABASE_URL` gesetzt ist, verbindet sich dieselbe App stattdessen mit
-einem echten Postgres. Der Anwendungscode merkt davon nichts.
+Dass sie **auch beim Entwickeln** gilt, ist Absicht und keine Bequemlichkeit:
+liefe `npm run dev` weiter gegen die Datei-Datenbank, gäbe es zwei Bestände.
+Eine Hausaufgabe, am Laptop eingetragen, käme am Handy nie an — und gemerkt
+hätte man es erst, wenn sie in der Schule fehlt.
+
+Ohne `DATABASE_URL` fällt dieselbe App auf **PGlite** zurück: ein echtes
+Postgres, das als Datei unter `.data/pglite` im Projekt liegt. Kein Server,
+keine Installation, dieselbe SQL-Sprache. Der Anwendungscode merkt vom
+Unterschied nichts. Der alte lokale Stand liegt dort unberührt weiter; wer ihn
+wieder benutzen will, nimmt `DATABASE_URL` aus `.env.local` heraus.
 
 ```bash
-# Beispiel für später
 DATABASE_URL=postgres://user:pass@host/db
 ```
+
+Die Zugangsdaten gehören in `.env.local` und nirgendwo sonst — `.env*` ist in
+`.gitignore`, und `.vercelignore` hält `.data/` und `.backups/` vom Hochladen
+fern. Der Umzug selbst lief über `scripts/daten-umzug.ts`.
 
 Nach Änderungen an `src/db/schema.ts` immer `npm run db:push` ausführen. Mit
 der Ablage kamen die drei Tabellen `materials`, `material_pages` und
