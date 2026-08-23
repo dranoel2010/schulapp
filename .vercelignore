@@ -1,0 +1,28 @@
+# Was beim Hochladen zu Vercel draußen bleibt.
+#
+# Ohne diese Datei richtet sich die Vercel-CLI nach .gitignore, und das ginge
+# hier auch gut. Sie steht trotzdem da, weil die beiden ersten Einträge nicht
+# nur Ballast sind, sondern Daten: .data/pglite ist die Schuldatenbank und
+# .backups/ sind ihre Kopien — am 23.8.2026 zusammen 900 MB, darunter jede
+# Note und jede Hausaufgabe. Ein Verzeichnis, dessen Ausschluss man nur aus
+# einer anderen Datei erschließen kann, wird irgendwann versehentlich
+# mitgeschickt.
+
+# Die lokale Datenbank und ihre Sicherungen — gehören nirgendwo hin außer auf
+# diesen Rechner.
+.data/
+.backups/
+
+# Baut Vercel selbst neu.
+.next/
+node_modules/
+
+# Geheimnisse. Sie stehen in der Vercel-Umgebung, nicht im Hochgeladenen.
+.env
+.env.*
+!.env.example
+
+# Zeug
+.git/
+.DS_Store
+*.tsbuildinfo
