@@ -355,6 +355,45 @@ describe("fingerprintOf", () => {
     );
   });
 
+  it("lässt zwei verschiedene Inhalte nicht auf denselben Abdruck fallen", () => {
+    // Der Grund, warum der Abdruck über JSON.stringify und nicht über ein
+    // Trennzeichen entsteht: jedes Trennzeichen kommt irgendwann im Inhalt
+    // selbst vor und baut die Feldgrenze nach. Der zweite Vorschlag würde
+    // dann als Dublette abgewiesen, obwohl er ein anderer ist.
+    const paare: [Record<string, unknown>, Record<string, unknown>][] = [
+      [
+        { titel: "S. 47 Nr. 3", faellig: null, notiz: "bis Freitag" },
+        { titel: "S. 47", faellig: null, notiz: "Nr. 3 bis Freitag" },
+      ],
+      [
+        { titel: "A", faellig: null, notiz: null },
+        { titel: "A", faellig: null, notiz: "" },
+      ],
+    ];
+
+    for (const [links, rechts] of paare) {
+      const a = parsePayload("hausaufgabe", links);
+      const b = parsePayload("hausaufgabe", rechts);
+      if (!a.ok || !b.ok) continue;
+
+      const gleich =
+        fingerprintOf(BLATT, "hausaufgabe", a.payload) ===
+        fingerprintOf(BLATT, "hausaufgabe", b.payload);
+
+      // Das zweite Paar MEINT dasselbe (leere Notiz wird zu null) und darf
+      // denselben Abdruck haben; das erste nicht.
+      assert.equal(gleich, links.notiz === "bis Freitag" ? false : true, JSON.stringify(links));
+    }
+  });
+
+  it("trennt zwei Themenlisten, die aneinandergehängt gleich aussähen", () => {
+    // ["ab", "c"] gegen ["a", "bc"] — zusammengehängt beide "abc".
+    assert.notEqual(
+      fingerprintOf(BLATT, "themen", themen(["ab", "c"])),
+      fingerprintOf(BLATT, "themen", themen(["a", "bc"])),
+    );
+  });
+
   it("ist ein Hash fester Länge und nicht der Inhalt selbst", () => {
     // Die Spalte trägt einen Index. Ein Vorschlag mit vierzig Themen wäre als
     // Text ein Kilobyte lang.

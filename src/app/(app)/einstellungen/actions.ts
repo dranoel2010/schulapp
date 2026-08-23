@@ -8,6 +8,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
+import { revokeTokens } from "@/lib/oauth";
 import { isThemePreference, THEME_COOKIE, THEME_MAX_AGE } from "@/lib/theme";
 
 /**
@@ -87,4 +88,23 @@ export async function setThemeAction(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/", "layout");
+}
+
+/**
+ * Nimmt allen Agenten den Zugriff wieder ab.
+ *
+ * Gelöscht werden die Token, nicht der Client: der bleibt angemeldet und darf
+ * jederzeit wieder fragen — aber er muss dann wieder durch die Zustimmung.
+ * Genau das ist der Widerruf, der auf der Zustimmungsseite versprochen wird.
+ *
+ * Ein Zugriffstoken gilt danach noch bis zu einer Stunde? Nein: geprüft wird
+ * bei jedem Aufruf gegen die Tabelle, und die Zeile ist weg. Der Widerruf
+ * greift mit dem nächsten Aufruf.
+ */
+export async function revokeAgentAccessAction(): Promise<void> {
+  const user = await requireUser();
+
+  await revokeTokens(user.id);
+
+  revalidatePath("/einstellungen");
 }

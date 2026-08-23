@@ -78,9 +78,8 @@ export default async function ProposalPage({
 
           <section className="border-t border-border pt-5">
             <p className="mb-3 text-sm text-muted">
-              Verworfen wird nichts gelöscht — der Vorschlag bleibt {" "}
-              stehen und wird nur ruhig. Am Blatt selbst ändert sich dabei
-              nichts.
+              Verworfen wird nichts gelöscht — der Vorschlag bleibt stehen und
+              wird nur ruhig. Am Blatt selbst ändert sich dabei nichts.
             </p>
             <DiscardButton
               action={discardProposalAction.bind(null, proposal.id)}

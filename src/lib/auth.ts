@@ -53,6 +53,19 @@ export async function login(password: string): Promise<boolean> {
 }
 
 /**
+ * Der Nutzer dieser App, ohne den Umweg über eine Sitzung.
+ *
+ * Gebraucht an genau einer Stelle: beim festen Token für den MCP-Endpunkt
+ * (`MCP_TOKEN`, siehe @/lib/oauth). Ein Token, das kein Cookie ist, weiß nicht,
+ * wem es gehört — und in einer App mit einem einzigen Konto ist das auch keine
+ * Frage. Über eine Sitzung geht dieser Weg ausdrücklich nicht: die gibt es dort
+ * nicht, und `cookies()` außerhalb einer Anfrage wirft.
+ */
+export async function onlyUser(): Promise<User | null> {
+  return (await findOnlyUser()) ?? null;
+}
+
+/**
  * Es gibt genau einen Nutzer. Sortiert nach Anlagedatum, damit auch bei einer
  * von Hand in die Datenbank geschriebenen zweiten Zeile immer dasselbe Konto
  * gemeint ist — sonst wäre die Reihenfolge Zufall.

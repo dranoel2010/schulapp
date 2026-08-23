@@ -143,9 +143,10 @@ einer Note nicht mehr zu schaffen.
       daraus, Pflege unter `/faecher/<id>/themen`~~ **fertig**
    2. ~~**Kamera und Ablage** — Blätter aufnehmen, speichern, Fach und Thema
       zuordnen. Ohne KI, und für sich schon nützlich~~ **fertig**
-   3. **Eingangskorb** — Vorschläge, die man bestätigt, mit vollem Handformular
-   4. **Web MCP** — die App bietet ihre Fähigkeiten als Tools an, ein Agent in
-      Claude benutzt sie
+   3. ~~**Eingangskorb** — Vorschläge, die man bestätigt, mit vollem
+      Handformular~~ **fertig**
+   4. ~~**Web MCP** — die App bietet ihre Fähigkeiten als Tools an, ein Agent in
+      Claude benutzt sie~~ **fertig**
 
 ## Die Ablage
 
@@ -189,6 +190,44 @@ der Stunde, die gerade läuft — aber nur, wenn es die App wirklich weiß und d
 Fach nicht abgewählt ist. Ein falsch vorbelegtes Fach rutscht unbemerkt durch,
 und ein Blatt im falschen Fach findet später niemand wieder.
 
+## Der Eingangskorb
+
+Ein **Vorschlag** ist kein Datensatz der App, sondern die Frage, ob einer
+entstehen soll. Er liegt im Korb, bis ein Mensch ihn übernimmt oder verwirft.
+
+```
+Blatt ─── Vorschlag    Art, Herkunft, Zustand, Inhalt, Begründung
+```
+
+**Jeder Vorschlag hängt an einem Blatt**, und zwar zwingend. Das ist die
+Aussage dieser Stufe und keine Sparsamkeit beim Fremdschlüssel: aus den
+Blättern wird Lernstoff, und was vorgeschlagen wird, stand auf Papier, das der
+Nutzer selbst fotografiert hat. Wer das Blatt löscht, ist die Vorschläge dazu
+mit los.
+
+Drei Arten, weil ein Blatt drei Dinge trägt: die **Themen**, um die es geht,
+eine **Hausaufgabe**, die daraufsteht, und einen **Termin**, der angekündigt
+ist. Der Inhalt liegt als `jsonb`, und hier ist eine Sammelspalte richtig: nach dem
+Inhalt eines Vorschlags wird nie gefragt, er wird einmal als Ganzes gelesen,
+und seine Form hängt an der Art. Geprüft wird er zweimal, beim Anlegen und beim
+Lesen.
+
+**Übernommen wird durch dieselbe Tür wie ein Formular.** Unter einem
+Aufgaben-Vorschlag steht wörtlich das Formular von „Neue Aufgabe“, unter einem
+Termin das von „Neue Klausur“ samt Vorlauf, Tagesbudget und Lernplan, unter
+Themen derselbe Griff wie auf der Seite des Blattes. Der Vorschlag füllt Felder
+vor, mehr tut er nicht — geprüft und geschrieben wird mit denselben Schemata,
+die auch für die Eingabe von Hand gelten.
+
+**Derselbe Vorschlag steht kein zweites Mal im Korb.** Ein eindeutiger Index
+über Art, Blatt und Inhalt gilt für die offenen Karten; ein Agent, der dasselbe
+Blatt zweimal liest, füllt den Korb damit nicht. Verworfen oder übernommen
+zählt der Abdruck nicht mehr — dann ist derselbe Vorschlag eine neue Frage an
+einen Menschen, der schon einmal geantwortet hat.
+
+Entschiedenes wird nie gelöscht, nur ruhig: vierzehn Tage bleibt es im Korb
+stehen, dieselbe Frist wie bei den abgehakten Hausaufgaben.
+
 ## Wie die KI angeschlossen wird
 
 Nicht in die App hinein, sondern außen herum. Die App ist ohne sie vollständig:
@@ -212,6 +251,27 @@ Vorsichtsmaßnahme, sondern die Bedingung: Wer nicht vertrauenswürdige Blätter
 liest und gleichzeitig schreiben darf, ist angreifbar über das Blatt selbst.
 Aus demselben Grund gehören Zettel nie in eine Claude-Code-Sitzung, sondern in
 die Claude-App — dort steht kein Bash und kein Zugriff auf das Repo daneben.
+
+**Der Server spricht MCP selbst, ohne Paket.** Ein Werkzeug-Server ohne
+Ressourcen, Prompts und Rückfragen braucht fünf Methoden, einen Umschlag und
+eine Handvoll Kopfzeilen. Er bedient zwei Protokoll-Zeitalter nebeneinander:
+die Revision `2026-07-28`, die den `initialize`-Handschlag und die Sitzung
+abgeschafft hat, und die älteren, die ihn noch erwarten — ein Server, der nur
+das Neue kann, ist für jeden noch nicht umgestellten Client tot.
+
+**Die Anmeldung ist OAuth, und die App ist ihr eigener Autorisierungsserver.**
+Das ist keine Vorliebe: die Claude-App verbindet sich aus Anthropics
+Rechenzentrum heraus und bietet beim Anlegen eines Connectors nur die Adresse
+und OAuth an — ein fester Token im Kopf lässt sich dort nicht eintragen. Übrig
+blieben zwei Wege: ohne Anmeldung (also die Noten und Blätter eines Schülers
+offen im Netz), oder OAuth. Die Zustimmung nimmt die Anmeldung, die es schon
+gibt: wer nicht angemeldet ist, kommt auf die Anmeldeseite und danach zurück.
+Kein zweiter Dienst, kein zweites Konto.
+
+Es gibt genau einen Scope, weil es genau eine Sache gibt, die der Agent darf:
+lesen und vorschlagen. Und dass er nicht schreiben kann, liegt nicht an diesem
+Scope — es gibt schlicht kein Werkzeug dafür. Ein Scope, den man weglassen
+kann, ist eine Einstellung; eine Fähigkeit, die es nicht gibt, ist eine Zusage.
 
 ## Offene Punkte
 
@@ -241,3 +301,16 @@ die Claude-App — dort steht kein Bash und kein Zugriff auf das Repo daneben.
   eine Ausnahme für einen Tag kennt er nicht
 - Freie Tage vom Lernplan ausnehmen (Wochenende, Urlaub) — im Datenmodell
   vorgesehen, in der Oberfläche noch nicht angeboten
+- **Der MCP-Server hat keine Bremse.** Die Spezifikation verlangt, dass ein
+  Server seine Werkzeugaufrufe begrenzt; hier tut es keiner. Für einen Server
+  mit genau einem Nutzer und einem Agenten ist das heute folgenlos, und die
+  ehrliche Bremse wäre eine, die zählt — also eine Tabelle mehr. Sie kommt,
+  sobald es einen Grund gibt, nicht vorher
+- Ein Vorschlag lässt sich nur ganz übernehmen oder ganz verwerfen. „Von diesen
+  fünf Themen die ersten drei“ geht über das Formular (Chips wegtippen), aber
+  es bleibt danach ein übernommener Vorschlag und keine halbe Antwort. Ob das
+  fehlt, zeigt sich erst im Gebrauch
+- Der Agent sieht ein Blatt nur, wenn er danach fragt. Eine Benachrichtigung in
+  die andere Richtung — „hier liegt ein neues Blatt“ — kennt MCP für Server
+  ohne offenen Strom nicht, und einen offenen Strom will dieser Server nicht
+  führen

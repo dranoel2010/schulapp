@@ -10,9 +10,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth";
+import { countAgentGrants } from "@/lib/oauth";
 import { readThemePreference, THEME_OPTIONS } from "@/lib/theme";
 
-import { setReminderHourAction, setThemeAction } from "./actions";
+import {
+  revokeAgentAccessAction,
+  setReminderHourAction,
+  setThemeAction,
+} from "./actions";
 import { PushSettings, ReminderTime } from "./push-settings";
 
 export const metadata: Metadata = {
@@ -40,6 +45,12 @@ export default async function SettingsPage() {
   // Ohne Schlüssel kann der Browser sich gar nicht erst anmelden — die
   // Komponente sagt das dann geradeheraus, statt einen Knopf anzubieten.
   const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
+
+  // Wie viele Agenten gerade zugreifen dürfen. Gezählt werden die
+  // Refresh-Token: eines je Verbindung, und es ist das, was die Verbindung am
+  // Leben hält. Zugriffstoken wären die falsche Zahl — davon entsteht jede
+  // Stunde ein neues.
+  const agents = await countAgentGrants(user.id);
 
   return (
     <div className="space-y-6 md:max-w-3xl">
@@ -172,6 +183,41 @@ export default async function SettingsPage() {
           </form>
         </CardContent>
       </Card>
+
+      {/* Die Karte steht nur da, wenn wirklich ein Agent verbunden ist. Eine
+          Zeile „0 Verbindungen“ unter jeder Einstellungsseite wäre eine
+          tägliche Meldung darüber, dass nichts passiert ist — dieselbe Regel
+          wie beim Eingangskorb auf der Startseite. Wie man einen Agenten
+          anschließt, steht im README und nicht hier: es ist ein Vorgang in der
+          Claude-App und nicht in dieser. */}
+      {agents > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Verbundene Agenten</CardTitle>
+            <CardDescription>
+              {agents === 1
+                ? "Ein Agent darf gerade lesen und Vorschläge in deinen Eingangskorb legen."
+                : `${agents} Agenten dürfen gerade lesen und Vorschläge in deinen Eingangskorb legen.`}{" "}
+              Ändern kann keiner von ihnen etwas — es gibt kein Werkzeug dafür.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form action={revokeAgentAccessAction}>
+              <Button
+                type="submit"
+                variant="secondary"
+                className="w-full sm:w-auto"
+              >
+                Zugriff zurücknehmen
+              </Button>
+            </form>
+            <p className="text-sm text-muted">
+              Danach kommt kein Agent mehr an deine Daten, bis du in der
+              Claude-App neu verbindest und hier wieder erlaubst.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

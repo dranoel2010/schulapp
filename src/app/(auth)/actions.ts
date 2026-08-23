@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { createAccount, hasAccount, login } from "@/lib/auth";
+import { safeNextPath } from "@/lib/redirect-path";
 
 /**
  * Rückgabe beider Formular-Aktionen, passend zu useActionState.
@@ -46,6 +47,19 @@ function firstMessage(issues: readonly { message: string }[]): string {
 function text(formData: FormData, field: string): string {
   const value = formData.get(field);
   return typeof value === "string" ? value : "";
+}
+
+/**
+ * Wohin es nach der Anmeldung geht — geprüft, obwohl die Anmeldeseite es schon
+ * geprüft hat.
+ *
+ * Das versteckte Feld kommt aus dem Browser und ist damit eine Eingabe wie
+ * jede andere; zwischen „angezeigt“ und „abgeschickt“ kann jemand es ändern.
+ * Die Regel steht in @/lib/redirect-path und nicht hier, weil beide Türen
+ * dieselbe brauchen.
+ */
+function nextPath(formData: FormData): string {
+  return safeNextPath(text(formData, "weiter"));
 }
 
 export async function setupAction(
@@ -101,5 +115,5 @@ export async function loginAction(
   }
 
   revalidatePath("/", "layout");
-  redirect("/");
+  redirect(nextPath(formData));
 }

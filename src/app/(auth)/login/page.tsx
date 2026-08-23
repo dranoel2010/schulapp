@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { hasAccount } from "@/lib/auth";
+import { safeNextPath } from "@/lib/redirect-path";
 import { getSessionUser } from "@/lib/session";
 
 import { LoginForm } from "./login-form";
@@ -12,13 +13,30 @@ export const metadata: Metadata = {
   title: "Anmelden",
 };
 
-export default async function LoginPage() {
+/**
+ * Ein Parameter kann mehrfach in der Adresse stehen; dann zählt der erste.
+ * Was kein Pfad auf diesem Server ist, fällt auf die Startseite zurück — die
+ * Regel dafür steht in @/lib/redirect-path und gilt auch in `loginAction()`.
+ */
+function nextPath(value: string | string[] | undefined): string {
+  return safeNextPath(Array.isArray(value) ? value[0] : value);
+}
+
+export default async function LoginPage({
+  searchParams,
+}: PageProps<"/login">) {
   if (!(await hasAccount())) {
     redirect("/setup");
   }
 
+  // "weiter" trägt den Weg, auf dem jemand hierhergeschickt wurde — heute
+  // genau einer: die Anmeldung des Agenten unter /oauth/authorize. Wer schon
+  // angemeldet ist, geht ihn sofort weiter, statt auf der Startseite zu landen
+  // und noch einmal von vorn anfangen zu müssen.
+  const next = nextPath((await searchParams).weiter);
+
   if (await getSessionUser()) {
-    redirect("/");
+    redirect(next);
   }
 
   return (
@@ -41,7 +59,7 @@ export default async function LoginPage() {
           </p>
 
           <div className="mt-8 md:mt-7">
-            <LoginForm />
+            <LoginForm next={next === "/" ? undefined : next} />
           </div>
         </div>
       </section>

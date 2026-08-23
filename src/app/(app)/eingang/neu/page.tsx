@@ -22,9 +22,12 @@ import { NewProposalForm, type ProposalMaterialOption } from "./proposal-form";
  * damit führt ein Weg von einem Blatt hierher, ohne dass man es in einer
  * langen Liste wiedersuchen muss.
  *
- * Zur Wahl stehen die Blätter, die auch in der Ablage stehen: dieselbe
- * Obergrenze, dieselbe Sortierung. Wer ein älteres meint, findet es über die
- * Ablage und kommt mit `?blatt=` zurück.
+ * Zur Wahl stehen die Blätter mit derselben Obergrenze wie in der Ablage,
+ * sortiert aber nach dem Zeitpunkt der Aufnahme statt nach dem Schultag: wer
+ * hier steht, hat eben fotografiert und meint fast immer das letzte Blatt. In
+ * der Ablage sucht man nach Unterricht, hier nach dem, was gerade in der Hand
+ * lag. Wer ein älteres meint, findet es über die Ablage und kommt mit
+ * `?blatt=` zurück.
  */
 
 export const metadata: Metadata = {

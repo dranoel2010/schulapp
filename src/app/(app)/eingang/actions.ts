@@ -264,15 +264,36 @@ export async function acceptExamAction(
     return { message: ALREADY_DECIDED };
   }
 
+  let examId: string;
   try {
     const exam = await createExam(user.id, parsed.data);
-    await setTopics(user.id, exam.id, normalizeTopics(texts(formData, "topics")));
-    await linkExamTopics(user.id, exam.id);
-    await generatePlan(user.id, exam.id, todayInBerlin());
+    examId = exam.id;
   } catch (error) {
     await reopenProposal(user.id, id);
     console.error("Termin übernehmen fehlgeschlagen", error);
     return { message: SAVE_FAILED };
+  }
+
+  // Ab hier steht die Prüfung in der Datenbank, und der Vorschlag wird **nicht
+  // mehr zurückgestellt**. Täte er es, stünde er wieder offen im Korb — und
+  // der nächste Tipp auf „Übernehmen“ legte dieselbe Prüfung ein zweites Mal
+  // an. Was hier noch schiefgehen kann, betrifft die Themen und den Lernplan;
+  // beides lässt sich auf der Prüfung selbst nachholen, und genau dorthin
+  // schickt der Satz.
+  try {
+    await setTopics(user.id, examId, normalizeTopics(texts(formData, "topics")));
+    await linkExamTopics(user.id, examId);
+    await generatePlan(user.id, examId, todayInBerlin());
+  } catch (error) {
+    console.error("Lernplan nach dem Übernehmen fehlgeschlagen", error);
+
+    revalidateInbox(found.proposal.material.id);
+    revalidatePath("/klausuren");
+
+    return {
+      message:
+        "Die Prüfung ist eingetragen, aber Themen und Lernplan sind dabei liegen geblieben. Öffne sie unter Klausuren und speichere sie einmal.",
+    };
   }
 
   revalidateInbox(found.proposal.material.id);

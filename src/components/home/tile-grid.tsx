@@ -259,23 +259,22 @@ export function HomeTiles({ data }: { data: HomeData }) {
           leer ist. Ehrlichkeit vor Vollständigkeit, dieselbe Regel wie bei den
           Kacheln selbst.
 
+          Eine Zeile und kein Absatz: jede zusätzliche Zeile schiebt die untere
+          Kachelreihe aus dem Bild, und dass die sechs Kacheln auf einen
+          Bildschirm passen, war eigens hergestellt. Was der Korb ist, steht
+          auf seiner eigenen Seite — hier steht, dass etwas liegt.
+
           Ohne Fächer kann es keine Blätter geben und damit auch keine
           Vorschläge — die beiden Hinweise stehen deshalb nie zugleich da. */}
       {data.openProposals > 0 ? (
         <Link
           href="/eingang"
-          className="mx-[14px] mb-[10px] flex items-center justify-between gap-3 rounded-[20px] bg-accent-soft px-[18px] py-[14px] transition-colors duration-150 hover:bg-border"
+          className="mx-[14px] mb-[10px] flex items-center justify-between gap-3 rounded-[20px] bg-accent-soft px-[18px] py-[11px] transition-colors duration-150 hover:bg-border"
         >
-          <span className="min-w-0">
-            <span className="block text-[15px] font-medium text-accent">
-              {data.openProposals === 1
-                ? "Ein Vorschlag wartet"
-                : `${data.openProposals} Vorschläge warten`}
-            </span>
-            <span className="mt-0.5 block text-[14px] leading-snug text-accent opacity-[0.85]">
-              Im Eingangskorb — nichts davon steht in der App, bis du es
-              übernimmst.
-            </span>
+          <span className="min-w-0 truncate text-[15px] font-medium text-accent">
+            {data.openProposals === 1
+              ? "Ein Vorschlag wartet im Eingangskorb"
+              : `${data.openProposals} Vorschläge warten im Eingangskorb`}
           </span>
           <span aria-hidden="true" className="shrink-0 text-[18px] text-accent">
             →

@@ -638,8 +638,8 @@ export const materialTopics = pgTable(
  * fotografiert hat. Nebenbei räumt „cascade“ damit von selbst auf — wer ein
  * Blatt löscht, will die Vorschläge dazu nicht behalten.
  *
- * **`payload` ist eine jsonb-Spalte, und das ist die eine Stelle im Schema, an
- * der eine Sammelspalte richtig ist.** Sonst gilt hier: jede Spalte muss sich
+ * **`payload` ist eine jsonb-Spalte, und hier ist eine Sammelspalte
+ * richtig.** Sonst gilt: jede Spalte muss sich
  * begründen lassen. Eine Spalte begründet sich dadurch, dass nach ihr gefragt
  * oder über sie eine Zusage gegeben wird — ein Index, ein Fremdschlüssel, eine
  * Bedingung. Auf den Inhalt eines Vorschlags trifft nichts davon zu: er wird

@@ -258,28 +258,45 @@ export function fingerprintOf(
     .digest("hex");
 }
 
-/** Der Inhalt als vergleichbarer Text — je Art auf seine Weise. */
+/**
+ * Der Inhalt als vergleichbarer Text — je Art auf seine Weise.
+ *
+ * Zusammengesetzt wird mit `JSON.stringify` über ein Feld und nicht mit einem
+ * Trennzeichen. Jedes Trennzeichen kann im Inhalt selbst vorkommen: eine Notiz
+ * mit einem Leerzeichen darin baut die Grenze zwischen zwei Feldern nach, und
+ * zwei verschiedene Vorschläge bekämen denselben Abdruck — der zweite würde
+ * als Dublette abgewiesen, obwohl niemand dieselbe Frage zweimal gestellt hat.
+ * Ein Steuerzeichen als Trenner wäre der übliche Ausweg; es macht die Datei
+ * aber für jedes Werkzeug zur Binärdatei, und `JSON.stringify` löst dasselbe
+ * Problem, ohne dass jemand die Quelle mit `grep` nicht mehr findet.
+ */
 function canonical(kind: ProposalKind, payload: ProposalPayload): string {
   if (kind === "themen") {
-    return topicsCanonical((payload as ThemenPayload).titel);
+    return JSON.stringify(topicsCanonical((payload as ThemenPayload).titel));
   }
 
   if (kind === "hausaufgabe") {
     const { titel, faellig, notiz } = payload as HausaufgabePayload;
-    return [topicKey(titel), faellig ?? "", notiz ?? ""].join(" ");
+    return JSON.stringify([topicKey(titel), faellig, notiz]);
   }
 
   const { datum, art, titel, themen } = payload as KlausurPayload;
-  return [
+  return JSON.stringify([
     datum,
     art,
-    titel ? topicKey(titel) : "",
+    titel === null ? null : topicKey(titel),
     topicsCanonical(themen),
-  ].join(" ");
+  ]);
 }
 
-function topicsCanonical(titles: readonly string[]): string {
-  return [...titles].map(topicKey).sort().join("");
+/**
+ * Eine Themenliste als vergleichbare Menge: gefaltet und sortiert.
+ *
+ * Ein Feld und keine zusammengehängte Zeichenkette — „ab“ und „c“ ergäben
+ * sonst dasselbe wie „a“ und „bc“.
+ */
+function topicsCanonical(titles: readonly string[]): string[] {
+  return [...titles].map(topicKey).sort();
 }
 
 /** Das Blatt, so wie es über einem Vorschlag steht. */
@@ -424,10 +441,17 @@ export async function createProposal(
  *
  * Beide Treiber reichen den Postgres-Code `23505` (unique_violation) herauf,
  * aber an verschiedenen Stellen der Fehlerkette — postgres-js legt ihn auf das
- * Fehlerobjekt selbst, PGlite verpackt ihn. Deshalb wird die Kette abgelaufen
- * und zusätzlich der Name des Index gesucht: ein anderer eindeutiger Index auf
- * dieser Tabelle wäre ein echter Fehler und darf nicht als „schon da“
- * durchgehen.
+ * Fehlerobjekt selbst, PGlite verpackt ihn. Deshalb wird die Kette abgelaufen;
+ * der Name des Index dient als zweiter Weg für den Fall, dass ein Treiber den
+ * Code einmal nicht durchreicht.
+ *
+ * **Jede unique_violation an dieser Stelle gilt als „schon da“**, nicht nur
+ * eine mit dem passenden Indexnamen. Das ist keine Nachlässigkeit: an dem
+ * einen Insert, um den es hier geht, können genau zwei eindeutige Bedingungen
+ * anschlagen — `proposals_open_key` und der Primärschlüssel über eine zufällige
+ * uuid. Die zweite trifft man nicht. Kommt eine dritte dazu, gehört diese
+ * Stelle noch einmal angesehen; bis dahin wäre eine Namensprüfung, die den
+ * Code überstimmt, nur eine zweite Regel, die dasselbe sagt.
  */
 function isDuplicate(error: unknown): boolean {
   for (let current = error, hops = 0; current && hops < 5; hops += 1) {
@@ -447,14 +471,29 @@ function isDuplicate(error: unknown): boolean {
   return false;
 }
 
-/** Wie viele Vorschläge gerade auf eine Antwort warten. */
+/**
+ * Wie viele Vorschläge gerade auf eine Antwort warten.
+ *
+ * Gezählt wird nicht mit `count(*)`, sondern über dieselbe Prüfung, mit der
+ * `listProposals()` liest: was seinem eigenen Schema nicht mehr genügt, fällt
+ * dort heraus und darf hier nicht mitgezählt werden. Sonst stünde auf der
+ * Startseite „ein Vorschlag wartet“ und im Korb nichts — die schlimmste
+ * Auskunft, die eine Zahl geben kann.
+ *
+ * Der Preis ist, dass die Inhalte gelesen werden statt nur der Zeilen. Bei
+ * höchstens `MAX_OPEN_PROPOSALS` offenen Karten ist das nichts, und die
+ * Obergrenze steht genau dafür.
+ */
 export async function countOpenProposals(userId: string): Promise<number> {
-  const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
+  const rows = await db
+    .select({ kind: proposals.kind, payload: proposals.payload })
     .from(proposals)
-    .where(and(eq(proposals.userId, userId), eq(proposals.status, "offen")));
+    .where(and(eq(proposals.userId, userId), eq(proposals.status, "offen")))
+    .limit(MAX_OPEN_PROPOSALS);
 
-  return row?.count ?? 0;
+  return rows.filter(
+    (row) => isProposalKind(row.kind) && parsePayload(row.kind, row.payload).ok,
+  ).length;
 }
 
 /** Wonach der Korb gefragt wird. */
@@ -654,6 +693,19 @@ export async function decideProposal(
  * Macht einen Anspruch rückgängig, wenn das Schreiben danach doch nicht
  * geklappt hat. Der Vorschlag steht dann wieder offen da, so als wäre nichts
  * gewesen.
+ *
+ * **Es kann misslingen, und das darf nicht durchschlagen.** Der eindeutige
+ * Index gilt für die offenen Karten; sobald diese hier beansprucht war, durfte
+ * derselbe Abdruck ein zweites Mal offen entstehen. Genau dann lässt sich die
+ * erste nicht mehr zurückstellen. Das Fenster ist winzig — es liegt zwischen
+ * dem Anspruch und dem gescheiterten Schreiben —, aber eine Ausnahme von hier
+ * käme aus einem `catch` heraus, das gerade dabei ist, einen anderen Fehler
+ * ordentlich zu beantworten. Aus „das hat nicht geklappt“ würde ein Absturz.
+ *
+ * Bleibt der Vorschlag also übernommen, obwohl nichts entstanden ist: das ist
+ * der bessere der beiden Ausgänge. Der Nutzer liest den Satz der Server Action,
+ * sieht die Karte als entschieden im Korb — und die neue, gleichlautende Karte
+ * steht daneben.
  */
 export async function reopenProposal(
   userId: string,
@@ -661,10 +713,14 @@ export async function reopenProposal(
 ): Promise<void> {
   if (!isId(id)) return;
 
-  await db
-    .update(proposals)
-    .set({ status: "offen", decidedAt: null })
-    .where(and(eq(proposals.userId, userId), eq(proposals.id, id)));
+  try {
+    await db
+      .update(proposals)
+      .set({ status: "offen", decidedAt: null })
+      .where(and(eq(proposals.userId, userId), eq(proposals.id, id)));
+  } catch (error) {
+    console.error("Vorschlag zurückstellen fehlgeschlagen", error);
+  }
 }
 
 /**

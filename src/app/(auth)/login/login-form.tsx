@@ -38,11 +38,25 @@ function Spinner() {
   );
 }
 
-export function LoginForm() {
+export type LoginFormProps = {
+  /**
+   * Wohin es nach der Anmeldung geht. Leer heißt: zur Startseite.
+   *
+   * Es steht als verstecktes Feld im Formular und nicht in der Adresse der
+   * Action — eine Server Action hat keine Adresse, die man beeinflussen kann.
+   * Geprüft wird der Pfad trotzdem noch einmal in der Action; ein verstecktes
+   * Feld ist eine Eingabe wie jede andere.
+   */
+  next?: string;
+};
+
+export function LoginForm({ next }: LoginFormProps) {
   const [state, formAction, pending] = useActionState(loginAction, INITIAL);
 
   return (
     <form action={formAction} className="space-y-4">
+      {next ? <input type="hidden" name="weiter" value={next} /> : null}
+
       <Field id="password" label="Passwort">
         {(control) => (
           <input
