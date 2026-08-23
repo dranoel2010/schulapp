@@ -6,10 +6,17 @@
 # entscheidet aber selbst anhand der Berliner Uhrzeit, wer gerade dran ist —
 # einmal am Tag geht die Rechnung also nicht auf.
 #
-# Zwei Werte müssen im Repo unter Settings → Secrets and variables → Actions
+# EIN Wert muss im Repo unter Settings → Secrets and variables → Actions
 # hinterlegt sein:
 #   CRON_SECRET  dasselbe Geheimnis wie in der Umgebung der App
-#   APP_URL      die Adresse der laufenden App, ohne Schrägstrich am Ende
+#
+# Die Adresse steht dagegen unten im Klartext. Sie war einmal ein Secret, und
+# genau daran ist der Lauf am 23.8.2026 gescheitert: war sie nicht gesetzt,
+# rief curl "/api/cron/reminders" ohne Host auf und brach mit Exit 3 ab — eine
+# Fehlermeldung, die nach einem kaputten Workflow aussieht und keine ist. Ein
+# Geheimnis war sie ohnehin nie: die Adresse steht auf jedem Handy in der
+# Adressleiste. Wer die App woanders betreibt, überschreibt sie mit einem
+# Secret oder einer Variablen gleichen Namens, ohne diese Datei anzufassen.
 name: Erinnerungen
 
 on:
@@ -24,10 +31,26 @@ jobs:
     steps:
       - name: Erinnerungs-Route aufrufen
         env:
-          APP_URL: ${{ secrets.APP_URL }}
+          # Secret und Variable dürfen sie überschreiben; fehlen beide, gilt die
+          # Adresse der laufenden App. Leer kann sie dadurch nicht mehr sein.
+          APP_URL: ${{ secrets.APP_URL || vars.APP_URL || 'https://schulapp-teal.vercel.app' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail
+
+          # Lieber ein Satz als curls Exit 3. Ohne diese Prüfung ruft curl
+          # "/api/cron/reminders" ohne Host auf und bricht mit "URL fehlerhaft"
+          # ab — im Protokoll steht dann nur "Process completed with exit code
+          # 3", und man sucht den Fehler im Workflow statt in einem leeren Wert.
+          if [ -z "${APP_URL}" ]; then
+            echo "::error::APP_URL ist leer. Erwartet wird die Adresse der App, ohne Schrägstrich am Ende."
+            exit 1
+          fi
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "::error::CRON_SECRET ist leer. Es gehört unter Settings → Secrets and variables → Actions als *Repository secret* — nicht als Environment secret."
+            exit 1
+          fi
+
           antwort=$(mktemp)
           code=$(curl -sS --max-time 60 -o "$antwort" -w "%{http_code}" \
             -H "Authorization: Bearer ${CRON_SECRET}" \

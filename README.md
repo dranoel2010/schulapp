@@ -294,9 +294,19 @@ Deployment scheitern („Hobby accounts are limited to daily cron jobs"). Einmal
 am Tag geht die Rechnung aber nicht auf, weil die Route die passende Stunde
 selbst sucht.
 
-Dafür müssen im GitHub-Repo unter *Settings → Secrets and variables → Actions*
-zwei Werte stehen: `CRON_SECRET` (dasselbe wie in der Umgebung der App) und
-`APP_URL` (die Adresse der laufenden App, ohne Schrägstrich am Ende).
+Dafür muss im GitHub-Repo unter *Settings → Secrets and variables → Actions*
+ein Wert stehen: `CRON_SECRET`, dasselbe wie in der Umgebung der App. Und zwar
+als **Repository secret** — ein *Environment secret* sieht dieser Workflow
+nicht, weil sein Job keiner Umgebung zugeordnet ist.
+
+Die Adresse der App steht dagegen im Klartext in `erinnerungen.yml`. Sie war
+einmal ein zweites Secret, und genau daran ist der erste Lauf gescheitert: war
+`APP_URL` nicht gesetzt, rief `curl` die Route ohne Host auf und brach mit Exit
+3 ab — im Protokoll stand nur „Process completed with exit code 3", was nach
+einem kaputten Workflow aussieht und keiner war. Ein Geheimnis war die Adresse
+ohnehin nie; sie steht auf jedem Handy in der Adressleiste. Wer die App
+woanders betreibt, überschreibt sie mit einem Secret oder einer Variablen
+namens `APP_URL`, ohne die Datei anzufassen.
 
 GitHubs Planer ist nicht auf die Minute genau und kann unter Last einige
 Minuten spät kommen. Verschiebt sich ein Lauf über die volle Stunde hinaus,
