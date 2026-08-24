@@ -517,13 +517,18 @@ const HANDLERS: Handlers = {
  * Wie schwer ein Bild in einem Tool-Ergebnis sein darf.
  *
  * Die Claude-App nimmt ein Ergebnis bis rund 150 000 Zeichen an, und Base64
- * macht aus drei Bytes vier Zeichen — 110 KB sind damit die Grenze, mit etwas
- * Luft für den Rest der Antwort. Die Lesefassung zielt beim Aufnehmen auf
- * 100 KB (`READING_TARGET_BYTES` in @/lib/images); diese Zahl hier ist der
- * Prüfstein daneben und absichtlich etwas größer: sie soll nur anschlagen,
- * wenn wirklich etwas nicht gepasst hat.
+ * macht aus drei Bytes vier Zeichen. 105 000 Bytes ergeben genau 140 000
+ * Zeichen und lassen damit zehntausend für alles andere in der Antwort: den
+ * Satz davor, den JSON-RPC-Umschlag, die Feldnamen. Das ist die Rechnung, und
+ * sie geht knapp auf — deshalb steht sie hier und nicht als runde Zahl im
+ * Vorbeigehen.
+ *
+ * Die Lesefassung zielt beim Aufnehmen auf 100 KB (`READING_TARGET_BYTES` in
+ * @/lib/images); diese Zahl hier ist der Prüfstein daneben und absichtlich
+ * etwas größer: sie soll nur anschlagen, wenn die Qualitätsleiter im Browser
+ * ihr Ziel wirklich verfehlt hat. Gemessen an zwei Blättern: 69 und 89 KB.
  */
-const MAX_IMAGE_BYTES = 110_000;
+const MAX_IMAGE_BYTES = 105_000;
 
 /** Ein Blatt, wie es in jeder der drei Listen steht. */
 function sheetRow(sheet: MaterialListItem) {

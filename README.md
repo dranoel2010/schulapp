@@ -273,7 +273,7 @@ durch, die Vorschau (320px) wäre unlesbar. Deshalb liegt an jeder Seite eine
 dritte Fassung mit 1000 Pixeln, gerechnet im Browser wie die anderen beiden
 (an zwei Testblättern gemessen: 69 und 89 KB, also 94 000 bis 121 000 Zeichen).
 Der Server braucht dafür keine Bildbibliothek. Wiegt eine Seite trotz der
-Qualitätsleiter mehr als 110 KB, sagt `read_page` das geradeheraus, statt ein
+Qualitätsleiter mehr als 105 KB, sagt `read_page` das geradeheraus, statt ein
 Ergebnis zu schicken, das unterwegs abgeschnitten wird.
 
 **Der Zugang läuft über OAuth**, weil die Claude-App für einen selbst gebauten

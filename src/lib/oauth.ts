@@ -965,12 +965,17 @@ function isUuid(value: string): boolean {
  *
  * **Der zweite Teil ist die Antwort auf die offene Anmeldung.** Jeder im Netz
  * darf einen Client anmelden, und keine dieser Zeilen bedeutet einen Zugang —
- * aber liegenbleiben würden sie trotzdem für immer. Weg kommt, was älter als
- * ein Tag ist und woran weder eine Verbindung noch ein offener Code hängt: was
- * ein Mensch bestätigt hat, bleibt, alles andere war ein Versuch.
+ * aber liegenbleiben würden sie trotzdem für immer. Weg kommt, woran weder eine
+ * Verbindung noch ein offener Code hängt: was ein Mensch bestätigt hat, bleibt,
+ * alles andere war ein Versuch.
  *
- * Ein Tag und nicht eine Stunde, weil zwischen Anmeldung und Zustimmung ein
- * Mensch steht — der darf auch am nächsten Morgen auf „Erlauben" drücken.
+ * **Dieselbe Frist wie oben, dreißig Tage, und nicht ein Tag.** Ein Client
+ * merkt sich seine Kennung; die Claude-App meldet sich einmal an und benutzt
+ * die Zeile danach jedes Mal wieder, auch nach einem Trennen und Neuverbinden.
+ * Eine kurze Frist träfe deshalb irgendwann genau den Fall, der aussieht wie
+ * ein Fehler in dieser App: „Diesen Zugang gibt es nicht" beim Verbinden, ohne
+ * dass jemand etwas getan hätte. Ein paar liegengebliebene Zeilen sind der
+ * billigere Preis — sie kosten Bytes, nicht Vertrauen.
  */
 export async function sweepGrants(): Promise<void> {
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -984,13 +989,11 @@ export async function sweepGrants(): Promise<void> {
       ),
     );
 
-  const gestern = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
   await db
     .delete(oauthClients)
     .where(
       and(
-        lte(oauthClients.createdAt, gestern),
+        lte(oauthClients.createdAt, cutoff),
         notExists(
           db
             .select({ eins: sql`1` })
