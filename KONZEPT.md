@@ -169,8 +169,9 @@ eigenen Server.
 Damit das trägt, wird **schon im Browser verkleinert**: lange Kante 1600 Pixel
 als JPEG, dazu eine Vorschau mit 320 Pixeln und — seit dem Web MCP — eine
 Lesefassung mit 1000 Pixeln für den Agenten. Eine Seite wiegt mit allen drei
-Fassungen zusammen rund 250 bis 400 KB statt mehrerer Megabyte (an einem
-Testblatt gemessen: 165 + 69 + 14 KB), ein Schuljahr also grob 50 bis 160 MB.
+Fassungen zusammen rund 250 bis 400 KB statt mehrerer Megabyte (an zwei
+Testblättern gemessen: 165 + 69 + 14 und 212 + 89 + 19 KB), ein Schuljahr also
+grob 50 bis 160 MB.
 Der Server
 braucht dadurch keine Bildbibliothek, und jede Anfrage trägt genau eine Seite —
 mehrere Bilder in einem Zug würden jede Größengrenze sprengen, die ein
@@ -397,8 +398,8 @@ Claude-App bei rund 150 000 Zeichen, und ein Bild reist dort als Base64 —
 drei Bytes werden zu vier Zeichen. Das Vollbild mit 1600 Pixeln käme nicht
 durch (gemessen: 165 KB, also rund 225 000 Zeichen), die Vorschau mit 320
 Pixeln käme durch und wäre unlesbar. Deshalb liegt neben beiden eine dritte
-Fassung mit 1000 Pixeln, gerechnet im Browser wie die anderen auch (gemessen:
-69 KB, also rund 94 000 Zeichen). Der Server bleibt damit ohne Bildbibliothek —
+Fassung mit 1000 Pixeln, gerechnet im Browser wie die anderen auch (gemessen: 69 und 89 KB, also
+94 000 bis 121 000 Zeichen). Der Server bleibt damit ohne Bildbibliothek —
 das war der Punkt.
 
 ## Offene Punkte

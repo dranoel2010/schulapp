@@ -17,6 +17,7 @@ import {
   getMaterial,
   listMaterials,
   readPageImage,
+  resolveMaterialTopic,
   LIST_LIMIT,
   type MaterialListItem,
 } from "@/lib/materials";
@@ -24,7 +25,7 @@ import { listSubjects } from "@/lib/subjects";
 import { listTopics, listTopicsForSubjects } from "@/lib/subject-topics";
 import { loadWeek, WEEKDAYS } from "@/lib/timetable";
 
-import { matchSubject, matchTopic, type Match } from "./resolve";
+import { looksLikeId, matchSubject, matchTopic, type Match } from "./resolve";
 import { TOOLS, type ToolArgs, type ToolName } from "./tools";
 
 /**
@@ -190,7 +191,7 @@ const HANDLERS: Handlers = {
     const ueberfaellig = items.filter((item) => !item.done && item.dueDate < heute);
 
     return daten(
-      `${zahl(items.filter((item) => !item.done).length, "offene Aufgabe", "offene Aufgaben", "f")}, davon ${ueberfaellig.length} überfällig. Heute ist der ${formatGerman(heute)}.`,
+      `${zahl(items.filter((item) => !item.done).length, "offene Aufgabe", "offene Aufgaben", "f")}, davon ${ueberfaellig.length} überfällig. ${heuteSatz(heute)}`,
       items.map((item) => ({
         id: item.id,
         title: item.title,
@@ -240,7 +241,7 @@ const HANDLERS: Handlers = {
     });
 
     return daten(
-      `${zahl(exams.length, "Prüfung", "Prüfungen", "f")}. Heute ist der ${formatGerman(todayInBerlin())}.`,
+      `${zahl(exams.length, "Prüfung", "Prüfungen", "f")}. ${heuteSatz(todayInBerlin())}`,
       exams.map((exam) => ({
         id: exam.id,
         subject: exam.subject.name,
@@ -370,7 +371,7 @@ const HANDLERS: Handlers = {
         args.limit,
         LIST_LIMIT,
         "filtere nach Fach oder Thema.",
-      )}`,
+      )} ${heuteSatz(todayInBerlin())}`,
       sheets.map(sheetRow),
     );
   },
@@ -445,7 +446,7 @@ const HANDLERS: Handlers = {
         args.limit,
         INBOX_LIMIT,
         "der Korb ist damit nicht leer, sondern abgeschnitten.",
-      )}`,
+      )} ${heuteSatz(todayInBerlin())}`,
       entries.map((entry) => ({
         ...sheetRow(entry),
         filedAt: entry.filedAt,
@@ -530,7 +531,16 @@ const HANDLERS: Handlers = {
  */
 const MAX_IMAGE_BYTES = 105_000;
 
-/** Ein Blatt, wie es in jeder der drei Listen steht. */
+/**
+ * Ein Blatt, wie es in jeder der drei Listen steht.
+ *
+ * `firstPageId` steht mit dabei, obwohl es aussieht wie ein Detail für die
+ * Detailansicht. Es ist die Abkürzung, die den Korb überhaupt benutzbar macht:
+ * ohne sie müsste ein Agent zwischen `read_inbox` und `read_page` immer erst
+ * `read_sheet` rufen, nur um eine id nachzuschlagen, die die Liste längst
+ * geladen hat. Bei einem Blatt mit mehreren Seiten führt der Weg trotzdem über
+ * `read_sheet` — die zweite Seite kennt nur das Detail.
+ */
 function sheetRow(sheet: MaterialListItem) {
   return {
     id: sheet.id,
@@ -540,6 +550,8 @@ function sheetRow(sheet: MaterialListItem) {
     subject: sheet.subject.name,
     subjectId: sheet.subject.id,
     pageCount: sheet.pageCount,
+    /** Für read_page. Bei mehrseitigen Blättern stehen die übrigen in read_sheet. */
+    firstPageId: sheet.coverPageId,
     topics: sheet.topics.map((topic) => topic.title),
   };
 }
@@ -575,6 +587,27 @@ async function findTopic(
   subjectId: string | undefined,
 ): Promise<Gefunden | { fehler: ToolOutcome }> {
   const subjects = await listSubjects(user.id, { includeArchived: true });
+
+  // Eine id geht denselben Weg wie in der Ablage: über `resolveMaterialTopic()`,
+  // und das folgt einer zusammengelegten Schreibweise auf ihr Ziel. Über die
+  // Liste unten fände sie sich nicht — `listTopics()` lässt Aliasse draußen,
+  // weil sie in einer Vorschlagsliste doppelt dastünden. Wer eine id aus einem
+  // früheren Aufruf mitbringt, soll trotzdem die Blätter bekommen, die inzwischen
+  // unter dem anderen Namen hängen.
+  if (looksLikeId(query)) {
+    const aufgeloest = await resolveMaterialTopic(user.id, query);
+
+    if (!aufgeloest) {
+      return { fehler: fehler(`Ein Thema mit dieser id gibt es nicht: ${query}`) };
+    }
+
+    return {
+      treffer: { id: aufgeloest.id, title: aufgeloest.title },
+      fach:
+        subjects.find((subject) => subject.id === aufgeloest.subjectId)?.name ??
+        "unbekanntes Fach",
+    };
+  }
 
   // Ist ein Fach genannt, gilt es zuerst — dort kann dasselbe Wort eindeutig
   // sein, das über alle Fächer hinweg mehrdeutig wäre. Findet sich dort nichts,
@@ -693,6 +726,20 @@ function grenzeErreicht(
   if (rows.length < (limit ?? grenze)) return "";
 
   return ` Das ist die Obergrenze dieser Abfrage — es liegen möglicherweise mehr da; ${rat}`;
+}
+
+/**
+ * Welcher Tag heute ist — in beiden Schreibweisen.
+ *
+ * Die deutsche steht da, weil der Satz deutsch ist; die andere, weil sie das
+ * Format ist, das `propose_sheet` verlangt. Ohne sie müsste ein Modell seinen
+ * eigenen Kalender befragen, und der ist nicht der dieser App: gerechnet wird
+ * hier durchweg in Berliner Zeit, und um kurz nach Mitternacht liegen die
+ * beiden Antworten einen Tag auseinander. Ein Schultag in der Zukunft wird beim
+ * Vorschlag abgewiesen — dann lieber die Zahl mitliefern als den Fehler.
+ */
+function heuteSatz(heute: string): string {
+  return `Heute ist der ${formatGerman(heute)} (${heute}).`;
 }
 
 /**

@@ -168,7 +168,7 @@ export const TOOLS = {
   read_material: {
     title: "Ablage durchsuchen",
     description:
-      "Abfotografierte Blätter, das neueste zuerst: id, Titel, Schultag, Fach, Themen und wie viele Seiten. Ohne Filter die ganze Ablage; mit `topic` beantwortet dieses Werkzeug „was habe ich zur Kettenregel?“. Das Foto selbst kommt aus read_page.",
+      "Abfotografierte Blätter, das neueste zuerst: id, Titel, Schultag, Fach, Themen, wie viele Seiten und `firstPageId` für read_page. Ohne Filter die ganze Ablage; mit `topic` beantwortet dieses Werkzeug „was habe ich zur Kettenregel?“.",
     readOnly: true,
     args: z
       .object({
@@ -204,7 +204,7 @@ export const TOOLS = {
   read_page: {
     title: "Das Foto einer Seite",
     description:
-      "Das Foto einer Seite als Bild, in einer Fassung zum Lesen (lange Kante 1000 Pixel). Damit liest du, was auf dem Blatt steht. Die id einer Seite kommt aus read_sheet — nicht die id des Blattes.",
+      "Das Foto einer Seite als Bild, in einer Fassung zum Lesen (lange Kante 1000 Pixel). Damit liest du, was auf dem Blatt steht. Die id einer Seite steht als `firstPageId` in read_material und read_inbox, alle Seiten eines Blattes in read_sheet — die id des Blattes ist eine andere.",
     readOnly: true,
     args: z
       .object({
@@ -213,7 +213,9 @@ export const TOOLS = {
           .trim()
           .min(1)
           .max(64)
-          .describe("Die id einer Seite aus read_sheet."),
+          .describe(
+            "Die id einer Seite — `firstPageId` aus read_material oder read_inbox, oder eine aus read_sheet.",
+          ),
       })
       .strict(),
   },
@@ -221,7 +223,7 @@ export const TOOLS = {
   read_inbox: {
     title: "Eingangskorb",
     description:
-      "Was noch eine Entscheidung braucht: Blätter, die niemand durchgesehen hat, und offene Vorschläge dazu. Der Einstieg, wenn du beim Einordnen helfen sollst — lies die Blätter mit read_page und leg mit propose_sheet einen Vorschlag daneben.",
+      "Was noch eine Entscheidung braucht: Blätter, die niemand durchgesehen hat, und offene Vorschläge dazu. Der Einstieg, wenn du beim Einordnen helfen sollst: jede Zeile nennt `firstPageId` — damit liest du das Foto direkt mit read_page und legst mit propose_sheet einen Vorschlag daneben. Hat ein Blatt mehrere Seiten, stehen die übrigen ids in read_sheet.",
     readOnly: true,
     args: z
       .object({
@@ -265,7 +267,7 @@ export const TOOLS = {
           .trim()
           .optional()
           .describe(
-            "Der Schultag als Kalenderdatum (JJJJ-MM-TT). Er darf nicht in der Zukunft liegen.",
+            "Der Schultag als Kalenderdatum (JJJJ-MM-TT). Er darf nicht in der Zukunft liegen — welcher Tag heute ist, sagt dir jedes Lese-Werkzeug am Ende seines Satzes. Meistens braucht es dieses Feld gar nicht: das Blatt trägt den Tag seiner Aufnahme schon.",
           ),
         note: z
           .string()

@@ -246,6 +246,14 @@ export function authorizationServerMetadata(
  * eines fremden Nutzers.
  */
 export function isAllowedRedirectUri(value: string): boolean {
+  // Kein Leerzeichen, kein Steuerzeichen — und das ist hier nicht Kosmetik:
+  // die angemeldeten Adressen stehen in EINER Spalte, durch Leerzeichen
+  // getrennt (`splitRedirectUris()`). Eine Adresse mit einem Leerzeichen darin
+  // zerfiele beim Lesen in zwei Bruchstücke, und verglichen würde danach gegen
+  // etwas, das nie jemand angemeldet hat. In einer echten Rückadresse steht ein
+  // Leerzeichen ohnehin als %20; roh gehört es nicht hinein.
+  if (/[\u0000-\u0020\u007f]/.test(value)) return false;
+
   let url: URL;
   try {
     url = new URL(value);
@@ -976,6 +984,12 @@ function isUuid(value: string): boolean {
  * ein Fehler in dieser App: „Diesen Zugang gibt es nicht" beim Verbinden, ohne
  * dass jemand etwas getan hätte. Ein paar liegengebliebene Zeilen sind der
  * billigere Preis — sie kosten Bytes, nicht Vertrauen.
+ *
+ * Ganz ausgeschlossen ist der Fall damit nicht: wer einen Monat lang getrennt
+ * bleibt, verliert mit der Verbindung auch die Zeile des Clients. Das ist die
+ * richtige Reihenfolge — eine Kennung ohne jede Verbindung ist nichts, was
+ * aufzuheben wäre —, und ein Client, der wiederkommt, meldet sich neu an. Das
+ * kostet ihn einen Aufruf und niemanden eine Entscheidung.
  */
 export async function sweepGrants(): Promise<void> {
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);

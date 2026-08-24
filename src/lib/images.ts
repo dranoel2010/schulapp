@@ -66,8 +66,8 @@ export const READING_EDGE = 1000;
 /**
  * Worauf die Lesefassung zielt — nicht, was sie höchstens darf.
  *
- * 100 KB sind rund 137 000 Zeichen Base64 und lassen unter der Grenze der
- * Claude-App Platz für den Rest der Antwort. `MAX_READING_BYTES` weiter unten
+ * 100 000 Bytes sind rund 133 000 Zeichen Base64 und lassen unter der Grenze
+ * der Claude-App Platz für den Rest der Antwort. `MAX_READING_BYTES` weiter unten
  * ist das Netz für den Fall, dass niemand gezielt hat; diese Zahl hier ist das
  * Ziel, auf das die Leiter zusteuert.
  */

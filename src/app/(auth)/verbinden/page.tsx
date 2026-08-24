@@ -78,9 +78,9 @@ export default async function VerbindenPage({
   // Der Name, unter dem die Rückadresse gleich auf dem Bildschirm steht. Der
   // Host allein und nicht die ganze Adresse: „claude.ai" ist zu lesen und zu
   // prüfen, „https://claude.ai/api/mcp/auth_callback?x=1" liest niemand zu
-  // Ende — und was zählt, steht vorne. Fällt das Auslesen aus (eine Adresse,
-  // die nicht einmal ein URL ist), steht die Zeichenkette selbst da; abgewiesen
-  // wird sie ohnehin gleich darunter.
+  // Ende. Wie gekürzt wird und warum vorne, steht an `hostVon()`. Fällt das
+  // Auslesen aus (eine Zeichenkette, die nicht einmal eine Adresse ist), steht
+  // sie selbst da; abgewiesen wird sie ohnehin gleich darunter.
   const ziel = hostVon(redirectUri);
 
   if (!redirectUriMatches(angemeldeteAdressen, redirectUri)) {
@@ -312,11 +312,32 @@ function first(value: string | string[] | undefined): string | null {
   return value ?? null;
 }
 
-/** Der Name des Rechners aus einer Adresse — „claude.ai" aus der ganzen Zeile. */
+/**
+ * Der Name des Rechners aus einer Adresse — „claude.ai" aus der ganzen Zeile.
+ *
+ * Ein sehr langer Name wird dabei VORNE gekürzt und nicht hinten. Das ist die
+ * ganze Überlegung dahinter: wem ein Name gehört, entscheidet sein Ende.
+ * „claude.ai.irgendwas.evil.example" beginnt vertrauenswürdig und endet bei
+ * jemand anderem; wer nur den Anfang liest, liest die falsche Hälfte. Gekürzt
+ * steht dann „…irgendwas.evil.example" da — mit dem Teil, auf den es ankommt.
+ */
 function hostVon(value: string): string {
+  let host: string;
   try {
-    return new URL(value).host;
+    host = new URL(value).host;
   } catch {
-    return value;
+    host = value;
   }
+
+  return host.length <= HOST_MAX ? host : `…${host.slice(-HOST_MAX)}`;
 }
+
+/**
+ * Wie viel vom Namen des Rechners stehen bleibt.
+ *
+ * Vierzig Zeichen tragen jeden echten Namen samt Port („claude.ai" hat neun)
+ * und passen in eine Zeile, die ein Mensch mit einem Blick erfasst. Alles
+ * darüber ist entweder eine Kette von Unter-Namen, die etwas verstecken soll,
+ * oder ein Name, den ohnehin niemand vorlesen kann.
+ */
+const HOST_MAX = 40;

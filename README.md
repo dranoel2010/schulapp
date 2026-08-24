@@ -47,7 +47,7 @@ npm run build && npm run start
 | `npm run db:push` | Schemaänderungen in die Datenbank übertragen |
 | `npm run db:studio` | Datenbank im Browser ansehen |
 | `npm run db:backup` | Kopie der lokalen Datenbank nach `.backups/` |
-| `npm test` | 412 Tests in 77 Suiten — die reine Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala, Themen-Titel, Bildmaße, die Zahlen der Startseite, das Formular der Ablage, die Vorbelegung aus einem Vorschlag, die Verteilung der Fehlermeldungen, die angehakten Felder des Epochenwechsels — und für den Web MCP die Rückadressen, PKCE, der Rückweg nach dem Anmelden, der Umschlag des Protokolls, die Auflösung von Fach und Thema und der Werkzeugkasten |
+| `npm test` | 414 Tests in 77 Suiten — die reine Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala, Themen-Titel, Bildmaße, die Zahlen der Startseite, das Formular der Ablage, die Vorbelegung aus einem Vorschlag, die Verteilung der Fehlermeldungen, die angehakten Felder des Epochenwechsels — und für den Web MCP die Rückadressen, PKCE, der Rückweg nach dem Anmelden, der Umschlag des Protokolls, die Auflösung von Fach und Thema und der Werkzeugkasten |
 | `npm run lint` | ESLint |
 
 ## Aufbau
@@ -177,8 +177,9 @@ es mit, es braucht keinen zweiten Zugang und kein Token, und lokal wie in der
 Cloud läuft derselbe Code. Verkleinert wird schon im Browser — lange Kante
 1600px als JPEG, dazu eine Vorschau mit 320px und eine Lesefassung mit 1000px
 für den Agenten. Eine Seite wiegt mit allen drei Fassungen zusammen rund 250
-bis 400 KB statt mehrerer Megabyte, jede Anfrage trägt genau eine Seite, und
-der Server braucht keine Bildbibliothek. Jede der drei Größen steht als eigene Spalte da, weil jede
+bis 400 KB statt mehrerer Megabyte (an zwei Testblättern gemessen: 165 + 69 + 14
+und 212 + 89 + 19 KB), jede Anfrage trägt genau eine Seite, und der Server
+braucht keine Bildbibliothek. Jede der drei Größen steht als eigene Spalte da, weil jede
 einen eigenen Leser hat: die Ablage zeigt bis zu zweihundert Vorschauen auf
 einmal (rund 3 MB; als Vollbilder wären es rund 50 MB), die Detailseite ein
 Vollbild, und der Agent bekommt die Lesefassung, weil ein Werkzeug-Ergebnis
@@ -273,13 +274,14 @@ durch, die Vorschau (320px) wäre unlesbar. Deshalb liegt an jeder Seite eine
 dritte Fassung mit 1000 Pixeln, gerechnet im Browser wie die anderen beiden
 (an zwei Testblättern gemessen: 69 und 89 KB, also 94 000 bis 121 000 Zeichen).
 Der Server braucht dafür keine Bildbibliothek. Wiegt eine Seite trotz der
-Qualitätsleiter mehr als 105 KB, sagt `read_page` das geradeheraus, statt ein
+Qualitätsleiter mehr als 105 000 Bytes, sagt `read_page` das geradeheraus (und nennt die Größe wie überall in der App binär, also „103 KB“), statt ein
 Ergebnis zu schicken, das unterwegs abgeschnitten wird.
 
 **Der Zugang läuft über OAuth**, weil die Claude-App für einen selbst gebauten
 Anschluss nichts Einfacheres anbietet, das man verantworten kann. Die App ist
-dabei ihr eigener Aussteller: `/.well-known/oauth-protected-resource` und
-`/.well-known/oauth-authorization-server` beschreiben sie, `/api/oauth/register`
+dabei ihr eigener Aussteller: `/.well-known/oauth-protected-resource/api/mcp`
+(und, für Clients, die es andersherum versuchen, dieselbe Beschreibung an der
+Wurzel) und `/.well-known/oauth-authorization-server` beschreiben sie, `/api/oauth/register`
 meldet ein Programm an, `/verbinden` fragt den Menschen, `/api/oauth/token`
 tauscht. Ein Zugriffs-Token gilt eine Stunde und für genau eine Adresse; das
 Erneuerungs-Token wird bei jedem Gebrauch gegen ein neues getauscht, dessen
