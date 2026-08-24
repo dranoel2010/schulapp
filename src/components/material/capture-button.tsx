@@ -23,6 +23,9 @@ import {
   MAX_EDGE,
   MAX_PAGE_BYTES,
   MAX_PAGES,
+  READING_EDGE,
+  READING_QUALITIES,
+  READING_TARGET_BYTES,
   THUMB_EDGE,
 } from "@/lib/images";
 
@@ -38,9 +41,12 @@ import {
  *
  * Verkleinert wird hier im Browser, bevor etwas hochgeht. Ein Handyfoto wiegt
  * roh mehrere Megabyte; nach dem Zeichnen auf ein Canvas mit 1600 Pixel langer
- * Kante bleiben rund 250 KB übrig, und dieselbe Rechnung liefert gleich noch
- * die Vorschau mit. Die Maße und Grenzen dafür stehen in @/lib/images — der
- * Server prüft sie ein zweites Mal und soll dabei dieselbe Zahl meinen.
+ * Kante bleiben rund 250 KB übrig, und dieselbe Rechnung liefert gleich die
+ * Vorschau und die Lesefassung mit. Die Maße und Grenzen dafür stehen in
+ * @/lib/images — der Server prüft sie ein zweites Mal und soll dabei dieselbe
+ * Zahl meinen. Dass es drei Größen sind und nicht zwei, liegt am Agenten: er
+ * bekommt sein Bild durch ein Tool-Ergebnis, und dort ist bei rund 150 000
+ * Zeichen Schluss (siehe `toReadingJpeg()` unten).
  *
  * Mehrere Bilder gehen einzeln über die Leitung, eine Anfrage je Seite: das
  * erste legt das Blatt an, jedes weitere hängt sich mit der zurückgegebenen id
@@ -150,6 +156,7 @@ async function readBitmap(file: File): Promise<ImageBitmap> {
 async function toJpeg(
   bitmap: ImageBitmap,
   max: number,
+  quality: number = JPEG_QUALITY,
 ): Promise<{ blob: Blob; width: number; height: number }> {
   const size = fitWithin(bitmap.width, bitmap.height, max);
 
@@ -165,7 +172,7 @@ async function toJpeg(
 
     const blob = await canvas.convertToBlob({
       type: "image/jpeg",
-      quality: JPEG_QUALITY,
+      quality,
     });
 
     return { blob, width: size.width, height: size.height };
@@ -181,7 +188,7 @@ async function toJpeg(
   context.drawImage(bitmap, 0, 0, size.width, size.height);
 
   const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY);
+    canvas.toBlob(resolve, "image/jpeg", quality);
   });
 
   if (!blob) throw new CaptureError(CANVAS_MESSAGE);
@@ -190,12 +197,52 @@ async function toJpeg(
 }
 
 /**
- * Ein Bild in die beiden Größen, die gespeichert werden: das Vollbild und die
- * Vorschau. Beide entstehen aus demselben ImageBitmap, das danach geschlossen
- * wird — ein Handy hält den Speicher sonst bis zum nächsten Neuladen fest.
+ * Die Lesefassung — dieselbe Kantenlänge, aber eine Größe, die durch ein
+ * Tool-Ergebnis passt.
+ *
+ * Sie ist die einzige der drei Fassungen, die eine feste Obergrenze in Bytes
+ * einhalten muss und nicht nur in Pixeln: ein Bild reist zum Agenten als
+ * Base64, und dort ist bei rund 150 000 Zeichen Schluss. Wie schwer 1000 Pixel
+ * ausfallen, hängt aber vom Blatt ab — ein Arbeitsblatt mit viel Weiß wiegt die
+ * Hälfte eines abfotografierten Tafelbilds. Eine feste Qualität träfe deshalb
+ * immer nur eines von beiden.
+ *
+ * Also wird gemessen statt geschätzt: die Stufen aus `READING_QUALITIES` der
+ * Reihe nach, die erste, die unter `READING_TARGET_BYTES` bleibt, gewinnt. Das
+ * sind im Normalfall null zusätzliche Durchgänge, weil schon die erste Stufe
+ * passt, und im schlimmsten Fall drei — auf einem Bitmap, das ohnehin schon im
+ * Speicher liegt.
+ *
+ * Bleibt auch die letzte Stufe zu schwer, wird sie trotzdem genommen. Ein zu
+ * schweres Bild ist immer noch ein Bild; was daraus folgt, entscheidet das
+ * Tool, das es ausliefern soll, und nicht der Auslöser im Unterricht. Hier
+ * abzubrechen hieße, eine Aufnahme wegen des Agenten zu verlieren — und die
+ * App ist ohne ihn vollständig.
+ */
+async function toReadingJpeg(bitmap: ImageBitmap): Promise<Blob> {
+  let last: Blob | null = null;
+
+  for (const quality of READING_QUALITIES) {
+    const attempt = await toJpeg(bitmap, READING_EDGE, quality);
+    last = attempt.blob;
+
+    if (attempt.blob.size <= READING_TARGET_BYTES) return attempt.blob;
+  }
+
+  if (!last) throw new CaptureError(CANVAS_MESSAGE);
+
+  return last;
+}
+
+/**
+ * Ein Bild in die drei Größen, die gespeichert werden: das Vollbild, die
+ * Lesefassung für den Agenten und die Vorschau. Alle drei entstehen aus
+ * demselben ImageBitmap, das danach geschlossen wird — ein Handy hält den
+ * Speicher sonst bis zum nächsten Neuladen fest.
  */
 async function prepare(file: File): Promise<{
   image: Blob;
+  reading: Blob;
   thumb: Blob;
   width: number;
   height: number;
@@ -208,6 +255,7 @@ async function prepare(file: File): Promise<{
 
   try {
     const full = await toJpeg(bitmap, MAX_EDGE);
+    const reading = await toReadingJpeg(bitmap);
     const thumb = await toJpeg(bitmap, THUMB_EDGE);
 
     if (full.blob.size > MAX_PAGE_BYTES) {
@@ -218,6 +266,7 @@ async function prepare(file: File): Promise<{
 
     return {
       image: full.blob,
+      reading,
       thumb: thumb.blob,
       width: full.width,
       height: full.height,
@@ -381,6 +430,7 @@ export function CaptureButton({
     formData.set("breite", String(page.width));
     formData.set("hoehe", String(page.height));
     formData.set("bild", page.image, "blatt.jpg");
+    formData.set("lesefassung", page.reading, "lesefassung.jpg");
     formData.set("vorschau", page.thumb, "vorschau.jpg");
 
     if (target) {

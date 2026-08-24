@@ -10,9 +10,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth";
+import { listConnections } from "@/lib/oauth";
 import { readThemePreference, THEME_OPTIONS } from "@/lib/theme";
 
-import { setReminderHourAction, setThemeAction } from "./actions";
+import {
+  revokeConnectionAction,
+  setReminderHourAction,
+  setThemeAction,
+} from "./actions";
 import { PushSettings, ReminderTime } from "./push-settings";
 
 export const metadata: Metadata = {
@@ -22,16 +27,22 @@ export const metadata: Metadata = {
 /** Wie auf der Startseite: der Server läuft womöglich in UTC. */
 const TIME_ZONE = "Europe/Berlin";
 
-export default async function SettingsPage() {
-  const user = await requireUser();
-  const theme = await readThemePreference();
-
-  const since = user.createdAt.toLocaleDateString("de-DE", {
+/** Ein Datum, wie es in dieser Karte steht: „24. August 2026". */
+function tag(value: Date): string {
+  return value.toLocaleDateString("de-DE", {
     day: "numeric",
     month: "long",
     year: "numeric",
     timeZone: TIME_ZONE,
   });
+}
+
+export default async function SettingsPage() {
+  const user = await requireUser();
+  const theme = await readThemePreference();
+  const connections = await listConnections(user.id);
+
+  const since = tag(user.createdAt);
 
   // In der Entwicklung liegt die Datenbank als Datei im Projekt, sonst steht
   // eine DATABASE_URL auf einen echten Postgres.
@@ -146,6 +157,50 @@ export default async function SettingsPage() {
             Danach liegt sie mit eigenem Symbol im App-Menü und startet ohne
             Browserleiste.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Verbundene Programme</CardTitle>
+          <CardDescription>
+            Was über den Web MCP mitlesen darf. Ein verbundenes Programm sieht
+            deine Schulsachen und kann Vorschläge in den Eingangskorb legen —
+            ändern kann es nichts.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {connections.length === 0 ? (
+            <p className="text-sm text-muted">
+              Nichts verbunden. Verbunden wird in der Claude-App unter
+              Connectors, mit der Adresse{" "}
+              <code className="break-all">/api/mcp</code> dieser App; die Frage
+              danach stellt dir diese App selbst.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {connections.map((connection) => (
+                <li
+                  key={connection.id}
+                  className="flex flex-wrap items-baseline justify-between gap-3"
+                >
+                  <div>
+                    <p className="font-medium">{connection.clientName}</p>
+                    <p className="text-sm text-muted">
+                      verbunden seit {tag(connection.createdAt)}
+                    </p>
+                  </div>
+
+                  <form action={revokeConnectionAction}>
+                    <input type="hidden" name="id" value={connection.id} />
+                    <Button type="submit" variant="secondary">
+                      Trennen
+                    </Button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
 

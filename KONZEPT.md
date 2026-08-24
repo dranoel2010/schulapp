@@ -145,8 +145,8 @@ einer Note nicht mehr zu schaffen.
       zuordnen. Ohne KI, und für sich schon nützlich~~ **fertig**
    3. ~~**Eingangskorb** — Vorschläge, die man bestätigt, mit vollem
       Handformular~~ **fertig**
-   4. **Web MCP** — die App bietet ihre Fähigkeiten als Tools an, ein Agent in
-      Claude benutzt sie
+   4. ~~**Web MCP** — die App bietet ihre Fähigkeiten als Tools an, ein Agent in
+      Claude benutzt sie~~ **fertig**
 
 ## Die Ablage
 
@@ -156,7 +156,7 @@ beliebig viele Themen aus dem Vokabular seines Fachs — dieselben Themen, aus
 denen auch die Klausuren schöpfen. Ein Blatt kann mehrere Seiten haben.
 
 ```
-Fach ─── Blatt ──┬── Seite    Reihenfolge, Maße, Vollbild, Vorschau
+Fach ─── Blatt ──┬── Seite    Reihenfolge, Maße, Vollbild, Lesefassung, Vorschau
                  └── Thema    Verweis ins Vokabular des Fachs
 ```
 
@@ -167,8 +167,11 @@ Das passt zu dem, was die App über sich behauptet — alle Daten liegen auf dem
 eigenen Server.
 
 Damit das trägt, wird **schon im Browser verkleinert**: lange Kante 1600 Pixel
-als JPEG, dazu eine Vorschau mit 320 Pixeln. Ein Blatt wiegt danach rund 250 KB
-statt mehrerer Megabyte, ein Schuljahr also grob 50 bis 120 MB. Der Server
+als JPEG, dazu eine Vorschau mit 320 Pixeln und — seit dem Web MCP — eine
+Lesefassung mit 1000 Pixeln für den Agenten. Eine Seite wiegt mit allen drei
+Fassungen zusammen rund 250 bis 400 KB statt mehrerer Megabyte (an einem
+Testblatt gemessen: 165 + 69 + 14 KB), ein Schuljahr also grob 50 bis 160 MB.
+Der Server
 braucht dadurch keine Bildbibliothek, und jede Anfrage trägt genau eine Seite —
 mehrere Bilder in einem Zug würden jede Größengrenze sprengen, die ein
 Funktionsaufruf in der Cloud hat.
@@ -266,10 +269,11 @@ danach am Blatt, und das Blatt ist die Sache, die Geschichte trägt. Mit einem
 Zustand liefe die Tabelle mit toten Entwürfen voll, die niemand mehr liest, und
 jede Abfrage des Korbs müsste darum herumfiltern.
 
-Heute gibt es keinen Agenten, also entstehen **alle Vorschläge von Hand**. Das
-ist keine Übungsaufgabe: es ist der Beweis, dass die Tür trägt, bevor jemand
-hindurchgeht. Dieselbe Regel gilt schon bei der Themenpflege, und sie gilt hier
-weiter.
+Bis Stufe 4 entstanden **alle Vorschläge von Hand**. Das war keine
+Übungsaufgabe, sondern der Beweis, dass die Tür trägt, bevor jemand
+hindurchgeht — und sie trug: das Werkzeug des Agenten (`propose_sheet`) legt
+seinen Vorschlag heute durch dieselbe Prüfung und dieselbe Datenschicht wie das
+Formular, ohne dass an ihnen eine Zeile geändert werden musste.
 
 ## Wie die KI angeschlossen wird
 
@@ -284,13 +288,14 @@ endet mit `redirect()`, und das wirft intern — ein Tool bekäme nie ein Ergebn
 
 **Angestoßen wird der Agent von Hand, in der Claude-App.** Das ist entschieden,
 und zwar aus drei Gründen, von denen keiner der Preis ist. Ein Blatt kostet als
-Bild rund 4 500 Tokens; bei zweihundert Blättern im Schuljahr sind das ein bis
-drei Euro, je nach Modell. Über drei Euro entscheidet man nicht.
+Bild rund 1 900 Tokens — so viel wiegt die Lesefassung mit 1000 Pixeln, die der
+Agent bekommt; bei zweihundert Blättern im Schuljahr ist das gut ein Euro, je
+nach Modell. Über einen Euro entscheidet man nicht.
 
 Entschieden hat es dies:
 
 Erstens liegt dieser Weg ohnehin auf dem Weg. Die App bietet ihre Fähigkeiten
-als Tools an — das ist Stufe 4 und steht unabhängig davon fest, weil die Frage
+als Tools an — das ist Stufe 4 und stand unabhängig davon fest, weil die Frage
 „was habe ich zur Kettenregel?" einen Agenten braucht, der lesen kann. Der
 Handgriff in der Claude-App ist genau dieser Weg plus die Gewohnheit, ihn zu
 gehen. Ein Aufruf aus der App heraus käme obendrauf und ersetzte nichts.
@@ -334,15 +339,81 @@ liest und gleichzeitig schreiben darf, ist angreifbar über das Blatt selbst.
 Aus demselben Grund gehören Zettel nie in eine Claude-Code-Sitzung, sondern in
 die Claude-App — dort steht kein Bash und kein Zugriff auf das Repo daneben.
 
+### Wie der Zugang abgesichert ist
+
+Die App bringt ihren **eigenen OAuth-Server** mit. Das ist keine Vorliebe für
+Protokolle: die Claude-App nimmt für einen selbst gebauten Anschluss genau drei
+Arten von Anmeldung an, und zwei davon scheiden aus. „Ohne Anmeldung" hieße,
+dass jeder im Netz die Blätter lesen kann. Ein fester Schlüssel in einer
+Kopfzeile ist dort eine Beta, die man bei Anthropic beantragen muss. Bleibt der
+vorgesehene Weg — und für einen einzigen Nutzer ist er kleiner, als sein Name
+vermuten lässt: eine Anmeldung ohne Passwort für das Programm, **eine Seite mit
+einem Knopf für den Menschen** (`/verbinden`), ein Tausch von Code gegen Token.
+
+Vier Dinge daran sind nicht verhandelbar, und jedes hat einen Fall, den es
+verhindert:
+
+- **PKCE.** Der Zustimmungs-Code reist durch die Adresszeile eines Browsers.
+  Ohne den Prüfwert wäre er allein schon der Schlüssel.
+- **Die Rückadresse wird Zeichen für Zeichen geprüft.** Sie ist die Stelle, an
+  die der Code geschickt wird; wer sie fälschen darf, braucht kein Passwort.
+- **Das Token gilt für genau eine Adresse.** Ein Token für einen anderen
+  MCP-Server, das jemand hierher weiterreicht, ist kein Zugang — sonst wäre
+  jeder Server, bei dem der Nutzer angemeldet ist, ein Schlüssel zu allen
+  anderen.
+- **Gespeichert werden nur Abdrücke.** Anders als das Sitzungs-Token im
+  eigenen Cookie gehen diese Zeichenketten durch fremde Hände.
+
+Und eine Regel, die nicht im Protokoll steht, sondern in diesem Konzept:
+**alles, was verbunden ist, steht in den Einstellungen und lässt sich dort
+trennen.** Ein Zugang, den man nur erteilen und nicht zurücknehmen kann, ist
+kein Zugang, sondern ein Geschenk.
+
+### Was der Agent kann
+
+Elf Werkzeuge, zehn davon lesen: Fächer, Themen, Stundenplan, Hausaufgaben,
+Klausuren samt Lernplan, Noten, die Ablage, ein Blatt, das Foto einer Seite,
+der Eingangskorb. Das elfte legt einen Vorschlag an. Kein Anlegen, kein
+Ändern, kein Löschen — und ausdrücklich auch kein Übernehmen eines Vorschlags.
+
+Jedes davon steht auch in der Oberfläche; die Regel „alles, was die KI kann,
+muss ich auch können" ist damit eingehalten, ohne dass eine Seite dazukommen
+musste. Umgekehrt gilt sie nicht: den Epochenwechsel, das Zusammenlegen von
+Themen und das Abhaken eines Lernblocks gibt es nur für Menschen.
+
+**Ein Fach nennt der Agent beim Namen.** „Mathe" ist eine zulässige Angabe,
+nicht nur die id — sonst müsste er vor jeder Frage eine Liste holen, um ein
+Wort zu übersetzen, das der Mensch ihm gerade gesagt hat. Passt der Name auf
+mehrere Fächer, fragt das Werkzeug zurück, statt eines zu raten: ein Blatt im
+falschen Fach findet später niemand wieder.
+
+**Das Foto braucht eine eigene Größe.** Ein Tool-Ergebnis endet in der
+Claude-App bei rund 150 000 Zeichen, und ein Bild reist dort als Base64 —
+drei Bytes werden zu vier Zeichen. Das Vollbild mit 1600 Pixeln käme nicht
+durch (gemessen: 165 KB, also rund 225 000 Zeichen), die Vorschau mit 320
+Pixeln käme durch und wäre unlesbar. Deshalb liegt neben beiden eine dritte
+Fassung mit 1000 Pixeln, gerechnet im Browser wie die anderen auch (gemessen:
+69 KB, also rund 94 000 Zeichen). Der Server bleibt damit ohne Bildbibliothek —
+das war der Punkt.
+
 ## Offene Punkte
 
 - Fächerliste (kommt beim ersten Einrichten in der App)
-- **Ob die Erkennung bei der eigenen Handschrift taugt, ist noch nicht
-  gemessen.** Der Weg dorthin kostet nichts: fünf Blätter in die Claude-App,
-  hinsehen. Erst danach lässt sich sagen, ob ein Knopf „Vorschläge holen" an
-  der App überhaupt lohnt (siehe oben) — bei schlechter Erkennung wird ohnehin
-  jeder Vorschlag nachgetippt, und dann füllt ein automatischer Aufruf den Korb
-  mit Arbeit, statt sie abzunehmen.
+- **Ob die Erkennung bei Formeln taugt, ist noch nicht gemessen.** Für
+  Fließtext ist es das: ein abfotografierter Aufsatz kam am 23.8.2026 wörtlich
+  richtig zurück, mit einem einzigen als unsicher markierten Wort — und die
+  Vermutung stimmte. Mathematik ist ein anderes Problem und wird das Fach mit
+  den meisten Blättern: Brüche, Indizes, Exponenten, beschriftete Skizzen. Der
+  Weg dorthin kostet jetzt gar nichts mehr — ein Mathe-Blatt aufnehmen und den
+  Agenten `read_page` rufen lassen. Erst danach lässt sich sagen, ob ein Knopf
+  „Vorschläge holen" an der App überhaupt lohnt (siehe oben): bei schlechter
+  Erkennung wird ohnehin jeder Vorschlag nachgetippt, und dann füllt ein
+  automatischer Aufruf den Korb mit Arbeit, statt sie abzunehmen.
+- **Was ein Vorschlag vom Agenten am Blatt ändern würde, steht nur beim
+  Übernehmen.** Der Korb zeigt, dass einer da ist, und wer wissen will, was
+  drinsteht, tippt ihn an. Bei einem Vorschlag von Hand war das richtig — man
+  hatte ihn selbst geschrieben. Bei einem vom Agenten wäre eine Zeile in der
+  Liste womöglich mehr wert.
 - **Die Oberstufe bringt zwei Änderungen auf einmal.** In der 11. gibt es Punkte
   0–15 statt Noten 1–6, und spätestens dann braucht die App Halbjahre: heute
   liegen alle Noten in einem Topf, und eine Themenliste über zwei Schuljahre

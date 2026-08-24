@@ -9,6 +9,7 @@ import { markFiled } from "@/lib/inbox";
 import {
   MAX_PAGES,
   MAX_PAGE_BYTES,
+  MAX_READING_BYTES,
   MAX_THUMB_BYTES,
   isAllowedMime,
 } from "@/lib/images";
@@ -108,16 +109,21 @@ async function readPage(
   formData: FormData,
 ): Promise<{ ok: true; page: NewPage } | { ok: false; message: string }> {
   const image = file(formData, "bild");
+  const reading = file(formData, "lesefassung");
   const thumb = file(formData, "vorschau");
 
-  if (!image || !thumb) {
+  if (!image || !reading || !thumb) {
     return {
       ok: false,
       message: "Von dieser Aufnahme ist nichts angekommen. Versuch es noch einmal.",
     };
   }
 
-  if (!isAllowedMime(image.type) || !isAllowedMime(thumb.type)) {
+  if (
+    !isAllowedMime(image.type) ||
+    !isAllowedMime(reading.type) ||
+    !isAllowedMime(thumb.type)
+  ) {
     return { ok: false, message: "Dieses Format kann die App nicht lesen." };
   }
 
@@ -131,10 +137,10 @@ async function readPage(
   // Auslöser kann das nicht passieren, der erzeugt beide aus demselben Canvas;
   // eine Server Action ist aber eine Adresse wie jede andere, und was die
   // Spalte voraussetzt, wird deshalb hier an der Tür geprüft statt gehofft.
-  if (image.type !== thumb.type) {
+  if (image.type !== thumb.type || image.type !== reading.type) {
     return {
       ok: false,
-      message: "Bild und Vorschau müssen dasselbe Format haben.",
+      message: "Bild, Lesefassung und Vorschau müssen dasselbe Format haben.",
     };
   }
 
@@ -142,11 +148,18 @@ async function readPage(
     return { ok: false, message: "Das Bild ist zu groß — höchstens 3 MB je Seite." };
   }
 
-  // Die Vorschau hat ihre eigene, viel engere Grenze: beide zusammen müssen
-  // unter das bodySizeLimit von 4 MB passen, sonst bricht Next die Anfrage ab,
-  // bevor dieser Prüfer sie je zu sehen bekommt. Ein eigener Satz, weil „das
-  // Bild ist zu groß“ hier auf das falsche der beiden zeigte und der Nutzer
-  // dann am Vollbild suchte, was an der Vorschau liegt.
+  // Lesefassung und Vorschau haben ihre eigene, viel engere Grenze: alle drei
+  // zusammen müssen unter das bodySizeLimit von 5 MB passen, sonst bricht Next
+  // die Anfrage ab, bevor dieser Prüfer sie je zu sehen bekommt. Jede bekommt
+  // ihren eigenen Satz, weil „das Bild ist zu groß“ hier auf das falsche der
+  // drei zeigte und der Nutzer dann am Vollbild suchte, was woanders liegt.
+  if (reading.size > MAX_READING_BYTES) {
+    return {
+      ok: false,
+      message: "Die Lesefassung ist zu groß — höchstens 400 KB.",
+    };
+  }
+
   if (thumb.size > MAX_THUMB_BYTES) {
     return {
       ok: false,
@@ -168,6 +181,7 @@ async function readPage(
       width,
       height,
       image: new Uint8Array(await image.arrayBuffer()),
+      reading: new Uint8Array(await reading.arrayBuffer()),
       thumb: new Uint8Array(await thumb.arrayBuffer()),
     },
   };

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { createAccount, hasAccount, login } from "@/lib/auth";
+import { safeReturnPath } from "@/lib/oauth";
 
 /**
  * Rückgabe beider Formular-Aktionen, passend zu useActionState.
@@ -101,5 +102,11 @@ export async function loginAction(
   }
 
   revalidatePath("/", "layout");
-  redirect("/");
+
+  // Normalerweise die Startseite. Steht im Formular ein Weg, führt er dorthin
+  // zurück — das ist der Fall, in dem Claude die Zustimmungsseite geöffnet hat
+  // und dabei auf eine Anmeldung gestoßen ist. Welche Wege zählen, entscheidet
+  // `safeReturnPath()` in @/lib/oauth und ausdrücklich nicht dieses Formular:
+  // ein Feld in einer Adresszeile ist Eingabe wie jede andere.
+  redirect(safeReturnPath(text(formData, "weiter")) ?? "/");
 }

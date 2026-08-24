@@ -14,6 +14,7 @@ import { germanShortParts, isCalendarDate, todayInBerlin } from "@/lib/dates";
 import {
   MAX_PAGES,
   MAX_PAGE_BYTES,
+  MAX_READING_BYTES,
   MAX_THUMB_BYTES,
   isAllowedMime,
 } from "@/lib/images";
@@ -34,12 +35,12 @@ import { normalizeTopics, topicKey } from "@/lib/topics";
  * Das ist die Stelle, an der die Bilder ausgeliefert werden; eine fehlende
  * Zeile dort hieße, dass eine geratene pageId fremde Blätter zeigt.
  *
- * **Für Listen wird `image` niemals mitselektiert.** Die Ablage holt bis zu
- * `LIST_LIMIT` Blätter auf einmal, also zweihundert; ein Vollbild wiegt nach
- * dem Verkleinern rund 250 KB, macht gut fünfzig Megabyte für eine Seite, die
- * 320 Pixel breite Bilder anzeigt. Deshalb steht in jeder
+ * **Für Listen werden `image` und `reading` niemals mitselektiert.** Die Ablage
+ * holt bis zu `LIST_LIMIT` Blätter auf einmal, also zweihundert; ein Vollbild
+ * wiegt nach dem Verkleinern rund 250 KB, macht gut fünfzig Megabyte für eine
+ * Seite, die 320 Pixel breite Bilder anzeigt. Deshalb steht in jeder
  * Abfrage hier eine ausdrückliche Feldliste und nie ein `select()` ohne
- * Argument — das holte beide bytea-Spalten mit.
+ * Argument — das holte alle drei bytea-Spalten mit.
  *
  * Datumsfelder sind reine Kalenderdaten als Zeichenkette ("2026-09-14"), wie
  * überall sonst im Projekt. Gerechnet wird ausschließlich in @/lib/dates.
@@ -279,14 +280,16 @@ export type MaterialDetail = MaterialListItem & {
 /**
  * Eine frisch aufgenommene Seite, so wie sie aus der Server Action kommt.
  *
- * `image` und `thumb` sind fertig verkleinert; hier wird nichts mehr gerechnet
- * — auf dem Server steht dafür auch nichts zur Verfügung.
+ * `image`, `reading` und `thumb` sind fertig verkleinert; hier wird nichts mehr
+ * gerechnet — auf dem Server steht dafür auch nichts zur Verfügung.
  */
 export type NewPage = {
   mimeType: string;
   width: number;
   height: number;
   image: Uint8Array;
+  /** Die Fassung für den Agenten, lange Kante 1000px. Warum es sie gibt, steht am Schema. */
+  reading: Uint8Array;
   thumb: Uint8Array;
 };
 
@@ -860,11 +863,18 @@ export async function setMaterialTopics(
 }
 
 /**
- * Die Bytes einer Seite, für den Route Handler.
+ * Die Bytes einer Seite, für den Route Handler und für das Tool des Agenten.
  *
  * Der Join auf `materials` ist hier keine Formsache: an der Seite selbst hängt
  * keine userId, und diese Funktion ist die einzige Stelle, an der Bilddaten
- * das Haus verlassen.
+ * das Haus verlassen. Das gilt seit dem Web MCP an zwei Türen statt an einer —
+ * und deshalb steht die Prüfung genau hier und nicht in der Tür.
+ *
+ * Drei Fassungen, drei Leser: „voll" ist das Bild auf der Detailseite,
+ * „vorschau" die Kachel in der Ablage, „lesefassung" das, was ein Agent durch
+ * ein Tool-Ergebnis bekommt. Welche Spalte gelesen wird, ist der ganze
+ * Unterschied; alles andere — Besitzprüfung, Format, kaputte id — ist an allen
+ * dreien dasselbe und steht deshalb nur einmal da.
  *
  * Der Rückgabetyp ist enger als „irgendein Uint8Array": `new Response(bytes)`
  * verlangt seit TypeScript 5.7 ein `ArrayBufferView<ArrayBuffer>`. Käme hier
@@ -874,13 +884,13 @@ export async function setMaterialTopics(
 export async function readPageImage(
   userId: string,
   pageId: string,
-  variant: "voll" | "vorschau",
+  variant: "voll" | "lesefassung" | "vorschau",
 ): Promise<{ bytes: Uint8Array<ArrayBuffer>; mimeType: string } | null> {
   if (!isId(pageId)) return null;
 
   const [row] = await db
     .select({
-      bytes: variant === "vorschau" ? materialPages.thumb : materialPages.image,
+      bytes: pageColumn(variant),
       mimeType: materialPages.mimeType,
     })
     .from(materialPages)
@@ -895,6 +905,22 @@ export async function readPageImage(
     .limit(1);
 
   return row ?? null;
+}
+
+/**
+ * Welche der drei bytea-Spalten eine Fassung meint.
+ *
+ * Eine eigene Funktion und kein Ausdruck mitten in der Abfrage: mit drei
+ * Fassungen wäre daraus eine verschachtelte Bedingung geworden, in der sich ein
+ * vertauschtes Paar leicht versteckt — und vertauscht hieße hier, dass die
+ * Ablage zweihundert Vollbilder ausliefert oder der Agent eine Briefmarke
+ * bekommt.
+ */
+function pageColumn(variant: "voll" | "lesefassung" | "vorschau") {
+  if (variant === "vorschau") return materialPages.thumb;
+  if (variant === "lesefassung") return materialPages.reading;
+
+  return materialPages.image;
 }
 
 /**
@@ -1236,12 +1262,14 @@ async function loadTopics(
  * Browser längst verkleinert hat. Das ist die letzte Tür vor der Datenbank;
  * wer sie umgeht, bekommt keinen stillen Erfolg.
  *
- * Geprüft werden beide Bilder, jedes an seiner eigenen Grenze. Die Vorschau ist
- * dabei nicht der kleine Bruder, den man mitlaufen lassen kann: sie ist das
+ * Geprüft werden alle drei Bilder, jedes an seiner eigenen Grenze. Die Vorschau
+ * ist dabei nicht der kleine Bruder, den man mitlaufen lassen kann: sie ist das
  * Bild, das später auf jeder Listenseite ausgeliefert wird. Wer an `readPage()`
  * in der Server Action vorbeigeht — genau der Fall, für den diese Tür da ist —,
  * könnte sonst eine 50-MB-Vorschau neben ein 1-KB-Vollbild legen, und die
- * Ablage lieferte sie danach zweihundertmal auf einmal aus.
+ * Ablage lieferte sie danach zweihundertmal auf einmal aus. Für die Lesefassung
+ * gilt dasselbe von der anderen Seite: sie ist das Bild, das ein Agent zu sehen
+ * bekommt, und ein zu schweres passt durch kein Tool-Ergebnis.
  */
 function pageValues(page: NewPage): {
   mimeType: string;
@@ -1249,17 +1277,26 @@ function pageValues(page: NewPage): {
   height: number;
   byteSize: number;
   image: Uint8Array<ArrayBuffer>;
+  reading: Uint8Array<ArrayBuffer>;
   thumb: Uint8Array<ArrayBuffer>;
 } {
   if (page.image.byteLength > MAX_PAGE_BYTES) {
     throw new Error("Das Bild ist zu groß — höchstens 3 MB je Seite.");
   }
 
+  if (page.reading.byteLength > MAX_READING_BYTES) {
+    throw new Error("Die Lesefassung ist zu groß — höchstens 400 KB je Seite.");
+  }
+
   if (page.thumb.byteLength > MAX_THUMB_BYTES) {
     throw new Error("Die Vorschau ist zu groß — höchstens 400 KB je Seite.");
   }
 
-  if (page.image.byteLength === 0 || page.thumb.byteLength === 0) {
+  if (
+    page.image.byteLength === 0 ||
+    page.reading.byteLength === 0 ||
+    page.thumb.byteLength === 0
+  ) {
     throw new Error("Von diesem Bild ist nichts angekommen.");
   }
 
@@ -1269,6 +1306,7 @@ function pageValues(page: NewPage): {
     height: pixels(page.height),
     byteSize: page.image.byteLength,
     image: new Uint8Array(page.image),
+    reading: new Uint8Array(page.reading),
     thumb: new Uint8Array(page.thumb),
   };
 }

@@ -38,11 +38,18 @@ function Spinner() {
   );
 }
 
-export function LoginForm() {
+/**
+ * `weiter` ist der Weg, der nach dem Anmelden gilt — gesetzt nur, wenn jemand
+ * hierher geschickt wurde, statt selbst zu kommen. Er reist als verstecktes
+ * Feld mit und nicht im Formular-Zustand: geprüft wird er ohnehin erst in der
+ * Action, und dort steht die Regel dafür.
+ */
+export function LoginForm({ weiter }: { weiter?: string }) {
   const [state, formAction, pending] = useActionState(loginAction, INITIAL);
 
   return (
     <form action={formAction} className="space-y-4">
+      {weiter ? <input type="hidden" name="weiter" value={weiter} /> : null}
       <Field id="password" label="Passwort">
         {(control) => (
           <input

@@ -8,6 +8,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
+import { revokeConnection } from "@/lib/oauth";
 import { isThemePreference, THEME_COOKIE, THEME_MAX_AGE } from "@/lib/theme";
 
 /**
@@ -58,6 +59,31 @@ export async function setReminderHourAction(
   revalidatePath("/einstellungen");
 
   return { savedHour: hour };
+}
+
+/**
+ * Trennt die Verbindung zu einem Programm.
+ *
+ * Ab dem Zeitpunkt gilt sein Zugriffs-Token nicht mehr — nicht erst nach
+ * Ablauf, sondern beim nächsten Aufruf. Beim Erneuern bekommt es
+ * „invalid_grant", und die Claude-App fragt dann wieder nach Zustimmung: der
+ * Nutzer sieht also, dass die Verbindung wirklich weg ist, statt sie
+ * stillschweigend wiederzubekommen.
+ *
+ * Ohne Erfolg wird trotzdem nur aufgefrischt und nicht gemeldet. Es gibt genau
+ * einen Fall, in dem `revokeConnection()` falsch zurückgibt — die Verbindung
+ * ist schon getrennt —, und dafür ist die Liste, die danach ohne sie dasteht,
+ * die richtige Antwort.
+ */
+export async function revokeConnectionAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
+
+  const id = formData.get("id");
+  if (typeof id !== "string") return;
+
+  await revokeConnection(user.id, id);
+
+  revalidatePath("/einstellungen");
 }
 
 /**

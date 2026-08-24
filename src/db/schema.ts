@@ -571,6 +571,12 @@ export const materials = pgTable(
  * ein einziges Vollbild 14 ms. Daraus folgt die Regel für jede Abfrage in
  * @/lib/materials: für Listen niemals `image` mitselektieren.
  *
+ * **Seit dem Web MCP steht eine dritte Spalte daneben, `reading`.** Dieselbe
+ * Begründung, nur für einen anderen Leser: der Agent bekommt ein Bild als
+ * Base64 in ein Tool-Ergebnis, und das ist in der Claude-App bei rund 150 000
+ * Zeichen zu Ende. Warum daraus eine gespeicherte Spalte wird und keine
+ * Rechnung beim Ausliefern, steht an der Spalte selbst.
+ *
  * `width` und `height` sind die des Vollbildes und stehen dabei, damit die
  * Seite den Platz reservieren kann, bevor das Bild da ist — sonst springt die
  * ganze Ablage beim Laden.
@@ -607,6 +613,21 @@ export const materialPages = pgTable(
     byteSize: integer("byte_size").notNull(),
     /** Das Blatt, lange Kante 1600px */
     image: bytea("image").notNull(),
+    /**
+     * Dasselbe Blatt, lange Kante 1000px — die Fassung für den Agenten.
+     *
+     * Sie steht hier, weil ein Tool-Ergebnis in der Claude-App bei rund
+     * 150 000 Zeichen endet und ein Bild dort als Base64 reist: das Vollbild
+     * wiegt umgerechnet rund 340 000 Zeichen und käme nie an, die Vorschau
+     * käme an und wäre unlesbar. Die dritte Spalte ist der einzige Weg, auf dem
+     * „lies dieses Blatt" beides sein kann — lesbar und klein genug.
+     *
+     * Gerechnet wird sie im Browser aus demselben Bitmap wie die anderen
+     * beiden, mit einer Qualitätsleiter, die auf rund 100 KB zielt
+     * (`READING_QUALITIES` in @/lib/images). Genau deshalb braucht der Server
+     * auch für sie keine Bildbibliothek.
+     */
+    reading: bytea("reading").notNull(),
     /** Dasselbe Blatt, lange Kante 320px — für Listen */
     thumb: bytea("thumb").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -766,8 +787,190 @@ export const materialProposalTopics = pgTable(
   ],
 );
 
+/**
+ * Ein Programm, das sich für den Zugriff auf die App angemeldet hat — heute
+ * genau eins: Claude.
+ *
+ * **Diese Zeile entsteht, bevor irgendjemand zugestimmt hat.** So ist OAuth
+ * gebaut: ein Client meldet sich zuerst an (Dynamic Client Registration, RFC
+ * 7591) und schickt den Nutzer erst danach zur Zustimmung. Die Anmeldung
+ * verlangt deshalb kein Passwort und kann von jedem im Netz aufgerufen werden;
+ * sie darf entsprechend auch nichts können. Eine Zeile hier ist ein Name, eine
+ * Rückadresse und sonst nichts — kein Zugriff, kein Nutzer, kein Recht. Erst
+ * eine Zeile in `oauth_grants` bedeutet, dass ein Mensch ja gesagt hat.
+ *
+ * Deshalb hängt hier auch **keine `userId`**: zum Zeitpunkt der Anmeldung gibt
+ * es keinen Nutzer, der gefragt worden wäre. Wem ein Client etwas darf, steht
+ * eine Tabelle weiter.
+ *
+ * **`redirectUris` ist eine Zeichenkette mit Leerzeichen dazwischen**, keine
+ * eigene Tabelle und kein Array. Eine Adresse enthält nie ein Leerzeichen, die
+ * Liste ist immer kurz (Claude nennt eine, Claude Code zwei), und sie wird nur
+ * als Ganzes gelesen und als Ganzes verglichen. Eine Kindtabelle wäre ein
+ * Verzeichnis für zwei Zeilen, die nie einzeln jemanden interessieren.
+ *
+ * Gegen ein `client_secret` hat sich das hier entschieden: Claude läuft als
+ * öffentlicher Client, das Geheimnis läge also in fremder Hand und schützte
+ * nichts. Was den Tausch von Code gegen Token absichert, ist PKCE — der
+ * Prüfwert, den nur derjenige kennt, der die Anmeldung angestoßen hat.
+ */
+export const oauthClients = pgTable("oauth_clients", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Wie der Client sich nennt, z.B. "Claude". Steht auf der Zustimmungsseite. */
+  name: text("name").notNull(),
+  /** Erlaubte Rückadressen, durch Leerzeichen getrennt. Verglichen wird Zeichen für Zeichen. */
+  redirectUris: text("redirect_uris").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Ein Zustimmungs-Code: die Quittung dafür, dass ein Mensch gerade „erlauben"
+ * gedrückt hat, gültig für eine Minute und für genau einen Tausch.
+ *
+ * **Gespeichert wird nur der Abdruck (`codeHash`), nie der Code selbst.** Der
+ * Code reist durch den Browser des Nutzers und steht dabei in einer Adresszeile
+ * — in der Chronik, womöglich in einem Serverlog. Wer später die Datenbank
+ * liest, soll damit nichts anfangen können; verglichen wird deshalb der
+ * SHA-256-Abdruck. Dasselbe gilt eine Tabelle weiter für die Token. Anders als
+ * das Sitzungs-Token in `sessions`, das im eigenen httpOnly-Cookie liegt und
+ * dieses Gerät nie verlässt, gehen diese Zeichenketten durch fremde Hände.
+ *
+ * **`redeemedAt` ist ein Zeitpunkt und kein Häkchen**, aus demselben Grund wie
+ * `materials.filedAt`. Er trägt hier zusätzlich die Einmaligkeit: eingelöst
+ * wird mit `update … where redeemed_at is null`, und die Datenbank entscheidet,
+ * wer von zwei gleichzeitigen Versuchen gewinnt. Gelöscht wird die Zeile beim
+ * Einlösen ausdrücklich nicht — ein zweiter Versuch mit demselben Code ist der
+ * Verdachtsfall, den OAuth 2.1 kennt (ein abgefangener Code), und den kann nur
+ * beantworten, wer die Zeile noch hat.
+ *
+ * `codeChallenge` ist der PKCE-Prüfwert. Er steht an der Zeile und nicht am
+ * Client, weil er zu diesem einen Tausch gehört: wer den Code hat, kommt damit
+ * nur weiter, wenn er auch das Geheimnis kennt, aus dem dieser Wert gerechnet
+ * wurde. Nur S256 wird angenommen; `plain` wäre ein Prüfwert, der sich aus dem
+ * Prüfwert ergibt.
+ *
+ * `resource` ist die Adresse, für die das spätere Token gelten soll (RFC 8707).
+ * Sie steht schon hier, damit das Token nicht später eine andere bekommen kann
+ * als die, die dem Nutzer auf der Zustimmungsseite genannt wurde.
+ */
+export const oauthCodes = pgTable(
+  "oauth_codes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** SHA-256 des Codes, hex. Nie der Code selbst. */
+    codeHash: text("code_hash").notNull(),
+    /** Die Rückadresse dieses Tausches — beim Einlösen muss dieselbe dastehen. */
+    redirectUri: text("redirect_uri").notNull(),
+    /** PKCE, base64url des SHA-256 über den code_verifier des Clients. */
+    codeChallenge: text("code_challenge").notNull(),
+    /** Rechte, durch Leerzeichen getrennt. Heute immer "mcp". */
+    scope: text("scope").notNull().default(""),
+    /** Für welche Adresse das Token gelten wird, z.B. "https://…/api/mcp". */
+    resource: text("resource").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    /** Wann eingelöst; leer heißt: noch offen. Ein zweites Einlösen gibt es nicht. */
+    redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("oauth_codes_hash_key").on(t.codeHash),
+    // Abgelaufene Codes werden beim nächsten Einlösen mit weggeräumt; dafür
+    // wird nach dem Zeitpunkt gesucht und nicht nach dem Abdruck.
+    index("oauth_codes_expires_idx").on(t.expiresAt),
+  ],
+);
+
+/**
+ * Was ein Client für einen Nutzer wirklich in der Hand hat: die Verbindung.
+ *
+ * Eine Zeile ist eine erteilte Erlaubnis, und sie trägt beide Schlüssel dazu —
+ * das kurzlebige Zugriffs-Token und das langlebige Erneuerungs-Token. Zwei
+ * Tabellen wären genauer im Sinne des Lehrbuchs und hier eine Trennung ohne
+ * Unterschied: die beiden entstehen zusammen, laufen zusammen ab und werden
+ * zusammen zurückgezogen.
+ *
+ * **Erneuern schreibt dieselbe Zeile um.** OAuth 2.1 verlangt für öffentliche
+ * Clients, dass ein Erneuerungs-Token nach Gebrauch nicht mehr gilt; genau das
+ * tut ein `update` auf beide Abdrücke. Ein abgefangenes altes Token passt danach
+ * auf keine Zeile mehr und bekommt „invalid_grant" — der Client fragt dann neu
+ * nach Zustimmung, und der Mensch sieht es.
+ *
+ * Kein `lastUsedAt`: es stünde für eine Schreiboperation bei jedem einzelnen
+ * Tool-Aufruf, also für viele Schreibvorgänge auf eine Zeile, die niemand
+ * liest. Die Einstellungsseite zeigt stattdessen, seit wann die Verbindung
+ * steht — das ist die Frage, die man an eine Verbindung wirklich hat.
+ *
+ * `revokedAt` ist wieder ein Zeitpunkt statt eines Ja/Nein; leer heißt gültig.
+ * Getrennt wird eine Verbindung über die Einstellungen, und dieselbe Spalte
+ * beantwortet danach die Frage, seit wann sie getrennt ist.
+ */
+export const oauthGrants = pgTable(
+  "oauth_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** SHA-256 des Zugriffs-Tokens, hex. */
+    accessTokenHash: text("access_token_hash").notNull(),
+    /** SHA-256 des Erneuerungs-Tokens, hex. */
+    refreshTokenHash: text("refresh_token_hash").notNull(),
+    /**
+     * Der Abdruck des VORIGEN Erneuerungs-Tokens — die Falle für ein
+     * gestohlenes.
+     *
+     * Beim Erneuern wird das alte Token ungültig; wer es danach noch einmal
+     * vorzeigt, hat entweder eine Antwort verloren oder das Token gestohlen.
+     * Ohne diese Spalte wären beide Fälle von „kenne ich nicht" nicht zu
+     * unterscheiden, und ein Dieb, der als Erster erneuert, behielte seine
+     * Kette für immer. Mit ihr fällt die ganze Verbindung, sobald ein
+     * verbrauchtes Token wiederkommt — beide Seiten müssen dann neu fragen,
+     * und der Mensch sieht es.
+     *
+     * Leer bei einer frisch erteilten Verbindung: davor gab es kein voriges.
+     */
+    previousRefreshTokenHash: text("previous_refresh_token_hash"),
+    /** Rechte, durch Leerzeichen getrennt. Heute immer "mcp". */
+    scope: text("scope").notNull().default(""),
+    /** Für welche Adresse das Token gilt — geprüft bei jeder Anfrage. */
+    resource: text("resource").notNull(),
+    /** Wann das Zugriffs-Token abläuft. */
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    /** Wann das Erneuerungs-Token abläuft; danach ist die Verbindung zu Ende. */
+    refreshExpiresAt: timestamp("refresh_expires_at", {
+      withTimezone: true,
+    }).notNull(),
+    /** Wann getrennt; leer heißt: die Verbindung steht. */
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("oauth_grants_access_key").on(t.accessTokenHash),
+    unique("oauth_grants_refresh_key").on(t.refreshTokenHash),
+    // Die Einstellungsseite listet die Verbindungen eines Nutzers, die neueste
+    // zuerst.
+    index("oauth_grants_user_idx").on(t.userId, t.createdAt),
+  ],
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
+  oauthGrants: many(oauthGrants),
   subjects: many(subjects),
   exams: many(exams),
   periods: many(periods),
@@ -915,6 +1118,27 @@ export const materialProposalTopicsRelations = relations(
   }),
 );
 
+export const oauthClientsRelations = relations(oauthClients, ({ many }) => ({
+  codes: many(oauthCodes),
+  grants: many(oauthGrants),
+}));
+
+export const oauthCodesRelations = relations(oauthCodes, ({ one }) => ({
+  client: one(oauthClients, {
+    fields: [oauthCodes.clientId],
+    references: [oauthClients.id],
+  }),
+  user: one(users, { fields: [oauthCodes.userId], references: [users.id] }),
+}));
+
+export const oauthGrantsRelations = relations(oauthGrants, ({ one }) => ({
+  client: one(oauthClients, {
+    fields: [oauthGrants.clientId],
+    references: [oauthClients.id],
+  }),
+  user: one(users, { fields: [oauthGrants.userId], references: [users.id] }),
+}));
+
 export const pushSubscriptionsRelations = relations(
   pushSubscriptions,
   ({ one }) => ({
@@ -955,6 +1179,12 @@ export type MaterialProposal = typeof materialProposals.$inferSelect;
 export type NewMaterialProposal = typeof materialProposals.$inferInsert;
 export type MaterialProposalTopic = typeof materialProposalTopics.$inferSelect;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type OauthClient = typeof oauthClients.$inferSelect;
+export type NewOauthClient = typeof oauthClients.$inferInsert;
+export type OauthCode = typeof oauthCodes.$inferSelect;
+export type NewOauthCode = typeof oauthCodes.$inferInsert;
+export type OauthGrant = typeof oauthGrants.$inferSelect;
+export type NewOauthGrant = typeof oauthGrants.$inferInsert;
 
 /** Art einer Prüfung */
 export type ExamKind = "klausur" | "test" | "referat" | "muendlich";

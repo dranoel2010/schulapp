@@ -7,7 +7,9 @@ import {
   MAX_EDGE,
   MAX_PAGES,
   MAX_PAGE_BYTES,
+  MAX_READING_BYTES,
   MAX_THUMB_BYTES,
+  READING_TARGET_BYTES,
   THUMB_EDGE,
   fitWithin,
   formatBytes,
@@ -158,16 +160,31 @@ describe("die Grenzen", () => {
     assert.ok(MAX_THUMB_BYTES < MAX_PAGE_BYTES);
   });
 
-  it("hält Vollbild und Vorschau zusammen unter dem bodySizeLimit", () => {
-    // 4 MB stehen in next.config.ts, und sie gelten für den ganzen Body samt
-    // multipart-Rahmen und Formularfeldern. Wächst eine der beiden Grenzen über
-    // diese Rechnung hinaus, stirbt die Anfrage an einer Tür, die dem Nutzer
-    // nichts Wahres sagen kann — dann schlägt hier zuerst der Test an.
+  it("hält die Lesefassung unter dem Vollbild", () => {
+    assert.ok(MAX_READING_BYTES < MAX_PAGE_BYTES);
+  });
+
+  it("lässt die Lesefassung ein Vielfaches ihrer üblichen Größe zu", () => {
+    // Die Leiter in @/components/material/capture-button zielt auf
+    // READING_TARGET_BYTES; die Grenze hier ist das Netz darunter und darf
+    // auch ein Blatt durchlassen, das sich nicht kleinrechnen ließ.
+    assert.ok(MAX_READING_BYTES >= 3 * READING_TARGET_BYTES);
+  });
+
+  it("hält Vollbild, Lesefassung und Vorschau zusammen unter dem bodySizeLimit", () => {
+    // 5 MB stehen in next.config.ts, und sie gelten für den ganzen Body samt
+    // multipart-Rahmen und Formularfeldern. Alle drei Bilder reisen in
+    // derselben Anfrage. Wächst eine der drei Grenzen über diese Rechnung
+    // hinaus, stirbt die Anfrage an einer Tür, die dem Nutzer nichts Wahres
+    // sagen kann — dann schlägt hier zuerst der Test an.
     // Dezimal gerechnet, weil das die vorsichtigere der beiden Auslegungen von
-    // "4mb" ist; binär wäre die Decke noch etwas höher.
-    const bodySizeLimit = 4 * 1_000_000;
+    // "5mb" ist; binär wäre die Decke noch etwas höher.
+    const bodySizeLimit = 5 * 1_000_000;
     const rahmen = 100_000;
 
-    assert.ok(MAX_PAGE_BYTES + MAX_THUMB_BYTES + rahmen < bodySizeLimit);
+    assert.ok(
+      MAX_PAGE_BYTES + MAX_READING_BYTES + MAX_THUMB_BYTES + rahmen <
+        bodySizeLimit,
+    );
   });
 });

@@ -47,7 +47,7 @@ npm run build && npm run start
 | `npm run db:push` | Schemaänderungen in die Datenbank übertragen |
 | `npm run db:studio` | Datenbank im Browser ansehen |
 | `npm run db:backup` | Kopie der lokalen Datenbank nach `.backups/` |
-| `npm test` | 318 Tests in 58 Suiten — die reine Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala, Themen-Titel, Bildmaße, die Zahlen der Startseite, das Formular der Ablage, die Vorbelegung aus einem Vorschlag, die Verteilung der Fehlermeldungen und die angehakten Felder des Epochenwechsels |
+| `npm test` | 412 Tests in 77 Suiten — die reine Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala, Themen-Titel, Bildmaße, die Zahlen der Startseite, das Formular der Ablage, die Vorbelegung aus einem Vorschlag, die Verteilung der Fehlermeldungen, die angehakten Felder des Epochenwechsels — und für den Web MCP die Rückadressen, PKCE, der Umschlag des Protokolls und der Werkzeugkasten |
 | `npm run lint` | ESLint |
 
 ## Aufbau
@@ -55,7 +55,9 @@ npm run build && npm run start
 ```
 src/
   app/
-    (auth)/         Einrichtung und Anmeldung — ohne Navigation
+    (auth)/         Einrichtung, Anmeldung und Zustimmung — ohne Navigation
+      verbinden/      „Claude mit deiner Schulapp verbinden?" — die eine
+                      Stelle, an der ein Zugang für einen Agenten entsteht
     (app)/          alles hinter der Anmeldung
       page.tsx        Start: am Handy drei wischbare Seiten — Kamera,
                       Kachelmenü, Tagesspur —, am Rechner das Dashboard
@@ -72,8 +74,13 @@ src/
                       eingang/ ist der Eingangskorb — was noch keiner
                       durchgesehen hat, und die Vorschläge dazu
       faecher/        Fächer mit Farbe, Kürzel und Gewichtung
-      einstellungen/  Erinnerungen, Darstellung, Konto
+      einstellungen/  Erinnerungen, Darstellung, Konto, verbundene Programme
+    .well-known/      wo ein Agent diese App findet: die Beschreibung des
+                      geschützten Servers und die des Ausstellers
     api/
+      mcp/            der MCP-Server — eine Adresse, elf Werkzeuge
+      oauth/          Anmeldung eines Programms und der Tausch von Code
+                      gegen Token
       material/       liefert die Bilder aus: /api/material/<seite> das
                       Vollbild, .../vorschau die Vorschau
       push/, cron/    Anmeldung der Geräte und der stündliche Anstoß
@@ -124,6 +131,18 @@ src/
     inbox.ts        der Eingangskorb: was noch keiner durchgesehen hat, die
                     Vorschläge dazu und die Vorbelegung des Handformulars
                     daraus (getestet)
+    oauth.ts        der eigene kleine OAuth-Server: Anmeldung eines
+                    Programms, Zustimmungs-Codes, Token und die
+                    Verbindungen, die in den Einstellungen stehen (getestet)
+    mcp/
+      protocol.ts   der Umschlag: JSON-RPC, die zwei Zeitalter des
+                    Protokolls, Begrüßung und Auskunft (getestet)
+      tools.ts      der Werkzeugkasten — je Werkzeug ein zod-Schema, aus
+                    dem auch das Verzeichnis entsteht (getestet)
+      resolve.ts    „Mathe" ist ein Fach: id, Name oder Kürzel, und eine
+                    Rückfrage, wenn es mehrere sein könnten (getestet)
+      run.ts        was die Werkzeuge tun — auf derselben @/lib wie die
+                    Oberfläche
     form-errors.ts  wo eine zod-Meldung landet — unter ihrem Feld oder über
                     dem ganzen Formular (getestet)
     theme.ts        hell, dunkel oder dem Gerät überlassen
@@ -156,11 +175,14 @@ auf einen Bildschirm.
 Foto steht als `bytea` neben allen anderen Daten; `npm run db:backup` sichert
 es mit, es braucht keinen zweiten Zugang und kein Token, und lokal wie in der
 Cloud läuft derselbe Code. Verkleinert wird schon im Browser — lange Kante
-1600px als JPEG, dazu eine Vorschau mit 320px. Ein Blatt wiegt danach rund 250
-KB statt mehrerer Megabyte, jede Anfrage trägt genau eine Seite, und der Server
-braucht keine Bildbibliothek. Die Vorschau steht als eigene Spalte daneben,
-weil die Ablage bis zu zweihundert Bilder auf einmal zeigt: als Vorschauen
-sind das rund 3 MB, als Vollbilder wären es rund 50 MB.
+1600px als JPEG, dazu eine Vorschau mit 320px und eine Lesefassung mit 1000px
+für den Agenten. Eine Seite wiegt mit allen drei Fassungen zusammen rund 250
+bis 400 KB statt mehrerer Megabyte, jede Anfrage trägt genau eine Seite, und
+der Server braucht keine Bildbibliothek. Jede der drei Größen steht als eigene Spalte da, weil jede
+einen eigenen Leser hat: die Ablage zeigt bis zu zweihundert Vorschauen auf
+einmal (rund 3 MB; als Vollbilder wären es rund 50 MB), die Detailseite ein
+Vollbild, und der Agent bekommt die Lesefassung, weil ein Werkzeug-Ergebnis
+bei rund 150 000 Zeichen endet.
 
 **Der Eingangskorb ist die einzige Tür in den Bestand.** Ein frisch
 aufgenommenes Blatt heißt „Blatt vom 21.8." und trägt kein Thema — es liegt im
@@ -172,9 +194,10 @@ weil sie dem Vokabular des alten Fachs gehören. Ein
 Vorschlag ändert nichts. Übernehmen heißt: dasselbe Handformular wie überall
 sonst, vorbelegt und Feld für Feld änderbar, und erst der Knopf darunter
 schreibt — durch dieselbe Prüfung (`materialInputSchema`) und dieselbe
-Datenschicht wie ein von Hand ausgefülltes Formular. Deshalb lässt sich alles,
-was ein Agent später vorschlagen wird, heute schon von Hand anlegen und ändern;
-alle Vorschläge, die es gibt, sind genau so entstanden.
+Datenschicht wie ein von Hand ausgefülltes Formular. Deshalb ließ sich alles,
+was der Agent heute vorschlägt, schon von Hand anlegen und ändern, bevor es ihn
+gab — und sein Werkzeug `propose_sheet` geht durch dieselbe Tür. Woher ein
+Vorschlag kam, steht an ihm (`origin`), und der Korb schreibt es dazu.
 
 **„Was habe ich zur Kettenregel?"** beantwortet die Ablage: `?thema=…` neben
 `?fach=…`, eine zweite Chip-Zeile mit den Themen des gewählten Fachs, und die
@@ -193,6 +216,70 @@ ein Topf noch leer, zählt er gar nicht — nicht als Vier und nicht als Null.
 Der Gesamtschnitt ist das Mittel der Fachschnitte, jedes Fach einmal;
 archivierte Fächer bleiben draußen, ihre Noten aber sichtbar. Und wo eine Zahl
 fehlt, steht ein Strich und keine geschätzte.
+
+## Der Web MCP
+
+Die App bietet ihre Fähigkeiten als Werkzeuge an, und ein Agent in der
+Claude-App benutzt sie. Das ist die vierte Stufe von Phase 5 — der Weg, auf dem
+aus einem abfotografierten Blatt ein Vorschlag wird, ohne dass jemand tippt.
+
+**Verbinden** (einmal, am Rechner):
+
+1. In der Claude-App unter *Customize → Connectors* auf *+* und
+   *Add custom connector*.
+2. Als Adresse `https://<deine-app>/api/mcp` eintragen.
+3. Claude schickt dich auf die Zustimmungsseite dieser App. Dort steht, was das
+   Programm lesen darf und was es schreiben darf — *Erlauben* drücken.
+
+Danach steht die Verbindung auch am Handy: Connectors gelten für das Konto,
+nicht für das Gerät. Was verbunden ist, steht unter *Einstellungen →
+Verbundene Programme* und lässt sich dort trennen.
+
+**Die Werkzeuge.** Zehn lesen, eines schreibt:
+
+| Werkzeug | Was es liefert |
+|---|---|
+| `read_subjects` | Fächer mit Kürzel, Lehrkraft, Raum, Gewichtung |
+| `read_topics` | das Themen-Vokabular eines Fachs mit der Zahl der Blätter |
+| `read_timetable` | Wochenplan und Stundenraster |
+| `read_homework` | Hausaufgaben, offene zuerst |
+| `read_exams` | Klausuren mit Lernplan-Fortschritt; einzeln mit allen Themen |
+| `read_grades` | Gesamtschnitt und Schnitt je Fach; einzeln mit allen Noten |
+| `read_material` | die Ablage, gefiltert nach Fach und Thema |
+| `read_sheet` | ein Blatt mit allen Seiten |
+| `read_page` | das Foto einer Seite, als Bild zum Lesen |
+| `read_inbox` | Eingangskorb: was wartet und welche Vorschläge daran hängen |
+| `propose_sheet` | legt einen Vorschlag in den Eingangskorb |
+
+Ein Fach darf dabei beim Namen genannt werden — „Mathe" genügt. Passt der Name
+auf mehrere Fächer, fragt das Werkzeug zurück, statt eines zu raten.
+
+**Was der Agent nicht kann, und zwar mit Absicht:** anlegen, ändern, löschen —
+und auch keinen Vorschlag übernehmen. Er legt Vorschläge in den Eingangskorb;
+übernommen werden sie von Hand, im selben Formular wie immer, durch dieselbe
+Prüfung wie ein von Hand ausgefüllter Vorschlag. Wer nicht vertrauenswürdige
+Blätter liest und gleichzeitig schreiben darf, ist über das Blatt selbst
+angreifbar; deshalb gibt es diese Werkzeuge nicht.
+
+**Das Foto hat eine eigene Größe.** Ein Werkzeug-Ergebnis endet in der
+Claude-App bei rund 150 000 Zeichen, und ein Bild reist als Base64 — aus drei
+Bytes werden vier Zeichen. Das Vollbild (1600px, gemessen 165 KB) käme nicht
+durch, die Vorschau (320px) wäre unlesbar. Deshalb liegt an jeder Seite eine
+dritte Fassung mit 1000 Pixeln, gerechnet im Browser wie die anderen beiden
+(gemessen 69 KB, rund 94 000 Zeichen). Der Server braucht dafür keine
+Bildbibliothek.
+
+**Der Zugang läuft über OAuth**, weil die Claude-App für einen selbst gebauten
+Anschluss nichts Einfacheres anbietet, das man verantworten kann. Die App ist
+dabei ihr eigener Aussteller: `/.well-known/oauth-protected-resource` und
+`/.well-known/oauth-authorization-server` beschreiben sie, `/api/oauth/register`
+meldet ein Programm an, `/verbinden` fragt den Menschen, `/api/oauth/token`
+tauscht. Ein Zugriffs-Token gilt eine Stunde und für genau eine Adresse; das
+Erneuerungs-Token gilt ein Vierteljahr und wird bei jedem Gebrauch ausgetauscht.
+Gespeichert werden von beiden nur die Abdrücke.
+
+**Zum Ausprobieren am eigenen Rechner** braucht es einen Tunnel: Claude verbindet
+sich aus der Cloud, `localhost` erreicht es nie.
 
 ## Datenbank
 
@@ -222,8 +309,11 @@ fern. Der Umzug selbst lief über `scripts/daten-umzug.ts`.
 Nach Änderungen an `src/db/schema.ts` immer `npm run db:push` ausführen. Mit
 der Ablage kamen die drei Tabellen `materials`, `material_pages` und
 `material_topics` dazu, mit dem Eingangskorb die Spalte `materials.filed_at`
-und die beiden Tabellen `material_proposals` und `material_proposal_topics`. **Ohne Push bleibt nicht nur der Materialbereich
-stehen, sondern die ganze Startseite** — sie lädt die letzten Blätter mit.
+und die beiden Tabellen `material_proposals` und `material_proposal_topics`,
+mit dem Web MCP die Spalte `material_pages.reading` und die drei Tabellen
+`oauth_clients`, `oauth_codes` und `oauth_grants`. **Ohne Push bleibt nicht nur
+der Materialbereich stehen, sondern die ganze Startseite** — sie lädt die
+letzten Blätter mit.
 
 > Bricht `db:push` wegen der Rückfrage unten ab, liegt dieselbe Änderung als
 > reines SQL bereit:
@@ -231,16 +321,27 @@ stehen, sondern die ganze Startseite** — sie lädt die letzten Blätter mit.
 > ```bash
 > npx tsx scripts/sql-einspielen.ts scripts/material-tabellen.sql   # die Ablage
 > npx tsx scripts/sql-einspielen.ts scripts/eingangskorb-tabellen.sql
+> npx tsx scripts/sql-einspielen.ts scripts/mcp-tabellen.sql        # der Web MCP
 > ```
 >
-> Sie ist rein additiv (nur `CREATE TABLE`, die Fremdschlüssel der neuen
-> Tabellen und `CREATE INDEX`) und wörtlich aus dem Schema erzeugt — ein
-> späteres `db:push` sieht danach keinen Unterschied. Der Server muss dafür aus
-> sein, und das Skript weist jede Datei zurück, in der eine Anweisung mit
-> `drop`, `truncate`, `delete` oder `update` **beginnt** oder in der irgendwo
-> ein `DROP TABLE`, `DROP COLUMN` und ihresgleichen steht. Geprüft wird pro
-> Anweisung und erst, nachdem alle Kommentare entfernt sind — `ON DELETE
-> cascade` in einem Fremdschlüssel darf deshalb durch.
+> `mcp-tabellen.sql` hat eine Bedingung, und zwar nur einmal: `reading` kommt
+> als NOT NULL ohne Vorgabe dazu, das geht nur auf einer leeren
+> `material_pages`. Am 24.8.2026 war sie leer. Wer sie später braucht, füllt
+> die Spalte vorher aus dem Vollbild.
+>
+> Sie sind rein additiv (`CREATE TABLE`, `ALTER TABLE … ADD COLUMN`, die
+> Fremdschlüssel der neuen Tabellen und `CREATE INDEX`) und wörtlich aus dem
+> Schema erzeugt — ein späteres `db:push` sieht danach keinen Unterschied. Der
+> Server muss dafür aus sein, und das Skript weist jede Datei zurück, in der
+> eine Anweisung mit `drop`, `truncate`, `delete` oder `update` **beginnt** oder
+> in der irgendwo ein `DROP TABLE`, `DROP COLUMN` und ihresgleichen steht.
+> Geprüft wird pro Anweisung und erst, nachdem alle Kommentare entfernt sind —
+> `ON DELETE cascade` in einem Fremdschlüssel darf deshalb durch.
+>
+> **Gegen die Cloud-Datenbank läuft `sql-einspielen.ts` bewusst nicht** (dort
+> gibt es keine Datei, die man vorher kopieren könnte). Für Neon ist der Weg
+> `npm run db:push` — oder, wenn dessen Rückfrage im Weg steht, dieselben
+> Anweisungen von Hand in einer Transaktion.
 
 > **Vorsicht bei einer Rückfrage von `db:push`.** Das Werkzeug kann anbieten,
 > die Tabelle `lessons` zu leeren, weil es den eindeutigen Schlüssel
@@ -369,9 +470,14 @@ Gegenüberstellung dessen, was der Vorschlag am Blatt ändern würde. Der Weg
 dorthin steht in der Ablage immer und auf der Startseite dann, wenn wirklich
 etwas wartet.
 
+**Web MCP** — die App bietet ihre Fähigkeiten als Werkzeuge an, und ein Agent
+in der Claude-App benutzt sie: zehn zum Lesen, eines legt einen Vorschlag in
+den Eingangskorb. Verbunden wird über die Zustimmungsseite `/verbinden`,
+getrennt unter *Einstellungen*. Wie das im Einzelnen läuft, steht oben unter
+*Der Web MCP*.
+
 Alles steht auch auf der Startseite: als Kachel, in der Tagesspur, auf der
 Kameraseite und im Dashboard. Damit sind die vier geplanten Ausbaustufen aus
-KONZEPT.md gebaut und von der fünften die ersten drei — das Themen-Vokabular,
-die Ablage und der Eingangskorb. Was noch fehlt, ist der Weg für einen Agenten
-(Web MCP). Wie er angestoßen wird, ist entschieden und steht in KONZEPT.md: von
-Hand, in der Claude-App.
+KONZEPT.md gebaut und die fünfte dazu — Themen-Vokabular, Ablage, Eingangskorb
+und der Weg für einen Agenten. Was jetzt aussteht, ist keine Stufe mehr,
+sondern eine Messung: ob die Erkennung auch bei Formeln taugt.

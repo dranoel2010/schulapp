@@ -42,6 +42,69 @@ export const MAX_EDGE = 1600;
 export const THUMB_EDGE = 320;
 
 /**
+ * Die lange Kante der Lesefassung — der Größe, die ein Agent zu sehen bekommt.
+ *
+ * Sie gibt es, weil ein Tool-Ergebnis in der Claude-App bei rund 150 000
+ * Zeichen endet. Ein Bild reist dort als Base64, und Base64 macht aus drei
+ * Bytes vier Zeichen: die Grenze liegt damit bei gut 100 KB Bild. Das Vollbild
+ * wiegt rund 250 KB und käme nie an; die Vorschau mit 320 Pixeln käme an und
+ * wäre unlesbar. Beides ist keine Antwort auf „lies dieses Blatt".
+ *
+ * 1000 Pixel sind die Kante, an der eine abfotografierte A4-Seite noch Zeile
+ * für Zeile lesbar ist — auch handschriftlich — und mit der Qualitätsleiter
+ * unten zuverlässig unter der Grenze bleibt. Mehr Pixel nützen nichts: das
+ * Modell rechnet ein Bild ohnehin auf gut eine Million Bildpunkte herunter,
+ * bevor es hineinsieht.
+ *
+ * **Gerechnet wird sie im Browser, aus demselben Bitmap wie die anderen
+ * beiden.** Das ist die ganze Begründung dafür, dass es eine dritte Spalte
+ * gibt und keine Bildbibliothek auf dem Server: das Handy hat das Foto gerade
+ * selbst aufgenommen, es kann es auch ein drittes Mal zeichnen.
+ */
+export const READING_EDGE = 1000;
+
+/**
+ * Worauf die Lesefassung zielt — nicht, was sie höchstens darf.
+ *
+ * 100 KB sind rund 137 000 Zeichen Base64 und lassen unter der Grenze der
+ * Claude-App Platz für den Rest der Antwort. `MAX_READING_BYTES` weiter unten
+ * ist das Netz für den Fall, dass niemand gezielt hat; diese Zahl hier ist das
+ * Ziel, auf das die Leiter zusteuert.
+ */
+export const READING_TARGET_BYTES = 100_000;
+
+/**
+ * Die Qualitätsstufen, die der Auslöser für die Lesefassung der Reihe nach
+ * versucht, bis sie unter `READING_TARGET_BYTES` bleibt.
+ *
+ * Eine Leiter und keine feste Zahl, weil dieselbe Kantenlänge je nach Blatt
+ * sehr verschieden wiegt: ein Arbeitsblatt mit viel Weiß fällt bei 0,6 auf
+ * 60 KB, ein abfotografiertes Tafelbild bei gleicher Einstellung auf das
+ * Doppelte. Mit einer festen Qualität ginge deshalb entweder das eine über die
+ * Grenze oder das andere unnötig durch die Mangel.
+ *
+ * Abwärts und nicht aufwärts: der erste Versuch ist der beste, und die
+ * schlechteren kommen nur dran, wenn sie müssen. Die letzte Stufe wird
+ * genommen, auch wenn sie das Ziel noch reißt — dann ist es ein Foto, das sich
+ * nicht kleinrechnen lässt, und ein zu schweres Bild ist immer noch besser als
+ * gar keines. Was danach passiert, entscheidet das Tool und nicht der Browser:
+ * es sagt dann, dass diese Seite nicht durch ein Tool-Ergebnis passt.
+ */
+export const READING_QUALITIES: readonly number[] = [0.6, 0.5, 0.42, 0.35];
+
+/**
+ * Serverseitiges Sicherheitsnetz für die Lesefassung.
+ *
+ * Wie bei der Vorschau ein Netz und keine Erwartung: erwartet werden rund
+ * 100 KB, abgelehnt wird erst bei 400 KB. Die Zahl ist dieselbe wie bei der
+ * Vorschau, und das ist kein Zufall — beide reisen in derselben Anfrage wie
+ * das Vollbild, und die Summe aller drei muss unter
+ * `experimental.serverActions.bodySizeLimit` in next.config.ts bleiben:
+ * 3 MB + 400 KB + 400 KB sind 3,8 MB, die Grenze dort steht auf 5 MB.
+ */
+export const MAX_READING_BYTES = 400_000;
+
+/**
  * Die JPEG-Qualität beim Verkleinern.
  *
  * 0,72 ist die Stelle, an der ein abfotografiertes Blatt keine sichtbaren
@@ -67,13 +130,13 @@ export const MAX_PAGE_BYTES = 3_000_000;
  *
  * Eine 320 Pixel lange Kante wiegt rund 15 KB; 400 KB sind das Netz und nicht
  * die Erwartung. Die Vorschau braucht trotzdem eine eigene, viel engere Grenze,
- * denn sie reist in derselben Anfrage wie das Vollbild. Gälte für beide
- * dieselbe Grenze, wären zusammen 6 MB zulässig — mehr, als
+ * denn sie reist in derselben Anfrage wie das Vollbild und die Lesefassung.
+ * Gälte für alle drei dieselbe Grenze, wären zusammen 9 MB zulässig — mehr, als
  * `experimental.serverActions.bodySizeLimit` in next.config.ts durchlässt. Next
  * bräche eine solche Anfrage mit Status 413 ab, bevor die Action überhaupt
  * läuft, und beim Auslöser käme das als abgerissene Verbindung an: der Nutzer
- * läse „Prüf deine Verbindung“, obwohl die Verbindung stand. 3 MB + 400 KB
- * bleiben mit Rand unter den 4 MB, also lehnt der Prüfer ab, was sonst
+ * läse „Prüf deine Verbindung“, obwohl die Verbindung stand. 3 MB + 400 KB +
+ * 400 KB bleiben mit Rand unter den 5 MB, also lehnt der Prüfer ab, was sonst
  * ungeprüft an der Tür gestorben wäre.
  */
 export const MAX_THUMB_BYTES = 400_000;
