@@ -28,6 +28,13 @@ export type Match<T> =
   | { art: "mehrere"; namen: string[] }
   | { art: "keins" };
 
+/**
+ * Dieselbe Regel wie `isId()` in @/lib/materials, @/lib/inbox und @/lib/oauth.
+ * Sie ist dort überall privat, und eine weitere Kopie ist der Preis dafür; wer
+ * eine ändert, ändert die anderen mit. Hier entscheidet sie etwas anderes als
+ * dort: nicht „taugt das für eine Abfrage", sondern „ist das überhaupt ein
+ * Verweis oder ein Name".
+ */
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

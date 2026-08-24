@@ -618,8 +618,8 @@ export const materialPages = pgTable(
      *
      * Sie steht hier, weil ein Tool-Ergebnis in der Claude-App bei rund
      * 150 000 Zeichen endet und ein Bild dort als Base64 reist: das Vollbild
-     * wiegt umgerechnet rund 340 000 Zeichen und käme nie an, die Vorschau
-     * käme an und wäre unlesbar. Die dritte Spalte ist der einzige Weg, auf dem
+     * wiegt an einem gemessenen Blatt 212 KB, also rund 290 000 Zeichen, und
+     * käme nie an; die Vorschau käme an und wäre unlesbar. Die dritte Spalte ist der einzige Weg, auf dem
      * „lies dieses Blatt" beides sein kann — lesbar und klein genug.
      *
      * Gerechnet wird sie im Browser aus demselben Bitmap wie die anderen

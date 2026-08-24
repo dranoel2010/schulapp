@@ -550,7 +550,7 @@ function sheetRow(sheet: MaterialListItem) {
 async function findSubject(
   user: User,
   query: string,
-): Promise<{ treffer: { id: string; name: string; weightWritten: number } } | { fehler: ToolOutcome }> {
+): Promise<{ treffer: { id: string; name: string } } | { fehler: ToolOutcome }> {
   const subjects = await listSubjects(user.id, { includeArchived: true });
   const match = matchSubject(subjects, query);
 

@@ -47,7 +47,7 @@ npm run build && npm run start
 | `npm run db:push` | Schemaänderungen in die Datenbank übertragen |
 | `npm run db:studio` | Datenbank im Browser ansehen |
 | `npm run db:backup` | Kopie der lokalen Datenbank nach `.backups/` |
-| `npm test` | 412 Tests in 77 Suiten — die reine Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala, Themen-Titel, Bildmaße, die Zahlen der Startseite, das Formular der Ablage, die Vorbelegung aus einem Vorschlag, die Verteilung der Fehlermeldungen, die angehakten Felder des Epochenwechsels — und für den Web MCP die Rückadressen, PKCE, der Umschlag des Protokolls und der Werkzeugkasten |
+| `npm test` | 412 Tests in 77 Suiten — die reine Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala, Themen-Titel, Bildmaße, die Zahlen der Startseite, das Formular der Ablage, die Vorbelegung aus einem Vorschlag, die Verteilung der Fehlermeldungen, die angehakten Felder des Epochenwechsels — und für den Web MCP die Rückadressen, PKCE, der Rückweg nach dem Anmelden, der Umschlag des Protokolls, die Auflösung von Fach und Thema und der Werkzeugkasten |
 | `npm run lint` | ESLint |
 
 ## Aufbau
@@ -235,6 +235,11 @@ Danach steht die Verbindung auch am Handy: Connectors gelten für das Konto,
 nicht für das Gerät. Was verbunden ist, steht unter *Einstellungen →
 Verbundene Programme* und lässt sich dort trennen.
 
+Bist du beim Zustimmen nicht angemeldet, führt der Weg über `/login` und von
+dort zurück auf dieselbe Seite (`?weiter=`) — sonst stündest du nach dem
+Anmelden auf der Startseite, während in der Claude-App ein Fenster auf eine
+Antwort wartet.
+
 **Die Werkzeuge.** Zehn lesen, eines schreibt:
 
 | Werkzeug | Was es liefert |
@@ -266,8 +271,10 @@ Claude-App bei rund 150 000 Zeichen, und ein Bild reist als Base64 — aus drei
 Bytes werden vier Zeichen. Das Vollbild (1600px, gemessen 165 KB) käme nicht
 durch, die Vorschau (320px) wäre unlesbar. Deshalb liegt an jeder Seite eine
 dritte Fassung mit 1000 Pixeln, gerechnet im Browser wie die anderen beiden
-(gemessen 69 KB, rund 94 000 Zeichen). Der Server braucht dafür keine
-Bildbibliothek.
+(an zwei Testblättern gemessen: 69 und 89 KB, also 94 000 bis 121 000 Zeichen).
+Der Server braucht dafür keine Bildbibliothek. Wiegt eine Seite trotz der
+Qualitätsleiter mehr als 110 KB, sagt `read_page` das geradeheraus, statt ein
+Ergebnis zu schicken, das unterwegs abgeschnitten wird.
 
 **Der Zugang läuft über OAuth**, weil die Claude-App für einen selbst gebauten
 Anschluss nichts Einfacheres anbietet, das man verantworten kann. Die App ist
@@ -275,8 +282,12 @@ dabei ihr eigener Aussteller: `/.well-known/oauth-protected-resource` und
 `/.well-known/oauth-authorization-server` beschreiben sie, `/api/oauth/register`
 meldet ein Programm an, `/verbinden` fragt den Menschen, `/api/oauth/token`
 tauscht. Ein Zugriffs-Token gilt eine Stunde und für genau eine Adresse; das
-Erneuerungs-Token gilt ein Vierteljahr und wird bei jedem Gebrauch ausgetauscht.
-Gespeichert werden von beiden nur die Abdrücke.
+Erneuerungs-Token wird bei jedem Gebrauch gegen ein neues getauscht, dessen
+Vierteljahr wieder von vorn läuft — eine Verbindung, die in Gebrauch ist, läuft
+also nie ab. Gespeichert werden von beiden nur die Abdrücke. Wer ein
+verbrauchtes Erneuerungs-Token noch einmal vorzeigt, verliert die ganze
+Verbindung: das ist entweder ein Client, der eine Antwort verloren hat, oder
+jemand, der das Token gestohlen hat, und beides beantwortet OAuth gleich.
 
 **Zum Ausprobieren am eigenen Rechner** braucht es einen Tunnel: Claude verbindet
 sich aus der Cloud, `localhost` erreicht es nie.

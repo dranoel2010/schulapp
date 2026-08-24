@@ -316,6 +316,11 @@ sie wird selbst zu der Stelle, die ein nicht vertrauenswürdiges Blatt einem
 Modell vorlegt. In der Claude-App ist der Schadensradius einer verunglückten
 Anweisung auf einem Blatt ein Chatverlauf.
 
+Seit dem 24.8.2026 ist dieser Weg gebaut und gelaufen: die Anmeldung eines
+Programms, die Zustimmung, der Tausch, elf Werkzeuge, ein Blatt als Bild und
+ein Vorschlag im Korb — alles gegen die echte Adresse geprüft. Was der zweite
+Grund verlangt, steht damit offen: fünf Blätter durchschicken und hinsehen.
+
 **Der andere Weg bleibt offen, und offen halten ihn genau zwei Zeilen.** Sollte
 sich der Handgriff als lästig erweisen, kommt ein Knopf an den Eingangskorb,
 der denselben Vorschlag von der App aus holt. Dafür muss sich am Korb nichts

@@ -17,7 +17,16 @@ import { INBOX_LIMIT, PROPOSAL_TOPIC_LIMIT } from "@/lib/inbox";
  * übrigen Code: Bezeichner englisch (`listSubjects`, `materialTopics`), Prosa
  * deutsch. Der Name eines Werkzeugs ist ein Bezeichner — er steht in einem
  * Protokoll neben `tools/call` —, seine Beschreibung ist Prosa, und sie geht an
- * ein Modell, das mit dem Nutzer Deutsch spricht.
+ * ein Modell, das mit dem Nutzer Deutsch spricht. Ausgenommen bleibt, was in
+ * @/lib/mcp/run.ts eine deutsche ANTWORT benennt (`art: "daten" | "fehler"`) —
+ * dieselbe Freiheit nimmt sich `markFiled()` in @/lib/inbox mit „gesetzt",
+ * „unveraendert", „weg".
+ *
+ * **Argumente heißen draußen `captured_on` und drinnen `capturedOn`.** Über die
+ * Leitung ist snake_case die Gewohnheit jedes MCP-Servers, im Code ist
+ * camelCase die dieses Projekts; übersetzt wird an einer Stelle, beim Bauen der
+ * Eingabe in run.ts. Zwei Schreibweisen sind ein kleiner Preis dafür, dass
+ * beide Seiten aussehen wie ihresgleichen.
  *
  * **`read_*` und `propose_*`, mehr nicht.** Das ist keine Sparsamkeit, sondern
  * die Bedingung des ganzen KI-Anschlusses, und sie steht so in KONZEPT.md: wer
