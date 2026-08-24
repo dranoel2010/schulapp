@@ -739,7 +739,9 @@ function grenzeErreicht(
  * Vorschlag abgewiesen — dann lieber die Zahl mitliefern als den Fehler.
  */
 function heuteSatz(heute: string): string {
-  return `Heute ist der ${formatGerman(heute)} (${heute}).`;
+  // „Heute ist Montag, 24. August" — `formatGerman()` bringt den Wochentag
+  // schon mit, ein „der" davor wäre einer zu viel.
+  return `Heute ist ${formatGerman(heute)} (${heute}).`;
 }
 
 /**

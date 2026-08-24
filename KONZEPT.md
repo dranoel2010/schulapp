@@ -402,6 +402,12 @@ Fassung mit 1000 Pixeln, gerechnet im Browser wie die anderen auch (gemessen: 69
 94 000 bis 121 000 Zeichen). Der Server bleibt damit ohne Bildbibliothek —
 das war der Punkt.
 
+Und wenn ein Blatt sich partout nicht kleinrechnen lässt — ein Tafelbild im
+Halbdunkel —, sagt `read_page` das geradeheraus, statt ein Ergebnis zu
+schicken, das unterwegs abgeschnitten wird. Die Grenze liegt bei 105 000 Bytes,
+also genau 140 000 Zeichen; die zehntausend Rest tragen den Satz davor und den
+Umschlag.
+
 ## Offene Punkte
 
 - Fächerliste (kommt beim ersten Einrichten in der App)
