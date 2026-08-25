@@ -280,7 +280,14 @@ export const TOOLS = {
           .max(PROPOSAL_TOPIC_LIMIT)
           .optional()
           .describe(
-            `Die Themen des Blattes als freier Text, höchstens ${PROPOSAL_TOPIC_LIMIT}. Kurze Fachwörter, keine Sätze.`,
+            [
+              "Wonach der Mensch dieses Blatt später sucht — meist EINS bis DREI, höchstens " +
+                PROPOSAL_TOPIC_LIMIT +
+                ".",
+              "Ein Thema ist der Griff zum Wiederfinden („was habe ich zur Kettenregel?“), nicht das Glossar des Blattes. Ein Hefteintrag über Siedlungsformen, der Einzelhof, Weiler, Haufendorf und Großstadt aufzählt, hat EIN Thema: „Siedlungsformen“. Die aufgezählten Begriffe sind sein Inhalt.",
+              "Nimm eine Schreibweise, die im Vokabular des Fachs schon steht, wenn eine passt (read_topics). Aus jedem neuen Wort wird beim Übernehmen eine Vokabel, und Vokabeln lassen sich nicht mehr löschen — nur umbenennen oder zusammenlegen.",
+              "Kurze Fachwörter, keine Sätze.",
+            ].join(" "),
           ),
       })
       .strict(),
