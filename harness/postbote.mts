@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,6 +40,7 @@ import {
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const GESEHEN_DATEI = path.join(HIER, "gesehen.json");
+const SPERRE = path.join(HIER, "lauf.lock");
 
 /** Wie oft nachgesehen wird, wenn nichts anderes gesagt ist. */
 const INTERVALL_SEKUNDEN = 120;
@@ -68,6 +69,83 @@ function argument(name: string): string | undefined {
 
 function schalter(name: string): boolean {
   return process.argv.includes(`--${name}`);
+}
+
+/** Läuft unter dieser Nummer noch ein Prozess? Signal 0 fragt, ohne zu treffen. */
+function lebt(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Es darf immer nur EIN Postbote laufen — und das ist keine Ordnungsliebe.
+ *
+ * Gemessen am 25.8.2026: zwei Postboten auf derselben `zugang.json` beenden
+ * einander. Das Erneuerungs-Token wird bei jedem Gebrauch getauscht; der eine
+ * holt sich ein frisches und schreibt es in die Datei, der andere hat das alte
+ * noch im Speicher und legt es beim nächsten Mal vor — und das ist genau das
+ * Muster, auf das die App wartet. Sie kann „mein zweites Ich" nicht von
+ * „jemand hat das Token" unterscheiden und tut das Richtige: sie lehnt ab. Der
+ * zweite Lauf stirbt dann mit `invalid_grant`, und im schlechteren Fall ist die
+ * ganze Verbindung fällig und muss neu zugestimmt werden.
+ *
+ * Die Sperre ist eine Datei mit einer Prozessnummer, keine Zeitmarke: nach
+ * einem Absturz oder einem harten Neustart steht dort eine Nummer, unter der
+ * niemand mehr läuft, und dann gilt sie nicht. Ein Postbote, der sich nach
+ * einem Stromausfall selbst aussperrt, wäre die schlechtere Störung.
+ */
+function sperren(): void {
+  // Zwei Versuche: der erste greift nach der Sperre, der zweite kommt nur dann
+  // dran, wenn dazwischen eine verwaiste weggeräumt wurde.
+  for (let versuch = 0; versuch < 2; versuch += 1) {
+    try {
+      // `wx` heißt: anlegen, aber nur wenn es sie noch nicht gibt — und zwar in
+      // einem Zug. Erst prüfen und dann schreiben hat eine Lücke dazwischen,
+      // und genau durch die sind am 25.8.2026 beim Ausprobieren zwei Postboten
+      // gleichzeitig gestartet. Beide sahen keine Sperre, beide legten eine an,
+      // beide holten sich mit demselben Token ein neues — und dem zweiten wurde
+      // es zu Recht verweigert.
+      writeFileSync(SPERRE, `${process.pid}\n`, { flag: "wx" });
+      break;
+    } catch (grund) {
+      if ((grund as NodeJS.ErrnoException).code !== "EEXIST") throw grund;
+
+      const pid = existsSync(SPERRE)
+        ? Number(readFileSync(SPERRE, "utf8").trim())
+        : 0;
+
+      if (Number.isFinite(pid) && pid > 0 && lebt(pid)) {
+        throw new Error(
+          `Es läuft schon ein Postbote (Prozess ${pid}).\n\n` +
+            "Zwei auf einmal geht nicht: sie teilen sich einen Zugang, dessen " +
+            "Token bei jedem Gebrauch getauscht wird, und nehmen sich " +
+            "gegenseitig die Verbindung weg.\n\n" +
+            `Beenden mit: kill ${pid}\n` +
+            `Läuft dort nichts mehr, kann die Sperre weg: rm ${SPERRE}`,
+        );
+      }
+
+      // Verwaist — die Nummer gehört keinem laufenden Prozess mehr.
+      rmSync(SPERRE, { force: true });
+    }
+  }
+
+  // Aufgeräumt wird auf jedem Weg hinaus — auch bei einem Fehler, auch bei
+  // Strg-C. Bliebe die Datei liegen, hilfe immerhin die Prüfung auf die
+  // Prozessnummer beim nächsten Start.
+  const loesen = () => {
+    try {
+      rmSync(SPERRE, { force: true });
+    } catch {
+      // Beim Hinausgehen ist eine liegengebliebene Datei kein Grund zu lärmen.
+    }
+  };
+
+  process.on("exit", loesen);
 }
 
 function liesGesehen(): Set<string> {
@@ -164,6 +242,8 @@ async function runde(
 }
 
 async function main(): Promise<void> {
+  sperren();
+
   const verbindung = new Verbindung(liesZugang());
   const intervall = Number(argument("intervall") ?? INTERVALL_SEKUNDEN) * 1000;
   const modell = argument("modell");

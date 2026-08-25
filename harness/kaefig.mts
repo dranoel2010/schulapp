@@ -36,10 +36,19 @@ import { ANTWORT_SCHEMA, auftragFuer, type Antwort } from "./auftrag.mts";
  * damit dort auch nichts läge, wenn doch einmal etwas lesen könnte.
  */
 
-/** Was der Lauf rufen darf. Weniger geht nicht, mehr braucht er nicht. */
+/**
+ * Was der Lauf rufen darf. Weniger geht nicht, mehr braucht er nicht.
+ *
+ * `read_subjects` steht seit dem 25.8.2026 dabei, und ohne das Werkzeug war die
+ * ganze Fachzuordnung eine Fassade: der Lauf konnte ein Fach vorschlagen, kannte
+ * aber die Fächer nicht, die es gibt. `propose_sheet` trifft eine Schreibweise
+ * nur, wenn sie auf Name oder Kürzel eines vorhandenen Fachs passt — „Erdkunde"
+ * für ein Fach namens „Geografie" wäre still nichts geworden.
+ */
 const ERLAUBT = [
   "mcp__schulapp__read_sheet",
   "mcp__schulapp__read_page",
+  "mcp__schulapp__read_subjects",
   "mcp__schulapp__read_topics",
   "mcp__schulapp__propose_sheet",
 ];

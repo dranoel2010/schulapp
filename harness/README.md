@@ -67,8 +67,49 @@ Regel über Erlaubnis, und die Einstellungen des Rechners können sie weiten.
 Wegnehmen schlägt Verbieten.
 
 Dazu: Der Lauf arbeitet in einem leeren, frisch angelegten Verzeichnis, das
-danach gelöscht wird. Und er darf von den elf Werkzeugen nur vier — lesen und
-vorschlagen, sonst nichts.
+danach gelöscht wird. Und er darf von den elf Werkzeugen nur fünf — vier zum
+Lesen (`read_sheet`, `read_page`, `read_subjects`, `read_topics`) und
+`propose_sheet`. Sonst nichts.
+
+## Das Fach ist seine Aufgabe
+
+Wer fotografiert, soll sich nicht um das Fach kümmern müssen. Die App belegt es
+vor — mit der Stunde, die gerade läuft, sonst mit dem Fach des zuletzt
+fotografierten Blattes —, und das ist eine Vermutung und keine Entscheidung.
+Entschieden wird sie hier: der Lauf liest das Blatt, liest mit `read_subjects`
+die vorhandenen Fächer und schlägt vor, wohin es gehört.
+
+Gemessen am 25.8.2026, mit drei Blättern, die absichtlich im falschen Fach
+lagen:
+
+| Blatt | eingetragen | vorgeschlagen |
+|---|---|---|
+| englische Buchzusammenfassung | Mathematik | **Englisch** |
+| französische Vokabelliste | Mathematik | **Französisch** |
+
+`read_subjects` ist dabei nicht optional. Ohne dieses Werkzeug war die ganze
+Fachzuordnung eine Fassade: der Lauf konnte ein Fach vorschlagen, kannte aber
+die Fächer nicht, die es gibt — und `propose_sheet` trifft eine Schreibweise
+nur, wenn sie auf Name oder Kürzel eines vorhandenen Fachs passt. „Erdkunde"
+für ein Fach namens „Geografie" wäre still nichts geworden.
+
+Erkennt er das Fach nicht — eine Seite Handschrift ohne Überschrift, eine
+Tabelle ohne ein einziges Fachwort —, lässt er es stehen und schreibt in die
+Notiz, dass er es nicht bestimmen konnte. Ein geratenes Fach ist schlimmer als
+ein offen gelassenes: das Blatt liegt danach dort, wo es niemand sucht.
+
+## Nur einer auf einmal
+
+Zwei Postboten auf derselben `zugang.json` beenden einander. Das
+Erneuerungs-Token wird bei jedem Gebrauch getauscht; der eine holt sich ein
+frisches, der andere legt das alte vor — und das ist genau das Muster, auf das
+die App wartet. Sie kann „mein zweites Ich" nicht von „jemand hat das Token"
+unterscheiden und lehnt ab.
+
+Deshalb legt der Postbote beim Start `lauf.lock` an. Läuft dort noch ein
+Prozess, startet der zweite gar nicht erst und sagt, welche Nummer zu beenden
+wäre. Nach einem Absturz steht in der Datei eine Nummer, unter der niemand mehr
+läuft — dann gilt sie nicht und wird weggeräumt.
 
 ## Was er nicht tut
 
@@ -123,4 +164,5 @@ nur `HOME` und `PATH`, sonst nichts.
 | `Die Verbindung gilt nicht mehr` | getrennt, abgelaufen oder ein Token doppelt benutzt — neu zustimmen |
 | `Kontingent erschöpft (429)` | das Abo ist für den Moment leer; er versucht es später wieder |
 | `Port 41751 ist belegt` | dort lauscht etwas anderes; die Rückadresse ist angemeldet und lässt sich nicht ausweichen |
+| `Es läuft schon ein Postbote` | genau das — die Nummer steht daneben, `kill` sie oder lass den anderen laufen |
 | `Der Lauf wollte etwas, das er nicht darf` | der Käfig hat zugeschlagen — steht auf dem Blatt eine Anweisung? |

@@ -6,3 +6,6 @@ zugang.json
 # Welche Blätter schon einen Lauf hatten. Kein Geheimnis, aber auch nichts,
 # was jemand anderes brauchen könnte — es gilt nur für dieses Gerät.
 gesehen.json
+
+# Die Sperre, die zwei gleichzeitige Postboten verhindert.
+lauf.lock
