@@ -364,6 +364,28 @@ export function CaptureButton({
     materialId && remaining !== undefined ? Math.max(0, remaining) : MAX_PAGES;
   const full = capacity === 0;
 
+  /**
+   * Die Bestätigung nach einer Aufnahme — und der Weg zum Blatt, für den, der
+   * ihn gleich will.
+   *
+   * Sie steht nur, wenn wirklich etwas angekommen ist und nichts schiefging;
+   * beim nächsten Auslösen räumt `openPicker()` sie weg. Beim Anhängen einer
+   * Seite steht sie nicht: dort sieht man das Ergebnis auf der Seite, auf der
+   * man ohnehin ist.
+   */
+  const savedNote =
+    saved && !error && !pending ? (
+      <p className="text-sm text-muted">
+        Angekommen — das nächste kann gleich kommen.{" "}
+        <Link
+          href={`/material/${saved}`}
+          className="text-foreground underline underline-offset-2"
+        >
+          Zum Blatt
+        </Link>
+      </p>
+    ) : null;
+
   /** Der Satz unter dem Knopf. Er steht an beiden Stellen, an denen es ihn gibt. */
   const errorNote = error ? (
     <p role="alert" className="text-sm text-danger">
@@ -414,8 +436,11 @@ export function CaptureButton({
   // hier deshalb kein Abbau: die Komponente bleibt samt State an ihrer Stelle
   // im Baum und zeigt nur nichts, solange sie nichts zu sagen hat.
   if (full) {
-    return errorNote ? (
-      <div className={cn("space-y-3", className)}>{errorNote}</div>
+    return errorNote || savedNote ? (
+      <div className={cn("space-y-3", className)}>
+        {errorNote}
+        {savedNote}
+      </div>
     ) : null;
   }
 
@@ -479,13 +504,22 @@ export function CaptureButton({
 
     setProgress(null);
 
-    // Ein neues Blatt will angesehen und richtiggestellt werden; eine
-    // nachgeschobene Seite gehört auf die Seite, auf der man ohnehin steht.
-    if (materialId) {
-      router.refresh();
-    } else if (target) {
-      router.push(`/material/${target}`);
-    }
+    // **Nach der Aufnahme bleibt der Auslöser stehen.** Bis Stufe 3 sprang er
+    // auf das frische Blatt — „ein neues Blatt will angesehen und
+    // richtiggestellt werden". Das stimmte, solange es den Eingangskorb nicht
+    // gab; seitdem ist Richtigstellen dessen Aufgabe, und der Sprung nimmt nur
+    // den Weg zum nächsten Foto.
+    //
+    // Und er widersprach der Seite, auf der er steht: die Kameraseite zeigt
+    // unter dem Knopf die zuletzt aufgenommenen Blätter, ausdrücklich als
+    // Bestätigung, „ohne die Ablage zu öffnen" (siehe @/components/home/
+    // capture-pane). Wer sofort weggeschickt wird, bekommt sie nie zu sehen.
+    //
+    // Ein Stapel Blätter ist der Normalfall, nicht die Ausnahme: fünf Zettel
+    // aus der Epoche sind fünfmal auslösen. Mit dem Sprung war das jedes Mal
+    // Foto, Blattseite, zurück, wischen, auslösen — vier Handgriffe für einen.
+    // Der Weg zum Blatt geht dabei nicht verloren, er steht als Satz darunter.
+    router.refresh();
   }
 
   /**
@@ -623,6 +657,7 @@ export function CaptureButton({
       </div>
 
       {errorNote}
+      {savedNote}
     </div>
   );
 }

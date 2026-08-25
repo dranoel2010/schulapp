@@ -44,7 +44,9 @@ import {
  * Die beiden Aufnahme-Actions geben ein Ergebnis zurück und leiten nicht
  * weiter. Der Auslöser ist eine Client-Komponente und soll dem Nutzer einen
  * Satz zeigen können; ein `redirect()` wirft intern, und dann käme bei ihm nie
- * eine Antwort an. Weitergeschickt wird im Browser, nachdem die id da ist.
+ * eine Antwort an. Was mit der id geschieht, entscheidet der Browser — heute:
+ * stehenbleiben und sie als Weg zum Blatt anbieten (siehe `run()` in
+ * @/components/material/capture-button).
  *
  * Aufgefrischt wird nach jeder Änderung auch „/“: die Startseite zeigt die
  * letzten Blätter — am Handy auf der Kameraseite, am Rechner in der

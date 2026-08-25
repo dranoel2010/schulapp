@@ -167,7 +167,13 @@ wurden beide in derselben Phase gebaut.
 **Die Kamera ist eine Wischgeste weit weg.** Am Handy hat die Startseite drei
 Seiten: links die Kamera, in der Mitte das Kachelmenü, rechts die Tagesspur.
 Der Weg zum Auslöser ist damit die Wischrichtung, in der nicht der Tagesablauf
-steht — im Unterricht bleiben für ein Arbeitsblatt zwei Sekunden. Das
+steht — im Unterricht bleiben für ein Arbeitsblatt zwei Sekunden.
+
+**Nach der Aufnahme bleibt der Auslöser stehen.** Ein Stapel Blätter ist der
+Normalfall: fünf Zettel sind fünfmal auslösen, und dazwischen soll nichts
+liegen. Unter dem Knopf steht danach „Angekommen" mit dem Weg zum Blatt, und
+darunter erscheint es im Raster der letzten Aufnahmen. Richtiggestellt wird
+später im Eingangskorb — dafür ist er da. Das
 Kachelraster hat deshalb keine siebte Kachel bekommen: es passt so, wie es ist,
 auf einen Bildschirm.
 
