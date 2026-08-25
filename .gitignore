@@ -48,3 +48,7 @@ next-env.d.ts
 
 # Datenbank-Sicherungen
 .backups/
+
+# Der Rückblick auf die ersten sieben Tage — ein Andenken, kein Code.
+# Bleibt auf diesem Rechner.
+rueckblick.html

@@ -1,9 +1,79 @@
 # Schulapp
 
-Persönliche Schul-App: Stundenplan, Hausaufgaben, Klausuren mit Lernplan und Noten —
-für eine Person, auf Handy und Laptop, mit synchronen Daten.
+Eine Schul-App für **einen** Menschen. Stundenplan, Hausaufgaben, Klausuren mit
+einem Lernplan, der sich selbst schreibt, Noten — und eine Kamera, die Zettel
+frisst.
+
+Sie läuft in der Cloud und ist von jedem Gerät dieselbe. Kein Konto für andere,
+keine Freigaben, keine Klassen: was hier steht, steht für eine Person.
 
 Was gebaut wird und warum, steht in [KONZEPT.md](KONZEPT.md).
+
+## Wie es benutzt wird
+
+Wer wissen will, was diese App tut, liest diesen Abschnitt. Alles darunter ist
+für den, der sie baut.
+
+### Der Zettel
+
+Das Herzstück, und der Grund für fast alles, was seit dem 21. August dazukam:
+**ein Blatt fotografieren und nie wieder einsortieren müssen.**
+
+1. **Wischen und tippen.** Am Handy liegt links von der Startseite die Kamera —
+   nicht eine Seite mit einem Knopf, sondern das laufende Bild. Darauf steht
+   nichts als das Fach, ein Kreis und die Zahl dessen, was angekommen ist. Ein
+   Antipper ist ein Blatt, und die Kamera bleibt offen: fünf Zettel aus einer
+   Epoche sind fünf Antipper.
+
+2. **Es landet im Eingangskorb.** Verkleinert wird schon im Browser, dreifach:
+   das Vollbild zum Ansehen, ein Vorschaubild für die Listen und eine
+   Lesefassung für den Agenten. Das Fach ist dabei geraten — aus dem
+   Stundenplan, sonst aus dem zuletzt fotografierten Blatt — und steht sichtbar
+   auf dem Kamerabild.
+
+3. **Jemand sieht hin.** Läuft [der Postbote](harness/README.md) auf dem
+   eigenen Rechner, schaut er alle zwei Minuten in den Korb und setzt Claude auf
+   jedes Blatt an, das noch keinen Vorschlag hat. Er liest das Blatt,
+   entscheidet über das Fach, schlägt Titel und Themen vor und schreibt in eine
+   Notiz, was er **nicht** sicher weiß. Gemessen: 35 bis 50 Sekunden je Blatt.
+
+4. **Ein Druck.** Im Korb steht der Vorschlag mit Fach, Titel, Themen und Notiz.
+   *Übernehmen* schreibt ihn ans Blatt und hakt es ab. *Erst ansehen* führt zu
+   einem Formular, in dem sich alles noch ändern lässt, samt Gegenüberstellung
+   dessen, was sich ändern würde. *Verwerfen* wirft ihn weg.
+
+**Der Agent ändert nie etwas selbst.** Er darf lesen und vorschlagen, sonst
+nichts — kein Anlegen, kein Löschen, kein Bestätigen. Die letzte Entscheidung
+trifft immer ein Mensch. Und was auf einem Blatt steht, ist für ihn Inhalt und
+niemals eine Anweisung: eine Aufforderung auf dem Papier landet als Beobachtung
+in der Notiz und wird nicht befolgt.
+
+**Ohne Postboten funktioniert alles genauso**, nur trägt man Fach, Titel und
+Themen dann selbst ein — im Korb oder direkt am Blatt.
+
+### Der Alltag
+
+| Bereich | Was er tut |
+|---|---|
+| **Stundenplan** | Festes Wochenraster Mo–Fr, ein Feld antippen bearbeitet es. Das Stundenraster ist einstellbar. Für Waldorfschulen trägt *Epoche wechseln* den Hauptunterricht in einem Zug auf ein anderes Fach um. |
+| **Hausaufgaben** | Liste zum Abhaken, überfällige zuerst. Eine neue Aufgabe ist von sich aus zur nächsten Stunde ihres Fachs fällig. Abgehaktes wird ausgeblendet, nie gelöscht. |
+| **Klausuren** | Termin mit Themen eintragen — den Lernplan schreibt die App: Blöcke über die Tage davor verteilt, mit Tagesbudget über alle Klausuren hinweg. Verpasst man einen Tag, fragt sie nach, statt still umzuplanen. |
+| **Noten** | Eintragen mit Art, Gewicht und Datum. Schnitt gesamt und je Fach, getrennt nach schriftlich und mündlich — und die Frage, die kein Zeugnis beantwortet: *was brauche ich noch für eine 2?* |
+| **Material** | Die Ablage aller Blätter, filterbar nach Fach **und** Thema. |
+| **Erinnerung** | Eine Push-Nachricht am Tag, wenn etwas ansteht. |
+
+Die Lernblöcke haben **bewusst keine Uhrzeit**. Die App sagt, was heute dran
+ist, nicht wann — sie ist kein Tagesplaner.
+
+### Auf dem Handy und am Rechner
+
+Am Handy hat die Startseite drei Seiten, zwischen denen man wischt: **links die
+Kamera, in der Mitte das Kachelmenü, rechts der Tagesablauf.** Am Rechner steht
+stattdessen ein Dashboard mit denselben Zahlen. Umgeschaltet wird allein über
+die Fensterbreite.
+
+Die App lässt sich über Chrome installieren und liegt danach wie eine richtige
+App auf dem Startbildschirm.
 
 ## Erster Start
 
@@ -555,6 +625,12 @@ in der Claude-App benutzt sie: zehn zum Lesen, eines legt einen Vorschlag in
 den Eingangskorb. Verbunden wird über die Zustimmungsseite `/verbinden`,
 getrennt unter *Einstellungen*. Wie das im Einzelnen läuft, steht oben unter
 *Der Web MCP*.
+
+**Der Postbote** — dasselbe ohne Handgriff. Ein Programm auf dem eigenen
+Rechner sieht alle zwei Minuten in den Korb und setzt Claude auf jedes Blatt an,
+das noch keinen Vorschlag hat; es gehört nicht zur App, sondern benutzt sie von
+außen durch dieselbe Tür. Es steht in [`harness/`](harness/README.md) und läuft
+nur, wenn man es startet.
 
 Alles steht auch auf der Startseite: als Kachel, in der Tagesspur, auf der
 Kameraseite und im Dashboard. Damit sind die vier geplanten Ausbaustufen aus
