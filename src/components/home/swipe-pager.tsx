@@ -37,6 +37,8 @@ import {
  * — nur die waagerechte Geste gehört dieser Komponente.
  */
 
+import { PagerPageProvider } from "./pager-context";
+
 export type SwipePagerProps = {
   /** Seite 0: die Kamera. Links, weil rechts der Kalender liegt. */
   camera: ReactNode;
@@ -369,7 +371,13 @@ export function SwipePager({ camera, start, calendar }: SwipePagerProps) {
 
             `min-h-0` lässt sie in der Zeile schrumpfen; die Höhe deckelt
             die Spur darüber. */}
-        <div className="flex min-h-0 min-w-full flex-col">{camera}</div>
+        {/* Nur die Kameraseite erfährt, ob sie vorn ist — und sie ist auch die
+            einzige, die es wissen muss (siehe pager-context). Während des
+            Ziehens gilt die Seite, von der aus gezogen wird, noch als vorn:
+            die Kamera soll nicht bei jedem Wackeln aus- und wieder angehen. */}
+        <PagerPageProvider value={page}>
+          <div className="flex min-h-0 min-w-full flex-col">{camera}</div>
+        </PagerPageProvider>
         <div className="flex min-h-0 min-w-full flex-col">{start}</div>
         <div className="flex min-h-0 min-w-full flex-col">{calendar}</div>
       </div>

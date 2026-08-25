@@ -23,7 +23,8 @@ import {
   prepareFile,
   sendPage,
 } from "./prepare-page";
-import { hasViewfinder, Viewfinder } from "./viewfinder";
+import { hasViewfinder } from "./camera";
+import { Viewfinder } from "./viewfinder";
 
 /**
  * Der Auslöser: vom Foto zum gespeicherten Blatt.

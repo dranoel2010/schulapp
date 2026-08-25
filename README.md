@@ -91,12 +91,13 @@ src/
     ui/             Bausteine: Button, Input, Field, Card, EmptyState
     nav/            Navigation
     home/           die vier Ansichten der Startseite: Kamera, Kachelmenü
-                    und Tagesspur am Handy, Dashboard am Rechner
+                    und Tagesspur am Handy, Dashboard am Rechner. Die
+                    Kameraseite läuft nur, wenn sie vorn ist
     study/          Lernblock und Nachfrage bei verpassten Tagen
     homework/       das Kästchen zum Abhaken, überall gleich
     grades/         die Fachzeile mit Schnitt, Balken und Fachfarbe
-    material/       der Auslöser: Kamera öffnen, Bild verkleinern,
-                    Seite für Seite hochladen
+    material/       die Kamera: laufendes Bild, Standbild einfrieren,
+                    verkleinern, Seite für Seite hochladen
   db/
     schema.ts       Datenmodell (Vertrag — Änderungen hier betreffen alles)
     index.ts        Datenbankverbindung
@@ -170,18 +171,48 @@ sich aus zur nächsten Stunde ihres Fachs fällig, und eine heute fällige
 Aufgabe erscheint in der Tagesspur in der Zeile dieser Stunde. Genau deshalb
 wurden beide in derselben Phase gebaut.
 
-**Die Kamera ist eine Wischgeste weit weg.** Am Handy hat die Startseite drei
-Seiten: links die Kamera, in der Mitte das Kachelmenü, rechts die Tagesspur.
-Der Weg zum Auslöser ist damit die Wischrichtung, in der nicht der Tagesablauf
-steht — im Unterricht bleiben für ein Arbeitsblatt zwei Sekunden.
+**Die Kamera ist eine Wischgeste weit weg — und sie ist die Seite selbst.** Am
+Handy hat die Startseite drei Seiten: links die Kamera, in der Mitte das
+Kachelmenü, rechts die Tagesspur. Der Weg zur Kamera ist damit die
+Wischrichtung, in der nicht der Tagesablauf steht.
 
-**Nach der Aufnahme bleibt der Auslöser stehen.** Ein Stapel Blätter ist der
-Normalfall: fünf Zettel sind fünfmal auslösen, und dazwischen soll nichts
-liegen. Unter dem Knopf steht danach „Angekommen" mit dem Weg zum Blatt, und
-darunter erscheint es im Raster der letzten Aufnahmen. Richtiggestellt wird
-später im Eingangskorb — dafür ist er da. Das
-Kachelraster hat deshalb keine siebte Kachel bekommen: es passt so, wie es ist,
-auf einen Bildschirm.
+Auf dieser linken Seite steht nichts als das laufende Kamerabild, das Fach, ein
+Kreis und die Zahl dessen, was angekommen ist. Ein Antipper ist ein Blatt, und
+die Kamera bleibt offen: fünf Zettel aus einer Epoche sind fünf Antipper.
+Gemessen: dreimal getippt in 129 ms, alle drei Blätter nach 1,0 s in der
+Datenbank. Der Auslöser wartet nicht auf die Leitung — aufgenommen wird sofort,
+hochgeladen wird eines nach dem anderen in einer Schlange dahinter.
+
+**Zwei Sätze, die hier bis Ende August standen, stimmen nicht mehr, und beide
+sind an derselben Stelle gescheitert.** Der erste hieß, nach der Aufnahme bleibe
+der Auslöser stehen und darunter erscheine das Blatt im Raster der letzten
+Aufnahmen. Das war die richtige Antwort auf die Frage „wie kommt man zum
+zweiten Foto" — solange das Gerät nach jedem Bild die Kamera zuklappte. Es
+löste aber nur die Hälfte: die Kamera ging trotzdem jedes Mal neu auf.
+
+Der zweite hieß, das Kachelraster habe „deshalb keine siebte Kachel bekommen".
+Es hat jetzt eine — „Blätter", über beide Spalten. Sie musste kommen, als die
+Kameraseite nur noch Kamera wurde: dort standen vorher der Weg in die Ablage
+und der in den Eingangskorb, und beide hielten genau den auf, der zum
+Fotografieren gewischt hat. Navigation gehört ins Kachelmenü. Es ist eine
+Kachel und nicht zwei, und sie zeigt dorthin, wo wirklich etwas zu tun ist:
+liegt etwas im Korb, führt sie in den Korb und trägt die Warnfarbe; sonst in
+die Ablage.
+
+**Das Fach wird vermutet, nicht erfragt.** Vorschlag ist die Stunde, die gerade
+läuft; sonst das Fach des zuletzt aufgenommenen Blattes; sonst das einzige
+aktive. Vorher endete diese Kette bei „dann wähl es selbst", und die Kamera ging
+nicht auf, bevor das geschehen war — abends, wenn der Stundenplan schweigt,
+stand also vor jedem Foto ein Auswahlfeld. Jetzt steht die Vermutung sichtbar
+auf dem Kamerabild, ist mit einem Antipper zu ändern, und wenn sie falsch ist,
+schlägt der Postbote das richtige Fach vor, sobald er das Blatt liest. Eine
+Vermutung, die man sieht und die sich später korrigiert, ist besser als ein
+Formular vor der Kamera.
+
+Am Rechner bleibt alles beim Alten: dort zeigte dieselbe Abfrage die Webcam über
+dem Bildschirm, und die ist auf kein Blatt zu richten. `(pointer: coarse)`
+entscheidet, und wo es nicht zutrifft — oder wo die Kamera verweigert wird —
+steht der gewohnte Auslöser mit Knopf und Galerie.
 
 **Die Blätter liegen in der Datenbank, nicht in einem Speicherdienst.** Ein
 Foto steht als `bytea` neben allen anderen Daten; `npm run db:backup` sichert

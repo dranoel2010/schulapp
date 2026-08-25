@@ -56,10 +56,14 @@ type TileProps = {
   /** Nur die erste Kachel trägt den Akzent. */
   highlighted?: boolean;
   /**
-   * Färbt allein die Caption warnend. Im Entwurf ist das die einzige Farbe im
-   * Raster außer dem Akzent — sie bleibt deshalb den Hausaufgaben vorbehalten.
+   * Färbt allein die Caption warnend. Im Entwurf ist das neben dem Akzent die
+   * einzige Farbe im Raster — sie steht deshalb nur da, wo wirklich etwas
+   * drängt: bei überfälligen Hausaufgaben und bei einem Eingangskorb, in dem
+   * etwas liegt.
    */
   warning?: boolean;
+  /** Für die eine Kachel, die über beide Spalten geht. */
+  className?: string;
 };
 
 function Tile({
@@ -69,6 +73,7 @@ function Tile({
   href,
   highlighted = false,
   warning = false,
+  className,
 }: TileProps) {
   // Auf der Akzentfläche trägt der Nebentext keine eigene Farbe, sondern
   // weniger Deckkraft — sonst müsste jede Textfarbe zweimal gedacht werden.
@@ -84,6 +89,7 @@ function Tile({
         highlighted
           ? "bg-accent text-accent-foreground hover:bg-accent-hover"
           : "bg-surface-muted text-foreground hover:bg-border",
+        className ?? "",
       ].join(" ")}
     >
       <span className={`${LABEL} ${quiet}`}>{label}</span>
@@ -317,6 +323,38 @@ export function HomeTiles({ data }: { data: HomeData }) {
           value={String(data.subjectCount)}
           caption="verwalten"
           href="/faecher"
+        />
+
+        {/* Die Blätter, über beide Spalten.
+ 
+            Sie stehen hier, seit die Kameraseite nur noch Kamera ist: dort
+            standen vorher der Weg in die Ablage und der in den Eingangskorb,
+            und beide hielten genau den auf, der zum Fotografieren gewischt hat.
+            Navigation gehört ins Kachelmenü.
+
+            EINE Kachel und nicht zwei, und sie zeigt dorthin, wo wirklich etwas
+            zu tun ist: liegt etwas im Korb, führt sie in den Korb und trägt die
+            Warnfarbe; sonst in die Ablage. Ein leerer Korb ist keine Aufgabe,
+            und eine zweite Kachel, die die meiste Zeit „0" anzeigt, wäre eine
+            Zeile Aufmerksamkeit für nichts.
+
+            Über beide Spalten, weil sie die siebte von sechs ist — allein in
+            der letzten Reihe sähe sie wie ein Rest aus. */}
+        <Tile
+          label="Blätter"
+          value={
+            data.inboxCount > 0 ? String(data.inboxCount) : undefined
+          }
+          caption={
+            data.inboxCount > 0
+              ? data.inboxCount === 1
+                ? "wartet im Eingangskorb"
+                : "warten im Eingangskorb"
+              : "in der Ablage suchen"
+          }
+          href={data.inboxCount > 0 ? "/material/eingang" : "/material"}
+          warning={data.inboxCount > 0}
+          className="col-span-2"
         />
       </div>
     </div>
