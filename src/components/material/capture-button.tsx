@@ -3,50 +3,51 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  useCallback,
   useId,
   useRef,
   useState,
+  useSyncExternalStore,
   useTransition,
   type ChangeEvent,
 } from "react";
 
-import {
-  addPageAction,
-  captureMaterialAction,
-} from "@/app/(app)/material/actions";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Select } from "@/components/ui/input";
+import { MAX_PAGES } from "@/lib/images";
+
 import {
-  fitWithin,
-  JPEG_QUALITY,
-  MAX_EDGE,
-  MAX_PAGE_BYTES,
-  MAX_PAGES,
-  READING_EDGE,
-  READING_QUALITIES,
-  READING_TARGET_BYTES,
-  THUMB_EDGE,
-} from "@/lib/images";
+  CaptureError,
+  NETWORK_MESSAGE,
+  prepareFile,
+  sendPage,
+} from "./prepare-page";
+import { hasViewfinder, Viewfinder } from "./viewfinder";
 
 /**
  * Der Auslöser: vom Foto zum gespeicherten Blatt.
  *
  * Er muss sich in zwei Sekunden bedienen lassen, während vorne noch etwas an
- * der Tafel steht. Deshalb ist der sichtbare Weg genau ein Knopf; er öffnet
- * über ein verstecktes `<input capture="environment">` unmittelbar die Kamera
- * des Geräts, ohne Zwischenseite und ohne Formular. Daneben steht leiser der
- * Weg aus der Galerie: am Rechner gibt es keine Kamera, und ein Foto, das
- * jemand weitergeschickt hat, ist genauso ein Blatt.
+ * der Tafel steht. Deshalb ist der sichtbare Weg genau ein Knopf. Wohin der
+ * führt, hängt vom Gerät ab:
  *
- * Verkleinert wird hier im Browser, bevor etwas hochgeht. Ein Handyfoto wiegt
- * roh mehrere Megabyte; nach dem Zeichnen auf ein Canvas mit 1600 Pixel langer
- * Kante bleiben rund 250 KB übrig, und dieselbe Rechnung liefert gleich die
- * Vorschau und die Lesefassung mit. Die Maße und Grenzen dafür stehen in
- * @/lib/images — der Server prüft sie ein zweites Mal und soll dabei dieselbe
- * Zahl meinen. Dass es drei Größen sind und nicht zwei, liegt am Agenten: er
- * bekommt sein Bild durch ein Tool-Ergebnis, und dort ist bei rund 150 000
- * Zeichen Schluss (siehe `toReadingJpeg()` unten).
+ * - **Am Handy in den Sucher** (@/components/material/viewfinder): die Kamera
+ *   geht in der App auf und bleibt offen, bis der Stapel durch ist. Ein Antipper
+ *   ist ein Blatt.
+ * - **Am Rechner in die Dateiauswahl**: dort gibt es keine Kamera, auf die sich
+ *   ein Blatt richten ließe, und keine Eile.
+ *
+ * Geht der Sucher nicht auf — kein Zugriff auf die Kamera, keine vorhanden, von
+ * einer anderen App belegt —, bleibt der alte Weg über ein verstecktes
+ * `<input capture="environment">`. Er öffnet die Kamera des Geräts und gibt ein
+ * Foto zurück; das ist umständlicher, aber es geht überall. Daneben steht leise
+ * der Weg aus der Galerie: ein Foto, das jemand weitergeschickt hat, ist
+ * genauso ein Blatt.
+ *
+ * Verkleinert wird im Browser, bevor etwas hochgeht — die Rechnung dafür steht
+ * in @/components/material/prepare-page, die Maße und Grenzen in @/lib/images,
+ * und der Server prüft sie ein zweites Mal.
  *
  * Mehrere Bilder gehen einzeln über die Leitung, eine Anfrage je Seite: das
  * erste legt das Blatt an, jedes weitere hängt sich mit der zurückgegebenen id
@@ -101,197 +102,8 @@ function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
-/**
- * Ein Fehler mit einem Satz, der so unter dem Knopf stehen darf. Alles andere,
- * was unterwegs geworfen wird, bekommt den allgemeinen Satz — ein Nutzer kann
- * mit „NotReadableError“ nichts anfangen.
- */
-class CaptureError extends Error {}
-
-const CANVAS_MESSAGE =
-  "Das Bild ließ sich auf diesem Gerät nicht verkleinern. Versuch es noch einmal oder nimm ein anderes Foto.";
-
-/**
- * Wenn die Leitung abreißt oder der Server gar nicht erst antwortet. Der Satz
- * verspricht nichts, was die App nicht weiß — nur, dass nichts angekommen ist.
- */
-const NETWORK_MESSAGE =
-  "Das Blatt ist nicht angekommen. Prüf deine Verbindung und versuch es noch einmal.";
-
-/** Wie das Format in der Fehlermeldung heißt: "HEIC", "AVIF", "TIFF". */
-function formatName(file: File): string {
-  const fromType = file.type.split("/")[1];
-  if (fromType) return fromType.toUpperCase();
-
-  const parts = file.name.split(".");
-  const extension = parts.length > 1 ? parts[parts.length - 1] : "";
-
-  return extension ? extension.toUpperCase() : "unbekanntes Format";
-}
-
-/**
- * Das Bild als ImageBitmap, aufrecht.
- *
- * `imageOrientation: "from-image"` dreht das Bild so, wie die Kamera es meint —
- * ohne die Option läge ein hochkant aufgenommenes Blatt auf der Seite, weil der
- * EXIF-Vermerk beim Zeichnen auf das Canvas verlorengeht. Ältere Browser kennen
- * die Option nicht und werfen darüber; dann eben ohne, das ist immer noch
- * besser als kein Bild.
- */
-async function readBitmap(file: File): Promise<ImageBitmap> {
-  try {
-    return await createImageBitmap(file, { imageOrientation: "from-image" });
-  } catch {
-    try {
-      return await createImageBitmap(file);
-    } catch {
-      throw new CaptureError(
-        `Dieses Bild kann der Browser nicht öffnen (${formatName(file)}). Speicher es als JPEG und versuch es noch einmal.`,
-      );
-    }
-  }
-}
-
-/** Zeichnet das Bild in den Kasten und gibt ein JPEG zurück. */
-async function toJpeg(
-  bitmap: ImageBitmap,
-  max: number,
-  quality: number = JPEG_QUALITY,
-): Promise<{ blob: Blob; width: number; height: number }> {
-  const size = fitWithin(bitmap.width, bitmap.height, max);
-
-  // OffscreenCanvas zeichnet ohne Umweg über den Dokumentbaum und hält das
-  // Gerät während der Aufnahme flüssig. Wo es das nicht gibt, tut es ein
-  // gewöhnliches Canvas genauso — nur eben im Dokument.
-  if (typeof OffscreenCanvas === "function") {
-    const canvas = new OffscreenCanvas(size.width, size.height);
-    const context = canvas.getContext("2d");
-    if (!context) throw new CaptureError(CANVAS_MESSAGE);
-
-    context.drawImage(bitmap, 0, 0, size.width, size.height);
-
-    const blob = await canvas.convertToBlob({
-      type: "image/jpeg",
-      quality,
-    });
-
-    return { blob, width: size.width, height: size.height };
-  }
-
-  const canvas = document.createElement("canvas");
-  canvas.width = size.width;
-  canvas.height = size.height;
-
-  const context = canvas.getContext("2d");
-  if (!context) throw new CaptureError(CANVAS_MESSAGE);
-
-  context.drawImage(bitmap, 0, 0, size.width, size.height);
-
-  const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, "image/jpeg", quality);
-  });
-
-  if (!blob) throw new CaptureError(CANVAS_MESSAGE);
-
-  return { blob, width: size.width, height: size.height };
-}
-
-/**
- * Die Lesefassung — dieselbe Kantenlänge, aber eine Größe, die durch ein
- * Tool-Ergebnis passt.
- *
- * Sie ist die einzige der drei Fassungen, die eine feste Obergrenze in Bytes
- * einhalten muss und nicht nur in Pixeln: ein Bild reist zum Agenten als
- * Base64, und dort ist bei rund 150 000 Zeichen Schluss. Wie schwer 1000 Pixel
- * ausfallen, hängt aber vom Blatt ab — ein Arbeitsblatt mit viel Weiß wiegt die
- * Hälfte eines abfotografierten Tafelbilds. Eine feste Qualität träfe deshalb
- * immer nur eines von beiden.
- *
- * Also wird gemessen statt geschätzt: die Stufen aus `READING_QUALITIES` der
- * Reihe nach, die erste, die unter `READING_TARGET_BYTES` bleibt, gewinnt. Das
- * sind im Normalfall null zusätzliche Durchgänge, weil schon die erste Stufe
- * passt, und im schlimmsten Fall drei — auf einem Bitmap, das ohnehin schon im
- * Speicher liegt.
- *
- * Bleibt auch die letzte Stufe zu schwer, wird sie trotzdem genommen. Ein zu
- * schweres Bild ist immer noch ein Bild; was daraus folgt, entscheidet das
- * Tool, das es ausliefern soll, und nicht der Auslöser im Unterricht. Hier
- * abzubrechen hieße, eine Aufnahme wegen des Agenten zu verlieren — und die
- * App ist ohne ihn vollständig.
- */
-async function toReadingJpeg(bitmap: ImageBitmap): Promise<Blob> {
-  let last: Blob | null = null;
-
-  for (const quality of READING_QUALITIES) {
-    const attempt = await toJpeg(bitmap, READING_EDGE, quality);
-    last = attempt.blob;
-
-    if (attempt.blob.size <= READING_TARGET_BYTES) return attempt.blob;
-  }
-
-  if (!last) throw new CaptureError(CANVAS_MESSAGE);
-
-  return last;
-}
-
-/**
- * Ein Bild in die drei Größen, die gespeichert werden: das Vollbild, die
- * Lesefassung für den Agenten und die Vorschau. Alle drei entstehen aus
- * demselben ImageBitmap, das danach geschlossen wird — ein Handy hält den
- * Speicher sonst bis zum nächsten Neuladen fest.
- */
-async function prepare(file: File): Promise<{
-  image: Blob;
-  reading: Blob;
-  thumb: Blob;
-  width: number;
-  height: number;
-}> {
-  if (!file.type.startsWith("image/")) {
-    throw new CaptureError(`„${file.name}“ ist kein Bild.`);
-  }
-
-  const bitmap = await readBitmap(file);
-
-  try {
-    const full = await toJpeg(bitmap, MAX_EDGE);
-    const reading = await toReadingJpeg(bitmap);
-    const thumb = await toJpeg(bitmap, THUMB_EDGE);
-
-    if (full.blob.size > MAX_PAGE_BYTES) {
-      throw new CaptureError(
-        "Das Bild bleibt auch verkleinert zu groß. Nimm das Blatt noch einmal auf, am besten ohne Zoom.",
-      );
-    }
-
-    return {
-      image: full.blob,
-      reading,
-      thumb: thumb.blob,
-      width: full.width,
-      height: full.height,
-    };
-  } finally {
-    bitmap.close();
-  }
-}
-
-/**
- * Der Aufruf der Server Action, mit einem Satz für den Fall, dass sie gar
- * nicht antwortet. Next bricht eine zu große Anfrage mit einem Fehler ab, den
- * der Aufrufer als Ausnahme sieht und nicht als Ergebnis — ohne dieses catch
- * stünde davon ein Overlay auf dem Bildschirm statt eines Satzes unter dem
- * Knopf.
- */
-async function callAction(target: string | null, formData: FormData) {
-  try {
-    return target
-      ? await addPageAction(formData)
-      : await captureMaterialAction(formData);
-  } catch {
-    throw new CaptureError(NETWORK_MESSAGE);
-  }
-}
+/** Ein Abonnement auf nichts — es gibt keine Änderung, auf die zu horchen wäre. */
+const NEVER_CHANGES = () => () => {};
 
 export function CaptureButton({
   subjectId,
@@ -346,6 +158,35 @@ export function CaptureButton({
   const [error, setError] = useState<string | null>(null);
   /** Steht ein Blatt schon halb in der Ablage, führt hier der Weg dorthin. */
   const [saved, setSaved] = useState<string | null>(null);
+  /** Offen heißt: die Kamera läuft in der App und der Rest ist verdeckt. */
+  const [viewfinderOpen, setViewfinderOpen] = useState(false);
+  /** Was der zuletzt geschlossene Sucher mitgebracht hat. */
+  const [fromViewfinder, setFromViewfinder] = useState(0);
+  /**
+   * Der Sucher ging nicht auf — kein Zugriff auf die Kamera, keine vorhanden,
+   * von einer anderen App belegt. Ab dann führt der Knopf den alten Weg über
+   * die Kamera des Geräts. Ohne dieses Merken liefe jeder weitere Antipper
+   * wieder in denselben schwarzen Bildschirm.
+   */
+  const [viewfinderBlocked, setViewfinderBlocked] = useState(false);
+
+  /**
+   * Ob es einen Sucher gibt, weiß erst der Browser — `navigator` und
+   * `matchMedia` gibt es auf dem Server nicht. Auf dem Server steht deshalb
+   * `false`, und das ist richtig so: der Knopf sieht in beiden Fällen gleich
+   * aus, es ändert sich nur, was er beim Antippen tut.
+   *
+   * `useSyncExternalStore` und kein Effekt mit setState: gefragt wird nach einer
+   * Eigenschaft des Geräts, nicht nach etwas, das die App selbst weiß. React
+   * liest sie beim Hydrieren einmal ab, statt erst zu rendern und sich dann zu
+   * berichtigen — und `NEVER_CHANGES` sagt, was wahr ist: eine Kamera wächst
+   * einem Gerät nicht im Betrieb.
+   */
+  const viewfinderAvailable = useSyncExternalStore(
+    NEVER_CHANGES,
+    hasViewfinder,
+    () => false,
+  );
 
   // Beim Anhängen weiterer Seiten spielt das Fach keine Rolle: das Blatt hat
   // schon eins, und die Seite erbt es.
@@ -372,9 +213,20 @@ export function CaptureButton({
    * beim nächsten Auslösen räumt `openPicker()` sie weg. Beim Anhängen einer
    * Seite steht sie nicht: dort sieht man das Ergebnis auf der Seite, auf der
    * man ohnehin ist.
+   *
+   * Nach dem Sucher steht statt des Weges die Zahl da. Ein Stapel hat kein
+   * „das Blatt“, auf das ein Link zeigen könnte — die Blätter stehen alle
+   * darunter im Raster, und dorthin führt kein Satz, sondern der Blick.
    */
   const savedNote =
-    saved && !error && !pending ? (
+    fromViewfinder > 0 && !error && !pending ? (
+      <p className="text-sm text-muted">
+        {fromViewfinder === 1
+          ? "1 Blatt angekommen."
+          : `${fromViewfinder} Blätter angekommen.`}{" "}
+        Das nächste kann gleich kommen.
+      </p>
+    ) : saved && !error && !pending ? (
       <p className="text-sm text-muted">
         Angekommen — das nächste kann gleich kommen.{" "}
         <Link
@@ -403,6 +255,38 @@ export function CaptureButton({
       ) : null}
     </p>
   ) : null;
+
+  /**
+   * Der Sucher hat zugemacht. Aufgefrischt wird auch bei null Aufnahmen nicht
+   * ins Blaue: wer die Kamera öffnet und wieder schließt, hat nichts geändert,
+   * und ein `refresh()` für nichts kostet eine Anfrage.
+   */
+  const closeViewfinder = useCallback(
+    ({
+      arrived,
+      startError,
+    }: {
+      arrived: number;
+      startError: string | null;
+    }) => {
+      setViewfinderOpen(false);
+      setFromViewfinder(arrived);
+
+      // Der Satz gehört unter den Knopf, und der Knopf muss von nun an den
+      // anderen Weg gehen.
+      if (startError) {
+        setViewfinderBlocked(true);
+        setError(startError);
+      }
+
+      if (arrived > 0) {
+        // Damit das Raster „Zuletzt aufgenommen“ darunter zeigt, was eben
+        // hereinkam. Gesprungen wird nicht — siehe `run()`.
+        router.refresh();
+      }
+    },
+    [router],
+  );
 
   if (needsSubject && subjects.length === 0) {
     // Zwei Lagen, zwei Wege. `subjects` sind die aktiven Fächer, und leer heißt
@@ -449,26 +333,14 @@ export function CaptureButton({
    * ersten Bild die eines frisch angelegten, danach die schon bekannte.
    */
   async function send(file: File, target: string | null): Promise<string> {
-    const page = await prepare(file);
+    const page = await prepareFile(file);
 
-    const formData = new FormData();
-    formData.set("breite", String(page.width));
-    formData.set("hoehe", String(page.height));
-    formData.set("bild", page.image, "blatt.jpg");
-    formData.set("lesefassung", page.reading, "lesefassung.jpg");
-    formData.set("vorschau", page.thumb, "vorschau.jpg");
-
-    if (target) {
-      formData.set("materialId", target);
-    } else {
-      formData.set("subjectId", chosen);
-      formData.set("capturedOn", today);
-    }
-
-    const result = await callAction(target, formData);
-    if (!result.ok) throw new CaptureError(result.message);
-
-    return result.id;
+    return sendPage(
+      page,
+      target
+        ? { materialId: target }
+        : { subjectId: chosen, capturedOn: today },
+    );
   }
 
   async function run(files: File[]) {
@@ -523,11 +395,16 @@ export function CaptureButton({
   }
 
   /**
-   * Ohne gewähltes Fach geht die Kamera gar nicht erst auf. Andersherum stünde
-   * der Nutzer nach dem Auslösen mit einem Foto da, das nirgendwohin kann.
+   * Was der große Knopf tut. Der Sucher, wo es einen gibt; sonst die Kamera des
+   * Geräts über das versteckte `<input capture>`.
+   *
+   * Ohne gewähltes Fach geht beides gar nicht erst auf. Andersherum stünde der
+   * Nutzer nach dem Auslösen mit einem Foto da, das nirgendwohin kann — und im
+   * Sucher gäbe es keine Stelle, an der er es noch nachreichen könnte.
    */
-  function openPicker(input: HTMLInputElement | null) {
+  function capture() {
     setSaved(null);
+    setFromViewfinder(0);
 
     if (needsSubject && !chosen) {
       setError("Wähl zuerst ein Fach, dann geht es los.");
@@ -535,7 +412,27 @@ export function CaptureButton({
     }
 
     setError(null);
-    input?.click();
+
+    if (viewfinderAvailable && !viewfinderBlocked) {
+      setViewfinderOpen(true);
+      return;
+    }
+
+    cameraRef.current?.click();
+  }
+
+  /** Die Galerie geht immer über die Dateiauswahl — dort ist keine Kamera im Spiel. */
+  function openGallery() {
+    setSaved(null);
+    setFromViewfinder(0);
+
+    if (needsSubject && !chosen) {
+      setError("Wähl zuerst ein Fach, dann geht es los.");
+      return;
+    }
+
+    setError(null);
+    galleryRef.current?.click();
   }
 
   function handlePick(event: ChangeEvent<HTMLInputElement>) {
@@ -549,6 +446,7 @@ export function CaptureButton({
 
     setError(null);
     setSaved(null);
+    setFromViewfinder(0);
 
     // Abgelehnt wird die ganze Auswahl und nicht nur der Überhang: die
     // passenden Seiten trotzdem hochzuladen wäre auch ehrlich, ließe den Nutzer
@@ -581,6 +479,12 @@ export function CaptureButton({
       ? `Seite ${Math.min(progress.done + 1, progress.total)} von ${progress.total} …`
       : "Wird gespeichert …";
 
+  // Im Sucher steht oben, wohin die Blätter fallen. Beim Anhängen ist das keine
+  // Frage mehr — dort steht, was der Knopf sagt.
+  const viewfinderLabel = materialId
+    ? buttonLabel
+    : (subjects.find((subject) => subject.id === chosen)?.name ?? "Aufnehmen");
+
   return (
     <div className={cn("space-y-3", className)}>
       {showPicker ? (
@@ -602,10 +506,26 @@ export function CaptureButton({
         </Field>
       ) : null}
 
+      {viewfinderOpen ? (
+        <Viewfinder
+          target={
+            materialId
+              ? { materialId }
+              : { subjectId: chosen, capturedOn: today }
+          }
+          label={viewfinderLabel}
+          capacity={materialId ? capacity : Number.POSITIVE_INFINITY}
+          onClose={closeViewfinder}
+        />
+      ) : null}
+
       {/* Beide Wege liegen versteckt hinter den Knöpfen: der erste öffnet
           unmittelbar die Kamera (capture), der zweite die Dateiauswahl. Ein
           sichtbares <input type="file"> sähe an dieser Stelle wie ein Formular
           aus, und ein Formular ist genau das, was hier keiner ausfüllen will.
+
+          Das erste ist seit dem Sucher nur noch der Rückfallweg — für Geräte
+          ohne Kamerazugriff und für den Fall, dass der Sucher nicht aufgeht.
 
           `multiple` steht an beiden. An der Kamera bleibt es folgenlos — die
           gibt ein Foto zurück und fertig —, in der Galerie ist es der ganze
@@ -638,7 +558,7 @@ export function CaptureButton({
           type="button"
           size="lg"
           loading={pending}
-          onClick={() => openPicker(cameraRef.current)}
+          onClick={capture}
           className={cn("flex-1 sm:flex-none", !materialId && "h-[68px] sm:h-12")}
         >
           {pending ? busyLabel : buttonLabel}
@@ -649,7 +569,7 @@ export function CaptureButton({
           variant="secondary"
           size="lg"
           disabled={pending}
-          onClick={() => openPicker(galleryRef.current)}
+          onClick={openGallery}
           className={cn("shrink-0", !materialId && "h-[68px] sm:h-12")}
         >
           Galerie
