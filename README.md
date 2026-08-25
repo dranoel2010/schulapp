@@ -146,6 +146,12 @@ src/
     form-errors.ts  wo eine zod-Meldung landet — unter ihrem Feld oder über
                     dem ganzen Formular (getestet)
     theme.ts        hell, dunkel oder dem Gerät überlassen
+
+harness/          der Postbote — gehört NICHT zur App, sondern benutzt sie
+  zugang.mts        einmal zustimmen, danach ein eigener Zugang
+  postbote.mts      alle paar Minuten nachsehen und Claude ansetzen
+  kaefig.mts        der Lauf ohne Bash, ohne Dateien, ohne fremde Server
+  auftrag.mts       was Claude an einem Blatt tun soll
 ```
 
 **Lernen und Verwalten sind getrennt.** Unter *Klausuren* trägt man Termine
@@ -299,6 +305,30 @@ jemand, der das Token gestohlen hat, und beides beantwortet OAuth gleich.
 
 **Zum Ausprobieren am eigenen Rechner** braucht es einen Tunnel: Claude verbindet
 sich aus der Cloud, `localhost` erreicht es nie.
+
+## Der Postbote — vom Foto bis zum Vorschlag ohne Handgriff
+
+Wer nicht jedes Mal selbst in der Claude-App fragen will, lässt `harness/`
+laufen: ein kleines Programm auf dem eigenen Rechner, das alle paar Minuten in
+den Eingangskorb sieht und Claude auf jedes Blatt ansetzt, das noch keinen
+Vorschlag hat.
+
+```bash
+npx tsx harness/zugang.mts     # einmal zustimmen
+npx tsx harness/postbote.mts   # laufen lassen
+```
+
+Es gehört ausdrücklich **nicht zur App**: die App hat keinen Schlüssel und ruft
+nie ein Modell. Der Postbote benutzt sie von außen, durch dieselbe Tür wie die
+Claude-App, mit eigener Zustimmung und eigenem Trennen-Knopf in den
+Einstellungen. Er läuft über Claude Code und damit über das Abo — kein
+API-Schlüssel, keine Rechnung.
+
+Der Lauf, in den ein fremdes Blatt gerät, ist dabei leer geräumt: `--tools ""`
+nimmt die eingebauten Werkzeuge weg, `--strict-mcp-config` alle anderen Server.
+Übrig bleiben die elf Werkzeuge dieser App, gemessen und nachgezählt. Warum das
+nötig ist und was sonst noch dahintersteht, steht in
+[harness/README.md](harness/README.md).
 
 ## Datenbank
 

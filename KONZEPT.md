@@ -322,15 +322,27 @@ Programms, die Zustimmung, der Tausch, elf Werkzeuge, ein Blatt als Bild und
 ein Vorschlag im Korb — alles gegen die echte Adresse geprüft. Was der zweite
 Grund verlangt, steht damit offen: fünf Blätter durchschicken und hinsehen.
 
-**Der andere Weg bleibt offen, und offen halten ihn genau zwei Zeilen.** Sollte
-sich der Handgriff als lästig erweisen, kommt ein Knopf an den Eingangskorb,
-der denselben Vorschlag von der App aus holt. Dafür muss sich am Korb nichts
-ändern: ein Vorschlag trägt seine Herkunft (`manuell` oder `agent`), und ein
-solcher Knopf wäre bloß ein weiterer Schreiber auf dieselbe Tabelle. Was
-ausdrücklich nicht kommt, ist der Aufruf nach jeder Aufnahme: er feuert im
-Unterricht, auf einer Verbindung, die es im Schulnetz oft nicht gibt, und
-bräuchte dafür eine Warteschlange und einen Fehlerzustand je Blatt — während
-ein Knopf den zweiten Versuch geschenkt bekommt.
+**Und der andere Weg ist gegangen worden — anders als beide Skizzen.** Am
+25.8.2026, einen Tag nach Stufe 4, kam der Wunsch: vom Foto bis zum Vorschlag
+ohne Handgriff. Gebaut wurde dafür weder der Knopf am Korb noch der Aufruf aus
+der App, sondern ein Dritter: **der Postbote** (`harness/`), ein kleines
+Programm auf dem eigenen Rechner. Es sieht alle paar Minuten in den Korb und
+setzt Claude auf jedes Blatt an, das noch keinen Vorschlag hat.
+
+Das hält alles, was oben steht. Die App bekommt keinen Schlüssel und ruft nie
+ein Modell — der Postbote tut es, von außen, durch dieselbe Tür wie die
+Claude-App. Er meldet sich als eigener Client an und holt sich eine eigene
+Zustimmung; damit steht er in den Einstellungen als eigene Zeile und lässt sich
+einzeln trennen. Und weil er über Claude Code läuft, kostet er kein
+API-Guthaben, sondern Kontingent.
+
+**Was ausdrücklich weiter nicht kommt, ist der Aufruf nach jeder Aufnahme.** Er
+feuerte im Unterricht, auf einer Verbindung, die es im Schulnetz oft nicht gibt,
+und bräuchte eine Warteschlange und einen Fehlerzustand je Blatt. Der Postbote
+braucht beides nicht, denn **der Eingangskorb IST die Warteschlange**: ein Blatt
+ohne Vorschlag ist die offene Aufgabe, und wer eine Runde verpasst, holt sie in
+der nächsten nach. Angestupst wird dabei nichts — die App weiß von ihm nichts,
+und sie soll nichts von ihm wissen.
 
 Zwei Regeln stehen darüber:
 
@@ -342,8 +354,26 @@ nur `read_*` und `propose_*`, kein Anlegen, kein Ändern, kein Löschen.
 Mensch übernimmt sie, durch dieselbe Tür wie ein Formular. Das ist keine
 Vorsichtsmaßnahme, sondern die Bedingung: Wer nicht vertrauenswürdige Blätter
 liest und gleichzeitig schreiben darf, ist angreifbar über das Blatt selbst.
-Aus demselben Grund gehören Zettel nie in eine Claude-Code-Sitzung, sondern in
-die Claude-App — dort steht kein Bash und kein Zugriff auf das Repo daneben.
+
+Daraus folgte lange ein zweiter Satz: Zettel gehörten nie in eine
+Claude-Code-Sitzung, sondern in die Claude-App — „dort steht kein Bash und kein
+Zugriff auf das Repo daneben". **Der Satz stimmte, und er stimmt so nicht
+mehr.** Am 25.8.2026 nachgemessen: entscheidend ist nicht, welches Programm
+das Blatt liest, sondern was in der Sitzung daneben steht. Und das lässt sich
+leeren.
+
+Drei Schalter nehmen einem Lauf die Fähigkeiten, statt sie ihm nur zu
+verbieten: `--tools ""` entfernt die eingebauten Werkzeuge, `--strict-mcp-config`
+lässt nur den mitgegebenen Server gelten, `--mcp-config` gibt genau einen mit.
+Ein so gestarteter Lauf, nach seinen Werkzeugen gefragt, zählt elf auf — alle
+aus dieser App; nach Bash gefragt, sagt er, er habe keines. Ohne den ersten
+Schalter führt derselbe Lauf `echo` aus, obwohl Bash nicht in der
+Erlaubnisliste steht: eine Erlaubnisregel können die Einstellungen des Rechners
+weiten, eine fehlende Fähigkeit nicht.
+
+Die Regel heißt deshalb ab jetzt: **ein Blatt gehört in keine Sitzung, in der
+mehr steht als die Werkzeuge dieser App** — und wer das behauptet, muss es
+zeigen können.
 
 ### Wie der Zugang abgesichert ist
 

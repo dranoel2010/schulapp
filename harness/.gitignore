@@ -1,0 +1,8 @@
+# Der Zugang des Postboten: das Erneuerungs-Token ist neunzig Tage lang der
+# Schlüssel zu allem, was die App weiß. Es gehört auf diesen Rechner und
+# nirgendwo sonst.
+zugang.json
+
+# Welche Blätter schon einen Lauf hatten. Kein Geheimnis, aber auch nichts,
+# was jemand anderes brauchen könnte — es gilt nur für dieses Gerät.
+gesehen.json
