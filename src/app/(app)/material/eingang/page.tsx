@@ -9,7 +9,7 @@ import { INBOX_LIMIT, listInbox, type InboxEntry } from "@/lib/inbox";
 import { getMaterial } from "@/lib/materials";
 import { listSubjects } from "@/lib/subjects";
 
-import { markFiledAction } from "./actions";
+import { acceptProposalAction, markFiledAction } from "./actions";
 import { SubmitButton } from "./proposal-form";
 import {
   MaterialGlance,
@@ -308,6 +308,10 @@ function InboxRow({
 }) {
   const filed = item.filedAt !== null;
 
+  // Der eine Vorschlag, der sich mit einem Druck übernehmen lässt. Bei mehreren
+  // steht hier nichts — warum, steht am Knopf.
+  const einziger = item.proposals.length === 1 ? item.proposals[0] : null;
+
   return (
     <li className="space-y-3 rounded-card border border-border bg-surface p-4 sm:p-5">
       <MaterialGlance item={item} />
@@ -325,22 +329,58 @@ function InboxRow({
       ) : null}
 
       <div className="flex flex-wrap gap-2">
+        {/* **Ja, so.** Ein Druck, und am Blatt steht, was auf der Karte
+            darunter zu lesen ist: Fach, Titel, Themen, Notiz — und abgehakt
+            ist es dann auch.
+
+            Seit der Postbote jedes Blatt liest und dabei das Fach zuordnet,
+            ist „der Vorschlag stimmt" die Regel und nicht die Ausnahme. Ihn
+            dafür erst zu öffnen, das Formular zu lesen und unten zu
+            bestätigen, waren drei Handgriffe für ein Ja.
+
+            NUR BEI GENAU EINEM VORSCHLAG. Liegen mehrere, ist „übernehmen"
+            keine Bestätigung mehr, sondern eine Auswahl — und die gehört auf
+            die Vorschlagsseite, wo sie einzeln dastehen. Ein Knopf, der
+            stillschweigend den jüngsten nimmt und die anderen wegräumt, wäre
+            genau die Art von Entscheidung, die diese App niemandem abnimmt. */}
+        {einziger ? (
+          <form action={acceptProposalAction.bind(null, einziger.id)}>
+            <SubmitButton variant="primary">Übernehmen</SubmitButton>
+          </form>
+        ) : null}
+
         {/* Der Weg für ein Blatt, an dem nichts zu ändern ist: angesehen,
             stimmt so, weg damit. `filed` steckt in der gebundenen Action und
             nicht in einem versteckten Feld — welcher Knopf gedrückt wurde,
-            weiß der Server dann von selbst. */}
+            weiß der Server dann von selbst.
+
+            Steht ein Vorschlag daneben, heißt er „Nur abhaken": sonst läse
+            sich „Abhaken" wie die kleine Schwester von „Übernehmen", und man
+            griffe danach in der Annahme, es passiere dasselbe in bescheiden.
+            Es passiert das Gegenteil — das Blatt bleibt, wie es ist. */}
         <form action={markFiledAction.bind(null, item.id, !filed)}>
           <SubmitButton>
-            {filed ? "Wieder in den Korb" : "Abhaken"}
+            {filed
+              ? "Wieder in den Korb"
+              : item.proposals.length > 0
+                ? "Nur abhaken"
+                : "Abhaken"}
           </SubmitButton>
         </form>
 
-        <ButtonLink
-          href={`/material/eingang/neu?blatt=${item.id}`}
-          variant="secondary"
-        >
-          Vorschlag anlegen
-        </ButtonLink>
+        {/* Von Hand vorschlagen — der Weg aus der Zeit vor dem Agenten. Er
+            bleibt, weil alles, was ein Agent vorschlägt, auch von Hand
+            anzulegen sein muss (so steht es in KONZEPT.md), aber er tritt
+            zurück, wo schon ein Vorschlag liegt: dort ist er niemandes
+            nächster Griff. */}
+        {item.proposals.length === 0 ? (
+          <ButtonLink
+            href={`/material/eingang/neu?blatt=${item.id}`}
+            variant="ghost"
+          >
+            Vorschlag anlegen
+          </ButtonLink>
+        ) : null}
 
         {/* Der Weg zum Blatt selbst. Dort wird direkt geändert — im Korb geht
             das absichtlich nicht: hier entscheidet man über Vorschläge, dort
@@ -375,7 +415,7 @@ function InboxRow({
                 href={`/material/eingang/${proposal.id}`}
                 variant="secondary"
               >
-                Ansehen und übernehmen
+                Erst ansehen
               </ButtonLink>
             </li>
           ))}

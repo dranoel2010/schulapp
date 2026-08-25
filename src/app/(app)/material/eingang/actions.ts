@@ -11,6 +11,7 @@ import {
   deleteProposal,
   getProposal,
   markFiled,
+  prefillFromProposal,
   proposalInputSchema,
   updateProposal,
   type ProposalFieldErrors,
@@ -334,6 +335,148 @@ export async function deleteProposalAction(id: string): Promise<void> {
  * einen Stand geprüft werden müssten, den niemand mehr sieht. Waren es mehr als
  * einer, steht das nachher auf dem Bildschirm — still verschwinden darf keiner.
  */
+/**
+ * Was beim Übernehmen wirklich geschieht — einmal geschrieben, von zwei Wegen
+ * benutzt.
+ *
+ * Die beiden Wege sind das Formular (ansehen, vielleicht ändern, dann
+ * übernehmen) und der Knopf am Korb (ein Druck, so wie vorgeschlagen). Sie
+ * unterscheiden sich nur darin, WOHER die Werte kommen; was danach passiert,
+ * muss dasselbe sein. Stünde es zweimal da, ginge eines Tages der eine Weg
+ * abhaken und der andere nicht, oder der eine räumte die übrigen Vorschläge
+ * weg und der andere ließe sie liegen.
+ */
+async function anwenden(
+  userId: string,
+  materialId: string,
+  werte: {
+    subjectId: string;
+    title: string;
+    capturedOn: string;
+    note: string | null;
+    topics: string[];
+  },
+): Promise<string | null> {
+  if (
+    !(await updateMaterial(userId, materialId, {
+      subjectId: werte.subjectId,
+      title: werte.title,
+      capturedOn: werte.capturedOn,
+      note: werte.note,
+    }))
+  ) {
+    return null;
+  }
+
+  const { verworfen, zusammengefallen, umbenannt } = await setMaterialTopics(
+    userId,
+    materialId,
+    werte.topics,
+  );
+
+  const entfernt = await clearProposals(userId, materialId);
+
+  // Erst ganz zum Schluss abhaken. Ein schon gesetzter Zeitpunkt bleibt dabei
+  // stehen — `markFiled()` fasst ihn nicht noch einmal an, damit „wann hat ein
+  // Mensch hingesehen?“ eine Antwort behält.
+  await markFiled(userId, materialId, true);
+
+  revalidateInbox(materialId);
+
+  return confirmedHref({
+    materialId,
+    // `entfernt` zählt den übernommenen mit — er ist ja auch weggeräumt
+    // worden. Interessant sind die anderen.
+    weitere: Math.max(0, entfernt - 1),
+    ohneFachwort: verworfen.length,
+    zusammengefallen: zusammengefallen.length,
+    // Ein getippter Titel, den das Fach schon anders schreibt. Am Blatt steht
+    // danach die Schreibweise des Fachs, und die Gegenüberstellung konnte das
+    // nicht ankündigen — sie ist eine reine Rechnung und liest das Vokabular
+    // nicht. Also wird es hinterher gesagt.
+    andereSchreibweise: umbenannt.length,
+  });
+}
+
+/**
+ * Einen Vorschlag mit einem Druck übernehmen — so, wie er dasteht.
+ *
+ * **Der kurze Weg für den Normalfall.** Seit der Postbote jedes Blatt liest und
+ * dabei auch das Fach zuordnet, ist „der Vorschlag stimmt" die Regel und nicht
+ * die Ausnahme. Ihn dafür erst zu öffnen, das Formular zu lesen und unten zu
+ * bestätigen, sind drei Handgriffe für ein Ja. Der Vorschlag steht mit Fach,
+ * Titel, Themen und Notiz schon auf der Karte im Korb; wer dort „Übernehmen"
+ * drückt, hat ihn gelesen.
+ *
+ * **Aus dem Formular kommt hier nichts.** Die Werte rechnet der Server aus dem
+ * Vorschlag selbst — mit `prefillFromProposal()`, derselben Funktion, mit der
+ * die Vorschlagsseite ihr Formular füllt und ihre Gegenüberstellung baut. Was
+ * dort steht, ist damit genau das, was hier geschieht; ein zweites Mal
+ * hingeschrieben würde es früher oder später auseinandergehen. Und weil der
+ * Browser nichts beisteuert, gibt es hier auch nichts zu fälschen.
+ */
+export async function acceptProposalAction(proposalId: string): Promise<void> {
+  const user = await requireUser();
+
+  // Zwei Geräte, zwei offene Seiten, und der Vorschlag ist auf dem einen längst
+  // entschieden. Dann führt der Weg zurück in den Korb — dort steht das Blatt
+  // dann so, wie der andere es hinterlassen hat, und niemand sieht einen
+  // Fehler für etwas, das schon getan ist.
+  const found = await getProposal(user.id, proposalId);
+  if (!found) redirect("/material/eingang");
+
+  /*
+   * Von den beiden Rückgaben wird hier nur `werte` gebraucht — die
+   * Gegenüberstellung `aenderungen` gehört auf die Vorschlagsseite, wo jemand
+   * sie liest. Deshalb reist der Name des vorgeschlagenen Fachs als `null`
+   * mit: er steht ausschließlich in der Gegenüberstellung, und ihn hier
+   * nachzuschlagen wäre eine Abfrage für einen Satz, den niemand zu sehen
+   * bekommt. Wer eines Tages `aenderungen` auch von hier aus braucht, holt den
+   * Namen dann — und ändert diesen Kommentar mit.
+   */
+  const { werte } = prefillFromProposal(
+    {
+      subjectId: found.material.subject.id,
+      subjectName: found.material.subject.name,
+      title: found.material.title,
+      capturedOn: found.material.capturedOn,
+      note: found.material.note,
+      topics: found.material.topics.map((topic) => topic.title),
+    },
+    {
+      subjectId: found.proposal.subjectId,
+      subjectName: null,
+      title: found.proposal.title,
+      capturedOn: found.proposal.capturedOn,
+      note: found.proposal.note,
+      topics: found.proposal.topics,
+    },
+  );
+
+  // Das vorgeschlagene Fach kann inzwischen archiviert oder gelöscht sein.
+  // Dann ist das hier kein „ein Druck genügt" mehr — es ist eine Entscheidung,
+  // und die gehört auf die Vorschlagsseite, wo eine Auswahl danebensteht.
+  if (!(await ownsSubject(user.id, werte.subjectId))) {
+    redirect(`/material/eingang/${proposalId}`);
+  }
+
+  let ziel: string | null;
+
+  try {
+    ziel = await anwenden(user.id, found.material.id, werte);
+  } catch (error) {
+    console.error("Vorschlag übernehmen (ein Druck) fehlgeschlagen", error);
+    redirect(`/material/eingang/${proposalId}`);
+  }
+
+  // Das Blatt gibt es nicht mehr — dann ist der Korb der ehrlichste Ort.
+  if (!ziel) redirect("/material/eingang");
+
+  // `redirect()` wirft intern und steht deshalb außerhalb des try; warum das
+  // wichtig ist, steht ausführlich in `confirmProposalAction()`.
+  redirect(ziel);
+}
+
 export async function confirmProposalAction(
   proposalId: string,
   state: MaterialFormState,
@@ -372,18 +515,9 @@ export async function confirmProposalAction(
     };
   }
 
-  let ziel: string;
+  let ziel: string | null;
 
   try {
-    // Das Fach gehört dem Nutzer, das ist eine Zeile weiter oben geprüft —
-    // bleibt als Grund für ein Nein nur noch das Blatt selbst.
-    if (!(await updateMaterial(user.id, materialId, parsed.data))) {
-      return {
-        saves: state.saves,
-        message: "Dieses Blatt gibt es nicht mehr.",
-      };
-    }
-
     // Die Themen kommen als Titel und nur als Titel — genau wie bei
     // `updateMaterialAction()`. `MaterialForm` hängt für jeden Chip ein
     // verstecktes Feld „themen“ mit dem Titel darin ans Formular; eine id
@@ -392,37 +526,16 @@ export async function confirmProposalAction(
       .getAll("themen")
       .filter((value): value is string => typeof value === "string");
 
-    const { verworfen, zusammengefallen, umbenannt } = await setMaterialTopics(
-      user.id,
-      materialId,
-      titles,
-    );
-
-    const entfernt = await clearProposals(user.id, materialId);
-
-    // Erst ganz zum Schluss abhaken. Ein schon gesetzter Zeitpunkt bleibt
-    // dabei stehen — `markFiled()` fasst ihn nicht noch einmal an, damit „wann
-    // hat ein Mensch hingesehen?“ eine Antwort behält.
-    await markFiled(user.id, materialId, true);
-
-    revalidateInbox(materialId);
-
-    ziel = confirmedHref({
-      materialId,
-      // `entfernt` zählt den übernommenen mit — er ist ja auch weggeräumt
-      // worden. Interessant sind die anderen.
-      weitere: Math.max(0, entfernt - 1),
-      ohneFachwort: verworfen.length,
-      zusammengefallen: zusammengefallen.length,
-      // Ein getippter Titel, den das Fach schon anders schreibt. Am Blatt
-      // steht danach die Schreibweise des Fachs, und die Gegenüberstellung
-      // konnte das nicht ankündigen — sie ist eine reine Rechnung und liest
-      // das Vokabular nicht. Also wird es hinterher gesagt.
-      andereSchreibweise: umbenannt.length,
-    });
+    // Das Fach gehört dem Nutzer, das ist eine Zeile weiter oben geprüft —
+    // bleibt als Grund für ein Nein nur noch das Blatt selbst.
+    ziel = await anwenden(user.id, materialId, { ...parsed.data, topics: titles });
   } catch (error) {
     console.error("Vorschlag übernehmen fehlgeschlagen", error);
     return { saves: state.saves, message: SAVE_FAILED };
+  }
+
+  if (!ziel) {
+    return { saves: state.saves, message: "Dieses Blatt gibt es nicht mehr." };
   }
 
   /*
