@@ -148,13 +148,15 @@ Beide stehen in `.gitignore`.
 
 ## Auf den Raspberry umziehen
 
-Der Postbote braucht drei Dinge: Node, ein angemeldetes Claude Code und diesen
-Ordner. Der Zugang gilt pro Gerät nicht — `zugang.json` lässt sich mitnehmen —,
-aber sauberer ist eine eigene Zustimmung dort: dann stehen zwei Zeilen in den
-Einstellungen und du kannst einzeln trennen.
+Schritt für Schritt in **[RASPBERRY.md](RASPBERRY.md)** — mit dem Teil, der
+nicht offensichtlich ist: wie die Zustimmung auf einen Rechner ohne Bildschirm
+kommt (SSH-Weiterleitung für Port 41751).
 
-Dauerbetrieb dann über systemd (Linux) oder launchd (macOS); der Dienst braucht
-nur `HOME` und `PATH`, sonst nichts.
+Kurz: Der Postbote braucht Node, ein angemeldetes Claude Code und diesen Ordner
+— **sonst nichts**, keine npm-Abhängigkeit und nicht das Repo drumherum.
+`zugang.json` bleibt zu Hause; der Pi bekommt eine eigene Zustimmung, sonst
+nehmen sich beide das Token weg. Und es läuft immer nur einer, sonst liegen zwei
+Vorschläge am selben Blatt.
 
 ## Wenn etwas klemmt
 

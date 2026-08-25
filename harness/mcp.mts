@@ -69,10 +69,26 @@ export function schreibeZugang(zugang: Zugang): void {
 }
 
 /** Es gibt noch keinen Zugang; der Mensch muss einmal zustimmen. */
+/**
+ * Der Weg zu `zugang.mts`, wie man ihn von hier aus tippt.
+ *
+ * Fest „harness/zugang.mts" hinzuschreiben stimmt nur, wenn man im Wurzel-
+ * verzeichnis des Repos steht. Auf dem Raspberry liegt der Ordner allein, und
+ * man steht darin — dort gibt es kein `harness/`, und der Rat schickte einen
+ * ins Leere. Also wird gerechnet: relativ zum Arbeitsverzeichnis.
+ */
+function zugangBefehl(): string {
+  const ziel = path.join(HIER, "zugang.mts");
+  const relativ = path.relative(process.cwd(), ziel);
+
+  // Führt der relative Weg nach oben hinaus, ist der absolute der ehrlichere.
+  return relativ && !relativ.startsWith("..") ? relativ : ziel;
+}
+
 export class FehlenderZugang extends Error {
   constructor() {
     super(
-      `Kein Zugang unter ${ZUGANG_DATEI}. Einmal einrichten:\n  npx tsx harness/zugang.mts`,
+      `Kein Zugang unter ${ZUGANG_DATEI}. Einmal einrichten:\n  npx tsx ${zugangBefehl()}`,
     );
   }
 }
@@ -81,7 +97,7 @@ export class FehlenderZugang extends Error {
 export class ZugangVerloren extends Error {
   constructor(grund: string) {
     super(
-      `${grund}\nDie Verbindung gilt nicht mehr. Neu zustimmen:\n  npx tsx harness/zugang.mts`,
+      `${grund}\nDie Verbindung gilt nicht mehr. Neu zustimmen:\n  npx tsx ${zugangBefehl()}`,
     );
   }
 }
