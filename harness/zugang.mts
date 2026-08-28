@@ -101,9 +101,23 @@ function wartenAufCode(state: string): Promise<string> {
       const iss = adresse.searchParams.get("iss");
 
       const antwortenUndSchliessen = (satz: string, dann: () => void) => {
-        antwort.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        antwort.end(seite(satz));
-        server.close(dann);
+        antwort.writeHead(200, {
+          "content-type": "text/html; charset=utf-8",
+          connection: "close",
+        });
+
+        // Erst antworten, dann sofort weiter — und ausdrücklich NICHT auf den
+        // Rückruf von `server.close(dann)` warten. Der kommt erst, wenn ALLE
+        // Verbindungen zu sind, und der Browser legt beim Umleiten hierher eine
+        // zweite auf Vorrat an, auf der er nie etwas schickt. Node räumt so
+        // eine stumme Verbindung erst nach `headersTimeout` weg: 60 Sekunden.
+        // Genau so lange gilt der Zustimmungs-Code (CODE_TTL_SECONDS) — er war
+        // damit tot, bevor der Tausch überhaupt losging.
+        antwort.end(seite(satz), () => {
+          server.close();
+          server.closeIdleConnections();
+          dann();
+        });
       };
 
       if (fehler) {
