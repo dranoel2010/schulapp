@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { MAX_PAGES } from "@/lib/images";
+import { PROPOSAL_TRANSCRIPT_MAX } from "@/lib/inbox";
 import { isToolName, TOOLS, toolList } from "@/lib/mcp/tools";
 
 /**
@@ -145,5 +147,209 @@ describe("die Argumente der Werkzeuge", () => {
       TOOLS.propose_sheet.args.safeParse({ sheet: "x", topics: zuViele }).success,
       false,
     );
+  });
+});
+
+describe("die Abschrift an propose_sheet", () => {
+  const seite = (page: string, text: string) => ({ page, text });
+
+  it("nimmt zu jeder Seite einen Text an — und die leere Seite als leeren Text", () => {
+    const result = TOOLS.propose_sheet.args.safeParse({
+      sheet: "blatt",
+      transcripts: [
+        seite("eins", "Kettenregel: äußere mal innere Ableitung"),
+        seite("zwei", ""),
+      ],
+    });
+
+    assert.equal(result.success, true);
+    // Der leere Text muss leer ANKOMMEN. Er heißt „gelesen, und es stand nichts
+    // darauf" und ist damit etwas anderes als ein fehlender Eintrag, der „diese
+    // Seite hat noch niemand gelesen" heißt. Fielen die beiden schon hier
+    // zusammen, wäre der Unterschied an der Tür verloren — und die Spalte in
+    // der Datenbank dürfte auch gleich NOT NULL sein.
+    assert.equal(result.success && result.data.transcripts?.[1]?.text, "");
+  });
+
+  it("liest eine Seite aus lauter Leerraum als gelesen und leer", () => {
+    const result = TOOLS.propose_sheet.args.safeParse({
+      sheet: "blatt",
+      transcripts: [seite("eins", "   \n  ")],
+    });
+
+    assert.equal(result.success && result.data.transcripts?.[0]?.text, "");
+  });
+
+  it("lässt die Leerzeilen INNERHALB einer Seite stehen — sie sind ihre Gliederung", () => {
+    const seitentext = "Aufgabe 1\n\n  a) 3x²\n\n  b) 5x";
+    const result = TOOLS.propose_sheet.args.safeParse({
+      sheet: "blatt",
+      transcripts: [seite("eins", `\n${seitentext}\n`)],
+    });
+
+    assert.equal(result.success && result.data.transcripts?.[0]?.text, seitentext);
+  });
+
+  it("weist zwei Abschriften an derselben Seite ab", () => {
+    // @/lib/inbox faltet sie sonst still zusammen (der erste gilt), damit der
+    // zusammengesetzte Primärschlüssel von `material_proposal_transcripts`
+    // nicht als englischer Postgres-Fehler zurückkommt. „Still" hieße: die
+    // zweite Abschrift ist weg, ohne dass jemand es sagt. An der Tür wird sie
+    // deshalb abgewiesen.
+    const result = TOOLS.propose_sheet.args.safeParse({
+      sheet: "blatt",
+      transcripts: [seite("eins", "oben"), seite("eins", "unten")],
+    });
+
+    assert.equal(result.success, false);
+    assert.deepEqual(result.success ? [] : result.error.issues[0]?.path, [
+      "transcripts",
+    ]);
+  });
+
+  it("hält die Grenze je Seite ein — und zwar genau die aus dem Eingangskorb", () => {
+    const gerade = "x".repeat(PROPOSAL_TRANSCRIPT_MAX);
+
+    assert.equal(
+      TOOLS.propose_sheet.args.safeParse({
+        sheet: "blatt",
+        transcripts: [seite("eins", gerade)],
+      }).success,
+      true,
+    );
+    assert.equal(
+      TOOLS.propose_sheet.args.safeParse({
+        sheet: "blatt",
+        transcripts: [seite("eins", `${gerade}x`)],
+      }).success,
+      false,
+    );
+  });
+
+  it("nimmt nicht mehr Abschriften an, als ein Blatt Seiten hat", () => {
+    const viele = (anzahl: number) =>
+      Array.from({ length: anzahl }, (_, index) => seite(`seite-${index}`, "Text"));
+
+    assert.equal(
+      TOOLS.propose_sheet.args.safeParse({
+        sheet: "blatt",
+        transcripts: viele(MAX_PAGES),
+      }).success,
+      true,
+    );
+    assert.equal(
+      TOOLS.propose_sheet.args.safeParse({
+        sheet: "blatt",
+        transcripts: viele(MAX_PAGES + 1),
+      }).success,
+      false,
+    );
+  });
+
+  it("verlangt zu jeder Abschrift beide Felder und duldet kein drittes", () => {
+    assert.equal(
+      TOOLS.propose_sheet.args.safeParse({
+        sheet: "blatt",
+        transcripts: [{ page: "eins" }],
+      }).success,
+      false,
+    );
+    assert.equal(
+      TOOLS.propose_sheet.args.safeParse({
+        sheet: "blatt",
+        transcripts: [{ text: "Text" }],
+      }).success,
+      false,
+    );
+    assert.equal(
+      TOOLS.propose_sheet.args.safeParse({
+        sheet: "blatt",
+        transcripts: [{ page: "eins", text: "Text", seite: 1 }],
+      }).success,
+      false,
+    );
+  });
+
+  it("bleibt ohne Abschrift der Vorschlag, der es vorher war", () => {
+    assert.equal(TOOLS.propose_sheet.args.safeParse({ sheet: "blatt" }).success, true);
+  });
+
+  it("verspricht nicht mehr Abschrift, als in ein Werkzeugergebnis passt", () => {
+    // Die Rechnung aus der Beschreibung, als Test. Ein Werkzeugergebnis endet
+    // in der Claude-App bei rund 150 000 Zeichen; zwölf Seiten mal 8 000 sind
+    // 96 000 und lassen Luft für den Satz davor, die Feldnamen und den
+    // JSON-RPC-Umschlag. Wer eine der beiden Zahlen anhebt, liest hier, was er
+    // damit verspricht — und nicht erst an einer Antwort, die niemand mehr
+    // annimmt.
+    assert.equal(MAX_PAGES * PROPOSAL_TRANSCRIPT_MAX + 10_000 < 150_000, true);
+  });
+
+  it("zeigt dem Modell im Verzeichnis beide Felder als Pflicht", () => {
+    // Die Eindeutigkeit der Seiten steht als `refine` im Schema und fällt bei
+    // der Umwandlung nach JSON-Schema still weg — deshalb steht sie zusätzlich
+    // im letzten Satz der Beschreibung. Was NICHT wegfallen darf, ist die
+    // Struktur: ohne `text` in `required` hielte ein Modell die leere Seite für
+    // eine, die man weglässt.
+    const proposal = toolList().find((tool) => tool.name === "propose_sheet");
+    const schema = proposal?.inputSchema as {
+      properties: {
+        transcripts: { maxItems: number; items: Record<string, unknown> };
+      };
+    };
+    const eintrag = schema.properties.transcripts.items;
+
+    assert.deepEqual(eintrag.required, ["page", "text"]);
+    assert.equal(eintrag.additionalProperties, false);
+    assert.equal(schema.properties.transcripts.maxItems, MAX_PAGES);
+  });
+
+  it("sagt dem Modell in der Beschreibung, WIE abgeschrieben wird", () => {
+    // Diese Beschreibung ist kein Kommentar, sondern die Anweisung: sie ist das
+    // Einzige, was steuert, wie eine Abschrift entsteht. Ein Modell an der
+    // Claude-App sieht harness/auftrag.mts nie, für den Menschen dort ist das
+    // hier der ganze Text. Wer sie kürzt, nimmt Regeln weg, die kein anderer
+    // Test vermisst — deshalb steht jede der fünf hier einzeln.
+    const transcripts = (
+      TOOLS.propose_sheet.args as unknown as {
+        shape: { transcripts: { description?: string } };
+      }
+    ).shape.transcripts;
+    const text = transcripts.description ?? "";
+
+    // wörtlich statt zusammengefasst
+    assert.match(text, /nicht zusammenfassen/i);
+    // die Schreibweise des Schülers bleibt stehen, auch die falsche
+    assert.match(text, /korrigierst nicht/i);
+    // Unsicheres in ⟨spitzen Klammern⟩ — und niemals raten
+    assert.match(text, /⟨spitze Klammern⟩/);
+    assert.match(text, /Rate NIE/);
+    // die leere Seite wird nicht weggelassen
+    assert.match(text, /LEEREN Text/);
+    // woher die id einer Seite kommt
+    assert.match(text, /read_sheet/);
+  });
+});
+
+describe("read_transcript", () => {
+  it("verlangt genau ein Blatt", () => {
+    assert.equal(TOOLS.read_transcript.args.safeParse({}).success, false);
+    assert.equal(TOOLS.read_transcript.args.safeParse({ sheet: "" }).success, false);
+    assert.equal(TOOLS.read_transcript.args.safeParse({ sheet: "blatt" }).success, true);
+    // Eine Seite ist kein Blatt; wer beides schickt, meint vermutlich das
+    // falsche von beiden.
+    assert.equal(
+      TOOLS.read_transcript.args.safeParse({ sheet: "blatt", page: "eins" }).success,
+      false,
+    );
+  });
+
+  it("liest nur — sonst fragte die App vor jedem Blick in eine Abschrift", () => {
+    assert.equal(TOOLS.read_transcript.readOnly, true);
+  });
+
+  it("wird von read_sheet aus gefunden — sonst kennt niemand den Weg zum Wortlaut", () => {
+    // read_sheet nennt je Seite nur die Länge. Ohne diesen Verweis läse ein
+    // Modell die Zahl und wüsste nicht, wie es an den Text kommt.
+    assert.match(TOOLS.read_sheet.description, /read_transcript/);
   });
 });

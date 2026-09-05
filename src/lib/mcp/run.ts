@@ -15,11 +15,13 @@ import {
 } from "@/lib/inbox";
 import {
   getMaterial,
+  listMaterialTranscripts,
   listMaterials,
   readPageImage,
   resolveMaterialTopic,
   LIST_LIMIT,
   type MaterialListItem,
+  type MaterialPageTranscript,
 } from "@/lib/materials";
 import { listSubjects } from "@/lib/subjects";
 import { listTopics, listTopicsForSubjects } from "@/lib/subject-topics";
@@ -380,8 +382,21 @@ const HANDLERS: Handlers = {
     const sheet = await getMaterial(user.id, args.sheet);
     if (!sheet) return fehler("Dieses Blatt gibt es nicht.");
 
+    // Wie viele Seiten schon abgeschrieben sind, steht im Satz und nicht nur in
+    // den Zahlen darunter: ein Modell soll nach EINEM Aufruf wissen, ob es die
+    // Abschrift überhaupt geben kann und mit welchem Werkzeug es sie holt. Bei
+    // null Seiten bleibt der Satz still — das ist der Normalfall jedes Blattes,
+    // das noch niemand gelesen hat, und ein Halbsatz darüber wäre Rauschen.
+    const abgeschrieben = sheet.pages.filter(
+      (page) => page.transcriptLength !== null,
+    ).length;
+
     return daten(
-      `„${sheet.title}“ aus ${sheet.subject.name}, ${zahl(sheet.pages.length, "Seite", "Seiten", "f")}.${sheet.filedAt ? "" : " Es liegt noch im Eingangskorb."}`,
+      `„${sheet.title}“ aus ${sheet.subject.name}, ${zahl(sheet.pages.length, "Seite", "Seiten", "f")}.${
+        abgeschrieben > 0
+          ? ` Davon ${zahl(abgeschrieben, "Seite", "Seiten", "f")} abgeschrieben — den Wortlaut holt read_transcript.`
+          : ""
+      }${sheet.filedAt ? "" : " Es liegt noch im Eingangskorb."}`,
       {
         ...sheetRow(sheet),
         filedAt: sheet.filedAt,
@@ -391,6 +406,26 @@ const HANDLERS: Handlers = {
           width: page.width,
           height: page.height,
           size: formatBytes(page.byteSize),
+          /**
+           * Die LÄNGE der Abschrift, nicht die Abschrift.
+           *
+           * Zwölf volle Seiten wären 96 000 Zeichen in einer Antwort, die vor
+           * allem dazu da ist, Seiten-ids zu nennen — und sie kämen bei jedem
+           * Aufruf mit, auch wenn niemand sie lesen will. Mit der Zahl
+           * entscheidet das Modell, ob sich read_transcript überhaupt lohnt.
+           *
+           * `null` heißt „diese Seite hat noch niemand gelesen", `0` heißt
+           * „gelesen, und es stand nichts darauf". Beides steht so in der
+           * Datenbank und wird hier nicht eingeebnet; ein `?? 0` an dieser
+           * Stelle machte aus jeder ungelesenen Seite eine leere.
+           *
+           * Draußen `transcriptChars`, drinnen `transcriptLength` — dieselbe
+           * Umbenennung an derselben Tür wie `coverPageId` nach `firstPageId`
+           * in `sheetRow()`. „Chars" sagt einem Modell, dass es Zeichen zählt
+           * und nicht Zeilen; gezählt wird in Postgres mit `length()`, also in
+           * Zeichen und nicht in UTF-16-Einheiten.
+           */
+          transcriptChars: page.transcriptLength,
         })),
       },
     );
@@ -430,6 +465,60 @@ const HANDLERS: Handlers = {
       base64: Buffer.from(page.bytes).toString("base64"),
       mimeType: page.mimeType,
     };
+  },
+
+  async read_transcript(user, args) {
+    // Zwei Abfragen, und die erste ist keine Bequemlichkeit. `listMaterial-
+    // Transcripts()` gibt zu einem Blatt, das es nicht gibt, dieselbe leere
+    // Liste zurück wie zu einem, das noch niemand gelesen hat — ein Modell, das
+    // versehentlich eine Seiten-id geschickt hat (die beiden sehen gleich aus,
+    // siehe read_page), läse dann „noch nicht abgeschrieben" und glaubte es.
+    // Das ist die eine Antwort, die schlimmer ist als ein Fehler: sie sieht
+    // richtig aus. `getMaterial()` beantwortet die Frage und bringt den Titel
+    // für den Satz gleich mit; den Text schleppt es nicht mit, an den Seiten
+    // hängt nur `transcriptLength`.
+    const sheet = await getMaterial(user.id, args.sheet);
+
+    if (!sheet) {
+      return fehler(
+        "Dieses Blatt gibt es nicht. Die id eines Blattes steht in read_material und read_inbox — die id einer Seite ist eine andere.",
+      );
+    }
+
+    const pages = await listMaterialTranscripts(user.id, args.sheet);
+    const gelesen = pages.filter((page) => page.transcript !== null).length;
+    const zeichen = pages.reduce(
+      (summe, page) => summe + (page.transcript?.length ?? 0),
+      0,
+    );
+    const offen = pages.length - gelesen;
+
+    // Kein Fehler, sondern eine Antwort — dieselbe Entscheidung wie bei einem
+    // Fach ohne Noten ein paar Handler weiter oben. `isError` hieße für das
+    // Modell „frag anders", und es gibt nichts anders zu fragen: der
+    // Normalzustand jeder Seite ist, dass noch niemand sie gelesen hat.
+    if (gelesen === 0) {
+      return daten(
+        `Von „${sheet.title}“ ist noch keine Seite abgeschrieben — was darauf steht, siehst du mit read_page.`,
+        { sheet: args.sheet, pages: transcriptRows(pages) },
+      );
+    }
+
+    return daten(
+      `Die Abschrift von „${sheet.title}“: ${gelesen} von ${pages.length} ${
+        pages.length === 1 ? "Seite" : "Seiten"
+      } abgeschrieben, ${tausender(zeichen)} Zeichen. Was in ⟨spitzen Klammern⟩ steht, war beim Abschreiben unsicher.${
+        offen > 0
+          ? ` Die übrigen ${offen} stehen mit „transcript: null“ da — die hat noch niemand gelesen, dafür read_page.`
+          : ""
+      }`,
+      { sheet: args.sheet, pages: transcriptRows(pages) },
+      // Der einzige Rat, der hier trägt: dieses Werkzeug hat kein `limit` und
+      // kein Seitenargument, mit dem sich enger fragen ließe. Zu groß wird
+      // diese Antwort ohnehin nur, wenn jemand von Hand eine Abschrift
+      // hineingeschrieben hat, die durch keine Tür der App gepasst hätte.
+      "Diese Abschrift ist zu lang für ein Werkzeugergebnis — sieh dir die Seiten einzeln als Foto mit read_page an.",
+    );
   },
 
   async read_inbox(user, args) {
@@ -474,6 +563,57 @@ const HANDLERS: Handlers = {
       subjectId = subject.treffer.id;
     }
 
+    // Die Abschriften hängen an SEITEN, und das Argument nennt sie nur als ids.
+    // Eine id kann von überall herkommen: aus einem früheren Aufruf, aus einem
+    // anderen Blatt, aus dem Blatt eines anderen Nutzers. Geprüft wird sie
+    // deshalb gegen genau das Blatt, um das es hier geht — `getMaterial()`
+    // liefert nur Seiten, die diesem Nutzer und diesem Blatt gehören. Ohne
+    // diese Zeilen hinge am Vorschlag die Abschrift einer fremden Seite, und
+    // beim Übernehmen schriebe ein Mensch sie in ein Blatt, das er nie gesehen
+    // hat. Der Fremdschlüssel allein fängt das nicht: eine fremde Seite gibt es
+    // ja, sie gehört nur woandershin.
+    //
+    // `createProposal()` stellt dieselbe Frage gleich darauf noch einmal
+    // (`ownsProposedPages()`), und das ist keine Verdopplung, die man sich
+    // sparen könnte: dort ist sie die Sicherung der Datenschicht und antwortet
+    // mit `null` — also mit einem Satz, in dem drei mögliche Ursachen stehen.
+    // Hier ist sie die Auskunft an das Modell und nennt die fremden ids beim
+    // Namen, damit ein Modell, das die Blatt-id statt der Seiten-id geschickt
+    // hat, im selben Satz liest, wo die richtige steht.
+    //
+    // Der Aufruf steht IN der Bedingung: ein Vorschlag ohne Abschrift — der
+    // Normalfall des Handformulars und jedes älteren Clients — soll deswegen
+    // nicht plötzlich ein Blatt nachschlagen, das `createProposal()` gleich
+    // darauf ohnehin prüft.
+    const transcripts: { pageId: string; text: string }[] = [];
+
+    if (args.transcripts && args.transcripts.length > 0) {
+      const sheet = await getMaterial(user.id, args.sheet);
+      if (!sheet) return fehler("Dieses Blatt gibt es nicht.");
+
+      const seiten = new Set(sheet.pages.map((page) => page.id));
+      const fremd = args.transcripts
+        .map((eintrag) => eintrag.page)
+        .filter((page) => !seiten.has(page));
+
+      if (fremd.length > 0) {
+        return fehler(
+          `Zu diesem Blatt gehören diese Seiten nicht: ${fremd.join(", ")}. Die ids seiner Seiten stehen in read_sheet unter „pages“ — die id des Blattes ist eine andere.`,
+        );
+      }
+
+      // Draußen `page`, drinnen `pageId`: dieselbe Übersetzung wie von
+      // `captured_on` nach `capturedOn`, an derselben Stelle — dem einen
+      // Bauplatz der Eingabe. `text` heißt an beiden Türen gleich, so steht es
+      // an `NewPageTranscript` in @/lib/materials.
+      transcripts.push(
+        ...args.transcripts.map((eintrag) => ({
+          pageId: eintrag.page,
+          text: eintrag.text,
+        })),
+      );
+    }
+
     // Geprüft wird mit genau dem Schema, das auch das Handformular benutzt —
     // sonst käme durch diese Tür ein Vorschlag herein, den die andere nicht
     // annimmt, und niemand könnte ihn übernehmen.
@@ -483,6 +623,7 @@ const HANDLERS: Handlers = {
       capturedOn: args.captured_on ?? null,
       note: args.note ?? null,
       topics: args.topics ?? [],
+      transcripts,
     });
 
     if (!parsed.success) {
@@ -494,13 +635,39 @@ const HANDLERS: Handlers = {
     const id = await createProposal(user.id, args.sheet, parsed.data, "agent");
 
     if (!id) {
+      // Der dritte Grund steht nur da, wenn er überhaupt in Frage kommt: seit
+      // der Abschrift sagt `createProposal()` auch dann Nein, wenn eine der
+      // genannten Seiten nicht zu diesem Blatt gehört. Die Prüfung oben hat das
+      // gerade erst verneint — bleibt das Rennen: wird die Seite in den
+      // Millisekunden dazwischen gelöscht (ein unscharfes Foto, das jemand
+      // wegwirft, während der Agent liest), ist sie hier weg. Ohne diesen Satz
+      // suchte das Modell den Fehler bei Blatt und Fach, die beide in Ordnung
+      // sind.
       return fehler(
-        "Der Vorschlag konnte nicht angelegt werden: das Blatt gibt es nicht, oder das vorgeschlagene Fach gehört nicht dazu.",
+        `Der Vorschlag konnte nicht angelegt werden: das Blatt gibt es nicht, oder das vorgeschlagene Fach gehört nicht dazu.${
+          transcripts.length > 0
+            ? " Möglich ist auch, dass eine der abgeschriebenen Seiten inzwischen weg ist — read_sheet nennt die, die es noch gibt."
+            : ""
+        }`,
       );
     }
 
+    // Was wirklich angekommen ist, und nicht, was hereinkam: `parsed.data` ist
+    // das, was das Schema durchgelassen hat. Nähme @/lib/inbox das Feld
+    // `transcripts` eines Tages nicht mehr an, stünde hier eine leere Liste —
+    // und niemand läse „Der Vorschlag liegt im Eingangskorb" und glaubte, die
+    // Abschrift sei mit drin.
+    const gespeichert = parsed.data.transcripts ?? [];
+
     return daten(
-      "Der Vorschlag liegt im Eingangskorb. Er ändert nichts, bis ein Mensch ihn übernimmt.",
+      // `zahl()` steht hier nicht: es baut den Nominativ („eine Seite"), und
+      // „mit der Abschrift von eine Seite" wäre ein schiefer Satz in einem
+      // Chatfenster.
+      `Der Vorschlag liegt im Eingangskorb${
+        gespeichert.length > 0
+          ? `, mit der Abschrift von ${gespeichert.length} Seite${gespeichert.length === 1 ? "" : "n"}`
+          : ""
+      }. Er ändert nichts, bis ein Mensch ihn übernimmt.`,
       {
         id,
         sheet: args.sheet,
@@ -509,6 +676,15 @@ const HANDLERS: Handlers = {
         capturedOn: parsed.data.capturedOn,
         note: parsed.data.note,
         topics: parsed.data.topics,
+        // Je Seite die Länge und nicht der Text. Der Text stünde sonst zweimal
+        // in derselben Unterhaltung — einmal hingeschickt, einmal
+        // zurückgelesen — und verdoppelte die Kosten des Aufrufs für nichts.
+        // Die Länge beantwortet trotzdem die einzige Frage, die offen ist: ist
+        // die leere Seite als leer angekommen (0) oder gar nicht?
+        transcripts: gespeichert.map((eintrag) => ({
+          page: eintrag.pageId,
+          chars: eintrag.text.length,
+        })),
       },
     );
   },
@@ -530,6 +706,40 @@ const HANDLERS: Handlers = {
  * ihr Ziel wirklich verfehlt hat. Gemessen an zwei Blättern: 69 und 89 KB.
  */
 const MAX_IMAGE_BYTES = 105_000;
+
+/**
+ * Wie lang ein Datenergebnis werden darf.
+ *
+ * Die Schwester von `MAX_IMAGE_BYTES`, von der anderen Seite gerechnet: dort
+ * werden aus drei Bytes vier Base64-Zeichen, hier ist der Text schon Text. Die
+ * Grenze ist dieselbe — ein Werkzeugergebnis endet in der Claude-App bei rund
+ * 150 000 Zeichen —, und wie beim Bild bleiben zehntausend für den
+ * JSON-RPC-Umschlag, die Feldnamen und den Satz drumherum.
+ *
+ * Bis zur Abschrift konnte kein Leseergebnis in die Nähe kommen: zweihundert
+ * Blattzeilen wiegen ein paar Zehntausend Zeichen, und deshalb stand hier bis
+ * heute nichts — der Datenzweig lief ungedeckelt in `JSON.stringify()`. Was
+ * dann passiert, hängt vom Client ab: abgeschnitten, abgewiesen oder still
+ * verschluckt, und keine dieser drei Antworten sagt jemandem, was los ist.
+ * Eine Abschrift kann die Grenze erreichen — `MAX_PAGES` mal
+ * `PROPOSAL_TRANSCRIPT_MAX` sind 96 000 —, und genau deshalb sind die beiden
+ * Zahlen an der Tür so gewählt, dass sie darunter bleiben, statt sich darauf zu
+ * verlassen.
+ *
+ * Abgeschnitten wird nichts. Ein halbes JSON ist kein JSON, und eine halbe
+ * Antwort sähe aus wie eine ganze: das Modell arbeitete mit ihr weiter, und
+ * niemand sähe je, dass etwas fehlt. Dieselbe Ehrlichkeit wie bei
+ * `grenzeErreicht()` weiter unten, nur schärfer — dort steht ein Hinweis unter
+ * einer vollständigen Liste, hier ein Fehler statt einer unvollständigen
+ * Antwort.
+ *
+ * Gezählt werden Zeichen des Rohtextes; der JSON-RPC-Umschlag verlängert
+ * Anführungszeichen und Zeilenumbrüche noch einmal um ein bis drei Prozent, und
+ * beide kommen in einer Abschrift häufiger vor als in unseren übrigen
+ * Antworten. Die zehntausend Reserve decken das — gerechnet, nicht gemessen,
+ * dieselbe Ehrlichkeit wie bei `MAX_IMAGE_BYTES`.
+ */
+const MAX_DATA_CHARS = 140_000;
 
 /**
  * Ein Blatt, wie es in jeder der drei Listen steht.
@@ -554,6 +764,27 @@ function sheetRow(sheet: MaterialListItem) {
     firstPageId: sheet.coverPageId,
     topics: sheet.topics.map((topic) => topic.title),
   };
+}
+
+/**
+ * Die Abschriften eines Blattes, wie read_transcript sie ausliefert.
+ *
+ * `id` und nicht `pageId`, weil read_sheet die Seite dieses Blattes schon so
+ * nennt — dieselbe Sache heißt an dieser Tür überall gleich, und ein Modell
+ * soll die beiden Listen nebeneinanderlegen können, ohne zu übersetzen.
+ *
+ * ALLE Seiten kommen mit, auch die ungelesenen. Nur die mit Text auszuliefern
+ * wäre kürzer und wäre eine stille Lücke: eine Antwort, in der zwischen Seite 2
+ * und Seite 4 nichts steht, sieht aus wie ein vollständiges Blatt und ist es
+ * nicht. Mit `transcript: null` steht dort, was wirklich der Fall ist — diese
+ * Seite hat noch niemand gelesen —, und der Unterschied zu `""` bleibt erhalten.
+ */
+function transcriptRows(pages: MaterialPageTranscript[]) {
+  return pages.map((page) => ({
+    id: page.pageId,
+    sortOrder: page.sortOrder,
+    transcript: page.transcript,
+  }));
 }
 
 /**
@@ -784,7 +1015,56 @@ function schnitt(average: number | null): string {
   return average === null ? "—" : formatAverage(average);
 }
 
-function daten(satz: string, daten: unknown): ToolOutcome {
+/**
+ * 142 300 statt 142300 — mit dem Leerzeichen, das im Deutschen die Tausender
+ * trennt.
+ *
+ * Von Hand und nicht mit `toLocaleString("de-DE")`: das hängt an den
+ * Sprachdaten der Laufzeit, und eine node-Fassung ohne volle ICU-Daten schriebe
+ * still „142,300" — im deutschen Satz daneben ist das Komma das Dezimalzeichen,
+ * die Zahl behauptete also das Gegenteil. `formatBytes()` in @/lib/images setzt
+ * seine Zahlen aus demselben Grund selbst zusammen.
+ */
+function tausender(wert: number): string {
+  return Math.round(wert)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/gu, " ");
+}
+
+/**
+ * Ein Datenergebnis — und die Prüfung, ob es überhaupt eines werden kann.
+ *
+ * Gemessen wird genau der Text, den der Route Handler gleich zusammensetzt:
+ * Satz, Zeilenumbruch, JSON (`toolResult()` in @/app/api/mcp/route.ts).
+ * `grossAmAnfang()` ändert nur einen Buchstaben und keine Länge, die Rechnung
+ * stimmt also auf das Zeichen.
+ *
+ * Dass dabei zweimal serialisiert wird — hier zum Messen, dort zum Senden — ist
+ * der bewusste Preis dafür, dass `ToolOutcome` weiterhin Daten trägt und keinen
+ * fertigen String: sonst müsste diese Datei wissen, wie die Antwort draußen
+ * aussieht. Bei der größten erlaubten Antwort kostet der zweite Durchgang den
+ * Bruchteil einer Millisekunde, und er kostet ihn einmal je Aufruf.
+ *
+ * Die Prüfung sitzt hier und nicht in den einzelnen Handlern, weil jedes
+ * Datenergebnis durch diese eine Funktion geht — auch jedes künftige. Zurück
+ * kommt ein gewöhnlicher Fehler (`isError`) und kein Protokollfehler: das
+ * Modell soll ihn lesen und es enger noch einmal versuchen können.
+ *
+ * `rat` ist der Satz, mit dem sich DIESES Werkzeug kleiner fragen lässt —
+ * derselbe Gedanke wie bei `grenzeErreicht()`: ein allgemeiner Rat wäre an der
+ * Stelle, an der es darauf ankommt, der falsche. „Nimm `limit`" hilft an einem
+ * Werkzeug ohne `limit` nicht weiter.
+ */
+function daten(satz: string, daten: unknown, rat?: string): ToolOutcome {
+  const json = JSON.stringify(daten);
+  const zeichen = satz.length + 1 + json.length;
+
+  if (zeichen > MAX_DATA_CHARS) {
+    return fehler(
+      `Diese Antwort wäre ${tausender(zeichen)} Zeichen lang und passt damit nicht in ein Werkzeugergebnis (Grenze rund ${tausender(MAX_DATA_CHARS)}). Abgeschnitten wird sie nicht: eine halbe Antwort sähe aus wie eine ganze, und du würdest mit ihr weiterrechnen. ${rat ?? "Frag enger — die Lese-Werkzeuge nehmen dafür `limit`, ein Fach oder ein Thema."}`,
+    );
+  }
+
   return { art: "daten", satz: grossAmAnfang(satz), daten };
 }
 

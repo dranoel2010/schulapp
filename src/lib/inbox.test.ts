@@ -2,15 +2,21 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { addDays, todayInBerlin } from "@/lib/dates";
+import { MAX_PAGES } from "@/lib/images";
 import {
   PROPOSAL_TOPIC_LIMIT,
+  PROPOSAL_TRANSCRIPT_MAX,
   prefillFromProposal,
   proposalInputSchema,
   type Prefill,
   type PrefillMaterial,
   type PrefillProposal,
 } from "@/lib/inbox";
-import { MATERIAL_NOTE_MAX, MATERIAL_TITLE_MAX } from "@/lib/materials";
+import {
+  MATERIAL_NOTE_MAX,
+  MATERIAL_TITLE_MAX,
+  MATERIAL_TRANSCRIPT_MAX,
+} from "@/lib/materials";
 
 /**
  * Die reinen Teile von @/lib/inbox: die Rechnung, aus der die Vorbelegung des
@@ -30,6 +36,13 @@ import { MATERIAL_NOTE_MAX, MATERIAL_TITLE_MAX } from "@/lib/materials";
 const MATHE = "3f7c1a2e-8b4d-4c9a-9e51-0d6f2a7b1c34";
 const PHYSIK = "9a1b2c3d-4e5f-4a6b-8c7d-1e2f3a4b5c6d";
 
+/** Die beiden Seiten des Beispielblattes, in ihrer Reihenfolge. */
+const SEITE_1 = "11111111-2222-4333-8444-555555555555";
+const SEITE_2 = "66666666-7777-4888-8999-aaaaaaaaaaaa";
+
+/** Eine id, die es an diesem Blatt nicht gibt — die weggeworfene Aufnahme. */
+const SEITE_WEG = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff";
+
 /**
  * Der Schultag des Beispielvorschlags — eine Woche zurück, aus derselben
  * Quelle gerechnet wie im Schema. Ein fest eingetragener Tag wäre irgendwann
@@ -47,6 +60,14 @@ function blatt(overrides: Partial<PrefillMaterial> = {}): PrefillMaterial {
     capturedOn: "2026-01-10",
     note: null,
     topics: ["Kettenregel", "Ableitungen"],
+    // Zwei Seiten, beide ungelesen — der Zustand jedes Blattes, das vor der
+    // Spalte `transcript` aufgenommen wurde. Zwei und nicht eine: mit nur einer
+    // ließe sich weder prüfen, dass die Nummer in der Gegenüberstellung stimmt,
+    // noch dass eine ungenannte Seite in Ruhe gelassen wird.
+    pages: [
+      { pageId: SEITE_1, transcript: null },
+      { pageId: SEITE_2, transcript: null },
+    ],
     ...overrides,
   };
 }
@@ -64,6 +85,7 @@ function vorschlag(overrides: Partial<PrefillProposal> = {}): PrefillProposal {
     capturedOn: null,
     note: null,
     topics: [],
+    transcripts: [],
     ...overrides,
   };
 }
@@ -116,6 +138,10 @@ describe("prefillFromProposal", () => {
       capturedOn: "2026-01-10",
       note: null,
       topics: ["Kettenregel", "Ableitungen"],
+      // Keine Abschrift geschrieben — nicht einmal eine leere. Über die beiden
+      // Seiten sagt dieser Vorschlag nichts, und was er nicht sagt, fasst das
+      // Übernehmen nicht an.
+      transcripts: [],
     });
     assert.deepEqual(prefill.aenderungen, []);
   });
@@ -447,6 +473,192 @@ describe("prefillFromProposal", () => {
     ]);
   });
 
+  it("schreibt eine Abschrift nur zu den Seiten, die der Vorschlag nennt", () => {
+    const prefill = prefillFromProposal(
+      blatt(),
+      vorschlag({ transcripts: [{ pageId: SEITE_2, text: "Kettenregel" }] }),
+    );
+
+    assert.deepEqual(prefill.werte.transcripts, [
+      { pageId: SEITE_2, text: "Kettenregel" },
+    ]);
+    assert.deepEqual(felder(prefill), ["Abschrift"]);
+    assert.deepEqual(zeile(prefill, "Abschrift"), {
+      feld: "Abschrift",
+      seite: 2,
+      vorher: "noch nicht gelesen",
+      nachher: "11 Zeichen",
+    });
+  });
+
+  it("lässt eine Seite in Ruhe, über die der Vorschlag schweigt", () => {
+    // Die andere Hälfte desselben Satzes: „leer heißt: dazu sage ich nichts"
+    // gilt bei der Abschrift je Seite. Käme Seite 1 hier mit einem leeren Text
+    // heraus, hieße das am Bestand „gelesen, nichts darauf" — und die Seite
+    // käme nie wieder an die Reihe.
+    const prefill = prefillFromProposal(
+      blatt(),
+      vorschlag({ transcripts: [{ pageId: SEITE_2, text: "Kettenregel" }] }),
+    );
+
+    assert.equal(
+      prefill.werte.transcripts.some((entry) => entry.pageId === SEITE_1),
+      false,
+    );
+  });
+
+  it("lässt eine Abschrift zu einer gelöschten Seite fallen", () => {
+    // Zwischen Vorschlag und Übernahme ist die unscharfe Aufnahme weggeworfen
+    // worden. In der Datenbank räumt „cascade" die Zeile mit weg; kommt sie
+    // trotzdem noch aus einer Rechnung von vorhin, hat sie hier kein Ziel.
+    const prefill = prefillFromProposal(
+      blatt(),
+      vorschlag({ transcripts: [{ pageId: SEITE_WEG, text: "Kettenregel" }] }),
+    );
+
+    assert.deepEqual(prefill.werte.transcripts, []);
+    assert.deepEqual(prefill.aenderungen, []);
+  });
+
+  it("unterscheidet „noch nicht gelesen“ von „nichts darauf“", () => {
+    // Der Unterschied, für den die Spalte NULL zulässt — und er muss bis auf
+    // den Bildschirm durchkommen, sonst hat ihn niemand.
+    const prefill = prefillFromProposal(
+      blatt(),
+      vorschlag({ transcripts: [{ pageId: SEITE_1, text: "" }] }),
+    );
+
+    assert.deepEqual(prefill.werte.transcripts, [{ pageId: SEITE_1, text: "" }]);
+    assert.deepEqual(zeile(prefill, "Abschrift"), {
+      feld: "Abschrift",
+      seite: 1,
+      vorher: "noch nicht gelesen",
+      nachher: "nichts darauf",
+    });
+  });
+
+  it("nennt keine Änderung, wenn dieselbe Abschrift schon dasteht", () => {
+    const prefill = prefillFromProposal(
+      blatt({
+        pages: [
+          { pageId: SEITE_1, transcript: "Kettenregel" },
+          { pageId: SEITE_2, transcript: null },
+        ],
+      }),
+      vorschlag({ transcripts: [{ pageId: SEITE_1, text: "Kettenregel" }] }),
+    );
+
+    assert.deepEqual(prefill.aenderungen, []);
+    // Geschrieben wird sie trotzdem: `werte` ist bei jedem Feld der Wert und
+    // nicht die Änderung, und derselbe Text noch einmal zu schreiben tut nichts.
+    assert.deepEqual(prefill.werte.transcripts, [
+      { pageId: SEITE_1, text: "Kettenregel" },
+    ]);
+  });
+
+  it("nennt eine Änderung, wenn nur ein Leerzeichen anders ist", () => {
+    // Wörtlich verglichen, ohne jede Faltung — und ausdrücklich nicht über die
+    // LÄNGE. Zwei gleich lange Texte sind nicht derselbe Text; ginge diese
+    // Zeile durch die Gegenüberstellung hindurch, ersetzte das Übernehmen eine
+    // Abschrift, ohne dass eine Zeile es angekündigt hätte.
+    const prefill = prefillFromProposal(
+      blatt({ pages: [{ pageId: SEITE_1, transcript: "a b" }] }),
+      vorschlag({ transcripts: [{ pageId: SEITE_1, text: "a  b" }] }),
+    );
+
+    assert.deepEqual(zeile(prefill, "Abschrift"), {
+      feld: "Abschrift",
+      seite: 1,
+      vorher: "3 Zeichen",
+      nachher: "4 Zeichen",
+    });
+  });
+
+  it("zeigt beim Ersetzen beide Längen", () => {
+    // Der seltene und heikle Fall: dort stand schon etwas. Genau dafür steht
+    // die Zahl links — sonst sähe Ersetzen aus wie Hinzufügen.
+    const prefill = prefillFromProposal(
+      blatt({ pages: [{ pageId: SEITE_1, transcript: "a".repeat(980) }] }),
+      vorschlag({ transcripts: [{ pageId: SEITE_1, text: "b".repeat(1240) }] }),
+    );
+
+    assert.deepEqual(zeile(prefill, "Abschrift"), {
+      feld: "Abschrift",
+      seite: 1,
+      vorher: "980 Zeichen",
+      nachher: "1.240 Zeichen",
+    });
+  });
+
+  it("zählt die Seiten in der Reihenfolge des Blattes", () => {
+    // Der Vorschlag nennt sie verkehrt herum; die Gegenüberstellung nicht.
+    const prefill = prefillFromProposal(
+      blatt(),
+      vorschlag({
+        transcripts: [
+          { pageId: SEITE_2, text: "hinten" },
+          { pageId: SEITE_1, text: "vorne" },
+        ],
+      }),
+    );
+
+    assert.deepEqual(
+      prefill.werte.transcripts.map((entry) => entry.text),
+      ["vorne", "hinten"],
+    );
+    assert.deepEqual(
+      prefill.aenderungen
+        .filter((change) => change.feld === "Abschrift")
+        .map((change) => change.seite),
+      [1, 2],
+    );
+  });
+
+  it("nimmt bei zwei Einträgen zur selben Seite den ersten", () => {
+    // Dieselbe Regel wie in `normalizeTranscripts()`. Aus der Datenbank kann
+    // das nicht kommen, aus einer Rechnung von Hand schon — und zwei Regeln für
+    // denselben Fall wären zwei Antworten.
+    const prefill = prefillFromProposal(
+      blatt(),
+      vorschlag({
+        transcripts: [
+          { pageId: SEITE_1, text: "zuerst" },
+          { pageId: SEITE_1, text: "danach" },
+        ],
+      }),
+    );
+
+    assert.deepEqual(prefill.werte.transcripts, [
+      { pageId: SEITE_1, text: "zuerst" },
+    ]);
+  });
+
+  it("stellt die Abschrift hinter die Felder des Formulars", () => {
+    // Die fünf davor sind die Felder des Handformulars in seiner Reihenfolge.
+    // Die Abschrift hat dort kein Feld und kann deshalb nur dahinter kommen.
+    const prefill = prefillFromProposal(
+      blatt(),
+      vorschlag({
+        subjectId: PHYSIK,
+        subjectName: "Physik",
+        title: "Kräfte und Bewegung",
+        capturedOn: "2026-09-14",
+        note: "Seite 2 fehlt",
+        topics: ["Newton"],
+        transcripts: [{ pageId: SEITE_1, text: "F = m · a" }],
+      }),
+    );
+
+    assert.deepEqual(felder(prefill), [
+      "Fach",
+      "Titel",
+      "Tag",
+      "Notiz",
+      "Themen",
+      "Abschrift",
+    ]);
+  });
+
   it("rechnet ohne Systemuhr — zweimal dasselbe Ergebnis", () => {
     // Reine Rechnung heißt: kein „heute" darin. Sonst hinge die
     // Gegenüberstellung davon ab, wann jemand die Seite lädt.
@@ -468,6 +680,9 @@ describe("proposalInputSchema", () => {
       capturedOn: null,
       note: null,
       topics: [],
+      // Die eine Leere, die hier `null` ist und nicht `[]` — die Begründung
+      // steht am Feld im Schema.
+      transcripts: null,
     });
   });
 
@@ -508,11 +723,137 @@ describe("proposalInputSchema", () => {
   });
 
   it("stellt die Meldung über das Formular und nicht unter ein Feld", () => {
-    // Es ist keines der fünf Felder falsch, es fehlen alle fünf. Unter einem
+    // Es ist keines der sechs Felder falsch, es fehlen alle sechs. Unter einem
     // Feld stünde sie da, wo sie niemand erwartet.
-    for (const feld of ["subjectId", "title", "capturedOn", "note", "topics"]) {
+    for (const feld of [
+      "subjectId",
+      "title",
+      "capturedOn",
+      "note",
+      "topics",
+      "transcripts",
+    ]) {
       assert.deepEqual(issuesFor(feld, {}), [], feld);
     }
+  });
+
+  it("nimmt einen Vorschlag an, der nur eine Abschrift nennt", () => {
+    // Seit dem Postboten der Normalfall: Fach, Titel und Tag stehen nach dem
+    // Auslösen der Kamera schon da, das einzig Neue ist, was auf der Seite
+    // steht. Wiese das Schema ihn ab, käme der eine Fakt, für den die Stufe
+    // gebaut ist, nie an.
+    const result = proposalInputSchema.safeParse({
+      transcripts: [{ pageId: SEITE_1, text: "Kettenregel: (f∘g)' = …" }],
+    });
+
+    assert.ok(result.success);
+    assert.equal(result.data.title, null);
+    assert.deepEqual(result.data.transcripts, [
+      { pageId: SEITE_1, text: "Kettenregel: (f∘g)' = …" },
+    ]);
+  });
+
+  it("hält eine Abschrift aus lauter Leerzeichen für eine Aussage", () => {
+    // Anders als bei den Themen: aus „   " wird der leere String, und der heißt
+    // „gelesen, und es stand nichts darauf". Ein Vorschlag, der das sagt, ist
+    // nicht leer — er ist die Auskunft, nach der der Postbote sucht.
+    const result = proposalInputSchema.safeParse({
+      transcripts: [{ pageId: SEITE_1, text: "   " }],
+    });
+
+    assert.ok(result.success);
+    assert.deepEqual(result.data.transcripts, [{ pageId: SEITE_1, text: "" }]);
+  });
+
+  it("macht aus einer fehlenden Abschriftliste null und keine leere Liste", () => {
+    // Der Unterschied trägt `updateProposal()`: null heißt „nicht anfassen".
+    for (const value of [null, undefined, []]) {
+      const result = proposalInputSchema.safeParse(
+        eingabe({ transcripts: value }),
+      );
+
+      assert.ok(result.success, String(value));
+      assert.equal(result.data.transcripts, null, String(value));
+    }
+  });
+
+  it("weist einen Vorschlag ab, der nur eine leere Abschriftliste trägt", () => {
+    assert.deepEqual(rootIssues({ transcripts: [] }), [
+      "Ein Vorschlag, der nichts vorschlägt, ist keiner.",
+    ]);
+  });
+
+  it("lässt genau achttausend Zeichen Abschrift zu und einen mehr nicht", () => {
+    // Abgewiesen und nicht abgeschnitten: eine gekürzte Abschrift behauptete,
+    // das sei alles, was auf der Seite steht.
+    assert.deepEqual(
+      issuesFor("transcripts", {
+        transcripts: [
+          { pageId: SEITE_1, text: "a".repeat(PROPOSAL_TRANSCRIPT_MAX) },
+        ],
+      }),
+      [],
+    );
+    assert.deepEqual(
+      issuesFor("transcripts", {
+        transcripts: [
+          { pageId: SEITE_1, text: "a".repeat(PROPOSAL_TRANSCRIPT_MAX + 1) },
+        ],
+      }),
+      ["Die Abschrift ist zu lang — höchstens 8000 Zeichen je Seite."],
+    );
+  });
+
+  it("nennt in der Meldung dieselbe Zahl, die auch die Grenze ist", () => {
+    // Die Meldung schreibt die 8000 aus, so wie bei Titel und Notiz. Senkt
+    // jemand die Konstante, ohne den Satz mitzuziehen, steht dem Agenten eine
+    // Zahl da, die nicht mehr gilt.
+    assert.equal(PROPOSAL_TRANSCRIPT_MAX, 8000);
+  });
+
+  it("hält dieselbe Grenze wie die Ablage", () => {
+    // Zwei Türen, eine Zahl: was der Korb annimmt, muss der Bestand schreiben
+    // können. Ginge das auseinander, nähme ein Vorschlag eine Abschrift an, die
+    // `setMaterialTranscripts()` beim Übernehmen mit einem Wurf abweist.
+    assert.equal(PROPOSAL_TRANSCRIPT_MAX, MATERIAL_TRANSCRIPT_MAX);
+  });
+
+  it("weist eine Seite ab, die keine id ist", () => {
+    for (const value of ["seite1", "11111111", ""]) {
+      assert.deepEqual(
+        issuesFor("transcripts", {
+          transcripts: [{ pageId: value, text: "x" }],
+        }),
+        ["Diese Seite gibt es nicht."],
+        value,
+      );
+    }
+  });
+
+  it("fasst zwei Einträge zur selben Seite zu einem zusammen", () => {
+    // Die Tabelle nähme sie nicht an (Primärschlüssel aus Vorschlag und Seite),
+    // und ein Agent bekäme statt einer deutschen Meldung den englischen
+    // Unique-Fehler von Postgres zurück. Es gilt der erste.
+    const result = proposalInputSchema.safeParse({
+      transcripts: [
+        { pageId: SEITE_1, text: "zuerst" },
+        { pageId: SEITE_1, text: "danach" },
+      ],
+    });
+
+    assert.ok(result.success);
+    assert.deepEqual(result.data.transcripts, [
+      { pageId: SEITE_1, text: "zuerst" },
+    ]);
+  });
+
+  it("nimmt nicht mehr Abschriften an, als ein Blatt Seiten hat", () => {
+    const viele = Array.from({ length: MAX_PAGES + 1 }, () => ({
+      pageId: SEITE_1,
+      text: "x",
+    }));
+
+    assert.equal(issuesFor("transcripts", { transcripts: viele }).length, 1);
   });
 
   it("macht aus leeren Zeichenketten null und nicht \"\"", () => {

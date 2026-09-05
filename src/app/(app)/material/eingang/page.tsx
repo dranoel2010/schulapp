@@ -154,6 +154,7 @@ export default async function InboxPage({
       ? await getMaterial(user.id, confirmedRaw)
       : null;
   const weitere = count(firstValue(query.weitere));
+  const abschrift = count(firstValue(query.abschrift));
   const ohneFachwort = count(firstValue(query.ohnefachwort));
   const zusammengefallen = count(firstValue(query.zusammengefallen));
   const andereSchreibweise = count(firstValue(query.schreibweise));
@@ -202,6 +203,21 @@ export default async function InboxPage({
           <p className="text-sm text-foreground">
             {`Übernommen: „${confirmed.title}“ steht jetzt so da, wie du es bestätigt hast — durchgesehen und aus dem Korb heraus.`}
           </p>
+
+          {/* Die Abschrift ist das einzige Übernommene, das vorher nirgends
+              auf dem Bildschirm stand — im Korb steht nur, DASS es sie gibt,
+              und auf der Vorschlagsseite ist sie ein Textfeld unter zwölf.
+              Ohne diesen Satz wäre der längste Teil dessen, was gerade
+              geschrieben wurde, der einzige, über den die App schweigt.
+              Gezählt sind die Seiten, an denen sich der Text wirklich geändert
+              hat — nicht die, die noch einmal geschrieben wurden. */}
+          {abschrift > 0 ? (
+            <p className="text-sm text-muted">
+              {abschrift === 1
+                ? "Die Abschrift einer Seite ist damit ans Blatt geschrieben — sie steht dort unter der Aufnahme, zu der sie gehört."
+                : `Die Abschrift von ${abschrift} Seiten ist damit ans Blatt geschrieben — sie steht dort jeweils unter der Aufnahme, zu der sie gehört.`}
+            </p>
+          ) : null}
 
           {/* Die anderen Vorschläge zu diesem Blatt sind mit weggefallen — sie
               bezögen sich auf einen Stand, den es nicht mehr gibt. Still
@@ -343,9 +359,24 @@ function InboxRow({
             die Vorschlagsseite, wo sie einzeln dastehen. Ein Knopf, der
             stillschweigend den jüngsten nimmt und die anderen wegräumt, wäre
             genau die Art von Entscheidung, die diese App niemandem abnimmt. */}
+        {/* Trägt der Vorschlag eine Abschrift, tritt dieser Knopf einen
+            Schritt zurück und „Erst ansehen“ weiter unten nimmt seinen Platz
+            als der auffällige ein.
+
+            Weggenommen wird er nicht: wer dem Postboten nach zwei Wochen
+            vertraut, soll weiter mit einem Druck übernehmen dürfen. Aber die
+            Begründung, mit der er überhaupt hier steht, hängt an einer
+            Bedingung — „der Vorschlag steht mit Fach, Titel, Themen und Notiz
+            schon auf der Karte“. Eine Abschrift steht dort nicht und kann dort
+            nicht stehen. Der auffällige Knopf ist dann der, der zu ihr führt;
+            dieser bleibt und sieht aus wie das, was er ist — die Abkürzung. */}
         {einziger ? (
           <form action={acceptProposalAction.bind(null, einziger.id)}>
-            <SubmitButton variant="primary">Übernehmen</SubmitButton>
+            <SubmitButton
+              variant={einziger.transcriptCount > 0 ? "secondary" : "primary"}
+            >
+              Übernehmen
+            </SubmitButton>
           </form>
         ) : null}
 
@@ -411,9 +442,13 @@ function InboxRow({
                 }
               />
 
+              {/* Der Gegenknopf zum Übernehmen weiter oben: wo eine Abschrift
+                  mitkommt, ist das hier der Weg, auf dem man sie zu sehen
+                  bekommt — und dann ist er der auffällige. Ohne Abschrift
+                  bleibt alles, wie es war. */}
               <ButtonLink
                 href={`/material/eingang/${proposal.id}`}
-                variant="secondary"
+                variant={proposal.transcriptCount > 0 ? "primary" : "secondary"}
               >
                 Erst ansehen
               </ButtonLink>

@@ -23,11 +23,17 @@ import {
   materialInputSchema,
   ownsSubject,
   setMaterialTopics,
+  setMaterialTranscripts,
   updateMaterial,
   type MaterialFieldErrors,
   type MaterialFormState,
   type NewPage,
 } from "@/lib/materials";
+import {
+  outdatedTranscriptPages,
+  transcriptBaseline,
+  transcriptsFromForm,
+} from "@/lib/transcripts";
 
 /**
  * Die Server Actions der Ablage.
@@ -386,6 +392,70 @@ export async function updateMaterialAction(
       titles,
     );
 
+    /*
+     * Die Abschriften: dasselbe Formular, derselbe Druck, dieselbe Tür.
+     *
+     * Gelaufen wird über die SEITEN DES BLATTES und nicht über die Feldnamen,
+     * die ankommen — deshalb wird das Blatt hier noch einmal geholt. Zwischen
+     * dem Anzeigen des Formulars und diesem Druck kann eine Seite gelöscht
+     * worden sein (der Knopf dafür steht direkt neben ihrem Bild), und eine
+     * Server Action ist eine Adresse wie jede andere: was unter einem
+     * erfundenen Feldnamen ankommt, wird nicht abgewiesen, sondern gar nicht
+     * erst gefragt. `transcriptLength` sagt dabei genau das, was gebraucht
+     * wird — `null` heißt „diese Seite hat noch niemand gelesen", und dann
+     * lässt ein leeres Feld es dabei.
+     *
+     * Ohne Rückmeldung auf dem Bildschirm, und das ist Absicht: was
+     * geschrieben wurde, steht nach dem Auffrischen im Feld und unter der Seite.
+     * Ein „drei Abschriften gespeichert" daneben wäre ein Satz über etwas, das
+     * man ansieht.
+     *
+     * Ist eine Abschrift zu lang, wirft `setMaterialTranscripts()`, und der
+     * Fang unten antwortet mit dem allgemeinen Satz. Über das Formular kann das
+     * nicht passieren — das Feld bremst bei 8000 Zeichen, und der Vorschlag
+     * kommt durch dieselbe Grenze herein.
+     *
+     * **`baseline` ist seit dem 5.9.2026 dabei, und ohne es verschwinden
+     * Abschriften.** Ein Bildschirm, der gerendert wurde, als die Seite noch
+     * NULL trug, zeigt ein leeres, zugeklapptes Feld. Schreibt der Postbote
+     * inzwischen 1240 Zeichen hinein und drückt derselbe alte Bildschirm danach
+     * auf „Speichern", ist `known` hier `true`, das leere Feld kommt trotzdem
+     * mit — und aus den 1240 Zeichen wird "", also „gelesen, es stand nichts
+     * darauf". Kein Versionsvergleich fängt das ab: `setMaterialTranscripts()`
+     * prüft die Zugehörigkeit und sonst nichts. Der Stand, den die Seite JETZT
+     * hat, geht deshalb mit in die Auslegung, und das Formular schickt den
+     * mit, auf den es sich beruft — passen die beiden nicht zusammen, bleibt
+     * die Seite unangetastet und steht unten im Satz.
+     */
+    const material = await getMaterial(user.id, id);
+
+    // Ausgelassene Seiten, mit ihrer Nummer — dieselbe, die über dem Bild und
+    // am Feld steht. Eine id sagte dem Nutzer nichts.
+    const ueberholt: number[] = [];
+
+    if (material) {
+      const targets = material.pages.map((page) => ({
+        pageId: page.id,
+        known: page.transcriptLength !== null,
+        baseline: transcriptBaseline(page.transcriptLength),
+      }));
+
+      const nummern = new Map(
+        material.pages.map((page, position) => [page.id, position + 1]),
+      );
+
+      for (const pageId of outdatedTranscriptPages(formData, targets)) {
+        const nummer = nummern.get(pageId);
+        if (nummer !== undefined) ueberholt.push(nummer);
+      }
+
+      await setMaterialTranscripts(
+        user.id,
+        id,
+        transcriptsFromForm(formData, targets),
+      );
+    }
+
     // **Speichern heißt durchgesehen.** Das ist der dritte Ort, an dem
     // `filed_at` gesetzt wird, und ohne ihn hätte der Eingangskorb ein Loch in
     // seiner Hauptschleife: die Kamera schickt nach jeder Aufnahme genau
@@ -405,13 +475,24 @@ export async function updateMaterialAction(
 
     const saves = (state.saves ?? 0) + 1;
 
-    // Drei Sorten Nachricht, und keine davon ist ein Fehler — deshalb stehen
+    // Vier Sorten Nachricht, und keine davon ist ein Fehler — deshalb stehen
     // sie alle in der ruhigen Bestätigung und nicht in Rot unter einem Feld.
     // „Zusammengefallen" erklärt, warum ein Chip weniger dasteht;
-    // „umbenannt", warum einer anders heißt, als er getippt wurde; und das
-    // Abhaken, warum das Blatt gleich aus dem Korb verschwindet.
+    // „umbenannt", warum einer anders heißt, als er getippt wurde; das
+    // Abhaken, warum das Blatt gleich aus dem Korb verschwindet — und die
+    // überholten Seiten, warum an einer Seite etwas anderes steht als das,
+    // was gerade abgeschickt wurde. Der letzte Satz ist der wichtigste von
+    // den vieren: ohne ihn wäre das Auslassen derselbe stille Verlust wie das
+    // Überschreiben, nur mit umgekehrtem Vorzeichen.
     const notice = [
       "Gespeichert.",
+      ...(ueberholt.length > 0
+        ? [
+            ueberholt.length === 1
+              ? `An Seite ${ueberholt[0]} hat inzwischen jemand anders geschrieben — sie wurde nicht überschrieben. Im Feld steht jetzt, was wirklich an ihr steht.`
+              : `An den Seiten ${ueberholt.join(", ")} hat inzwischen jemand anders geschrieben — sie wurden nicht überschrieben. In den Feldern steht jetzt, was wirklich an ihnen steht.`,
+          ]
+        : []),
       ...zusammengefallen.map(
         ({ getippt, thema }) =>
           `„${getippt}“ meint dasselbe Thema wie „${thema}“ — es steht einmal am Blatt.`,

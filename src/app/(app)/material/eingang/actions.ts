@@ -18,13 +18,17 @@ import {
   type ProposalFormState,
 } from "@/lib/inbox";
 import {
+  listMaterialTranscripts,
   materialInputSchema,
   ownsSubject,
   setMaterialTopics,
+  setMaterialTranscripts,
   updateMaterial,
   type MaterialFieldErrors,
   type MaterialFormState,
+  type NewPageTranscript,
 } from "@/lib/materials";
+import { transcriptsFromForm } from "@/lib/transcripts";
 
 /**
  * Die Server Actions des Eingangskorbs.
@@ -355,6 +359,17 @@ async function anwenden(
     capturedOn: string;
     note: string | null;
     topics: string[];
+    /**
+     * Nur die Seiten, über die etwas gesagt wird — nicht alle Seiten des
+     * Blattes.
+     *
+     * Bei den Themen IST die Menge die Aussage, deshalb ersetzt
+     * `setMaterialTopics()` sie ganz. Bei der Abschrift ist jede Seite eine
+     * eigene Aussage, und „zu Seite 1 sage ich nichts" heißt nicht „Seite 1 ist
+     * leer": genannte Seiten werden gesetzt, ungenannte bleiben stehen. Die
+     * ausführliche Begründung steht an `setMaterialTranscripts()`.
+     */
+    transcripts: NewPageTranscript[];
   },
 ): Promise<string | null> {
   if (
@@ -374,6 +389,48 @@ async function anwenden(
     werte.topics,
   );
 
+  /*
+   * Die Abschriften, und zwar mit einer Zählung davor.
+   *
+   * Gezählt werden die Seiten, an denen sich der Text WIRKLICH ändert, und
+   * nicht die, die geschrieben werden. Der Unterschied ist auf dem Bildschirm
+   * zu sehen: das Formular schickt jede Seite mit, auch die unberührten, weil
+   * geschrieben wird, was im Feld steht. Ohne diesen Vergleich stünde im Korb
+   * „die Abschrift von 4 Seiten ist mit übernommen“, wenn der Vorschlag nur
+   * eine einzige angefasst hat — eine Zahl, die stimmt und trotzdem die
+   * Unwahrheit sagt.
+   *
+   * Gelesen wird nur, wenn überhaupt eine Abschrift im Spiel ist. Ein
+   * gewöhnliches Übernehmen ohne Abschrift kostet damit keine Abfrage mehr als
+   * vorher.
+   */
+  let abschrift = 0;
+
+  if (werte.transcripts.length > 0) {
+    const vorher = new Map(
+      (await listMaterialTranscripts(userId, materialId)).map(
+        (page) => [page.pageId, page.transcript] as const,
+      ),
+    );
+
+    const geaendert = werte.transcripts.filter(
+      // `undefined` steht für eine Seite, die es nicht mehr gibt — der
+      // Vergleich gegen einen String ist dann „anders“.
+      (entry) => entry.text !== vorher.get(entry.pageId),
+    ).length;
+
+    const geschrieben = await setMaterialTranscripts(
+      userId,
+      materialId,
+      werte.transcripts,
+    );
+
+    // Wird zwischen dem Lesen und dem Schreiben eine Seite gelöscht, kommt sie
+    // in `geschrieben` nicht mehr vor. Der Deckel sorgt dafür, dass der Korb
+    // hinterher keine Seite mehr nennt, als wirklich beschrieben wurde.
+    abschrift = Math.min(geaendert, geschrieben);
+  }
+
   const entfernt = await clearProposals(userId, materialId);
 
   // Erst ganz zum Schluss abhaken. Ein schon gesetzter Zeitpunkt bleibt dabei
@@ -388,6 +445,10 @@ async function anwenden(
     // `entfernt` zählt den übernommenen mit — er ist ja auch weggeräumt
     // worden. Interessant sind die anderen.
     weitere: Math.max(0, entfernt - 1),
+    // Die Abschrift ist das einzige Übernommene, das im Korb nie zu sehen war
+    // — auf der Karte stand nur, dass es sie gibt. Ohne diese Zahl bliebe der
+    // längste Teil dessen, was gerade geschrieben wurde, unerwähnt.
+    abschrift,
     ohneFachwort: verworfen.length,
     zusammengefallen: zusammengefallen.length,
     // Ein getippter Titel, den das Fach schon anders schreibt. Am Blatt steht
@@ -442,6 +503,18 @@ export async function acceptProposalAction(proposalId: string): Promise<void> {
       capturedOn: found.material.capturedOn,
       note: found.material.note,
       topics: found.material.topics.map((topic) => topic.title),
+      /*
+       * Der Wortlaut der heutigen Abschriften, und nicht `material.pages`:
+       * dort steht nur die Länge, und mit ihr zu vergleichen hieße, zwei
+       * gleich lange verschiedene Texte für unverändert zu halten.
+       *
+       * `anwenden()` liest sie gleich noch einmal, um zählen zu können, wie
+       * viele Seiten sich wirklich ändern. Das ist eine Abfrage zu viel für
+       * einen Weg, den man höchstens einmal je Vorschlag geht — und der Preis
+       * dafür, dass beide Wege des Übernehmens dieselbe Zählung benutzen statt
+       * jeder seine eigene.
+       */
+      pages: await listMaterialTranscripts(user.id, found.material.id),
     },
     {
       subjectId: found.proposal.subjectId,
@@ -450,6 +523,7 @@ export async function acceptProposalAction(proposalId: string): Promise<void> {
       capturedOn: found.proposal.capturedOn,
       note: found.proposal.note,
       topics: found.proposal.topics,
+      transcripts: found.proposal.transcripts,
     },
   );
 
@@ -526,9 +600,38 @@ export async function confirmProposalAction(
       .getAll("themen")
       .filter((value): value is string => typeof value === "string");
 
+    /*
+     * Die Abschriften kommen aus demselben Formular wie alles andere — Feld
+     * für Feld, je Seite eines.
+     *
+     * `known` beantwortet die eine Frage, an der NULL und leerer String
+     * auseinandergehen: Steht an dieser Seite schon etwas, oder bringt der
+     * Vorschlag etwas zu ihr mit? Nur dann heißt ein leeres Feld „gelesen, und
+     * es stand nichts darauf". Der zweite Teil ist der, den man vergisst: der
+     * Agent darf ausdrücklich „ich habe hingesehen, da steht nichts" sagen, und
+     * genau das steht dann als leeres Feld auf dem Bildschirm. Ohne
+     * `vorgeschlagen` fiele diese Aussage beim Übernehmen unter den Tisch, und
+     * der Postbote legte dieselbe leere Seite beim nächsten Lauf wieder vor.
+     */
+    const vorgeschlagen = new Set(
+      found.proposal.transcripts.map((entry) => entry.pageId),
+    );
+
+    const transcripts = transcriptsFromForm(
+      formData,
+      found.material.pages.map((page) => ({
+        pageId: page.id,
+        known: page.transcriptLength !== null || vorgeschlagen.has(page.id),
+      })),
+    );
+
     // Das Fach gehört dem Nutzer, das ist eine Zeile weiter oben geprüft —
     // bleibt als Grund für ein Nein nur noch das Blatt selbst.
-    ziel = await anwenden(user.id, materialId, { ...parsed.data, topics: titles });
+    ziel = await anwenden(user.id, materialId, {
+      ...parsed.data,
+      topics: titles,
+      transcripts,
+    });
   } catch (error) {
     console.error("Vorschlag übernehmen fehlgeschlagen", error);
     return { saves: state.saves, message: SAVE_FAILED };
@@ -572,6 +675,7 @@ export async function confirmProposalAction(
 function confirmedHref(outcome: {
   materialId: string;
   weitere: number;
+  abschrift: number;
   ohneFachwort: number;
   zusammengefallen: number;
   andereSchreibweise: number;
@@ -579,6 +683,8 @@ function confirmedHref(outcome: {
   const query = new URLSearchParams({ uebernommen: outcome.materialId });
 
   if (outcome.weitere > 0) query.set("weitere", String(outcome.weitere));
+
+  if (outcome.abschrift > 0) query.set("abschrift", String(outcome.abschrift));
 
   if (outcome.ohneFachwort > 0) {
     query.set("ohnefachwort", String(outcome.ohneFachwort));

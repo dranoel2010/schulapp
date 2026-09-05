@@ -16,6 +16,7 @@ import { db } from "@/db";
 import {
   materialPages,
   materialProposalTopics,
+  materialProposalTranscripts,
   materialProposals,
   materialTopics,
   materials,
@@ -24,6 +25,7 @@ import {
   type ProposalOrigin,
 } from "@/db/schema";
 import { germanShortParts, isCalendarDate, todayInBerlin } from "@/lib/dates";
+import { MAX_PAGES } from "@/lib/images";
 import {
   MATERIAL_NOTE_MAX,
   MATERIAL_TITLE_MAX,
@@ -44,20 +46,29 @@ import { TOPIC_LIMIT, normalizeTopics, vocabularyKey } from "@/lib/topics";
  * Zeile in `material_proposals` ist ein offener Vorschlag, sonst nichts**, und
  * **leer heißt an jeder Spalte „dazu sage ich nichts"**.
  *
- * Weder `material_proposals` noch `material_proposal_topics` trägt eine
- * userId; sie hängt am Blatt. Deshalb steht in JEDER Abfrage auf diesen beiden
- * Tabellen ein `innerJoin` auf `materials` mit `eq(materials.userId, userId)`
- * — genau wie bei `material_pages` in @/lib/materials, und aus demselben
- * Grund: eine fehlende Zeile dort hieße, dass eine geratene id fremde Blätter
- * zeigt. Bei `material_proposal_topics` geht der Weg über zwei Verbünde, weil
- * die Zeile das Blatt nur über den Vorschlag kennt.
+ * Weder `material_proposals` noch `material_proposal_topics` noch
+ * `material_proposal_transcripts` trägt eine userId; sie hängt am Blatt.
+ * Deshalb steht in JEDER Abfrage auf diesen drei Tabellen ein `innerJoin` auf
+ * `materials` mit `eq(materials.userId, userId)` — genau wie bei
+ * `material_pages` in @/lib/materials, und aus demselben Grund: eine fehlende
+ * Zeile dort hieße, dass eine geratene id fremde Blätter zeigt. Bei
+ * `material_proposal_topics` und `material_proposal_transcripts` geht der Weg
+ * über zwei Verbünde, weil die Zeile das Blatt nur über den Vorschlag kennt.
+ *
+ * **Die Abschrift stellt eine Frage mehr, die kein Verbund beantwortet.** Sie
+ * nennt eine SEITE, und der Fremdschlüssel prüft nur, dass es diese Seite
+ * gibt — nicht, dass sie an DIESEM Blatt hängt. Eine geratene pageId legte
+ * sonst die Abschrift eines fremden Blattes an, und beim Übernehmen schriebe
+ * ein Mensch sie dort in die Spalte, ohne je das Blatt gesehen zu haben, zu
+ * dem sie gehört. Diese Frage stellt `ownsProposedPages()`, einmal in
+ * `createProposal()` und einmal in `updateProposal()`.
  *
  * Die schreibenden Anweisungen können das nicht halten: ein INSERT, ein
  * UPDATE und ein DELETE haben keinen Verbund. Sie fragen deshalb eine
  * Anweisung früher nach dem Besitzer — über dieselbe verbundene Abfrage wie
  * jedes Lesen, also `ownsMaterial()` oder `findProposal()` — und schreiben erst
- * danach über die geprüfte id. Das betrifft beide Anweisungen in
- * `createProposal()`, alle drei in `updateProposal()` und je eine in
+ * danach über die geprüfte id. Das betrifft alle drei Anweisungen in
+ * `createProposal()`, alle fünf in `updateProposal()` und je eine in
  * `deleteProposal()` und `clearProposals()`.
  *
  * **`image` und `thumb` werden nirgends mitselektiert.** Der Korb ist eine
@@ -102,6 +113,42 @@ export const INBOX_LIMIT = 200;
  */
 export const PROPOSAL_TOPIC_LIMIT = TOPIC_LIMIT;
 
+/**
+ * So lang darf die Abschrift EINER Seite höchstens sein.
+ *
+ * Die Zahl kommt aus dem Weg, den eine Abschrift nimmt, und nicht aus dem
+ * Bauch. Ein Werkzeugergebnis endet in der Claude-App bei rund 150 000
+ * Zeichen — dieselbe Grenze, aus der `MAX_IMAGE_BYTES` in @/lib/mcp/run.ts
+ * gerechnet ist, dort für Base64 statt für Text. Ein Blatt trägt bis zu
+ * `MAX_PAGES` Seiten, also zwölf; zwölfmal 8 000 sind 96 000 Zeichen, und die
+ * gut 50 000 übrigen bleiben für alles andere in der Antwort: den Satz davor,
+ * die Feldnamen, den JSON-RPC-Umschlag und die restlichen Felder des
+ * Vorschlags. Knapp genug, dass die Rechnung hier stehen muss, statt als runde
+ * Zahl im Vorbeigehen hingeschrieben zu werden.
+ *
+ * **Dieselbe Zahl wie `MATERIAL_TRANSCRIPT_MAX` in @/lib/materials**, und sie
+ * ist trotzdem zweimal hingeschrieben statt importiert. Die beiden messen zwei
+ * verschiedene Türen: hier die Grenze dessen, was ein Agent VORSCHLAGEN darf,
+ * dort die Grenze dessen, was in die Spalte geschrieben wird. Sie müssen
+ * zusammenpassen, sonst nähme der Korb an, was der Bestand abweist — und genau
+ * das hält der Test „hält dieselbe Grenze wie die Ablage" fest. Ein Import wäre
+ * die kürzere Zeile und die falschere Aussage: die Vorschlagsgrenze folgt dem
+ * Werkzeugergebnis, die Bestandsgrenze der Spalte.
+ *
+ * **Zu lang wird abgewiesen und nicht abgeschnitten.** Das ist der Unterschied
+ * zu den Themen, die `normalizeTopics()` still auf `TOPIC_MAX_LENGTH` kürzt.
+ * Ein Thema ist ein Griff zum Wiederfinden und überlebt das Kürzen; eine
+ * abgeschnittene Abschrift dagegen behauptete, das sei alles, was auf der
+ * Seite steht. Sie landete beim Übernehmen im Bestand, und danach liest
+ * niemand mehr das Foto daneben, um es zu merken — genau die Sorte Unwahrheit,
+ * die nie wieder auffällt.
+ *
+ * Zum Verhältnis: der Fließtext eines vollgeschriebenen A4-Blattes liegt bei
+ * einigen tausend Zeichen. 8 000 sind also Luft und keine enge Grenze; wer sie
+ * reißt, hat kein Blatt fotografiert, sondern ein Buch.
+ */
+export const PROPOSAL_TRANSCRIPT_MAX = 8_000;
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -140,6 +187,107 @@ function optionalText(maxLength: number, tooLong: string) {
 }
 
 /**
+ * Die Abschrift EINER Seite — was auf ihr steht, wörtlich.
+ *
+ * Seite und Text stehen zusammen in einem Objekt und nicht in zwei Listen. Der
+ * Agent liest je Seite (`read_page`), ein Blatt trägt bis zu `MAX_PAGES`
+ * davon, und zwei parallele Listen — eine mit ids, eine mit Texten — wären
+ * beim ersten Fehler um eins gegeneinander verschoben. Das fiele niemandem
+ * auf: die Abschrift der Vorderseite stünde dann unter der Rückseite, und
+ * beide sind Text vom selben Blatt.
+ *
+ * Die Feldnamen sind die von `NewPageTranscript` in @/lib/materials, Zeichen
+ * für Zeichen. Das ist kein Zufall und soll auch keiner bleiben: was
+ * `prefillFromProposal()` als `werte.transcripts` ausrechnet, geht beim
+ * Übernehmen unverändert in `setMaterialTranscripts()`. Eine Umbenennung
+ * unterwegs wäre eine Schleife mehr und eine Stelle, an der sich ein
+ * vertauschtes Paar verstecken kann.
+ *
+ * **Der leere Text ist ein Wert und kein Nichts.** Er heißt „gelesen, und es
+ * stand nichts darauf". „Diese Seite hat noch niemand gelesen" heißt dagegen:
+ * es gibt zu ihr gar keinen Eintrag — und am Bestand, in
+ * `material_pages.transcript`, heißt es NULL. Der Unterschied ist der Grund,
+ * warum `normalizeTranscripts()` leere Texte behält, obwohl
+ * `normalizeTopics()` leere Titel wegwirft. Fielen beide zusammen, käme jede
+ * leere Rückseite bei jedem Lauf des Postboten wieder an die Reihe; die
+ * ausführliche Begründung steht an der Spalte in src/db/schema.ts.
+ *
+ * Unsicheres markiert der Agent im Text mit ⟨spitzen Klammern⟩. Das ist reiner
+ * Text und wird nirgends ausgewertet — hier nicht, beim Übernehmen nicht und
+ * in der Ausgabe nicht. Wer eines Tages darauf reagieren will, tut das an
+ * einer Stelle und nicht an vieren.
+ */
+export type ProposalTranscript = {
+  /** Die Seite, zu der die Abschrift gehört — `material_pages.id`. */
+  pageId: string;
+  text: string;
+};
+
+/**
+ * Schneidet die vorgeschlagenen Abschriften auf das zu, was gespeichert werden
+ * darf: je Seite höchstens eine — und „gar nichts" wird zu `null`.
+ *
+ * Zwei Einträge zur selben Seite kann die Tabelle nicht aufnehmen, ihr
+ * Primärschlüssel ist (proposal_id, page_id). Ohne diese Faltung bekäme ein
+ * Agent, der dieselbe Seite zweimal nennt, statt einer deutschen Meldung den
+ * englischen Unique-Fehler von Postgres durch die MCP-Tür zurück. Es gilt der
+ * ERSTE Eintrag — dieselbe Regel wie bei `normalizeTopics()`.
+ *
+ * **Leere Texte bleiben stehen**, siehe `ProposalTranscript`. Das ist der eine
+ * Punkt, an dem diese Funktion nicht tut, was ihr Vorbild bei den Themen tut.
+ *
+ * Die leere Liste wird zu `null`, weil beide dasselbe sagen: „dazu sage ich
+ * nichts". Danach hat die Datenschicht nur noch EINE Frage zu stellen — `null`
+ * heißt „nicht anfassen", eine Liste heißt „genau das steht da". Zwei Sorten
+ * Leere müsste `updateProposal()` sonst unterscheiden, und die eine davon
+ * hieße dort „lösch alles".
+ */
+function normalizeTranscripts(
+  entries: readonly ProposalTranscript[],
+): ProposalTranscript[] | null {
+  const seen = new Set<string>();
+  const result: ProposalTranscript[] = [];
+
+  for (const entry of entries) {
+    if (seen.has(entry.pageId)) continue;
+
+    seen.add(entry.pageId);
+    result.push({ pageId: entry.pageId, text: entry.text });
+  }
+
+  return result.length > 0 ? result : null;
+}
+
+/**
+ * Ein einzelner Eintrag der Eingabe: welche Seite, und was darauf steht.
+ *
+ * Die id wird gegen dieselbe Form geprüft, die auch `isId()` vor jeder Abfrage
+ * verlangt — eine zweite uuid-Regel wäre eine zweite Wahrheit. OB es die Seite
+ * gibt und ob sie an diesem Blatt hängt, kann ein Schema nicht wissen; das
+ * prüft `ownsProposedPages()`.
+ *
+ * Getrimmt wird nur außen. Der Zeilenfall im Inneren ist die Gliederung der
+ * Seite und gehört zur Abschrift; die Leerzeilen am Rand sind der Rest eines
+ * Modells, das seine Antwort eingerückt hat. Nebenbei fällt dabei die einzige
+ * Mehrdeutigkeit weg, die es hier geben könnte: aus „   " wird der leere
+ * String, also „gelesen, nichts darauf", und nicht ein dritter Zustand
+ * dazwischen.
+ */
+const transcriptInputSchema = z.object({
+  pageId: z
+    .string("Zu dieser Abschrift fehlt die Seite.")
+    .trim()
+    .refine(isId, "Diese Seite gibt es nicht."),
+  text: z
+    .string("Zu dieser Seite fehlt der Text.")
+    .trim()
+    .max(
+      PROPOSAL_TRANSCRIPT_MAX,
+      "Die Abschrift ist zu lang — höchstens 8000 Zeichen je Seite.",
+    ),
+});
+
+/**
  * Was ein Vorschlag sagen darf — und das ist absichtlich fast nichts.
  *
  * **Anders als `materialInputSchema` ist hier JEDES Feld optional.** Das ist
@@ -153,9 +301,16 @@ function optionalText(maxLength: number, tooLong: string) {
  * Ein **völlig leerer** Vorschlag ist trotzdem keiner. Er stünde als Zeile im
  * Korb, verlangte eine Entscheidung und hätte nichts, worüber zu entscheiden
  * wäre. Die Prüfung dafür hängt am ganzen Objekt und nicht an einem Feld: es
- * ist keines der fünf falsch, es fehlen alle fünf. Die Meldung landet deshalb
+ * ist keines der sechs falsch, es fehlen alle sechs. Die Meldung landet deshalb
  * über dem Formular (`ProposalFormState.message`) und nicht unter einem Feld,
  * an dem sie niemand erwartet.
+ *
+ * **Eine Abschrift allein ist Inhalt** — und seit dem Postboten sogar der
+ * häufigste. Fach, Titel und Tag stehen nach dem Auslösen der Kamera schon
+ * richtig da; das einzig Neue, was ein Agent beizutragen hat, ist dann, was auf
+ * der Seite steht. Zählte die Abschrift hier nicht mit, wiese das Schema
+ * ausgerechnet diesen Vorschlag als „schlägt nichts vor" ab, und der eine
+ * Fakt, für den die ganze Stufe gebaut ist, käme nie an.
  *
  * Die Grenzen und Meldungen für Titel, Tag und Notiz sind wortgleich die des
  * Blattformulars, und die Zahlen kommen aus @/lib/materials. Ein Vorschlag ist
@@ -215,6 +370,35 @@ export const proposalInputSchema = z
       .array(z.string())
       .nullish()
       .transform((value) => normalizeTopics(value ?? [])),
+    /**
+     * Die Abschriften, je Seite eine. **`null` heißt „dazu sage ich nichts".**
+     *
+     * Das einzige Feld dieses Schemas, dessen Leere `null` ist und nicht `[]` —
+     * und der Unterschied ist kein Geschmack, sondern die Rettung der Abschrift
+     * vor dem eigenen Formular. Bei den Themen sind beide Leeren dasselbe, weil
+     * das Formular die Themen mitschickt: was in seinem Textfeld steht, ist die
+     * ganze Aussage, und eine leere Liste heißt dort ehrlich „keine". Ein
+     * Abschriftfeld hat dieses Formular nicht — proposal-form.tsx zeigt Fach,
+     * Titel, Tag, Notiz und Themen, sonst nichts. Hieße `[]` hier „lösch alles",
+     * verlöre jeder, der am Vorschlag einen Tippfehler im Titel verbessert, die
+     * Abschrift von bis zu zwölf Seiten. Lautlos, und ohne dass das Formular je
+     * behauptet hätte, über sie etwas zu sagen.
+     *
+     * Also: `null` = nicht anfassen, eine (nie leere) Liste = so steht es da.
+     * Was `updateProposal()` daraus macht, steht dort.
+     *
+     * Gedeckelt wird bei `MAX_PAGES`, und die Zahl steht als Verweis und nicht
+     * abgeschrieben in der Meldung: sie gehört @/lib/images, und wer sie dort
+     * ändert, liest diese Datei nicht.
+     */
+    transcripts: z
+      .array(transcriptInputSchema)
+      .max(
+        MAX_PAGES,
+        `Ein Blatt hat höchstens ${MAX_PAGES} Seiten — so viele Abschriften kann es nicht geben.`,
+      )
+      .nullish()
+      .transform((value) => normalizeTranscripts(value ?? [])),
   })
   .refine(
     (input) =>
@@ -222,7 +406,12 @@ export const proposalInputSchema = z
       input.title !== null ||
       input.capturedOn !== null ||
       input.note !== null ||
-      input.topics.length > 0,
+      input.topics.length > 0 ||
+      // `null` und „leere Liste" sind hier schon zusammengefallen — das erledigt
+      // `normalizeTranscripts()`. Eine Liste, die es gibt, hat also mindestens
+      // einen Eintrag, und ein Eintrag mit leerem Text ist trotzdem eine
+      // Aussage: „diese Seite habe ich gelesen, es stand nichts darauf."
+      input.transcripts !== null,
     "Ein Vorschlag, der nichts vorschlägt, ist keiner.",
   );
 
@@ -232,7 +421,18 @@ export type ProposalInput = z.infer<typeof proposalInputSchema>;
  * Fehler pro Feld, so wie das Formular sie einsammelt.
  *
  * „topics" steht anders als bei `MaterialFieldErrors` nicht zusätzlich dabei —
- * hier ist es ein Feld der Eingabe wie die vier anderen.
+ * hier ist es ein Feld der Eingabe wie die fünf anderen.
+ *
+ * Mit der Abschrift ist „transcripts" hinzugekommen, und zwar von selbst: der
+ * Typ wird aus `ProposalInput` abgeleitet. Eine Meldung darunter kann nur aus
+ * einem Werkzeugaufruf stammen — eine kaputte Seiten-id oder ein Text über
+ * `PROPOSAL_TRANSCRIPT_MAX`. `formErrors()` schneidet den Pfad auf sein erstes
+ * Stück, aus `transcripts.3.text` wird also „transcripts", und das ist hier
+ * richtig, obwohl auf keinem Bildschirm ein Feld dieses Namens steht: die
+ * MCP-Tür reiht die Meldungen ohnehin zu einem Satz aneinander
+ * (@/lib/mcp/run.ts), und das Handformular schickt gar keine Abschrift mit,
+ * kann diese Meldung also nicht auslösen. Sollte je ein Formular eines
+ * bekommen, ist der Platz dafür damit schon da.
  */
 export type ProposalFieldErrors = Partial<Record<keyof ProposalInput, string>>;
 
@@ -266,6 +466,39 @@ export type ProposalItem = {
   note: string | null;
   /** Die vorgeschlagenen Themen als Titel, in ihrer Reihenfolge. */
   topics: string[];
+  /**
+   * Zu wie vielen Seiten dieser Vorschlag eine Abschrift trägt — die ZAHL und
+   * nicht der Text.
+   *
+   * Der Text steht ausschließlich an `ProposalDetail`, und das ist keine
+   * Sparsamkeit, sondern eine Grenze. `listInbox()` gibt bis zu `INBOX_LIMIT`
+   * Blätter mit allen ihren Vorschlägen heraus, und ein Vorschlag darf zwölf
+   * Abschriften zu je `PROPOSAL_TRANSCRIPT_MAX` Zeichen tragen: zweihundert
+   * Zeilen mal 96 000 Zeichen sind neunzehn Megabyte für eine Liste, die je
+   * Vorschlag drei Wörter anzeigt. Schlimmer noch am anderen Ende: `read_inbox`
+   * reicht dieselbe Liste an die Claude-App weiter, wo ein Werkzeugergebnis bei
+   * rund 150 000 Zeichen endet — die erste Zeile des Korbs füllte es allein,
+   * und der Rest des Korbs sähe aus, als gäbe es ihn nicht.
+   *
+   * Derselbe Schnitt wie `pageCount` gegen `MaterialDetail.pages` in
+   * @/lib/materials: die Liste zeigt, DASS etwas da ist, das Detail zeigt, WAS.
+   */
+  transcriptCount: number;
+};
+
+/**
+ * Ein Vorschlag samt seinen Abschriften — was `getProposal()` herausgibt.
+ *
+ * Ein eigener Typ und nicht ein „vielleicht leeres" Feld an `ProposalItem`.
+ * Ein `transcripts: []` an einem Vorschlag, dessen Abschriften niemand geladen
+ * hat, hieße auf dem Bildschirm „dieser Vorschlag hat keine" — von der
+ * Wahrheit nicht zu unterscheiden. So verweigert stattdessen der Compiler den
+ * Zugriff auf etwas, das keine Abfrage geholt hat; die ausführliche Begründung
+ * steht an `MaterialCard` in @/lib/materials.
+ */
+export type ProposalDetail = ProposalItem & {
+  /** Je Seite eine, in der Reihenfolge der Seiten des Blattes. */
+  transcripts: ProposalTranscript[];
 };
 
 /** Eine Zeile im Eingangskorb: ein Blatt und die Vorschläge daran. */
@@ -283,6 +516,31 @@ export type PrefillMaterial = {
   capturedOn: string;
   note: string | null;
   topics: string[];
+  /**
+   * Die Seiten des Blattes **in ihrer Reihenfolge**, mit dem, was heute an
+   * ihnen steht.
+   *
+   * Die Reihenfolge ist keine Zierde, aus ihr wird die Seitenzahl in der
+   * Gegenüberstellung („Abschrift, Seite 2"). Die Nummer aus `sort_order`
+   * selbst zu nehmen ginge NICHT: nach dem Löschen einer Seite hat die Folge
+   * Lücken, und auf dem Bildschirm stünde „Seite 3" an einem Blatt mit zwei
+   * Seiten.
+   *
+   * **Woher der Aufrufer diese Liste nimmt: `listMaterialTranscripts()` aus
+   * @/lib/materials**, deren `MaterialPageTranscript` diesen Typ Feld für Feld
+   * erfüllt und schon so sortiert ist, wie `getMaterial()` die Seiten
+   * herausgibt. Ausdrücklich NICHT `material.pages` aus `getMaterial()`: dort
+   * steht mit `transcriptLength` nur die Länge, und die ist zur Anzeige da und
+   * kein Prüfstein (die Begründung steht an `MaterialPageInfo`). Verglichen
+   * werden muss aber der Text — sonst hieße „gleich lang" hier „unverändert",
+   * und ein Vorschlag, der 980 Zeichen durch 980 andere ersetzt, ginge ohne
+   * eine Zeile in der Gegenüberstellung durch.
+   *
+   * `transcript` ist dreiwertig, und die drei Werte bedeuten Verschiedenes:
+   * `null` = diese Seite hat noch niemand gelesen, `""` = gelesen, es stand
+   * nichts darauf, sonst der Text.
+   */
+  pages: { pageId: string; transcript: string | null }[];
 };
 
 /** Der Vorschlag daneben. Jedes Feld darf leer sein; leer heißt „schweigt". */
@@ -293,11 +551,32 @@ export type PrefillProposal = {
   capturedOn: string | null;
   note: string | null;
   topics: string[];
+  /**
+   * Die vorgeschlagenen Abschriften, je Seite höchstens eine. Die leere Liste
+   * heißt „schweigt", genau wie bei den Themen.
+   *
+   * Hier genügt die leere Liste, während `ProposalInput.transcripts` dafür
+   * `null` führt — und das ist kein Widerspruch, sondern zwei verschiedene
+   * Fragen. Dort geht es darum, ob `updateProposal()` vorhandene Zeilen
+   * ERSETZEN soll; hier gibt es nichts zu ersetzen, gerechnet wird nur, was das
+   * Übernehmen schriebe.
+   */
+  transcripts: ProposalTranscript[];
 };
 
 /** Ein Feld, das der Vorschlag am Blatt ändern würde. */
 export type PrefillChange = {
-  feld: "Fach" | "Titel" | "Tag" | "Notiz" | "Themen";
+  feld: "Fach" | "Titel" | "Tag" | "Notiz" | "Themen" | "Abschrift";
+  /**
+   * Nur bei „Abschrift": die wievielte Seite des Blattes, ab 1 gezählt.
+   *
+   * Die Abschrift ist das einzige Feld, das MEHRMALS in dieser Liste stehen
+   * kann — ein Vorschlag darf zwölf Seiten neu beschriften, und eine Zeile
+   * „Abschrift: — → 12 Seiten" sagte nicht, welche davon schon eine hatte. Wer
+   * die Liste anzeigt, braucht deshalb einen Schlüssel aus beidem; `feld`
+   * allein kommt jetzt doppelt vor.
+   */
+  seite?: number;
   vorher: string;
   nachher: string;
 };
@@ -310,6 +589,22 @@ export type Prefill = {
     capturedOn: string;
     note: string | null;
     topics: string[];
+    /**
+     * Die Abschriften, die geschrieben werden — und nur die.
+     *
+     * Anders als bei den Themen ist das KEINE vollständige Menge, die den
+     * Bestand ersetzt. Genannt sind ausschließlich die Seiten, über die der
+     * Vorschlag etwas sagt; eine Seite, die hier fehlt, behält, was an ihr
+     * steht. „Leer heißt: dazu sage ich nichts" gilt bei der Abschrift also je
+     * SEITE und nicht für die Liste als Ganzes — bei den Themen kann es das
+     * nicht, weil `setMaterialTopics()` die ganze Menge ersetzt und eine leere
+     * Liste dort löschte. `setMaterialTranscripts()` hält die andere Hälfte
+     * derselben Regel: genannte Seiten werden gesetzt, ungenannte bleiben.
+     *
+     * Ein Eintrag, dessen Seite es am Blatt nicht (mehr) gibt, steht nicht
+     * darin; warum, steht an `prefillFromProposal()`.
+     */
+    transcripts: ProposalTranscript[];
   };
   /** Was sich dadurch gegenüber dem Blatt ändert — für die Gegenüberstellung. */
   aenderungen: PrefillChange[];
@@ -427,11 +722,18 @@ export async function countInbox(userId: string): Promise<number> {
  * Das Blatt kommt über `getMaterial()` aus @/lib/materials und nicht über eine
  * eigene Abfrage — es ist dasselbe `MaterialDetail`, das die Detailseite
  * zeigt, mit denselben Seiten und denselben aufgelösten Themen.
+ *
+ * **Dies ist die einzige Tür, durch die der Wortlaut einer vorgeschlagenen
+ * Abschrift herauskommt** — und sie ist die richtige: hier hängen die beiden
+ * Stellen dran, an denen eine Abschrift wirklich in den Bestand geschrieben
+ * wird (die Bestätigungsseite und `acceptProposalAction()`). Deshalb ist der
+ * Rückgabetyp `ProposalDetail` und nicht `ProposalItem`; er erweitert ihn, kein
+ * Aufrufer bricht dadurch.
  */
 export async function getProposal(
   userId: string,
   id: string,
-): Promise<{ proposal: ProposalItem; material: MaterialDetail } | null> {
+): Promise<{ proposal: ProposalDetail; material: MaterialDetail } | null> {
   if (!isId(id)) return null;
 
   const row = await findProposal(userId, id);
@@ -441,8 +743,19 @@ export async function getProposal(
   if (!material) return null;
 
   const topics = await loadProposalTopics(userId, [row.id]);
+  // Die Abschriften kommen NUR hier mit, nicht in `loadProposals()`. Das ist
+  // der Unterschied zwischen `ProposalItem` und `ProposalDetail`, und er steht
+  // an den beiden Typen ausgerechnet.
+  const transcripts = await loadProposalTranscripts(userId, [row.id]);
 
-  return { proposal: toProposalItem(row, topics.get(row.id) ?? []), material };
+  return {
+    proposal: toProposalDetail(
+      row,
+      topics.get(row.id) ?? [],
+      transcripts.get(row.id) ?? [],
+    ),
+    material,
+  };
 }
 
 /**
@@ -456,9 +769,17 @@ export async function getProposal(
  * wieder auftaucht; `updateMaterial()` lehnte das später ab, aber dann steht
  * der Vorschlag schon im Korb und lässt sich nicht bestätigen.
  *
- * Vorschlag und Themen entstehen in einer Transaktion: ein Vorschlag ohne
- * seine Themen ist ein anderer Vorschlag, und beim Übernehmen ersetzte er
- * still die vorhandenen Themen durch nichts.
+ * Seit der Abschrift hat `null` einen dritten Grund: eine der genannten Seiten
+ * gehört nicht zu diesem Blatt. Das prüft `ownsProposedPages()`, und der
+ * Fremdschlüssel kann es nicht — er weiß nur, dass es die Seite gibt.
+ *
+ * Vorschlag, Themen und Abschriften entstehen in EINER Transaktion: ein
+ * Vorschlag ohne seine Themen ist ein anderer Vorschlag, und beim Übernehmen
+ * ersetzte er still die vorhandenen Themen durch nichts. Bei der Abschrift
+ * wiegt es noch schwerer: ein Vorschlag, dessen Abschriften auf halbem Weg
+ * steckengeblieben sind, sieht aus wie einer, der über die übrigen Seiten
+ * nichts zu sagen hat — der Mensch übernähme ihn, und die fehlenden Seiten
+ * blieben für immer NULL, also „noch nicht gelesen", obwohl sie gelesen waren.
  *
  * `origin` steht als Parameter und nicht im Schema. Woher ein Vorschlag kommt,
  * entscheidet die Tür, durch die er hereinkommt — die Server Action des
@@ -475,6 +796,12 @@ export async function createProposal(
   if (!isId(materialId)) return null;
   if (!(await ownsMaterial(userId, materialId))) return null;
   if (!(await ownsProposedSubject(userId, input.subjectId))) return null;
+  // Die dritte Frage, und die einzige, die eine ANDERE Zeile als das Blatt
+  // meint: gehören die genannten Seiten zu genau diesem Blatt? Der
+  // Fremdschlüssel prüft nur, dass es sie gibt.
+  if (!(await ownsProposedPages(userId, materialId, input.transcripts))) {
+    return null;
+  }
 
   return db.transaction(async (tx): Promise<string | null> => {
     const [created] = await tx
@@ -497,6 +824,19 @@ export async function createProposal(
           proposalId: created.id,
           title,
           sortOrder: index,
+        })),
+      );
+    }
+
+    // `null` heißt „dazu sage ich nichts" — dann entsteht keine Zeile. Eine
+    // Liste ist nach `normalizeTranscripts()` nie leer; ein `.length > 0` wie
+    // bei den Themen wäre hier die Prüfung auf einen Fall, den es nicht gibt.
+    if (input.transcripts !== null) {
+      await tx.insert(materialProposalTranscripts).values(
+        input.transcripts.map((entry) => ({
+          proposalId: created.id,
+          pageId: entry.pageId,
+          transcript: entry.text,
         })),
       );
     }
@@ -530,6 +870,14 @@ export async function updateProposal(
   const existing = await findProposal(userId, id);
   if (!existing) return false;
   if (!(await ownsProposedSubject(userId, input.subjectId))) return false;
+  // Gegen das Blatt des VORHANDENEN Vorschlags — ein Vorschlag wechselt das
+  // Blatt nie, und `existing.materialId` ist die einzige Auskunft darüber, die
+  // nicht aus der Eingabe stammt.
+  if (
+    !(await ownsProposedPages(userId, existing.materialId, input.transcripts))
+  ) {
+    return false;
+  }
 
   await db.transaction(async (tx) => {
     await tx
@@ -552,6 +900,35 @@ export async function updateProposal(
           proposalId: id,
           title,
           sortOrder: index,
+        })),
+      );
+    }
+
+    /*
+     * **Die Abschriften werden nur angefasst, wenn die Eingabe von ihnen
+     * spricht.** `null` heißt „dazu sage ich nichts", und hier ist das der
+     * Normalfall: das Formular, das diese Funktion ruft, hat gar kein Feld für
+     * die Abschrift (proposal-form.tsx zeigt Fach, Titel, Tag, Notiz, Themen).
+     * Führe die Eingabe stattdessen eine leere Liste, löschte jedes Ändern
+     * eines Titels die Abschrift von bis zu zwölf Seiten — und niemand sähe
+     * eine Zeile, die das angekündigt hätte.
+     *
+     * Steht eine Liste da, wird komplett ersetzt und nicht abgeglichen —
+     * dieselbe Begründung wie bei den Themen: die Zeile besteht aus Seite und
+     * Text und trägt keine Geschichte, die ein Abgleich retten könnte. Und die
+     * Liste ist dann die GANZE Aussage; was nicht darin steht, soll auch nicht
+     * am Vorschlag hängen.
+     */
+    if (input.transcripts !== null) {
+      await tx
+        .delete(materialProposalTranscripts)
+        .where(eq(materialProposalTranscripts.proposalId, id));
+
+      await tx.insert(materialProposalTranscripts).values(
+        input.transcripts.map((entry) => ({
+          proposalId: id,
+          pageId: entry.pageId,
+          transcript: entry.text,
         })),
       );
     }
@@ -729,6 +1106,32 @@ export async function markFiled(
  *   eine Aussage, und genau eine ist es. Bei der Notiz kann das Zeichen nur
  *   links stehen: ein Vorschlag kann eine Notiz hinzufügen, aber keine
  *   wegnehmen.
+ * - **Die Abschrift gilt je SEITE und nicht als Ganzes.** Sie ist das einzige
+ *   Feld, das an mehreren Zeilen zugleich hängt, und deshalb gilt die Regel
+ *   „leer heißt: dazu sage ich nichts" hier innerhalb der Liste: eine Seite,
+ *   die der Vorschlag nicht nennt, behält, was an ihr steht. Für alle Seiten
+ *   zusammen könnte sie gar nicht gelten — ein Vorschlag, der Seite 1 abliest
+ *   und über Seite 2 schweigt, dürfte Seite 2 nicht leeren.
+ * - **Eine Abschrift zu einer Seite, die es am Blatt nicht gibt, fällt weg.**
+ *   Gerechnet wird über `material.pages` und nicht über die Einträge des
+ *   Vorschlags; was kein Ziel hat, kommt gar nicht erst vor. Auf dem normalen
+ *   Weg passiert das nie: löscht jemand zwischen Vorschlag und Übernahme eine
+ *   Seite, räumt „cascade" die Zeile in `material_proposal_transcripts` mit
+ *   weg (siehe src/db/schema.ts), und die Abschrift der weggeworfenen
+ *   unscharfen Aufnahme ist damit auch weg. Diese Zeilen hier sind die zweite
+ *   Sicherung für den Fall, dass gelöscht wird, während die Seite schon offen
+ *   ist — das Blatt kommt dann frisch aus der Datenbank, der Vorschlag aber
+ *   aus einer Rechnung, die vorher lief.
+ * - **Eine Änderung an der Abschrift zeigt Zahlen und nicht den Text.** Zwei
+ *   Abschriften zu je 8 000 Zeichen in einer Zeile „vorher → nachher"
+ *   gegenüberzustellen, wäre keine Gegenüberstellung, sondern eine Textwand,
+ *   die niemand liest — und wer nichts liest, bestätigt alles. Die Zeile
+ *   beantwortet deshalb genau die Frage, die vor dem Übernehmen zählt: WELCHE
+ *   Seite bekommt eine Abschrift, und stand dort schon eine? „noch nicht
+ *   gelesen → 1.240 Zeichen" ist der Normalfall, „980 Zeichen → 1.240 Zeichen"
+ *   der seltene und heikle: dann wird etwas ersetzt. Der Text selbst gehört auf
+ *   dieselbe Seite, aber in einen eigenen Abschnitt unter der
+ *   Gegenüberstellung — dort kann man ihn lesen, statt ihn zu überfliegen.
  *
  * Reine Rechnung: keine Datenbank, keine Systemuhr. Deshalb steht sie hier und
  * lässt sich prüfen, ohne dass ein Test eine Datenbank braucht.
@@ -807,8 +1210,63 @@ export function prefillFromProposal(
     });
   }
 
+  const vorgeschlagen = new Map<string, string>();
+
+  for (const entry of proposal.transcripts) {
+    // Bei zwei Einträgen zur selben Seite gilt der erste — dieselbe Regel wie
+    // in `normalizeTranscripts()`. Aus der Datenbank kann das nicht kommen (der
+    // Primärschlüssel steht dagegen), aus einem Test schon, und zwei Regeln für
+    // denselben Fall wären zwei Antworten.
+    if (!vorgeschlagen.has(entry.pageId)) {
+      vorgeschlagen.set(entry.pageId, entry.text);
+    }
+  }
+
+  const transcripts: ProposalTranscript[] = [];
+
+  /*
+   * Gelaufen wird über die Seiten des BLATTES und nicht über die Einträge des
+   * Vorschlags. Das erledigt drei Dinge mit einer Schleife: die Reihenfolge ist
+   * die der Seiten (und damit stimmt die Nummer, die auf dem Bildschirm steht),
+   * eine Abschrift ohne Ziel fällt weg, und die Abschrift der Seite steht
+   * daneben, ohne dass eine zweite Map dafür nötig wäre.
+   *
+   * Die Zeilen stehen ganz am Ende der Gegenüberstellung, hinter den Themen.
+   * Die fünf davor sind die Felder des Handformulars in der Reihenfolge, in der
+   * sie dort stehen; die Abschrift hat dort kein Feld, sie kann also nur
+   * dahinter kommen.
+   */
+  material.pages.forEach((page, index) => {
+    const text = vorgeschlagen.get(page.pageId);
+    // Über diese Seite sagt der Vorschlag nichts — sie behält, was an ihr
+    // steht. Ein `?? ""` an dieser Stelle wäre der teuerste Tippfehler der
+    // ganzen Datei: er hieße „gelesen, nichts darauf" für jede Seite, die
+    // niemand angesehen hat.
+    if (text === undefined) return;
+
+    // Auch dann, wenn er dasselbe sagt, was schon dasteht: geschrieben wird,
+    // worüber der Vorschlag spricht, und derselbe Text noch einmal zu schreiben
+    // ändert nichts. Eine Ausnahme hier hieße, dass `werte` und `aenderungen`
+    // dieselbe Liste wären — und `werte` ist bei jedem anderen Feld der WERT
+    // und nicht die Änderung.
+    transcripts.push({ pageId: page.pageId, text });
+
+    // Wörtlich verglichen, ohne jede Faltung. Eine Abschrift ist eine
+    // Abschrift: ein anderes Leerzeichen ist ein anderer Text, und ob das eine
+    // Änderung wert ist, entscheidet nicht diese Funktion, sondern der, der es
+    // hingeschrieben hat.
+    if (text !== page.transcript) {
+      aenderungen.push({
+        feld: "Abschrift",
+        seite: index + 1,
+        vorher: transcriptLabel(page.transcript),
+        nachher: transcriptLabel(text),
+      });
+    }
+  });
+
   return {
-    werte: { subjectId, title, capturedOn, note, topics },
+    werte: { subjectId, title, capturedOn, note, topics, transcripts },
     aenderungen,
   };
 }
@@ -854,6 +1312,35 @@ const PROPOSAL_FIELDS = {
   title: materialProposals.title,
   capturedOn: materialProposals.capturedOn,
   note: materialProposals.note,
+  /**
+   * Zu wie vielen Seiten dieser Vorschlag eine Abschrift trägt.
+   *
+   * Als Unterabfrage und nicht als dritte Nachfrage in `loadProposals()`: die
+   * Zahl gehört zu jeder Zeile, die diese Datei als Vorschlag herausgibt, und
+   * die Feldliste ist der Ort, an dem „in jeder Abfrage dieselben" steht. Sie
+   * zählt über den Primärschlüssel (proposal_id, page_id) und rührt die Texte
+   * nicht an — das ist der ganze Zweck: der Korb erfährt, DASS eine Abschrift
+   * da ist, ohne bis zu neunzehn Megabyte Text zu laden (die Rechnung steht an
+   * `ProposalItem.transcriptCount`).
+   *
+   * `cast(count(*) as int)` wie in `countInbox()` — sonst gibt Postgres ein
+   * bigint heraus, und je nach Treiber steht dann eine Zeichenkette in einem
+   * Feld, das `number` heißt.
+   *
+   * **Die Zahl kann von selbst kleiner werden, und das ist richtig so.** Wird
+   * eine Seite gelöscht, räumt „cascade" die Zeile in
+   * `material_proposal_transcripts` mit weg; gezählt wird also bei jeder
+   * Abfrage neu, was es noch gibt, und nicht, was einmal vorgeschlagen wurde.
+   * Ein Vorschlag, der nur von dieser einen Seite sprach, steht danach als
+   * leere Zeile im Korb — er verlangt dann noch genau eine Entscheidung,
+   * nämlich das Verwerfen. Eine gespeicherte Zahl an `material_proposals`
+   * behauptete stattdessen eine Abschrift, die niemand mehr öffnen kann.
+   */
+  transcriptCount: sql<number>`(
+    select cast(count(*) as int)
+    from ${materialProposalTranscripts}
+    where ${materialProposalTranscripts.proposalId} = ${materialProposals.id}
+  )`,
 };
 
 type ProposalRow = {
@@ -865,6 +1352,7 @@ type ProposalRow = {
   title: string | null;
   capturedOn: string | null;
   note: string | null;
+  transcriptCount: number;
 };
 
 /**
@@ -1164,6 +1652,77 @@ async function loadProposalTopics(
   return byProposal;
 }
 
+/**
+ * Die Abschriften mehrerer Vorschläge auf einmal, in der Reihenfolge der
+ * Seiten.
+ *
+ * Der Weg zum Nutzer ist derselbe wie bei den Themen: die Zeile kennt nur ihren
+ * Vorschlag, der Vorschlag kennt das Blatt, und erst am Blatt steht die userId.
+ * Ohne den zweiten Verbund zeigte eine geratene proposalId fremden Text — und
+ * bei der Abschrift wäre das nicht ein Titel, sondern der Inhalt eines fremden
+ * Blattes.
+ *
+ * Der dritte Verbund, auf `material_pages`, tut zweierlei. Er ordnet: sortiert
+ * wird nach `sort_order` und `created_at`, also genau so, wie `getMaterial()`
+ * die Seiten herausgibt, damit die Abschriften in derselben Folge stehen wie
+ * die Seiten daneben. Und er prüft mit — die Bedingung verlangt, dass die
+ * Seite an DEMSELBEN Blatt hängt wie der Vorschlag. Geschrieben wird das schon
+ * von `ownsProposedPages()`; hier steht es als das, was es ist: eine zweite
+ * Sicherung an der Stelle, an der der Text tatsächlich herauskommt.
+ *
+ * Trägt heute nur `getProposal()` mit einer einzigen id auf. Die Form für eine
+ * Liste steht trotzdem hier, weil sie dieselbe ist wie bei
+ * `loadProposalTopics()` und weil eine Fassung für „genau einen" beim ersten
+ * zweiten Aufrufer umgeschrieben werden müsste.
+ */
+async function loadProposalTranscripts(
+  userId: string,
+  proposalIds: string[],
+): Promise<Map<string, ProposalTranscript[]>> {
+  const byProposal = new Map<string, ProposalTranscript[]>();
+  if (proposalIds.length === 0) return byProposal;
+
+  const rows = await db
+    .select({
+      proposalId: materialProposalTranscripts.proposalId,
+      pageId: materialProposalTranscripts.pageId,
+      text: materialProposalTranscripts.transcript,
+    })
+    .from(materialProposalTranscripts)
+    .innerJoin(
+      materialProposals,
+      eq(materialProposals.id, materialProposalTranscripts.proposalId),
+    )
+    .innerJoin(
+      materials,
+      and(
+        eq(materials.id, materialProposals.materialId),
+        eq(materials.userId, userId),
+      ),
+    )
+    .innerJoin(
+      materialPages,
+      and(
+        eq(materialPages.id, materialProposalTranscripts.pageId),
+        eq(materialPages.materialId, materialProposals.materialId),
+      ),
+    )
+    .where(inArray(materialProposalTranscripts.proposalId, proposalIds))
+    .orderBy(
+      asc(materialProposalTranscripts.proposalId),
+      asc(materialPages.sortOrder),
+      asc(materialPages.createdAt),
+    );
+
+  for (const row of rows) {
+    const list = byProposal.get(row.proposalId) ?? [];
+    list.push({ pageId: row.pageId, text: row.text });
+    byProposal.set(row.proposalId, list);
+  }
+
+  return byProposal;
+}
+
 /** Aus der Zeile wird der Vorschlag, wie ihn die Oberfläche sieht. */
 function toProposalItem(row: ProposalRow, topics: string[]): ProposalItem {
   return {
@@ -1175,6 +1734,31 @@ function toProposalItem(row: ProposalRow, topics: string[]): ProposalItem {
     capturedOn: row.capturedOn,
     note: row.note,
     topics,
+    // `Number()` aus demselben Grund wie in `countInbox()`: die Zahl kommt aus
+    // einer Unterabfrage, und welcher Treiber daraus eine Zeichenkette macht,
+    // ist nicht die Sorge dieser Stelle.
+    transcriptCount: Number(row.transcriptCount ?? 0),
+  };
+}
+
+/**
+ * Dasselbe, plus die Abschriften — für die eine Stelle, die sie wirklich
+ * braucht.
+ *
+ * Die Zahl kommt hier aus der geladenen Liste und nicht mehr aus der
+ * Unterabfrage. Beide zählen dasselbe, aber nur eine davon steht auch als Text
+ * daneben; zwei Wahrheiten in einem Objekt wären eine zu viel, und die
+ * unterlegene wäre ausgerechnet die, die die Oberfläche anzeigt.
+ */
+function toProposalDetail(
+  row: ProposalRow,
+  topics: string[],
+  transcripts: ProposalTranscript[],
+): ProposalDetail {
+  return {
+    ...toProposalItem(row, topics),
+    transcriptCount: transcripts.length,
+    transcripts,
   };
 }
 
@@ -1231,6 +1815,54 @@ async function ownsProposedSubject(
   return subjectId === null || (await ownsSubject(userId, subjectId));
 }
 
+/**
+ * Gehören alle genannten Seiten zu genau diesem Blatt?
+ *
+ * Die Frage, die kein Fremdschlüssel beantwortet.
+ * `material_proposal_transcripts.page_id` zeigt auf `material_pages`, und die
+ * Datenbank prüft, dass es die Zeile gibt — nicht, an welchem Blatt sie hängt
+ * und wem das gehört. Ohne diese Funktion legte eine geratene pageId aus einem
+ * Werkzeugaufruf die Abschrift an einer fremden Seite ab; beim Übernehmen
+ * schriebe ein Mensch sie in eine Spalte, deren Blatt er nie gesehen hat, und
+ * `read_sheet` gäbe sie ihm danach als seinen eigenen Inhalt zurück.
+ *
+ * Kein Eintrag ist in Ordnung — `null` heißt „dazu sage ich nichts".
+ *
+ * Gezählt statt verglichen: die Abfrage holt die Seiten, die es gibt, und die
+ * Zahl muss stimmen. **Das geht nur auf, weil die ids dublettenfrei sind** —
+ * dafür sorgt `normalizeTranscripts()` im Schema. Käme diese Liste je an dieser
+ * Faltung vorbei, ließe eine zweimal genannte Seite die Rechnung kippen (zwei
+ * Einträge, eine Zeile), und der Vorschlag würde grundlos abgewiesen.
+ */
+async function ownsProposedPages(
+  userId: string,
+  materialId: string,
+  transcripts: ProposalTranscript[] | null,
+): Promise<boolean> {
+  if (transcripts === null) return true;
+
+  const pageIds = transcripts.map((entry) => entry.pageId);
+
+  const rows = await db
+    .select({ id: materialPages.id })
+    .from(materialPages)
+    .innerJoin(
+      materials,
+      and(
+        eq(materials.id, materialPages.materialId),
+        eq(materials.userId, userId),
+      ),
+    )
+    .where(
+      and(
+        eq(materialPages.materialId, materialId),
+        inArray(materialPages.id, pageIds),
+      ),
+    );
+
+  return rows.length === pageIds.length;
+}
+
 /** Gehört das Fach diesem Nutzer? Prüfen, nicht hoffen. */
 async function ownsSubject(userId: string, subjectId: string): Promise<boolean> {
   if (!isId(subjectId)) return false;
@@ -1269,6 +1901,32 @@ function dayLabel(date: string): string {
 /** Die Themen als eine Zeile. Keine Themen sind auch eine Aussage. */
 function topicLabel(titles: string[]): string {
   return titles.length > 0 ? titles.join(", ") : EMPTY_VALUE;
+}
+
+/**
+ * Wie eine Abschrift in der Gegenüberstellung dasteht.
+ *
+ * **Nicht der Text.** Warum, steht an `prefillFromProposal()`: zwei Wände aus
+ * je 8 000 Zeichen sind keine Gegenüberstellung. Hier steht, was die
+ * Entscheidung trägt — ob dort schon etwas stand und wie viel dazukommt.
+ *
+ * **Und ausdrücklich nicht `EMPTY_VALUE`.** Überall sonst in dieser Datei heißt
+ * „—" schlicht „hier steht nichts", und das genügt, weil es dort nur eine Sorte
+ * Nichts gibt. Bei der Abschrift gibt es zwei, und sie sind der Grund, warum
+ * die Spalte NULL zulässt: „noch nicht gelesen" ist ein offener Posten, „nichts
+ * darauf" ist eine erledigte Seite. Ein Zeichen für beide machte aus der einen
+ * Auskunft, für die diese ganze Stufe gebaut ist, wieder ein Achselzucken —
+ * und der Postbote liefe bei jedem Lauf gegen dieselbe leere Rückseite.
+ *
+ * Die Zahl deutsch geschrieben, also „1.240 Zeichen". Vierstellig wird sie
+ * regelmäßig, und „1240" liest sich in einer Zeile neben einer zweiten Zahl
+ * wie ein Zahlenpaar.
+ */
+function transcriptLabel(text: string | null): string {
+  if (text === null) return "noch nicht gelesen";
+  if (text === "") return "nichts darauf";
+
+  return `${text.length.toLocaleString("de-DE")} Zeichen`;
 }
 
 /**

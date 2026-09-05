@@ -2,11 +2,18 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { addDays, germanShortParts, todayInBerlin } from "@/lib/dates";
+import { MAX_PAGES } from "@/lib/images";
 import {
+  LIST_LIMIT,
   MATERIAL_NOTE_MAX,
   MATERIAL_TITLE_MAX,
+  MATERIAL_TRANSCRIPT_MAX,
+  TRANSCRIPT_EXPORT_LIMIT,
+  type TranscriptCursor,
   defaultMaterialTitle,
+  isCursorTimestamp,
   materialInputSchema,
+  transcriptSchema,
 } from "@/lib/materials";
 
 /**
@@ -255,5 +262,201 @@ describe("materialInputSchema", () => {
       [...new Set(result.error.issues.map((issue) => issue.path[0]))].sort(),
       ["capturedOn", "note", "subjectId", "title"],
     );
+  });
+});
+
+describe("transcriptSchema", () => {
+  it("lässt eine gewöhnliche Abschrift unangetastet durch", () => {
+    const text = "Aufgabe 1\n\na) f(x) = 3x² − 2x\nb) ⟨unleserlich⟩";
+    const result = transcriptSchema.safeParse(text);
+
+    assert.ok(result.success);
+    assert.equal(result.data, text);
+  });
+
+  it("rührt die ⟨spitzen Klammern⟩ des Agenten nicht an", () => {
+    // Damit markiert der Agent, was er nicht sicher lesen konnte. Das ist reiner
+    // Text und keine Auszeichnung — wer hier anfängt, ihn zu zählen oder zu
+    // entfernen, nimmt dem Menschen die einzige Stelle, an der steht, wo die
+    // Abschrift unsicher ist.
+    const result = transcriptSchema.safeParse("Der ⟨Satz des Pythagoras⟩ gilt");
+
+    assert.ok(result.success);
+    assert.equal(result.data, "Der ⟨Satz des Pythagoras⟩ gilt");
+  });
+
+  it("lässt den leeren String stehen, statt null daraus zu machen", () => {
+    // Der Unterschied trägt die ganze Abschrift: null heißt „diese Seite hat
+    // noch niemand gelesen“, "" heißt „gelesen, und es stand nichts darauf“.
+    // Fielen beide zusammen, legte der Postbote dieselbe leere Seite bei jedem
+    // Lauf wieder vor. Genau darin unterscheidet sich diese Prüfung von
+    // optionalText(), das für die Notiz das Gegenteil tut.
+    for (const value of ["", "   ", "\n\n", "\t \n"]) {
+      const result = transcriptSchema.safeParse(value);
+
+      assert.ok(result.success, JSON.stringify(value));
+      assert.equal(result.data, "", JSON.stringify(value));
+    }
+  });
+
+  it("schneidet nur die Ränder weg und lässt die Zeilen dazwischen in Ruhe", () => {
+    // Die Einrückung einer Aufgabe ist Teil dessen, was auf dem Blatt steht.
+    const result = transcriptSchema.safeParse("  Zeile 1\n\n   Zeile 2  ");
+
+    assert.ok(result.success);
+    assert.equal(result.data, "Zeile 1\n\n   Zeile 2");
+  });
+
+  it("lässt genau achttausend Zeichen zu und einen mehr nicht", () => {
+    const gerade = transcriptSchema.safeParse(
+      "a".repeat(MATERIAL_TRANSCRIPT_MAX),
+    );
+    assert.ok(gerade.success);
+
+    const zuLang = transcriptSchema.safeParse(
+      "a".repeat(MATERIAL_TRANSCRIPT_MAX + 1),
+    );
+    assert.ok(!zuLang.success);
+    assert.deepEqual(
+      zuLang.error.issues.map((issue) => issue.message),
+      ["Die Abschrift einer Seite ist zu lang — höchstens 8000 Zeichen."],
+    );
+  });
+
+  it("nennt in der Meldung dieselbe Zahl, die auch die Grenze ist", () => {
+    // Die Meldung schreibt die 8000 aus, wie es bei Titel und Notiz auch steht —
+    // ein Satz mit einer eingesetzten Zahl liest sich schlechter. Der Preis ist
+    // diese Prüfung: wer MATERIAL_TRANSCRIPT_MAX senkt und die Meldung vergisst,
+    // stellt dem Nutzer eine Zahl hin, die nicht gilt.
+    const result = transcriptSchema.safeParse(
+      "a".repeat(MATERIAL_TRANSCRIPT_MAX + 1),
+    );
+
+    assert.ok(!result.success);
+    assert.ok(
+      result.error.issues[0]?.message.includes(String(MATERIAL_TRANSCRIPT_MAX)),
+      result.error.issues[0]?.message,
+    );
+  });
+
+  it("misst die Abschrift nach dem Abschneiden der Ränder", () => {
+    // Sonst entschiede ein nachgestellter Zeilenumbruch darüber, ob eine
+    // Abschrift durch die Tür passt — dieselbe Regel wie beim Titel.
+    const padded = `\n ${"a".repeat(MATERIAL_TRANSCRIPT_MAX)} \n`;
+    const result = transcriptSchema.safeParse(padded);
+
+    assert.ok(result.success);
+    assert.equal(result.data.length, MATERIAL_TRANSCRIPT_MAX);
+  });
+
+  it("nimmt nur Text an", () => {
+    for (const value of [null, undefined, 42, ["a"], { text: "a" }]) {
+      const result = transcriptSchema.safeParse(value);
+      assert.ok(!result.success, String(value));
+    }
+  });
+});
+
+describe("die Grenzen der Abschrift", () => {
+  it("lässt zwölf volle Seiten durch ein Werkzeugergebnis passen", () => {
+    // Ein Werkzeugergebnis endet in der Claude-App bei rund 150 000 Zeichen —
+    // dieselbe Grenze, aus der in @/lib/mcp/run.ts MAX_IMAGE_BYTES gerechnet
+    // ist. `transcripts` an propose_sheet trägt bis zu MAX_PAGES Abschriften in
+    // EINEM Aufruf. Wächst eine der beiden Zahlen über diese Rechnung hinaus,
+    // bekommt der Agent keine Fehlermeldung, sondern eine abgeschnittene
+    // Antwort — dann schlägt hier zuerst der Test an.
+    const werkzeugErgebnis = 150_000;
+    const rahmen = 20_000; // Feldnamen, zwölf ids, Satz davor, JSON-RPC-Umschlag
+
+    assert.ok(MATERIAL_TRANSCRIPT_MAX * MAX_PAGES + rahmen < werkzeugErgebnis);
+  });
+
+  it("lässt eine dicht beschriebene Seite mit Abstand durch", () => {
+    // Grob geschätzt trägt eine eng vollgeschriebene A4-Seite rund 3000
+    // Zeichen. Die Grenze ist das Netz und nicht die Erwartung: sie darf eine
+    // ehrliche Abschrift nie treffen. (Sobald ein echtes Blatt abgeschrieben
+    // ist, gehört an diese Stelle die gemessene Zahl statt der geschätzten.)
+    assert.ok(MATERIAL_TRANSCRIPT_MAX >= 2 * 3_000);
+  });
+
+  it("hält eine Runde des Exports klein genug für eine Antwort", () => {
+    // Diese eine Liste trägt als einzige den Volltext mit. Mit der Decke der
+    // Ablage wären es im schlimmsten Fall 19,2 Millionen Zeichen in einer
+    // Antwort; deshalb hat der Export eine eigene, niedrigere.
+    assert.ok(TRANSCRIPT_EXPORT_LIMIT < LIST_LIMIT);
+    assert.ok(
+      TRANSCRIPT_EXPORT_LIMIT * MAX_PAGES * MATERIAL_TRANSCRIPT_MAX <=
+        5_000_000,
+    );
+  });
+});
+
+/**
+ * Der Zeitstempel im Export-Cursor.
+ *
+ * Was ohne diese Prüfung geschah, ist gemessen und steht ausführlich an
+ * `TranscriptCursor.createdAt`: der Zeitstempel lief als JS-`Date` durch den
+ * Cursor, verlor dabei die drei letzten Stellen der Mikrosekunde und zeigte
+ * danach VOR das Blatt, das er markiert. An jeder Rundengrenze kam dieses Blatt
+ * ein zweites Mal heraus; bei drei Blättern derselben Millisekunde rückte der
+ * Cursor gar nicht mehr vor. Die Wiki-Übergabe brach daran ab, das Fach-PDF
+ * füllte sich mit Wiederholungen.
+ *
+ * Die Runde selbst braucht eine Datenbank und steht deshalb als Probe 9 in
+ * scripts/probe-abschrift.mts — mit von Hand gesetzten Mikrosekunden, weil
+ * PGlites `now()` nur Millisekunden liefert und der Fehler sich sonst gar nicht
+ * herstellen lässt. Hier steht der Teil, der ohne Datenbank auskommt: dass ein
+ * Zeitstempel mit Millisekunden als Cursor NICHT durchgeht, und dass der Typ
+ * eine Zeichenkette verlangt und kein `Date`.
+ */
+describe("isCursorTimestamp", () => {
+  it("nimmt an, was eine Runde des Exports ausgibt", () => {
+    assert.ok(isCursorTimestamp("2026-09-01T10:00:00.123456Z"));
+    assert.ok(isCursorTimestamp("2026-01-01T00:00:00.000000Z"));
+    assert.ok(isCursorTimestamp("2024-02-29T23:59:59.999999Z"));
+  });
+
+  it("weist einen Zeitstempel mit Millisekunden ab", () => {
+    // Genau die Form, die `new Date(…).toISOString()` schreibt — also der
+    // Fehler selbst. Drei Stellen statt sechs heißen: hier war ein `Date` im
+    // Weg, und der Wert ist um bis zu 999 Mikrosekunden zu klein. Eine leere
+    // Antwort darauf ist unangenehm; eine Runde, die Blätter doppelt
+    // herausgibt, ist schlimmer.
+    assert.ok(!isCursorTimestamp("2026-09-01T10:00:00.123Z"));
+    assert.ok(!isCursorTimestamp("2026-09-01T10:00:00Z"));
+    assert.ok(!isCursorTimestamp("2026-09-01T10:00:00.1234567Z"));
+  });
+
+  it("weist ab, was Postgres mit einem Typfehler quittieren würde", () => {
+    // Ein Muster allein reicht nicht: den 31. Februar gibt es nicht, und
+    // `'2026-02-31…'::timestamptz` wirft. Aus dem Wurf würde im PDF ein
+    // abgestürzter Route Handler — dieselbe Überlegung wie bei `isId()`.
+    assert.ok(!isCursorTimestamp("2026-02-31T10:00:00.000000Z"));
+    assert.ok(!isCursorTimestamp("2026-13-01T10:00:00.000000Z"));
+    assert.ok(!isCursorTimestamp("2026-09-01T24:00:00.000000Z"));
+    assert.ok(!isCursorTimestamp("2026-09-01T10:60:00.000000Z"));
+  });
+
+  it("nimmt keine andere Schreibweise desselben Zeitpunkts", () => {
+    // Der Wert wird unverändert als `::timestamptz` eingesetzt, also muss er
+    // genau das Format tragen, das `to_char()` schreibt. Alles andere ist ein
+    // Cursor, den diese Datei nicht ausgegeben hat.
+    assert.ok(!isCursorTimestamp("2026-09-01 10:00:00.123456+00"));
+    assert.ok(!isCursorTimestamp("2026-09-01T10:00:00.123456+00:00"));
+    assert.ok(!isCursorTimestamp(""));
+    assert.ok(!isCursorTimestamp("heute"));
+  });
+
+  it("verlangt im Cursor eine Zeichenkette und kein Date", () => {
+    // Dieser Test prüft nichts zur Laufzeit — er steht für den Compiler da.
+    // Wird `createdAt` je wieder ein `Date`, ist `npx tsc --noEmit` rot, und
+    // zwar hier, mit dem Kommentar daneben, der sagt warum.
+    const cursor: TranscriptCursor = {
+      capturedOn: "2026-09-01",
+      createdAt: "2026-09-01T10:00:00.123456Z",
+      id: "3f7c1a2e-8b4d-4c9a-9e51-0d6f2a7b1c34",
+    };
+
+    assert.ok(isCursorTimestamp(cursor.createdAt));
   });
 });

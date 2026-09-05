@@ -11,6 +11,7 @@ import {
   getProposal,
   prefillFromProposal,
 } from "@/lib/inbox";
+import { listMaterialTranscripts } from "@/lib/materials";
 import { listTopicsForSubjects } from "@/lib/subject-topics";
 import { listSubjects } from "@/lib/subjects";
 
@@ -94,6 +95,21 @@ export default async function ProposalPage({
     all.map((subject) => [subject.id, subject.name] as const),
   );
 
+  /*
+   * Was heute wörtlich an den Seiten steht.
+   *
+   * Über `listMaterialTranscripts()` und nicht über `material.pages`: dort
+   * steht mit `transcriptLength` nur die LÄNGE, und mit ihr zu vergleichen
+   * hieße, zwei gleich lange verschiedene Texte für unverändert zu halten — ein
+   * Vorschlag, der 980 Zeichen durch 980 andere ersetzt, ginge dann ohne eine
+   * Zeile in der Gegenüberstellung durch. Verglichen werden muss der Text, und
+   * das ist die eine Tür, durch die er kommt.
+   */
+  const wortlaut = await listMaterialTranscripts(user.id, material.id);
+  const amBlatt = new Map(
+    wortlaut.map((page) => [page.pageId, page.transcript] as const),
+  );
+
   const prefill = prefillFromProposal(
     {
       subjectId: material.subject.id,
@@ -102,6 +118,7 @@ export default async function ProposalPage({
       capturedOn: material.capturedOn,
       note: material.note,
       topics: material.topics.map((topic) => topic.title),
+      pages: wortlaut,
     },
     {
       subjectId: proposal.subjectId,
@@ -113,6 +130,7 @@ export default async function ProposalPage({
       capturedOn: proposal.capturedOn,
       note: proposal.note,
       topics: proposal.topics,
+      transcripts: proposal.transcripts,
     },
   );
 
@@ -140,6 +158,22 @@ export default async function ProposalPage({
     subjects.map(
       (subject) => [subject.id, topicsBySubject.get(subject.id) ?? []] as const,
     ),
+  );
+
+  /*
+   * Die vorbelegte Abschrift je Seite, aus derselben Rechnung wie alles andere.
+   *
+   * `prefillFromProposal()` hat sie schon zusammengeführt: sie nennt genau die
+   * Seiten, über die der Vorschlag etwas sagt, und für jede davon den Text, der
+   * beim Übernehmen geschrieben würde. Hier daneben noch einmal zu entscheiden,
+   * was gilt, wären zwei Antworten auf die Frage, was gleich passiert — genau
+   * das, was die Gegenüberstellung über dem Formular ausschließen soll.
+   *
+   * Eine Seite, die hier fehlt, behält ihre Abschrift; unten im Formular steht
+   * sie deshalb mit `amBlatt` vorbelegt und nicht leer.
+   */
+  const prefillTranscripts = new Map(
+    prefill.werte.transcripts.map(({ pageId, text }) => [pageId, text] as const),
   );
 
   const today = todayInBerlin();
@@ -295,13 +329,24 @@ export default async function ProposalPage({
           </p>
         ) : (
           <dl className="space-y-2">
+            {/* Der Schlüssel trägt seit der Abschrift die Seite mit: „Abschrift“
+                ist das einzige Feld, das MEHRMALS in dieser Liste stehen kann
+                (ein Vorschlag darf zwölf Seiten neu beschriften), und zwei
+                Zeilen mit demselben Schlüssel wären für React dieselbe Zeile.
+                Aus demselben Grund steht die Seitenzahl auch im Text: „Abschrift
+                → 1.240 Zeichen“ dreimal untereinander sagte nicht, welche Seite
+                gemeint ist. Die Spalte ist dafür breiter als die 16, die für
+                „Themen“ gereicht hat — und bei allen Zeilen gleich breit, sonst
+                stünden die Pfeile versetzt. */}
             {prefill.aenderungen.map((change) => (
               <div
-                key={change.feld}
+                key={`${change.feld}-${change.seite ?? ""}`}
                 className="flex flex-col gap-0.5 sm:flex-row sm:gap-3"
               >
-                <dt className="shrink-0 text-sm text-subtle sm:w-16">
-                  {change.feld}
+                <dt className="shrink-0 text-sm text-subtle sm:w-32">
+                  {change.seite === undefined
+                    ? change.feld
+                    : `${change.feld}, Seite ${change.seite}`}
                 </dt>
                 <dd className="min-w-0 flex-1 text-sm">
                   <span className="text-muted">{change.vorher}</span>
@@ -330,6 +375,20 @@ export default async function ProposalPage({
             erst mit dem Knopf darunter, und geschrieben wird genau das, was
             hier steht.
           </p>
+
+          {/* Der Satz steht nur da, wenn eine Abschrift dabei ist. Er nennt
+              den Ort und nicht den Inhalt: die Abschrift ist zu lang, um über
+              dem Formular zu stehen, und der Bildschirm soll nicht behaupten,
+              er habe sie gezeigt. Gezählt werden die Seiten, zu denen der
+              Vorschlag etwas sagt — nicht alle Seiten des Blattes. */}
+          {prefillTranscripts.size > 0 ? (
+            <p className="text-sm text-muted">
+              {prefillTranscripts.size === 1
+                ? "Dazu kommt diesmal die Abschrift einer Seite: was darauf steht, wörtlich. Sie steht unten im Formular, neben dem Bild dieser Seite."
+                : `Dazu kommt diesmal die Abschrift von ${prefillTranscripts.size} Seiten: was darauf steht, wörtlich. Sie stehen unten im Formular — je Seite eine Zeile, die sich neben ihrem Bild aufklappen lässt.`}
+            </p>
+          ) : null}
+
           {/* Zwei Dinge tut das Übernehmen zusätzlich, und beide stehen in
               keiner Zeile der Gegenüberstellung — die vergleicht nur die
               Angaben des Blattes. Ungesagt wären sie eine Überraschung: wer
@@ -360,20 +419,60 @@ export default async function ProposalPage({
          * Der Schlüssel trägt genau die Werte, mit denen das Formular
          * vorbelegt wird. Ändert sich einer, baut React das Formular neu auf,
          * und es steht wieder das darin, was die Gegenüberstellung ankündigt.
+         *
          * Den Preis dafür trägt der seltenere Fall: wer erst ins
          * Übernehmen-Formular tippt und DANN den Vorschlag ändert, verliert
          * seine Eingabe. Das ist die richtige Reihenfolge — die Grundlage hat
          * sich geändert, das Formular muss ihr folgen —, und `ProposalForm`
          * eine Datei weiter löst dasselbe Problem mit demselben Mittel.
+         *
+         * **Gebaut wird er mit `JSON.stringify` und nicht mit `join("\n")`.**
+         * Bis zum 5.9.2026 stand hier ein Trennzeichen, das in einem der Werte
+         * selbst vorkommen darf: die Notiz ist mehrzeilig — beide Formulare
+         * bieten dafür ein <textarea rows={3}> an, `optionalText()` in
+         * @/lib/inbox schneidet nur die Ränder ab, und der Auftrag des
+         * Postboten schickt ausdrücklich mehrere Aussagen dorthin. Dann ist die
+         * Kette nicht mehr eindeutig: eine Notiz „a\nb" ohne Thema ergibt
+         * Zeichen für Zeichen denselben Schlüssel wie die Notiz „a" mit dem
+         * Thema „b". Ändert jemand den Vorschlag von der einen Vorbelegung in
+         * die andere, hält React das Formular für dasselbe und baut es nicht
+         * neu — über dem Knopf steht dann die neue Notiz, geschrieben wird die
+         * alte, und genau dagegen steht dieser Schlüssel. `JSON.stringify`
+         * maskiert den Umbruch und die Anführungszeichen und hält die Werte
+         * damit auseinander; die Themen stehen dafür als eigene Liste und nicht
+         * mehr flach danebengelegt. Nebenbei unterscheidet es `null` von "" —
+         * was der Absatz unten für einen späteren Ausbau ohnehin verlangt.
+         *
+         * **Die Abschriften stehen bewusst NICHT im Schlüssel**, obwohl sie
+         * vorbelegte Werte sind. Zwei Gründe, und der zweite ist der
+         * gewichtigere:
+         *
+         * - Sie brauchen ihn nicht. `MaterialForm` kopiert sie nicht in den
+         *   Zustand; dort liegt nur, was jemand getippt hat, und ein
+         *   unberührtes Feld liest bei jedem Rendern seine Vorbelegung. Ändert
+         *   sich der Vorschlag unten, folgt es also von selbst — ohne dass
+         *   dafür das ganze Formular neu aufgebaut werden müsste.
+         * - Sie wären zu groß dafür. Zwölf Seiten mal 8000 Zeichen sind bis zu
+         *   96 000, und ein Schlüssel wird als Zeichenkette in die Antwort des
+         *   Servers geschrieben. Die Abschriften gingen damit ein zweites Mal
+         *   durch die Leitung — für eine Vorsichtsmaßnahme, die nichts
+         *   absichert, was nicht schon abgesichert wäre.
+         *
+         * Wer sie eines Tages doch hineinnimmt, muss NULL und leeren String
+         * unterscheidbar halten — `JSON.stringify` tut das von selbst, ein
+         * beiläufiges `text ?? ""` davor macht es zunichte. Es machte aus
+         * „niemand hat gelesen“ und
+         * „gelesen, nichts drauf“ denselben Schlüssel — und dann bliebe das
+         * Formular genau bei der Änderung stehen, um die es geht.
          */}
         <MaterialForm
-          key={[
+          key={JSON.stringify([
             prefill.werte.subjectId,
             prefill.werte.title,
             prefill.werte.capturedOn,
-            prefill.werte.note ?? "",
-            ...prefill.werte.topics,
-          ].join("\n")}
+            prefill.werte.note,
+            prefill.werte.topics,
+          ])}
           action={confirmProposalAction.bind(null, proposal.id)}
           subjects={subjects}
           topicSuggestions={topicSuggestions}
@@ -411,6 +510,24 @@ export default async function ProposalPage({
               title,
             })),
           }}
+          /* Die Seiten des Blattes, vorbelegt mit der vorgeschlagenen
+             Abschrift. `transcript` (was am Blatt steht) reist daneben mit;
+             aus dem Unterschied zwischen beiden baut das Formular je Seite den
+             Satz, was das Übernehmen dort ändern würde. Deshalb wird hier
+             NICHT das eine mit dem anderen überschrieben.
+
+             Sagt der Vorschlag zu einer Seite nichts, steht in beiden dasselbe
+             — das Feld zeigt dann, was am Blatt steht, und das Übernehmen
+             schreibt es unverändert zurück. */
+          pages={material.pages.map((page) => {
+            const transcript = amBlatt.get(page.id) ?? null;
+
+            return {
+              ...page,
+              transcript,
+              prefill: prefillTranscripts.get(page.id) ?? transcript,
+            };
+          })}
           today={today}
           submitLabel="Vorschlag übernehmen"
         />

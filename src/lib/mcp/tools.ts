@@ -1,7 +1,12 @@
 import { z } from "zod";
 
+import { MAX_PAGES } from "@/lib/images";
 import { LIST_LIMIT, MATERIAL_NOTE_MAX, MATERIAL_TITLE_MAX } from "@/lib/materials";
-import { INBOX_LIMIT, PROPOSAL_TOPIC_LIMIT } from "@/lib/inbox";
+import {
+  INBOX_LIMIT,
+  PROPOSAL_TOPIC_LIMIT,
+  PROPOSAL_TRANSCRIPT_MAX,
+} from "@/lib/inbox";
 
 /**
  * Der Werkzeugkasten des Agenten — was er kann und wie er danach fragt.
@@ -74,6 +79,29 @@ const SHEET_ARG = z
   .min(1)
   .max(64)
   .describe("Die id eines Blattes, wie sie read_material oder read_inbox liefert.");
+
+/**
+ * Wie eine Seite benannt wird — immer als id, nie als „die zweite".
+ *
+ * Anders als beim Fach gibt es hier nichts aufzulösen: eine Seite hat keinen
+ * Namen, und die Nummer, die ein Mensch ihr gäbe, steht in read_sheet neben
+ * ihrer id. Der Satz in der Beschreibung ist deshalb der eigentliche Inhalt
+ * dieses Arguments — Blatt-id und Seiten-id sehen gleich aus, und wer die
+ * falsche schickt, bekommt eine Fehlermeldung statt eines Bildes.
+ *
+ * Eine Konstante und nicht zweimal derselbe Aufbau: read_page und die
+ * Abschriften an propose_sheet meinen dasselbe. Jede Stelle darf die
+ * Beschreibung mit `.describe()` überschreiben, so wie `SUBJECT_ARG` es an
+ * read_grades tut.
+ */
+const PAGE_ARG = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .describe(
+    "Die id einer Seite — `firstPageId` aus read_material oder read_inbox, oder eine aus read_sheet.",
+  );
 
 /**
  * Der Werkzeugkasten. Die Reihenfolge ist die, in der ein Verzeichnis sie
@@ -196,7 +224,7 @@ export const TOOLS = {
   read_sheet: {
     title: "Ein Blatt",
     description:
-      "Ein einzelnes Blatt mit allen Seiten: je Seite die id (für read_page), die Maße und die Größe. Dazu Fach, Titel, Schultag, Notiz, Themen und ob es noch im Eingangskorb liegt.",
+      "Ein einzelnes Blatt mit allen Seiten: je Seite die id (für read_page), die Maße, die Größe und `transcriptChars` — wie viele Zeichen ihre Abschrift hat. Dabei heißt `null` „diese Seite hat noch niemand gelesen“ und `0` „gelesen, und es stand nichts darauf“; den Wortlaut selbst holt read_transcript. Dazu Fach, Titel, Schultag, Notiz, Themen und ob es noch im Eingangskorb liegt.",
     readOnly: true,
     args: z.object({ sheet: SHEET_ARG }).strict(),
   },
@@ -206,18 +234,15 @@ export const TOOLS = {
     description:
       "Das Foto einer Seite als Bild, in einer Fassung zum Lesen (lange Kante 1000 Pixel). Damit liest du, was auf dem Blatt steht. Die id einer Seite steht als `firstPageId` in read_material und read_inbox, alle Seiten eines Blattes in read_sheet — die id des Blattes ist eine andere.",
     readOnly: true,
-    args: z
-      .object({
-        page: z
-          .string()
-          .trim()
-          .min(1)
-          .max(64)
-          .describe(
-            "Die id einer Seite — `firstPageId` aus read_material oder read_inbox, oder eine aus read_sheet.",
-          ),
-      })
-      .strict(),
+    args: z.object({ page: PAGE_ARG }).strict(),
+  },
+
+  read_transcript: {
+    title: "Die Abschrift eines Blattes",
+    description:
+      "Was auf den Seiten eines Blattes steht, als Text: je Seite die id, ihre Nummer und die Abschrift, die beim Einordnen übernommen wurde. Sie zu lesen ist billiger als die Fotos und lässt sich zitieren; ⟨spitze Klammern⟩ darin markieren, was schon beim Abschreiben unsicher war. `transcript: null` heißt „diese Seite hat noch niemand gelesen“ — dann hilft nur read_page. Welche Seiten überhaupt eine Abschrift haben, steht schon in read_sheet.",
+    readOnly: true,
+    args: z.object({ sheet: SHEET_ARG }).strict(),
   },
 
   read_inbox: {
@@ -241,7 +266,7 @@ export const TOOLS = {
   propose_sheet: {
     title: "Vorschlag zu einem Blatt",
     description: [
-      "Legt einen Vorschlag zu einem Blatt in den Eingangskorb: Fach, Titel, Schultag, Notiz, Themen.",
+      "Legt einen Vorschlag zu einem Blatt in den Eingangskorb: Fach, Titel, Schultag, Notiz, Themen — und die Abschrift dessen, was auf den Seiten steht.",
       "Er ändert nichts. Er liegt neben dem Blatt, bis ein Mensch ihn im Formular übernimmt — und dabei jedes Feld noch ändern kann.",
       "Jedes Feld darf fehlen, und fehlen heißt überall dasselbe: „dazu sage ich nichts, es bleibt, wie es am Blatt steht“. Erfinde also keinen Titel, nur damit das Feld gefüllt ist. Nur ganz leer darf ein Vorschlag nicht sein.",
       "Themen sind freier Text und dürfen im Vokabular noch fehlen — schreib sie so, wie sie auf dem Blatt stehen.",
@@ -287,6 +312,88 @@ export const TOOLS = {
               "Ein Thema ist der Griff zum Wiederfinden („was habe ich zur Kettenregel?“), nicht das Glossar des Blattes. Ein Hefteintrag über Siedlungsformen, der Einzelhof, Weiler, Haufendorf und Großstadt aufzählt, hat EIN Thema: „Siedlungsformen“. Die aufgezählten Begriffe sind sein Inhalt.",
               "Nimm eine Schreibweise, die im Vokabular des Fachs schon steht, wenn eine passt (read_topics). Aus jedem neuen Wort wird beim Übernehmen eine Vokabel, und Vokabeln lassen sich nicht mehr löschen — nur umbenennen oder zusammenlegen.",
               "Kurze Fachwörter, keine Sätze.",
+            ].join(" "),
+          ),
+        /**
+         * Die Abschrift — das einzige Feld, das an SEITEN hängt und nicht am
+         * Blatt. Deshalb ein Array aus Paaren und kein Text: welcher Text zu
+         * welcher Seite gehört, muss dastehen und darf nicht aus der
+         * Reihenfolge geraten werden. Das Argument der Seite heißt `page`,
+         * genau wie bei read_page — dieselbe Sache heißt an dieser Tür überall
+         * gleich; nach `pageId` übersetzt wird einmal, beim Bauen der Eingabe
+         * in @/lib/mcp/run.ts, genau wie `captured_on` nach `capturedOn`.
+         *
+         * **Diese Beschreibung ist das eigentliche Bauteil.** Sie ist das
+         * Einzige, was steuert, WIE abgeschrieben wird, und deshalb steht sie
+         * hier und nicht nur im Auftrag des Postboten: an der Claude-App sitzt
+         * ein Mensch, der harness/auftrag.mts nie zu Gesicht bekommt. Der
+         * Auftrag sagt dasselbe ausführlicher und beruft sich ausdrücklich
+         * darauf, dass die Regeln hier stehen („Was hier NICHT steht, steht
+         * schon in den Werkzeugen"). Wer einen dieser Sätze ändert, ändert den
+         * dortigen mit — gingen die beiden auseinander, folgte der
+         * unbeaufsichtigte Lauf einer anderen Regel als der Mensch im Chat.
+         *
+         * **Die Grenze kommt aus @/lib/inbox und ist nicht abgeschrieben.**
+         * `PROPOSAL_TRANSCRIPT_MAX` ist die Zahl, gegen die
+         * `proposalInputSchema` gleich darauf prüft — dieselbe Regel, nach der
+         * `PROPOSAL_TOPIC_LIMIT` ein paar Zeilen weiter oben von dort kommt.
+         * Stünde hier eine eigene, verspräche das Verzeichnis dem Modell etwas
+         * anderes, als die Prüfung annimmt. `MAX_PAGES` deckelt nicht die
+         * Wahrheit, sondern die Absurdität: mehr Abschriften als Seiten kann
+         * kein Blatt haben.
+         *
+         * `.trim()` steht am Text, damit eine Seite aus lauter Leerraum als
+         * „gelesen und leer" ankommt und nicht als Zeile voller Leerzeichen —
+         * zod trimmt zuerst und misst dann. Die Leerzeilen INNERHALB bleiben:
+         * sie sind die Gliederung der Seite.
+         *
+         * Die Doppelung zwischen dem `refine` und dem letzten Satz der
+         * Beschreibung ist Absicht. `z.toJSONSchema()` lässt eine Verfeinerung
+         * stillschweigend weg — im Verzeichnis stehen nur `maxItems` und
+         * `maxLength` —, das Modell sieht die Regel also nicht. Stünde sie nur
+         * im Code, bekäme es beim zweiten Eintrag zur selben Seite eine
+         * Abweisung für etwas, das es nie lesen konnte. Andersherum genügt der
+         * Satz allein auch nicht: @/lib/inbox faltet zwei Einträge zur selben
+         * Seite still zusammen (der erste gilt), damit der zusammengesetzte
+         * Primärschlüssel von `material_proposal_transcripts` nicht als
+         * englischer Postgres-Fehler durch diese Tür zurückkommt — und „still"
+         * heißt hier: die zweite Abschrift wäre weg, ohne dass jemand es sagt.
+         * An der Tür wird sie deshalb abgewiesen, drinnen aufgefangen.
+         */
+        transcripts: z
+          .array(
+            z
+              .object({
+                page: PAGE_ARG.describe(
+                  "Die id der Seite, zu der diese Abschrift gehört — aus read_sheet unter „pages“.",
+                ),
+                text: z
+                  .string()
+                  .trim()
+                  .max(PROPOSAL_TRANSCRIPT_MAX)
+                  .describe(
+                    `Der Wortlaut dieser einen Seite, höchstens ${PROPOSAL_TRANSCRIPT_MAX} Zeichen. Leer heißt: gelesen, und es stand nichts darauf.`,
+                  ),
+              })
+              .strict(),
+          )
+          .max(MAX_PAGES)
+          .refine(
+            (liste) =>
+              new Set(liste.map((eintrag) => eintrag.page)).size === liste.length,
+            "Zu jeder Seite gehört höchstens eine Abschrift — eine id steht zweimal da.",
+          )
+          .optional()
+          .describe(
+            [
+              "Was auf den Seiten steht, wörtlich: je Seite ein Eintrag aus ihrer id (`page` — dieselbe wie bei read_page, alle ids eines Blattes stehen in read_sheet unter „pages“) und dem Text (`text`).",
+              "Abschreiben, nicht zusammenfassen: Satz für Satz, Zeile für Zeile, in der Reihenfolge, in der es auf der Seite steht — Überschriften, Aufgabennummern und Vokabelzeilen mit, eine Tabelle zeilenweise. Nach dieser Abschrift sucht der Mensch sein Blatt später wieder; was du zusammenfasst, findet er nie.",
+              "Die Schreibweise des Schülers bleibt stehen, auch die falsche: Rechtschreibfehler, Abkürzungen, Zahlen, ein fehlendes Komma und die Groß-/Kleinschreibung bleiben, wie sie dastehen, auch wenn sie mitten im Satz wechseln. Du schreibst ab, du korrigierst nicht — es ist sein Text und nicht deiner.",
+              "Was du nicht sicher liest, kommt in ⟨spitze Klammern⟩: ⟨Kettenregel⟩ heißt „so lese ich es, sicher bin ich nicht“, ⟨Kettenregel/Kettenreqel⟩ nennt zwei mögliche Lesungen, ⟨unleserlich⟩ heißt „hier steht etwas, das ich nicht entziffern kann“. Rate NIE ein Wort ohne diese Klammern. Eine geratene Zeile steht danach als Tatsache in der App, und niemand sieht ihr an, dass sie geraten war; eine markierte liest der Mensch selbst nach.",
+              "Was kein Text ist — eine Skizze, ein Diagramm, eine Zeichnung —, schreibst du nicht ab, sondern benennst es in denselben Klammern: ⟨Skizze: Kräfteparallelogramm⟩.",
+              "Eine Seite, auf der nichts steht, bekommt einen LEEREN Text und wird nicht weggelassen: kein Eintrag heißt „diese Seite hat noch niemand gelesen“, ein leerer Text heißt „gelesen, und es stand nichts darauf“.",
+              "Eine Seite, die du gar nicht lesen kannst — zu unscharf, zu dunkel, angeschnitten —, lässt du weg: keinen Eintrag, keinen halben Text, keinen geratenen. Sie gilt damit weiter als ungelesen und ist nach einem besseren Foto wieder dran. Die übrigen Seiten schickst du trotzdem mit: eine unlesbare Seite ist kein Grund, die übrigen wegzulassen.",
+              `Höchstens ${MAX_PAGES} Einträge, je Seite höchstens ${PROPOSAL_TRANSCRIPT_MAX} Zeichen, und jede Seite höchstens einmal.`,
             ].join(" "),
           ),
       })

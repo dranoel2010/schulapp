@@ -198,6 +198,35 @@ export function ProposalSummary({
     parts.push({ feld: "Notiz", wert: proposal.note });
   }
 
+  /*
+   * Die Abschrift steht hier als Zahl und als Wegbeschreibung — und als
+   * einzige Zeile dieser Liste nicht als das, was sie behauptet.
+   *
+   * Das ist eine Ausnahme mit Grund. Jede andere Zeile zeigt den
+   * vorgeschlagenen Wert selbst, weil er in eine Zeile passt: ein Titel, ein
+   * Tag, ein paar Themen. Eine Abschrift sind bis zu 8000 Zeichen JE SEITE und
+   * bis zu zwölf Seiten; hier abgedruckt wäre der Korb kein Korb mehr, sondern
+   * ein Stapel Text, durch den man sich zum nächsten Blatt scrollt. Deshalb
+   * trägt `ProposalItem` auch nur die Zahl — den Wortlaut holt eine Abfrage
+   * weiter, und nur auf der Vorschlagsseite.
+   *
+   * Verschwiegen werden darf sie trotzdem nicht, und das ist der eigentliche
+   * Punkt. Der Knopf „Übernehmen“ weiter oben trägt seine Rechtfertigung im
+   * Satz „der Vorschlag steht mit Fach, Titel, Themen und Notiz schon auf der
+   * Karte; wer dort Übernehmen drückt, hat ihn gelesen“. Sobald eine Abschrift
+   * mitkommt, stimmt dieser Satz nicht mehr — also sagt die Karte, dass da
+   * noch etwas ist und wo es steht.
+   */
+  if (proposal.transcriptCount > 0) {
+    parts.push({
+      feld: "Abschrift",
+      wert:
+        proposal.transcriptCount === 1
+          ? "eine Seite — sie steht auf der Vorschlagsseite"
+          : `${proposal.transcriptCount} Seiten — sie stehen auf der Vorschlagsseite`,
+    });
+  }
+
   /* Ein Vorschlag ohne eine einzige Angabe kommt durch das Formular nicht
      herein — `proposalInputSchema` weist ihn ab. Entstehen kann er trotzdem,
      und zwar nachträglich: schlug er nur ein Fach vor und wird genau dieses
@@ -218,9 +247,13 @@ export function ProposalSummary({
 
   return (
     <dl className="space-y-1 text-sm">
+      {/* Die Spalte der Feldnamen ist seit „Abschrift“ eine Stufe breiter: das
+          Wort ist länger als die 64 Pixel, die für „Themen“ gereicht haben, und
+          ein einzelnes Wort bricht nicht um — es stünde sonst in den Wert
+          daneben hinein. */}
       {parts.map(({ feld, wert }) => (
         <div key={feld} className="flex gap-2">
-          <dt className="w-16 shrink-0 text-subtle">{feld}</dt>
+          <dt className="w-20 shrink-0 text-subtle">{feld}</dt>
           <dd className="min-w-0 flex-1 text-foreground">{wert}</dd>
         </div>
       ))}

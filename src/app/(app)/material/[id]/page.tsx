@@ -8,7 +8,7 @@ import { requireUser } from "@/lib/auth";
 import { subjectColor } from "@/lib/colors";
 import { berlinDay, formatGerman, todayInBerlin } from "@/lib/dates";
 import { MAX_PAGES, formatBytes } from "@/lib/images";
-import { getMaterial } from "@/lib/materials";
+import { getMaterial, listMaterialTranscripts } from "@/lib/materials";
 import { listTopicsForSubjects } from "@/lib/subject-topics";
 import { listSubjects } from "@/lib/subjects";
 
@@ -58,6 +58,33 @@ export default async function MaterialDetailPage({
   if (!item) {
     notFound();
   }
+
+  /*
+   * Der Wortlaut der Abschriften — die zweite Abfrage, und sie ist nötig.
+   *
+   * `getMaterial()` bringt je Seite nur `transcriptLength` mit, und das aus
+   * gutem Grund: der Volltext wären bis zu zwölfmal 8000 Zeichen an jeder
+   * Abfrage, und `read_sheet` gäbe ihn dem Agenten weiter (die Begründung steht
+   * an `MaterialPageInfo`). Diese Seite ist der eine Ort, an dem ein Mensch die
+   * Abschrift wirklich liest und ändert — sie holt den Wortlaut deshalb
+   * ausdrücklich über `listMaterialTranscripts()`, die eine Tür dafür, und
+   * nicht dadurch, dass die gemeinsame Abfrage für alle anderen mit ihm
+   * beladen wird.
+   *
+   * Eine Zeile je Seite kommt zurück, auch für die ungelesenen. Das `?? null`
+   * fängt nur den Fall ab, dass zwischen den beiden Abfragen eine Seite
+   * dazugekommen ist; es ebnet nichts ein — `null` ist dort dann die Wahrheit.
+   */
+  const wortlaut = new Map(
+    (await listMaterialTranscripts(user.id, item.id)).map(
+      (page) => [page.pageId, page.transcript] as const,
+    ),
+  );
+
+  const pages = item.pages.map((page) => ({
+    ...page,
+    transcript: wortlaut.get(page.id) ?? null,
+  }));
 
   const active = await listSubjects(user.id);
   // Hängt das Blatt an einem archivierten Fach, fehlte es sonst in der
@@ -177,7 +204,7 @@ export default async function MaterialDetailPage({
 
       <MaterialPages
         title={item.title}
-        pages={item.pages.map((page) => ({
+        pages={pages.map((page) => ({
           ...page,
           deleteAction: deletePageAction.bind(null, item.id, page.id),
         }))}
@@ -263,6 +290,39 @@ export default async function MaterialDetailPage({
         </div>
       </section>
 
+      {/*
+       * ZUM `key`, den es hier NICHT gibt — nachgesehen und nicht vergessen.
+       *
+       * Die Regel, an die man hier denkt, steht auf der Vorschlagsseite: der
+       * Schlüssel eines vorbelegten Formulars muss jeden vorbelegten Wert
+       * enthalten, sonst schreibt das Formular alte Werte zurück, während über
+       * dem Knopf die neuen angekündigt stehen. Mit der Abschrift kommt ein
+       * weiterer vorbelegter Wert dazu, und die Frage stellt sich neu.
+       *
+       * Hier gehört trotzdem keiner hin, und zwar aus zwei Gründen:
+       *
+       * 1. **Ein Schlüssel nähme die Bestätigung mit.** Dieses Formular leitet
+       *    nach dem Speichern nicht weiter — man bleibt beim Blatt, und
+       *    `updateMaterialAction()` antwortet mit „Gespeichert.“ und mit dem,
+       *    was aus den Themen wurde. Ein Schlüssel aus den vorbelegten Werten
+       *    wechselte bei genau diesem Speichern, React baute das Formular neu
+       *    auf, und `useActionState` verlöre seinen Zustand: die Bestätigung
+       *    verschwände in der Sekunde, in der sie erscheint. Dasselbe steht
+       *    ausführlich an `savedMark` in proposal-form.tsx, und dort ist der
+       *    Schlüssel deshalb am Kasten UM die Felder und nicht am Formular.
+       * 2. **Die Abschrift braucht ihn nicht.** `MaterialForm` kopiert sie gar
+       *    nicht in den Zustand; der Kasten dort hält nur, was jemand getippt
+       *    hat, und jedes unberührte Feld liest bei jedem Rendern `prefill`.
+       *    Ein alter Wert kann also nicht zurückgeschrieben werden — und das
+       *    ist besser als ein Schlüssel, denn eine Seite, die während des
+       *    Tippens dazukommt (der Auslöser steht auf derselben Seite), setzt so
+       *    auch nichts zurück.
+       *
+       * Was ohne Schlüssel bliebe — nach dem Speichern steht Getipptes statt
+       * Gespeichertem im Feld —, erledigt `savedMark` in material-form.tsx über
+       * `state.saves`. Wer hier doch einen Schlüssel setzen will, muss vorher
+       * wissen, wohin die Bestätigung soll.
+       */}
       <MaterialForm
         action={updateMaterialAction.bind(null, item.id)}
         subjects={subjects}
@@ -274,6 +334,11 @@ export default async function MaterialDetailPage({
           note: item.note,
           topics: item.topics,
         }}
+        /* Auf der Blattseite ist die Vorbelegung genau das, was am Blatt steht
+           — hier schlägt niemand etwas vor. Deshalb `prefill: page.transcript`
+           und nicht `?? ""`: NULL muss NULL bleiben, sonst hieße jede noch
+           ungelesene Seite plötzlich „gelesen, stand nichts drauf“. */
+        pages={pages.map((page) => ({ ...page, prefill: page.transcript }))}
         today={today}
       />
 
