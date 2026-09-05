@@ -46,6 +46,38 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  /*
+   * Alles unter /api/ bleibt unangetastet — auch dann, wenn es als Navigation
+   * hereinkommt.
+   *
+   * Der Fall, für den diese Zeile da ist, ist das Fach-PDF unter
+   * /api/fach/<id>/pdf. Wer diese Adresse in die Adresszeile tippt oder einem
+   * Link folgt, dessen `download` der Browser nicht beachtet, erzeugt eine
+   * Anfrage mit `mode === "navigate"` — und ohne diese Zeile fiele sie in
+   * networkFirst() und landete im PAGE_CACHE. Drei Gründe, warum das falsch
+   * wäre:
+   *
+   *  1. Es altert falsch. Der PAGE_CACHE ist für Seiten da, deren Adresse
+   *     dieselbe bleibt und deren Inhalt zur Not eine Version alt sein darf.
+   *     Ein Fach-PDF ändert sich mit jedem neuen Blatt und mit jeder
+   *     richtiggestellten Abschrift. Aus dem Cache käme still ein Dokument von
+   *     vorletzter Woche.
+   *  2. Es gehört nicht liegengelassen. Genau diese Überlegung steht in
+   *     KONZEPT.md zu den Seitenbildern: „weil ein Schulblatt nicht
+   *     versehentlich liegenbleiben soll". Ein Fach-PDF ist nicht ein Blatt,
+   *     sondern alle auf einmal.
+   *  3. Es ist zu groß. Ein Fach-PDF darf bis zu 40 MB Fotos tragen
+   *     (PDF_IMAGE_BYTES in @/lib/pdf/subject-pdf). Der Cache-Speicher, aus
+   *     dem im Zweifel die Offline-Seite kommt, ist nicht der Ort dafür.
+   *
+   * Für alle anderen Adressen unter /api/ ändert sich dadurch nichts: sie
+   * kommen als fetch() herein, nicht als Navigation, und fielen ohnehin unten
+   * durch. Die Zeile steht hier trotzdem als Regel und nicht als Sonderfall
+   * für ein Pfadstück — die nächste Adresse, die eine Datei ausliefert, soll
+   * nicht wieder daran denken müssen.
+   */
+  if (url.pathname.startsWith("/api/")) return;
+
   if (request.mode === "navigate") {
     event.respondWith(networkFirst(request, event));
     return;
