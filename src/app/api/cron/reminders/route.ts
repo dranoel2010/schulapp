@@ -16,11 +16,18 @@ import { isPushConfigured, sendToUser, type PushPayload } from "@/lib/push";
 /**
  * Die Zeitsteuerung der Erinnerungen.
  *
- * Vercel ruft diese Route stündlich auf — geplant wird dort in UTC, die
- * Erinnerungszeit des Nutzers gilt aber in Berliner Zeit. Welche Stunde
- * gerade dran ist, entscheidet deshalb die Route selbst: sie schaut nach,
- * wie spät es in Berlin ist, und beschickt nur die Nutzer, deren
- * reminderHour genau darauf fällt.
+ * Etwas von außen ruft diese Route stündlich auf — heute eine GitHub Action
+ * (.github/workflows/erinnerungen.yml), früher der Cron von Vercel. Wer es tut,
+ * ist der Route gleichgültig, und das ist der Grund, warum sie den Umzug auf
+ * das NAS am 30.8.2026 unverändert überstanden hat.
+ *
+ * Geplant wird außen in UTC, die Erinnerungszeit des Nutzers gilt aber in
+ * Berliner Zeit. Welche Stunde gerade dran ist, entscheidet deshalb die Route
+ * selbst: sie schaut nach, wie spät es in Berlin ist, und beschickt nur die
+ * Nutzer, deren reminderHour genau darauf fällt. Ein Auslöser, der eine Stunde
+ * zu spät kommt oder zweimal ruft, richtet damit keinen Schaden an — beim
+ * zweiten Ruf in derselben Stunde ginge die Nachricht allerdings noch einmal
+ * hinaus.
  *
  * Kein Cookie, sondern "Authorization: Bearer <CRON_SECRET>".
  */

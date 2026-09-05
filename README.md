@@ -4,8 +4,9 @@ Eine Schul-App für **einen** Menschen. Stundenplan, Hausaufgaben, Klausuren mit
 einem Lernplan, der sich selbst schreibt, Noten — und eine Kamera, die Zettel
 frisst.
 
-Sie läuft in der Cloud und ist von jedem Gerät dieselbe. Kein Konto für andere,
-keine Freigaben, keine Klassen: was hier steht, steht für eine Person.
+Sie läuft auf einem NAS im eigenen Heimnetz und ist von jedem Gerät dieselbe.
+Kein Konto für andere, keine Freigaben, keine Klassen: was hier steht, steht für
+eine Person.
 
 Was gebaut wird und warum, steht in [KONZEPT.md](KONZEPT.md).
 
@@ -31,16 +32,43 @@ Das Herzstück, und der Grund für fast alles, was seit dem 21. August dazukam:
    Stundenplan, sonst aus dem zuletzt fotografierten Blatt — und steht sichtbar
    auf dem Kamerabild.
 
-3. **Jemand sieht hin.** Läuft [der Postbote](harness/README.md) auf dem
-   eigenen Rechner, schaut er alle zwei Minuten in den Korb und setzt Claude auf
-   jedes Blatt an, das noch keinen Vorschlag hat. Er liest das Blatt,
-   entscheidet über das Fach, schlägt Titel und Themen vor und schreibt in eine
-   Notiz, was er **nicht** sicher weiß. Gemessen: 35 bis 50 Sekunden je Blatt.
+3. **Jemand sieht hin.** Läuft [der Postbote](harness/README.md), schaut er alle
+   zwei Minuten in den Korb und setzt Claude auf jedes Blatt an, das noch keinen
+   Vorschlag hat. Er liest das Blatt, entscheidet über das Fach, schlägt Titel
+   und Themen vor, **schreibt jede Seite wörtlich ab** und vermerkt in einer
+   Notiz, was er **nicht** sicher weiß.
 
-4. **Ein Druck.** Im Korb steht der Vorschlag mit Fach, Titel, Themen und Notiz.
-   *Übernehmen* schreibt ihn ans Blatt und hakt es ab. *Erst ansehen* führt zu
-   einem Formular, in dem sich alles noch ändern lässt, samt Gegenüberstellung
-   dessen, was sich ändern würde. *Verwerfen* wirft ihn weg.
+4. **Ein Druck.** Im Korb steht der Vorschlag mit Fach, Titel, Themen, Notiz und
+   der Abschrift. *Übernehmen* schreibt ihn ans Blatt und hakt es ab. *Erst
+   ansehen* führt zu einem Formular, in dem sich alles noch ändern lässt, samt
+   Gegenüberstellung dessen, was sich ändern würde. *Verwerfen* wirft ihn weg.
+
+### Die Abschrift
+
+Seit dem 5.9.2026 bleibt nicht nur das Foto, sondern auch **der Text darauf**.
+Das ist der Unterschied zwischen einem Bilderstapel und einer Ablage, in der man
+suchen kann.
+
+Wo das Modell sich nicht sicher war, steht die Stelle in ⟨spitzen Klammern⟩ —
+und genau die zeigt das Formular hervorgehoben an, mit der Zahl daneben. Man
+korrigiert also nicht den ganzen Text, sondern die drei Stellen, an denen es
+darauf ankommt. Die Zahl zählt beim Tippen mit; wenn sie auf null steht, ist man
+fertig.
+
+**Leer und ungelesen sind zweierlei.** Eine Seite, auf der wirklich nichts steht,
+ist gelesen. Eine, die zu unscharf war, ist es nicht und kommt nach einem
+besseren Foto wieder dran. Die App hält das an jeder Stelle auseinander — im
+Formular, im PDF und im Wiki.
+
+Aus dieser einen gespeicherten Abschrift entstehen die beiden Ausgaben:
+
+- **Ein PDF je Fach.** Ein Knopf auf der Fachseite legt alle Blätter des Fachs
+  zu einem Dokument zusammen, nach Thema gegliedert, jedes mit Foto und sauber
+  gesetztem Text. Zum Lernen am Stück lesbar, zum Ausdrucken.
+- **Eine tägliche Übergabe ans Wiki.** Einmal am Tag legt die App ihren ganzen
+  Bestand als Markdown in einen Ordner, aus dem ein eigener Agent ihn in ein
+  Obsidian-Vault einordnet. Die App ordnet dabei **nicht** selbst ein — sie
+  liefert flach und beschriftet ab. Mehr unter [Die Wiki-Übergabe](#die-wiki-übergabe).
 
 **Der Agent ändert nie etwas selbst.** Er darf lesen und vorschlagen, sonst
 nichts — kein Anlegen, kein Löschen, kein Bestätigen. Die letzte Entscheidung
@@ -77,8 +105,9 @@ App auf dem Startbildschirm.
 
 ## Erster Start
 
-Voraussetzung ist nur Node.js (getestet mit Version 24). Kein Docker, kein
-Datenbankserver.
+Zum Entwickeln ist nur Node.js nötig (getestet mit Version 24) — kein Docker und
+kein Datenbankserver. Im Betrieb ist beides im Spiel: dort läuft die App seit dem
+30.8.2026 in zwei Containern auf einem NAS, siehe [Betrieb](#betrieb).
 
 ```bash
 npm install
@@ -117,7 +146,7 @@ npm run build && npm run start
 | `npm run db:push` | Schemaänderungen in die Datenbank übertragen |
 | `npm run db:studio` | Datenbank im Browser ansehen |
 | `npm run db:backup` | Kopie der lokalen Datenbank nach `.backups/` |
-| `npm test` | 414 Tests in 77 Suiten — die reine Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala, Themen-Titel, Bildmaße, die Zahlen der Startseite, das Formular der Ablage, die Vorbelegung aus einem Vorschlag, die Verteilung der Fehlermeldungen, die angehakten Felder des Epochenwechsels — und für den Web MCP die Rückadressen, PKCE, der Rückweg nach dem Anmelden, der Umschlag des Protokolls, die Auflösung von Fach und Thema und der Werkzeugkasten |
+| `npm test` | 659 Tests in 128 Suiten — die reine Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala, Themen-Titel, Bildmaße, die Zahlen der Startseite, das Formular der Ablage, die Vorbelegung aus einem Vorschlag, die Verteilung der Fehlermeldungen, die angehakten Felder des Epochenwechsels — für den Web MCP die Rückadressen, PKCE, der Rückweg nach dem Anmelden, der Umschlag des Protokolls, die Auflösung von Fach und Thema und der Werkzeugkasten — und seit der Abschrift die ⟨spitzen Klammern⟩, die Auslegung der Formularfelder, die Deckung der beiden Schriften, der Bildkopf, der Dateiname und die Markdown-Verpackung feindlichen Textes |
 | `npm run lint` | ESLint |
 
 ## Aufbau
@@ -148,7 +177,7 @@ src/
     .well-known/      wo ein Agent diese App findet: die Beschreibung des
                       geschützten Servers und die des Ausstellers
     api/
-      mcp/            der MCP-Server — eine Adresse, elf Werkzeuge
+      mcp/            der MCP-Server — eine Adresse, zwölf Werkzeuge
       oauth/          Anmeldung eines Programms und der Tausch von Code
                       gegen Token
       material/       liefert die Bilder aus: /api/material/<seite> das
@@ -427,20 +456,30 @@ API-Schlüssel, keine Rechnung.
 
 Der Lauf, in den ein fremdes Blatt gerät, ist dabei leer geräumt: `--tools ""`
 nimmt die eingebauten Werkzeuge weg, `--strict-mcp-config` alle anderen Server.
-Übrig bleiben die elf Werkzeuge dieser App, gemessen und nachgezählt. Warum das
+Übrig bleiben die Werkzeuge dieser App, gemessen und nachgezählt. Warum das
 nötig ist und was sonst noch dahintersteht, steht in
 [harness/README.md](harness/README.md).
 
 ## Datenbank
 
-**Seit dem 23.8.2026 liegt die Datenbank in der Cloud** — ein Postgres bei Neon
-in Frankfurt. Die App läuft unter `schulapp-teal.vercel.app`, und `DATABASE_URL`
-steht sowohl in der Vercel-Umgebung als auch lokal in `.env.local`.
+**Seit dem 30.8.2026 läuft die App auf einem Synology-NAS im Heimnetz** — in
+zwei Containern, die App und ein Postgres 18 daneben. Erreichbar ist sie über
+Tailscale Funnel unter `https://treskownas.tail3a40b0.ts.net`, ohne einen
+offenen Port im Router. `DATABASE_URL` setzt die Compose-Datei auf dem NAS und
+zeigt auf den Datenbank-Container.
 
-Dass sie **auch beim Entwickeln** gilt, ist Absicht und keine Bequemlichkeit:
-liefe `npm run dev` weiter gegen die Datei-Datenbank, gäbe es zwei Bestände.
+> **Davor, vom 23. bis 30.8.2026:** Vercel als Hosting, eine Neon-Datenbank in
+> Frankfurt, die Adresse `schulapp-teal.vercel.app`. Beides ist abgeschaltet.
+> Wo im Repo noch die alte Adresse steht, ist es ein Rest und keine Auskunft.
+
+Dass die eine Datenbank **auch beim Entwickeln** gilt, war und bleibt Absicht:
+liefe `npm run dev` gegen eine eigene Datei-Datenbank, gäbe es zwei Bestände.
 Eine Hausaufgabe, am Laptop eingetragen, käme am Handy nie an — und gemerkt
-hätte man es erst, wenn sie in der Schule fehlt.
+hätte man es erst, wenn sie in der Schule fehlt. Mit dem Umzug ist diese Frage
+allerdings offen: die `DATABASE_URL` in der lokalen `.env.local` zeigt weiterhin
+auf Neon und damit ins Leere. Wer lokal entwickelt, entscheidet sich also
+zwischen der Datei-Datenbank (Variable herausnehmen) und einem Tunnel auf das
+NAS — beides ist vertretbar, nur nicht der jetzige Zustand.
 
 Ohne `DATABASE_URL` fällt dieselbe App auf **PGlite** zurück: ein echtes
 Postgres, das als Datei unter `.data/pglite` im Projekt liegt. Kein Server,
@@ -488,10 +527,46 @@ letzten Blätter mit.
 > Geprüft wird pro Anweisung und erst, nachdem alle Kommentare entfernt sind —
 > `ON DELETE cascade` in einem Fremdschlüssel darf deshalb durch.
 >
-> **Gegen die Cloud-Datenbank läuft `sql-einspielen.ts` bewusst nicht** (dort
-> gibt es keine Datei, die man vorher kopieren könnte). Für Neon ist der Weg
-> `npm run db:push` — oder, wenn dessen Rückfrage im Weg steht, dieselben
-> Anweisungen von Hand in einer Transaktion.
+> **Gegen eine entfernte Datenbank läuft `sql-einspielen.ts` bewusst nicht**
+> (dort gibt es keine Datei, die man vorher kopieren könnte).
+
+> ## ⚠ Der Fehler, der Erfolg meldet
+>
+> **Weder `npm run db:push` noch `npx tsx scripts/sql-einspielen.ts` erreichen
+> die laufende Datenbank.** Beide schreiben in die Datei-Datenbank unter
+> `.data/pglite`, und beide melden danach, es sei gutgegangen.
+>
+> Der Grund ist unspektakulär und deshalb tückisch: `DATABASE_URL` steht nur in
+> `.env.local`, und diese Datei liest **allein Next**. Weder `node` noch `tsx`
+> kennen sie, und das dotenv, das drizzle-kit mitbringt, sucht nach `.env` und
+> `.env.vault` — ein `.env` gibt es in diesem Repo nicht. Nachgemessen am
+> 5.9.2026: `npx tsx -e "console.log(process.env.DATABASE_URL ? 'SET':'UNSET')"`
+> antwortet `UNSET`.
+>
+> Zwei Folgen, beide still. Erstens landet die Änderung in einer Datei, die mit
+> der laufenden App nichts zu tun hat; der Fehler zeigt sich Tage später als
+> Laufzeitfehler in einer Abfrage. Zweitens **feuert der eingebaute Schutz in
+> `sql-einspielen.ts` nie** — er verweigert den Dienst bei gesetzter
+> `DATABASE_URL`, und gesetzt ist sie beim Aufruf eben nicht.
+>
+> Auf dem NAS geht eine Wanderung deshalb von Hand hinein, in einer
+> Transaktion, mit Abbruch beim ersten Fehler:
+>
+> ```bash
+> ssh leonard@192.168.178.90
+> cd /volume1/docker/schulapp
+> sudo docker compose exec -T db \
+>   psql -v ON_ERROR_STOP=1 --single-transaction \
+>        -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+>   < repo/scripts/abschrift-tabellen.sql
+> ```
+>
+> Und danach wird nachgesehen, statt es zu glauben:
+>
+> ```bash
+> sudo docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+>   -c '\d material_pages'
+> ```
 
 > **Vorsicht bei einer Rückfrage von `db:push`.** Das Werkzeug kann anbieten,
 > die Tabelle `lessons` zu leeren, weil es den eindeutigen Schlüssel
@@ -582,6 +657,146 @@ Lokal testest du sie so:
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/reminders
 ```
+
+## Das Fach-PDF
+
+`/faecher/<id>` hat einen Knopf *PDF erzeugen*. Er führt auf
+`/api/fach/<id>/pdf`, und dort entsteht das Dokument beim Abruf — es liegt
+nirgends herum und wird nirgends zwischengespeichert.
+
+Gegliedert wird **Fach → Thema → Blatt**, und jedes Blatt steht genau einmal:
+unter seinem ersten Thema, die übrigen stehen am Blatt. Unter jedem seiner
+Themen abgedruckt verdoppelte sich das Dokument samt Fotos, und „habe ich das
+schon gelesen?" wäre nicht mehr zu beantworten.
+
+**Zwei Schriften, und das ist keine Spielerei.** Gesetzt wird in Geist, damit
+das Dokument aussieht wie die App. Aber Geist fehlen `∈ ⊂ α β γ Δ θ σ` — und
+`⟨ ⟩`, also ausgerechnet die Klammern, mit denen unsichere Stellen markiert
+sind. Für genau diese Zeichen schaltet der Satz auf DejaVu Sans um, Zeichen für
+Zeichen. Ohne das stünde in jedem Mathe-PDF an jeder Formel ein leeres Kästchen,
+und gemerkt hätte man es erst nach dem Ausdrucken. Die Messung dahinter steht in
+[assets/schriften/README.md](assets/schriften/README.md).
+
+Was fehlt, wird gesagt statt verschwiegen: ein Foto im WebP-Format kann pdfkit
+nicht einbetten, ein Blatt kann die Bildgrenze reißen, ein Zeichen kann keiner
+der beiden Schriften bekannt sein. Jeder dieser Fälle steht an seiner Stelle im
+Dokument, und der Schluss zählt sie noch einmal auf.
+
+| Grenze | Wert | Warum |
+|---|---|---|
+| `PDF_SHEET_LIMIT` | 150 Blätter | Drei volle Runden der Auswahlschicht; deckt ein Schuljahr |
+| `PDF_IMAGE_BYTES` | 40 MB | Nicht eine Anzahl, weil achtzig Fotos je nach Blatt 16 oder 240 MB sind. Greift sie, läuft das Dokument als reiner Text weiter — die Abschriften bleiben vollständig |
+
+## Die Wiki-Übergabe
+
+Einmal täglich legt die App ihren ganzen Bestand als Markdown in einen Ordner.
+Ein **eigener Agent** holt ihn dort ab und ordnet ihn in ein Obsidian-Vault ein.
+
+**Die App ist Lieferant, nicht Bibliothekar.** Sie baut keine Fächer-Ordner nach
+und entscheidet nicht, wo im Vault etwas landet — das wäre eine Ordnung, die der
+Agent hinterher wieder auflösen müsste. Sie liefert flach und datiert:
+
+```
+<WIKI_EXPORT_DIR>/2026-09-05/
+  MANIFEST.md
+  fach-<uuid>.md
+  blatt-<uuid>.md
+  klausur-<uuid>.md
+  …
+```
+
+Drei Entscheidungen tragen das:
+
+- **Die Kennung ist dreierlei in einem** — Dateiname, Feld `id` im Frontmatter
+  und Zeilenschlüssel in der Tabelle `wiki_deliveries`. Sie ändert sich nie, auch
+  nicht beim Umbenennen. Ohne sie könnte der Agent „neu" nicht von „schon
+  abgelegt, nur geändert" unterscheiden, und nach zwei Wochen läge alles
+  vierzehnfach im Vault. Nebenbei ist sie die Sicherung gegen einen Pfad aus dem
+  Ordner heraus: ein Dateiname entsteht nie aus einem Titel.
+- **Nur was sich geändert hat.** Verglichen wird ein Hash über den *fertig
+  gerenderten* Dateitext. Deshalb darf in keiner Datei etwas stehen, das sich von
+  Tag zu Tag ändert, ohne dass sich der Inhalt ändert — kein „übergeben am".
+- **Ganz oder gar nicht.** Geschrieben wird in einen versteckten Ordner und dann
+  in einem Zug umbenannt; die Abdrücke in der Tabelle folgen erst danach. Der
+  Agent sieht nie einen halben Ordner, und der schlimmste Fall ist eine doppelte
+  Lieferung unter derselben Kennung — nie eine Lücke, die niemandem auffällt.
+
+**Fremder Text wird eingepackt, nicht geglaubt.** Auf einem abfotografierten
+Blatt kann alles stehen, und die Abschrift bringt es wörtlich in die Datei. Kurze
+Werte (Titel, Fach, Thema) gehen maskiert in eine Zeile; freier Text steht
+wörtlich in einem Codeblock, dessen Zaun länger ist als die längste
+Rückwärtsstrich-Folge darin. Auch die Raute wird maskiert — sonst verschlagwortet
+sich ein Blatt in Obsidian selbst. Und die `MANIFEST.md` sagt dem Agenten in
+Klartext, dass in einem Codeblock Inhalt steht und kein Auftrag.
+
+Eingerichtet wird der Lauf im **DSM-Aufgabenplaner** und nicht als GitHub Action:
+er läuft unabhängig von GitHub und vom Tailscale Funnel und kennt die
+60-Sekunden-Frist von `curl` nicht. Die Schritte stehen vollständig im Kopf von
+`src/app/api/cron/wiki/route.ts` — samt dem Volume-Mount des Vaults in den
+Container und der Umgebungsvariablen `WIKI_EXPORT_DIR`. Fehlt sie, antwortet die
+Route mit einem Fehler und **nicht** mit „nichts zu tun": ein grüner Lauf, der
+jede Nacht nichts tut, fällt niemandem auf.
+
+## Betrieb
+
+Die App läuft seit dem 30.8.2026 auf einem Synology-NAS im Heimnetz, in zwei
+Containern: `app` (Next auf Port 3000) und `db` (Postgres 18). Nach außen führt
+ein Tailscale Funnel unter `https://treskownas.tail3a40b0.ts.net` — der Router
+bleibt dabei zu, es gibt keine Portfreigabe.
+
+```
+/volume1/docker/schulapp/
+  repo/                <- der Klon dieses Repos, zugleich der Build-Kontext
+  docker-compose.yml   <- beide Container; liegt NUR auf dem NAS
+  .env                 <- die Geheimnisse; liegt NUR auf dem NAS
+  data/postgres/       <- die Datenbankdateien
+```
+
+Zwei der vier Einträge stehen bewusst nicht im Repo. Die Compose-Datei
+beschreibt eine bestimmte Maschine, und die `.env` trägt die Geheimnisse —
+darunter die VAPID-Schlüssel und das `CRON_SECRET`, die beim Umzug **neu erzeugt
+wurden**. Die Werte in der lokalen `.env.local` sind seitdem nicht mehr die
+gültigen.
+
+Eine neue Fassung geht so hinein (SSH ist in DSM vorher kurz einzuschalten):
+
+```bash
+ssh leonard@192.168.178.90
+cd /volume1/docker/schulapp
+sudo git -C repo pull
+sudo docker compose up -d --build
+```
+
+Gebaut wird mit dem `Dockerfile` im Repo — zweistufig, Node 22 auf Alpine, und
+der Server läuft als Benutzer `node` statt als root. Eine Sache muss die
+Compose-Datei dabei mitgeben, und sie fällt sonst niemandem auf:
+
+```yaml
+build:
+  args:
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+```
+
+Next backt jeden `NEXT_PUBLIC_`-Wert beim **Bauen** ein. Steht der Schlüssel in
+der Compose-Datei nur unter `environment`, ist er zur Laufzeit zwar gesetzt und
+wirkt trotzdem nicht: die Anmeldung für Push scheitert still, und in den
+Einstellungen steht nur noch der Satz über die fehlenden Schlüssel. Das
+Dockerfile schreibt deshalb drei Warnzeilen ins Bau-Protokoll, wenn das Argument
+leer ankommt.
+
+> **Auf dem NAS liegt ein unversioniertes `Dockerfile` im selben Ordner** — es
+> wurde dort von Hand angelegt, bevor eines im Repo stand. Sobald das
+> eingecheckte ankommt, bricht `git pull` dort mit „untracked working tree files
+> would be overwritten" ab. Vorher wegräumen — und am besten einmal gegen das
+> hier halten, denn das dort ist das erprobte Original und dieses hier der
+> Nachbau.
+
+Der Postbote läuft ebenfalls auf dem NAS, unter `/volume1/docker/postbote` mit
+einer eigenen `zugang.json`. Ein zweiter darf nirgendwo sonst laufen; warum,
+steht in [harness/README.md](harness/README.md). Und weil ein Zugang immer für
+die Adresse gilt, unter der zugestimmt wurde, braucht er nach dem Umzug eine
+**neue** Zustimmung gegen die NAS-Adresse — die alte zeigt auf Vercel und wird
+nirgends automatisch nachgezogen.
 
 ## Stand
 

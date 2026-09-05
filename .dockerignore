@@ -1,0 +1,104 @@
+# Was den Bau des Bildes nicht erreichen soll.
+#
+# Der Build-Kontext ist auf dem NAS der Git-Klon unter
+# /volume1/docker/schulapp/repo, auf diesem Rechner das Projektverzeichnis
+# selbst. Alles, was hier nicht ausgeschlossen ist, schickt Docker vor dem
+# ersten Befehl an den Daemon, und `COPY . .` in der Bau-Stufe holt es in eine
+# Schicht. Aus einer Schicht verschwindet nichts wieder: Ein späteres `rm`
+# löscht die Datei nur aus der Ansicht, im Bild bleibt sie liegen und lässt
+# sich auslesen.
+#
+# Drei Sorten Einträge stehen hier — Daten, Geheimnisse, Ballast —, und nur
+# die dritte ist eine Frage der Größe.
+
+
+# --- Daten ---------------------------------------------------------------
+#
+# .data/pglite ist die Schuldatenbank, .backups/ sind ihre Kopien — am
+# 23.8.2026 zusammen 900 MB, darunter jede Note und jede Hausaufgabe. Ein
+# Bild wird kopiert, weitergereicht und in Registries gelegt; dort hat der
+# Bestand eines einzelnen Schülers nichts verloren.
+#
+# Auf dem NAS läuft die App gegen den Postgres-Container nebenan, im Klon dort
+# sollte es beide Verzeichnisse also gar nicht geben. „Sollte" ist genau der
+# Grund, warum die Zeilen trotzdem hier stehen und man ihre Abwesenheit nicht
+# aus .gitignore erschließen muss.
+.data/
+.backups/
+
+
+# --- Geheimnisse ---------------------------------------------------------
+#
+# Die gültigen Werte stehen in der .env auf dem NAS und kommen zur Laufzeit
+# aus der Umgebung des Containers, nicht aus einer Schicht. Der Bau braucht
+# keine einzige dieser Dateien: Was er wissen muss, ist der öffentliche
+# VAPID-Schlüssel, und der kommt als ARG (siehe Dockerfile).
+#
+# Es geht dabei nicht nur um Geheimhaltung, sondern um falsche Werte. `next
+# build` liest von sich aus .env.production.local, .env.local, .env.production
+# und .env aus dem Arbeitsverzeichnis (nachgesehen in loadEnvConfig,
+# node_modules/@next/env/dist/index.js) und füllt damit alles, was in der
+# Umgebung noch leer ist. Die .env.local auf dem Mac trägt aber noch die
+# Schlüssel von vor dem Umzug am 30.8.2026 — ein Bau von diesem Rechner würde
+# sich also stillschweigend an einem Stand bedienen, den es nicht mehr gibt.
+#
+# .env.example steht nicht auf Nexts Liste und wäre harmlos; sie fällt
+# trotzdem mit heraus, damit die Regel eine Zeile bleibt und niemand im Kopf
+# behalten muss, welche Endungen gelesen werden und welche nicht.
+.env
+.env.*
+
+# harness/zugang.json trägt die Zugangsdaten des Postboten zum Web MCP. Der
+# Postbote läuft nicht in diesem Container, sondern eigenständig unter
+# /volume1/docker/postbote — im Bild hat sein ganzer Ordner nichts zu suchen.
+# Der Typprüfer vermisst ihn nicht: harness steht in der exclude-Liste der
+# tsconfig.json.
+harness/
+
+
+# --- Ballast -------------------------------------------------------------
+#
+# node_modules baut `npm ci` im Bild neu, und das ist keine Sparmaßnahme,
+# sondern Notwendigkeit: Die Fertigteile hier stammen von einem Mac
+# (@next/swc-darwin-arm64, sharp für macOS) und wären in einem Alpine-Container
+# unbrauchbar. Käme der Ordner mit, würde `npm ci` ihn zwar ersetzen — aber
+# erst, nachdem 536 MB (gemessen am 5.9.2026) durch den Daemon gelaufen sind.
+node_modules/
+
+# Der gebaute Stand von hier ist der Stand dieses Rechners. Im Bild entsteht
+# er neu; mitgeschickt würde er nur den ersten Bau verwirren und danach
+# überschrieben. .next/dev und .next/cache machen davon allein den Löwenanteil
+# aus (am 5.9.2026 269 MB und 169 MB).
+.next/
+out/
+build/
+
+# Git-Geschichte: Das Bild braucht keinen Klon, nur einen Stand.
+.git/
+.gitignore
+.github/
+
+# Was zu Vercel gehörte. Die App ist seit dem 30.8.2026 dort weg; im Bild
+# hätten diese drei ohnehin nie eine Aufgabe gehabt.
+.vercel/
+.vercelignore
+vercel.json
+
+# Anleitungen, Berichte, Entwürfe — nichts davon wird gebaut oder ausgeliefert.
+*.md
+*.pdf
+rueckblick.html
+neue/
+projekte/
+.claude/
+
+# Zwischenstände und Betriebssystem-Krümel.
+*.tsbuildinfo
+.tmp-readonly/
+.DS_Store
+npm-debug.log*
+
+# Sich selbst: Eine Änderung am Dockerfile ändert den Bau ohnehin, sie muss
+# nicht zusätzlich die Schicht mit dem Quelltext entwerten.
+Dockerfile
+.dockerignore

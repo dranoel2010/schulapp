@@ -27,7 +27,9 @@ automatisch geplanten Lernblöcken davor.
 - **Next.js (App Router) + TypeScript + Tailwind**
 - **PWA** — installierbar auf dem Homescreen, offline lesbar
 - **Postgres** als Datenbank, Zugriff über eine typsichere Schicht (Drizzle)
-- **Vercel** als Hosting, Deploy per Git-Push
+- **Hosting:** anfangs Vercel mit Deploy per Git-Push; seit dem 30.8.2026 zwei
+  Docker-Container auf einem Synology-NAS im Heimnetz, öffentlich über Tailscale
+  Funnel. Gezogen wird mit `git pull`, gebaut auf dem NAS
 - **Ein Login** mit Passwort + Session-Cookie
 
 Begründung: ein Codestand für beide Geräte, Sync ergibt sich aus dem Server,
@@ -318,7 +320,7 @@ Modell vorlegt. In der Claude-App ist der Schadensradius einer verunglückten
 Anweisung auf einem Blatt ein Chatverlauf.
 
 Seit dem 24.8.2026 ist dieser Weg gebaut und gelaufen: die Anmeldung eines
-Programms, die Zustimmung, der Tausch, elf Werkzeuge, ein Blatt als Bild und
+Programms, die Zustimmung, der Tausch, die Werkzeuge, ein Blatt als Bild und
 ein Vorschlag im Korb — alles gegen die echte Adresse geprüft. Was der zweite
 Grund verlangt, steht damit offen: fünf Blätter durchschicken und hinsehen.
 
@@ -407,10 +409,17 @@ kein Zugang, sondern ein Geschenk.
 
 ### Was der Agent kann
 
-Elf Werkzeuge, zehn davon lesen: Fächer, Themen, Stundenplan, Hausaufgaben,
+Zwölf Werkzeuge, elf davon lesen: Fächer, Themen, Stundenplan, Hausaufgaben,
 Klausuren samt Lernplan, Noten, die Ablage, ein Blatt, das Foto einer Seite,
-der Eingangskorb. Das elfte legt einen Vorschlag an. Kein Anlegen, kein
-Ändern, kein Löschen — und ausdrücklich auch kein Übernehmen eines Vorschlags.
+die Abschrift eines Blattes, der Eingangskorb. Das zwölfte legt einen Vorschlag
+an. Kein Anlegen, kein Ändern, kein Löschen — und ausdrücklich auch kein
+Übernehmen eines Vorschlags.
+
+Das elfte Lesewerkzeug, `read_transcript`, kam am 5.9.2026 mit der Abschrift
+dazu. Es steht neben `read_page` und nicht darin: `read_page` liefert das Foto,
+`read_transcript` den Wortlaut, den ein Mensch bestätigt hat. Getrennt sind sie,
+weil ein Blatt mit zwölf Seiten als Bilder nie in ein Werkzeugergebnis passte —
+als Text passt es.
 
 Jedes davon steht auch in der Oberfläche; die Regel „alles, was die KI kann,
 muss ich auch können" ist damit eingehalten, ohne dass eine Seite dazukommen
