@@ -630,6 +630,30 @@ export const materialPages = pgTable(
     reading: bytea("reading").notNull(),
     /** Dasselbe Blatt, lange Kante 320px — für Listen */
     thumb: bytea("thumb").notNull(),
+    /**
+     * Was auf dieser Seite steht — wörtlich abgeschrieben.
+     *
+     * Sie ist der eine neue Fakt, aus dem das Fach-PDF und die tägliche
+     * Wiki-Übergabe beide entstehen. Keine der beiden Ausgaben leitet etwas her
+     * und keine ruft ein Modell; sie lesen diese Spalte. Unterscheiden sie sich,
+     * ist das ein Fehler und keine Einstellung.
+     *
+     * Sie steht an der SEITE und nicht am Blatt, weil der Agent je Seite liest
+     * (`read_page`) und ein Blatt bis zu zwölf Seiten trägt (`MAX_PAGES` in
+     * @/lib/images).
+     *
+     * NULL und leerer String heißen NICHT dasselbe, und der Unterschied ist der
+     * Grund, warum hier kein `.notNull().default("")` steht. NULL heißt „noch
+     * niemand hat diese Seite gelesen" — der Normalzustand jeder Seite, die es
+     * vor dieser Spalte schon gab. Der leere String heißt „gelesen, und es stand
+     * nichts darauf". Fielen beide zusammen, käme jede leere Seite bei jedem Lauf
+     * wieder an die Reihe.
+     *
+     * Geschrieben wird sie ausschließlich beim Übernehmen eines Vorschlags, nie
+     * direkt von einem Agenten. Der Weg dorthin führt über
+     * `material_proposal_transcripts`.
+     */
+    transcript: text("transcript"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -784,6 +808,52 @@ export const materialProposalTopics = pgTable(
   },
   (t) => [
     index("material_proposal_topics_proposal_idx").on(t.proposalId, t.sortOrder),
+  ],
+);
+
+/**
+ * Die vorgeschlagene Abschrift einer Seite — ein Transportweg, kein Aufbewahrungsort.
+ *
+ * Ein Vorschlag wird beim Übernehmen gelöscht. Diese Zeile trägt die Abschrift
+ * also nur so lange, bis ein Mensch sie gesehen und bestätigt hat; danach steht
+ * sie in `material_pages.transcript` und hier nichts mehr. Das ist dieselbe
+ * Regel wie für Fach, Titel und Themen — der Bestand wird nur durch die
+ * Bestätigung geschrieben, nie direkt.
+ *
+ * Warum eine eigene Tabelle und nicht eine Spalte an `material_proposals`: die
+ * Abschrift gehört zu einer SEITE, und ein Blatt hat bis zu zwölf. Eine Spalte
+ * am Vorschlag müsste zwölf Texte in einem Feld unterbringen und beim
+ * Übernehmen wieder auseinandernehmen — ohne verlässlich zu wissen, welcher
+ * Text zu welcher Seite gehört. Genau das geht schief, sobald jemand zwischen
+ * Vorschlag und Bestätigung eine Seite löscht.
+ *
+ * Der zusammengesetzte Primärschlüssel ist die ganze Zeile: dieser Vorschlag,
+ * diese Seite, einmal. Beide Fremdschlüssel tragen "cascade", und für die Seite
+ * ist das die wichtigere Hälfte: wer eine unscharfe Aufnahme wegwirft und neu
+ * fotografiert, will nicht die Abschrift der alten übernehmen.
+ */
+export const materialProposalTranscripts = pgTable(
+  "material_proposal_transcripts",
+  {
+    proposalId: uuid("proposal_id")
+      .notNull()
+      .references(() => materialProposals.id, { onDelete: "cascade" }),
+    pageId: uuid("page_id")
+      .notNull()
+      .references(() => materialPages.id, { onDelete: "cascade" }),
+    /**
+     * Der Text. `notNull`, anders als an der Seite: hier gibt es den Zustand
+     * „noch nicht gelesen" nicht — wer nichts vorzuschlagen hat, legt keine
+     * Zeile an.
+     */
+    transcript: text("transcript").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      name: "material_proposal_transcripts_pk",
+      columns: [t.proposalId, t.pageId],
+    }),
+    index("material_proposal_transcripts_page_idx").on(t.pageId),
   ],
 );
 
@@ -968,6 +1038,142 @@ export const oauthGrants = pgTable(
   ],
 );
 
+/**
+ * Was schon im Wiki liegt — das Gedächtnis der täglichen Übergabe.
+ *
+ * Einmal am Tag legt die App alles in einen flachen, datierten Ordner; ein
+ * eigener Agent räumt es von dort in den Obsidian-Vault ein. Ohne diese Tabelle
+ * wäre jede Übergabe eine vollständige: nach vierzehn Tagen lägen vierzehn
+ * Fassungen desselben Blattes im Vault, und der Agent müsste jeden Morgen alles
+ * noch einmal einsortieren. Mit ihr enthält der Ordner ab dem zweiten Lauf nur
+ * noch das, was sich wirklich unterscheidet.
+ *
+ * ── `doc_id`: die feste Kennung ──────────────────────────────────────────────
+ *
+ * Sie ist dreierlei in einem: der Schlüssel dieser Zeile, der Dateiname im
+ * Übergabeordner (mit „.md" dahinter) und das Feld `id` im Frontmatter, an dem
+ * der Agent das Dokument wiedererkennt. Ihr Aufbau ist „<art>-<uuid>", also
+ * „blatt-3f2a…", „fach-9c11…", „stundenplan-<nutzer-uuid>".
+ *
+ * Die UUID ist die der Datenbank und ändert sich nie. Genau darauf steht und
+ * fällt die ganze Stufe: ohne stabile Kennung kann der Agent „neu" nicht von
+ * „liegt schon da, hat sich nur geändert" unterscheiden. Ein Dateiname aus dem
+ * Titel („Kettenregel Übungen.md") könnte das nicht — eine Umbenennung sähe aus
+ * wie ein neues Blatt, und nach zwei Wochen läge alles vierzehnfach im Vault.
+ *
+ * Der Dateiname wird deshalb NIE aus einem Titel oder einem Fachnamen gebaut.
+ * Das ist zugleich die Sicherung gegen einen Pfad, der aus dem Übergabeordner
+ * herausführt: ein Fach „Deutsch/Französisch" oder ein Titel „../../autostart"
+ * kann keinen Dateinamen beeinflussen, weil in ihn nur eine Art und eine UUID
+ * eingehen. Geprüft wird es trotzdem ein zweites Mal, in `fileNameFor()` in
+ * @/lib/wiki/folder.
+ *
+ * `kind` steht als eigene Spalte daneben und nicht bloß als Vorsilbe in der
+ * `doc_id`. Wenn eine Entität gelöscht wurde, meldet das MANIFEST sie nach Art
+ * gruppiert — und diese Zeile ist dann das Einzige, was von ihr übrig ist. Sie
+ * dafür an einem Bindestrich aufzutrennen wäre eine Zeichenkettenrechnung an
+ * der Stelle, an der man am wenigsten raten will.
+ *
+ * ── `hash`: woran „geändert" erkannt wird ────────────────────────────────────
+ *
+ * SHA-256 über den FERTIG GERENDERTEN Text der Datei, hexadezimal. Nicht über
+ * die Datenbankzeile: der Agent liest die gerenderte Datei, und nur ein Hash
+ * darüber erfasst auch eine Änderung an der Darstellung selbst — wer die
+ * Renderer anfasst, liefert die betroffenen Dateien dadurch von selbst neu aus.
+ *
+ * Daraus folgt eine Regel für @/lib/wiki, und sie ist scharf: **in einer
+ * gerenderten Datei darf nichts stehen, was sich von Tag zu Tag ändert, ohne
+ * dass sich der Inhalt ändert.** Kein „übergeben am", kein Zeitstempel des
+ * Laufs, keine Zählung wie „seit 12 Tagen". Stünde eines davon darin,
+ * unterschiede sich jede Datei jeden Tag von sich selbst, und die Übergabe wäre
+ * wieder eine vollständige — der Fehler wäre still, denn herauskommen würde
+ * etwas Richtiges, nur zu viel davon.
+ *
+ * Der Hash heilt außerdem den ausgefallenen Lauf: fällt eine Nacht aus, ist der
+ * nächste Lauf von selbst der Nachholer, weil alles verglichen wird und nicht
+ * bloß das seit gestern Angefasste. Dasselbe gilt für eine Korrektur, die einen
+ * alten Eintrag von vor einem halben Jahr betrifft.
+ *
+ * ── `title`, `folder`, `delivered_at` ────────────────────────────────────────
+ *
+ * `title` ist die zuletzt übergebene Überschrift, und sie steht hier für genau
+ * einen Fall: Wird eine Klausur gelöscht, soll im MANIFEST stehen, WELCHE
+ * entfallen ist. Zu diesem Zeitpunkt ist die Zeile in `exams` weg — aus der
+ * Datenbank ist nichts mehr zu holen, was einen Namen ergäbe. Ohne diese Spalte
+ * stünde dort eine nackte UUID, und der Agent müsste im Vault danach suchen.
+ *
+ * `folder` und `delivered_at` beantworten „wann und wo lag das zuletzt?". Das
+ * ist die Frage, die man stellt, wenn im Vault etwas fehlt: sie sagen, in
+ * welchem Übergabeordner nachzusehen ist.
+ *
+ * ── Was passiert, wenn ein Lauf mittendrin abbricht ──────────────────────────
+ *
+ * Hier wird erst geschrieben, wenn der fertige Übergabeordner an seinem Platz
+ * steht (siehe `publishHandover()` in @/lib/wiki/folder). Die umgekehrte
+ * Reihenfolge wäre die gefährliche: die App hielte Dateien für abgeliefert, die
+ * nie ankamen, und lieferte sie nie wieder — der Vault hätte eine Lücke, die
+ * niemand mehr sieht. So herum ist der schlimmste Fall eine doppelte Lieferung
+ * desselben Inhalts, und die erkennt der Agent an der `doc_id`.
+ *
+ * Eine Zeile für eine gelöschte Entität wird ebenfalls erst danach entfernt,
+ * also nachdem das MANIFEST, das den Wegfall meldet, im Ordner liegt.
+ *
+ * ── Was diese Tabelle NICHT weiß: wohin geliefert wurde ──────────────────────
+ *
+ * Sie merkt sich, WAS abgeliefert wurde, und nicht, in welchen Vault. Das ist
+ * eine bewusste Grenze und hat eine Folge, die man kennen muss: Zeigt
+ * `WIKI_EXPORT_DIR` plötzlich auf einen anderen, leeren Ordner, hält die App
+ * alles für längst geliefert und schreibt dorthin nichts mehr. Wer den Vault
+ * umzieht, nimmt seinen Inhalt mit.
+ *
+ * Wer wirklich alles noch einmal haben will — nach einem verlorenen Vault, oder
+ * um eine geänderte Darstellung im Ganzen auszurollen —, leert diese Tabelle:
+ *
+ *   delete from wiki_deliveries;
+ *
+ * Der nächste Lauf übergibt danach den vollständigen Bestand, so wie der
+ * allererste. Verloren geht dabei nichts: die Tabelle trägt keine Daten, nur
+ * Abdrücke von Daten, die anderswo stehen.
+ *
+ * ── Kein Index, keine `relations()` ──────────────────────────────────────────
+ *
+ * Gelesen wird ausschließlich „alle Zeilen eines Nutzers", und dafür ist der
+ * Primärschlüssel (user_id, doc_id) schon der richtige Index: `user_id` steht
+ * vorn. Ein zweiter wäre Schreiblast ohne Leser.
+ *
+ * `relations()` gibt es nicht, weil keine Abfrage diese Tabelle über
+ * `db.query` liest — und die eine Seite ohne die andere anzulegen hieße,
+ * `usersRelations` anzufassen. Der Fremdschlüssel mit „cascade" steht trotzdem:
+ * ohne den Nutzer ist eine Zeile darüber, was er im Wiki liegen hat, sinnlos.
+ */
+export const wikiDeliveries = pgTable(
+  "wiki_deliveries",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** „blatt-<uuid>" — Dateiname ohne „.md" und Kennung im Frontmatter */
+    docId: text("doc_id").notNull(),
+    /** fach | stundenplan | hausaufgabe | klausur | noten | blatt */
+    kind: text("kind").notNull(),
+    /** Die zuletzt übergebene Überschrift — für die Meldung „entfallen" */
+    title: text("title").notNull(),
+    /** SHA-256 über den gerenderten Dateitext, hex */
+    hash: text("hash").notNull(),
+    /** Name des Übergabeordners, in dem die Datei zuletzt lag, z.B. "2026-09-05" */
+    folder: text("folder").notNull(),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({
+      name: "wiki_deliveries_pk",
+      columns: [t.userId, t.docId],
+    }),
+  ],
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   oauthGrants: many(oauthGrants),
@@ -1105,6 +1311,7 @@ export const materialProposalsRelations = relations(
       references: [subjects.id],
     }),
     topics: many(materialProposalTopics),
+    transcripts: many(materialProposalTranscripts),
   }),
 );
 
@@ -1114,6 +1321,20 @@ export const materialProposalTopicsRelations = relations(
     proposal: one(materialProposals, {
       fields: [materialProposalTopics.proposalId],
       references: [materialProposals.id],
+    }),
+  }),
+);
+
+export const materialProposalTranscriptsRelations = relations(
+  materialProposalTranscripts,
+  ({ one }) => ({
+    proposal: one(materialProposals, {
+      fields: [materialProposalTranscripts.proposalId],
+      references: [materialProposals.id],
+    }),
+    page: one(materialPages, {
+      fields: [materialProposalTranscripts.pageId],
+      references: [materialPages.id],
     }),
   }),
 );
@@ -1178,6 +1399,10 @@ export type MaterialTopic = typeof materialTopics.$inferSelect;
 export type MaterialProposal = typeof materialProposals.$inferSelect;
 export type NewMaterialProposal = typeof materialProposals.$inferInsert;
 export type MaterialProposalTopic = typeof materialProposalTopics.$inferSelect;
+export type MaterialProposalTranscript =
+  typeof materialProposalTranscripts.$inferSelect;
+export type NewMaterialProposalTranscript =
+  typeof materialProposalTranscripts.$inferInsert;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type OauthClient = typeof oauthClients.$inferSelect;
 export type NewOauthClient = typeof oauthClients.$inferInsert;
@@ -1185,6 +1410,8 @@ export type OauthCode = typeof oauthCodes.$inferSelect;
 export type NewOauthCode = typeof oauthCodes.$inferInsert;
 export type OauthGrant = typeof oauthGrants.$inferSelect;
 export type NewOauthGrant = typeof oauthGrants.$inferInsert;
+export type WikiDelivery = typeof wikiDeliveries.$inferSelect;
+export type NewWikiDelivery = typeof wikiDeliveries.$inferInsert;
 
 /** Art einer Prüfung */
 export type ExamKind = "klausur" | "test" | "referat" | "muendlich";
