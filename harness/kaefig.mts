@@ -6,8 +6,7 @@ import path from "node:path";
 import { ANTWORT_SCHEMA, auftragFuer, type Antwort } from "./auftrag.mts";
 
 /**
- * Der Käfig: ein Claude-Lauf, der nichts kann außer den elf Werkzeugen dieser
- * App.
+ * Der Käfig: ein Claude-Lauf, der nichts kann außer den Werkzeugen dieser App.
  *
  * **Das ist die Stelle, an der eine Zeile in KONZEPT.md steht.** Dort hieß es,
  * Zettel gehörten nie in eine Claude-Code-Sitzung, „dort steht kein Bash und
@@ -24,7 +23,12 @@ import { ANTWORT_SCHEMA, auftragFuer, type Antwort } from "./auftrag.mts";
  *   des Postboten.
  *
  * Gemessen am 25.8.2026: ein so gestarteter Lauf, gefragt nach seinen
- * Werkzeugen, zählt genau elf auf — alle aus dieser App. Nach Bash gefragt,
+ * Werkzeugen, zählte genau elf auf — alle aus dieser App, und damals waren es
+ * elf. Seit dem 5.9.2026 sind es zwölf (`read_transcript` kam mit der Abschrift
+ * dazu); die Zahl steht hier bewusst als die GEMESSENE und wird nicht
+ * fortgeschrieben, sonst behauptete der Kommentar eine Messung, die niemand
+ * gemacht hat. Was die Messung zeigt, gilt unverändert: alles, was der Lauf
+ * sieht, kommt aus dieser App. Nach Bash gefragt,
  * antwortet er „KEIN-BASH". Ohne `--tools ""` führt derselbe Lauf `echo` aus,
  * obwohl Bash nicht in der Erlaubnisliste steht: `--allowedTools` ist eine
  * Regel über Erlaubnis, und die Einstellungen des Rechners können sie weiten.
@@ -56,23 +60,93 @@ const ERLAUBT = [
 /**
  * Wie lange ein Lauf höchstens dauern darf.
  *
- * Drei Minuten sind großzügig für „ein Bild lesen und einen Vorschlag
- * schreiben" und knapp genug, dass ein hängender Lauf den Dienst nicht für den
- * Abend blockiert. `claude` bringt selbst kein Zeitlimit mit.
+ * Die alte Rechnung waren drei Minuten für „ein Bild lesen und einen Vorschlag
+ * schreiben" — großzügig für ein Blatt, dessen ganze Ausgabe aus einem Fach,
+ * einem Thema und zwei Sätzen Notiz bestand.
+ *
+ * Seit der Abschrift (5.9.2026) sieht die Rechnung anders aus. Im dichtesten
+ * Fall schreibt derselbe Lauf zwölf Seiten (MAX_PAGES in @/lib/images) zu je
+ * 8 000 Zeichen ab: 96 000 Zeichen, grob 25 000 Token, die Zeichen für Zeichen
+ * erzeugt werden müssen. Mit überschlagenen 50 Token in der Sekunde sind das
+ * rund acht Minuten, in denen nichts geschieht außer Schreiben — und davor
+ * liegen noch zwölf Bilder, die gelesen und je einmal durch die Leitung
+ * geschickt werden wollen. Drei Minuten hätten so ein Blatt mitten in der
+ * vierten Seite abgeschnitten.
+ *
+ * Fünfzehn Minuten sind dafür großzügig gerechnet und immer noch eine Grenze:
+ * ein hängender Lauf blockiert den Dienst, er beendet ihn nicht. `claude`
+ * bringt selbst kein Zeitlimit mit.
+ *
+ * Die Zahl ist überschlagen und nicht gemessen — ein Blatt mit zwölf vollen
+ * Seiten gab es hier noch nicht. Wer nachmessen will, findet die tatsächliche
+ * Dauer in jeder Zeile „Vorschlag liegt im Korb (… s)".
+ *
+ * Was das kostet, steht in postbote.mts: PRO_RUNDE ist drei, und drei Läufe,
+ * die alle in die Frist laufen, halten eine Runde eine Dreiviertelstunde auf.
+ * Genau deshalb bricht ein Zeitablauf seit dem 5.9.2026 nur noch dieses eine
+ * Blatt ab und nicht mehr die ganze Runde — siehe `LaufErgebnis`.
  */
-const FRIST_MS = 180_000;
+const FRIST_MS = 900_000;
 
 /**
- * Wie viele Züge ein Lauf hat. Ein Blatt mit zwölf Seiten braucht zwölf
- * read_page plus read_sheet, read_topics und propose_sheet — zwanzig lässt Luft
- * und zieht trotzdem eine Grenze gegen ein Modell, das sich verrennt.
+ * Wie viele Züge ein Lauf hat.
+ *
+ * Die Rechnung: read_sheet, read_subjects, read_topics und propose_sheet sind
+ * vier Aufrufe, dazu bis zu zwölf read_page (MAX_PAGES in @/lib/images) —
+ * sechzehn. Neu ist, dass der Auftrag verlangt, die Abschrift DIREKT NACH JEDEM
+ * BILD aufzuschreiben statt am Ende alles auf einmal aus dem Gedächtnis; das
+ * sind bis zu zwölf weitere Züge, in denen gar kein Werkzeug läuft. Macht
+ * achtundzwanzig im dichtesten Fall.
+ *
+ * Vierzig lässt Luft für einen Fehlgriff — ein Werkzeug, das nein sagt und noch
+ * einmal richtig gerufen wird — und zieht trotzdem eine Grenze gegen ein
+ * Modell, das sich verrennt.
+ *
+ * Zwanzig waren es vorher, und zwanzig wären ab jetzt die schlechteste aller
+ * Grenzen: ein zwölfseitiges Blatt liefe mitten in der Abschrift aus den Zügen,
+ * also BEVOR propose_sheet an die Reihe kommt. Herauskäme ein Lauf, der die
+ * ganze Arbeit gemacht und nichts abgeliefert hat.
  */
-const MAX_ZUEGE = 20;
+const MAX_ZUEGE = 40;
 
-/** Was bei einem Lauf herauskommt — auch wenn er scheitert. */
+/**
+ * Was bei einem Lauf herauskommt — auch wenn er scheitert.
+ *
+ * **„Später" war bis zum 5.9.2026 eins und ist seitdem zweierlei.** Beide Fälle
+ * sagen dasselbe über das Blatt: es ist nicht erledigt, merk es dir nicht als
+ * abgearbeitet. Sie unterscheiden sich in der Frage, die unmittelbar danach
+ * kommt — lohnt es sich, im selben Durchgang das NÄCHSTE Blatt anzufassen?
+ *
+ * Bei einem leeren Kontingent (429) lautet die Antwort nein. Das Kontingent
+ * gehört dem Abo und nicht dem Blatt; der nächste Lauf bekommt dieselbe Absage,
+ * nur schneller. Drei Blätter hintereinander gegen dieselbe Wand zu fahren
+ * kostet zwar nichts, füllt aber das Mitlesen mit drei gleichlautenden Zeilen
+ * und verdeckt damit, was eigentlich los ist. Dasselbe gilt für eine API, die
+ * mit 500 antwortet, und für ein `claude`, das sich gar nicht erst starten
+ * lässt — da ist kein Modell im Spiel, sondern eine kaputte Installation.
+ *
+ * Bei einem Zeitablauf lautet die Antwort ja. Die Frist gehört dem BLATT: sie
+ * läuft ab, weil dieses eine zwölf volle Seiten hat, weil die Handschrift zäh
+ * ist, weil das Modell sich an einer Stelle festgebissen hat. Über das nächste
+ * Blatt sagt das nichts — es hat vielleicht eine Seite und ist in vierzig
+ * Sekunden fertig. Die Runde deswegen abzubrechen hieß bisher: ein einziges
+ * zähes Blatt hält den ganzen Stapel auf, und zwar jede Runde aufs Neue, denn
+ * es steht ja weiterhin vorn im Korb. Mit einer Frist von fünfzehn Minuten
+ * wäre aus dem Schönheitsfehler ein Dienst geworden, der nichts mehr schafft.
+ */
 export type LaufErgebnis =
   | { art: "antwort"; antwort: Antwort; kostenUsd: number; dauerMs: number }
-  /** Etwas ging schief, aber es lohnt ein späterer Versuch (Kontingent, Netz, Frist). */
+  /**
+   * Nicht dieser Lauf war das Problem, sondern das, worauf jeder Lauf sich
+   * stützt: Kontingent leer, API weg, `claude` startet nicht. Die Runde hört
+   * auf; das Blatt bleibt ungemerkt.
+   */
+  | { art: "pause"; grund: string }
+  /**
+   * Dieser eine Lauf ist nicht fertig geworden (Frist). Das Blatt bleibt
+   * ungemerkt und ist beim nächsten Durchgang wieder dran — die Runde macht
+   * mit dem nächsten Blatt weiter.
+   */
   | { art: "spaeter"; grund: string }
   /** Der Lauf ist gelaufen und hat nichts zustande gebracht. Nicht wiederholen. */
   | { art: "nichts"; grund: string };
@@ -173,8 +247,11 @@ function starten(
 
     kind.on("error", (grund) => {
       clearTimeout(frist);
+      // „pause" und nicht „spaeter": wenn `claude` sich nicht starten lässt,
+      // fehlt es im Pfad oder darf nicht ausgeführt werden. Beim nächsten Blatt
+      // fehlt es genauso.
       fertig({
-        art: "spaeter",
+        art: "pause",
         grund: `claude ließ sich nicht starten: ${grund.message}`,
       });
     });
@@ -183,7 +260,13 @@ function starten(
       clearTimeout(frist);
 
       if (abgebrochen) {
-        fertig({ art: "spaeter", grund: `Frist von ${FRIST_MS / 1000} s überschritten` });
+        // Der eine Fall, der ausdrücklich NICHT die Runde beendet: die Frist
+        // gehört diesem Blatt (zwölf Seiten, zähe Handschrift), nicht dem
+        // Dienst. Ausführlich an `LaufErgebnis`.
+        fertig({
+          art: "spaeter",
+          grund: `Frist von ${Math.round(FRIST_MS / 60_000)} Minuten überschritten`,
+        });
         return;
       }
 
@@ -206,6 +289,18 @@ function starten(
  *   hat.** Die Wahrheit steht in `is_error` und `api_error_status`.
  * - **429 heißt warten, nicht scheitern.** Das Kontingent des Abos ist leer;
  *   dasselbe Blatt später noch einmal ist richtig, ein „nichts" wäre falsch.
+ *   Es wird zu „pause" und nicht zu „spaeter": leer ist das Kontingent für alle
+ *   Blätter dieser Runde, nicht nur für dieses.
+ *
+ * **Und die Falle, die still zuschlägt:** das Rückgabeobjekt unten wird Feld
+ * für Feld von Hand abgeschrieben. Das ist Absicht — was hier ankommt, hat ein
+ * Modell erzeugt, und `structured_output` einfach durchzureichen hieße, ihm die
+ * Form der Antwort zu überlassen. Der Preis dafür ist, dass ein NEUES Feld im
+ * Schema still verschwindet, wenn es hier nicht auch abgeschrieben wird: es
+ * steht im Typ, der Compiler sieht kein Problem (es kommt ja aus einem `as`),
+ * und im Mitlesen steht dann eine Null. Genau das ist am 5.9.2026 beinahe mit
+ * `seiten` und `abschriften` passiert. Wer das Schema erweitert, erweitert
+ * diese Stelle mit.
  */
 function auswerten(aus: string, fehlerAus: string, code: number | null): LaufErgebnis {
   let ergebnis: {
@@ -223,18 +318,22 @@ function auswerten(aus: string, fehlerAus: string, code: number | null): LaufErg
     ergebnis = JSON.parse(aus.trim());
   } catch {
     const kurz = (aus || fehlerAus).trim().split("\n").pop() ?? "";
+    // Auch das ist „pause": wer statt JSON etwas anderes schreibt, ist nicht an
+    // diesem Blatt gescheitert. Das sind die Fälle „nicht angemeldet", „andere
+    // Fassung von claude", „unbekanntes Argument" — sie treffen das nächste
+    // Blatt genauso, und dann steht der Satz wenigstens einmal da statt dreimal.
     return {
-      art: "spaeter",
+      art: "pause",
       grund: `claude antwortete nicht in JSON (exit ${code}): ${kurz.slice(0, 200)}`,
     };
   }
 
   if (ergebnis.api_error_status === 429) {
-    return { art: "spaeter", grund: "Kontingent erschöpft (429)" };
+    return { art: "pause", grund: "Kontingent erschöpft (429)" };
   }
 
   if (ergebnis.api_error_status && ergebnis.api_error_status >= 500) {
-    return { art: "spaeter", grund: `Die API war nicht erreichbar (${ergebnis.api_error_status})` };
+    return { art: "pause", grund: `Die API war nicht erreichbar (${ergebnis.api_error_status})` };
   }
 
   if (ergebnis.is_error || code !== 0) {
@@ -267,9 +366,31 @@ function auswerten(aus: string, fehlerAus: string, code: number | null): LaufErg
       ergebnis: antwort.ergebnis,
       vorschlagId: antwort.vorschlagId,
       themen: antwort.themen ?? [],
+      // Zahl oder nichts: `?? 0` ließe eine "9" aus dem Modell als Zeichenkette
+      // durch, und die stünde später im Mitlesen als „9 von 12" da, während
+      // jede Rechnung damit schiefginge.
+      seiten: zahl(antwort.seiten),
+      abschriften: zahl(antwort.abschriften),
       grund: antwort.grund ?? "",
     },
     kostenUsd: ergebnis.total_cost_usd ?? 0,
     dauerMs: ergebnis.duration_ms ?? 0,
   };
+}
+
+/**
+ * Eine Zahl aus etwas, das ein Modell geschrieben hat.
+ *
+ * Das Schema verlangt `integer`, und in aller Regel kommt auch eine Zahl an.
+ * Der Typ `Antwort` sagt es ebenfalls — nur steht dahinter ein `as`, und ein
+ * `as` prüft nichts. Was hier wirklich ankommt, ist geparstes JSON aus einem
+ * fremden Prozess; „12" mit Anführungszeichen, `null` oder ein fehlendes Feld
+ * sind alle möglich, ohne dass der Compiler etwas merkt. Eine 0 ist an dieser
+ * Stelle die ehrlichste Antwort: sie sagt „unbekannt" und rechnet sich nicht
+ * heimlich als NaN durch das Mitlesen.
+ */
+function zahl(wert: unknown): number {
+  return typeof wert === "number" && Number.isFinite(wert) && wert >= 0
+    ? Math.round(wert)
+    : 0;
 }

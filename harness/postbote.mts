@@ -210,10 +210,29 @@ async function runde(
       modell,
     );
 
-    if (ergebnis.art === "spaeter") {
-      sagen(`   später noch einmal: ${ergebnis.grund}`);
-      // Nicht merken — dieses Blatt ist beim nächsten Durchgang wieder dran.
+    // Zwei Arten von „später", und sie unterscheiden sich hier in genau einem
+    // Wort: `return` beendet die Runde, `continue` nimmt das nächste Blatt.
+    // Gemeinsam ist beiden das Wichtigere — das Blatt wird NICHT gemerkt und
+    // ist beim nächsten Durchgang wieder dran. Warum die beiden getrennt
+    // gehören, steht ausführlich an `LaufErgebnis` in kaefig.mts; kurz: das
+    // leere Kontingent gehört dem Abo und trifft das nächste Blatt genauso, die
+    // abgelaufene Frist gehört diesem Blatt und sagt über das nächste nichts.
+    if (ergebnis.art === "pause") {
+      sagen(`   Runde abgebrochen: ${ergebnis.grund}`);
       return;
+    }
+
+    if (ergebnis.art === "spaeter") {
+      sagen(`   übersprungen, später noch einmal: ${ergebnis.grund}`);
+      // Ein Blatt, das jedes Mal in die Frist läuft, kommt auch jedes Mal
+      // wieder und kostet dann jede Runde einen ganzen Lauf, ohne je fertig zu
+      // werden. Eine zweite Merkliste („dreimal versucht, jetzt lass es") wäre
+      // die Antwort darauf, und sie steht hier bewusst nicht: das eine
+      // Gedächtnis dieses Dienstes ist mit Absicht das einzige, und ein
+      // Zähler, den niemand sieht, wäre der Anfang einer zweiten Warteschlange
+      // neben dem Korb. Wer so ein Blatt loswerden will, trägt seine id von
+      // Hand in gesehen.json ein — oder fotografiert es besser ab.
+      continue;
     }
 
     gesehen.add(zeile.id);
@@ -234,6 +253,22 @@ async function runde(
       // auf die Kreditkarte. Er steht trotzdem da: er ist das einzige Maß
       // dafür, wie teuer ein Blatt den Tag macht.
       sagen(`   Vorschlag liegt im Korb: ${themen} (${dauer}, entspricht ${kostenUsd.toFixed(2)} $)`);
+
+      // Die Abschrift bekommt eine eigene Zeile, und zwar mit beiden Zahlen.
+      // „9 von 12" ist die einzige Stelle, an der jemand, der nur das Mitlesen
+      // vor sich hat, merkt, dass drei Seiten nicht zu lesen waren — und das
+      // ist der Hinweis, das Blatt noch einmal zu fotografieren. Ein bloßes
+      // „abgeschrieben" verschwiege genau den Fall, der einen Blick wert ist.
+      // Bei `seiten === 0` bleibt die Zeile weg: dann hat das Modell die Zahl
+      // nicht gefüllt, und „0 von 0" wäre eine Behauptung und keine Auskunft.
+      if (gesagt.seiten > 0) {
+        const offen = gesagt.seiten - gesagt.abschriften;
+        sagen(
+          `   Abschrift: ${gesagt.abschriften} von ${gesagt.seiten} Seiten` +
+            (offen > 0 ? ` — ${offen} nicht zu lesen, bleibt offen` : ""),
+        );
+      }
+
       if (gesagt.grund) sagen(`   dazu: ${gesagt.grund}`);
     } else {
       sagen(`   kein Vorschlag: ${gesagt.grund || "ohne Angabe"} (${dauer})`);

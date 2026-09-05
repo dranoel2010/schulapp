@@ -1,8 +1,9 @@
 # Der Postbote
 
 Sieht alle paar Minuten in den Eingangskorb der Schulapp und setzt Claude auf
-jedes Blatt an, das noch keinen Vorschlag hat. Vom Foto bis zum Vorschlag ohne
-einen Handgriff.
+jedes Blatt an, das noch keinen Vorschlag hat: er liest die Seiten, schlägt
+Fach, Titel und Themen vor — und schreibt ab, was daraufsteht. Vom Foto bis zum
+Vorschlag ohne einen Handgriff.
 
 **Er gehört nicht zur App.** Die App weiß nichts von ihm, hat keinen Schlüssel
 und ruft nie ein Modell. Der Postbote ist ein Programm auf deinem Rechner, das
@@ -26,6 +27,25 @@ npx tsx harness/zugang.mts
 Danach steht der Postbote in der App unter *Einstellungen → Verbundene
 Programme*, neben Claude, mit eigenem **Trennen**-Knopf.
 
+### Die Adresse hat sich geändert
+
+`zugang.json` zeigt hier noch auf `https://schulapp-teal.vercel.app`. Die App
+läuft aber seit dem 30.8.2026 nicht mehr dort, sondern auf dem NAS unter
+`https://treskownas.tail3a40b0.ts.net` (Tailscale Funnel).
+
+Ein Zugang gilt für die Adresse, unter der zugestimmt wurde — sie steht als
+`origin` und `resource` in `zugang.json`, und das Token ist für genau diese
+`resource` ausgestellt. Umschreiben lässt sich das nicht: **ein Postbote gegen
+die neue Adresse braucht eine neue Zustimmung.** Es ist eine andere App mit
+einer anderen Datenbank; von der alten Zustimmung weiß sie nichts.
+
+```bash
+npx tsx harness/zugang.mts https://treskownas.tail3a40b0.ts.net
+```
+
+Die Adresse muss dabei mitgegeben werden: die Vorgabe in `zugang.mts`
+(`VORGABE_ORIGIN`) ist ebenfalls noch die alte.
+
 ## Laufen lassen
 
 ```bash
@@ -39,11 +59,12 @@ npx tsx harness/postbote.mts --modell sonnet
 So sieht eine Runde aus:
 
 ```
-16:14:52  Postbote wach. https://schulapp-teal.vercel.app/api/mcp
+16:14:52  Postbote wach. https://treskownas.tail3a40b0.ts.net/api/mcp
 16:14:54  1 Blatt/Blätter zu bearbeiten.
 16:14:54  → e8545329 „Blatt vom 25.8." (Geografie)
-16:15:30     Vorschlag liegt im Korb: Vulkanismus (35 s, entspricht 0.33 $)
-16:15:30     dazu: Thema „Vulkanismus" ist im Geografie-Vokabular neu
+16:16:39     Vorschlag liegt im Korb: Vulkanismus (105 s, entspricht 0.41 $)
+16:16:39     Abschrift: 2 von 3 Seiten — 1 nicht zu lesen, bleibt offen
+16:16:39     dazu: Seite 3 ist verwackelt; Thema „Vulkanismus" ist im Geografie-Vokabular neu
 ```
 
 ## Der Käfig
@@ -59,7 +80,10 @@ mit drei Schaltern, die **Fähigkeiten wegnehmen statt sie zu verbieten**:
 | `--mcp-config` | genau einer: die Schulapp, mit dem Token des Postboten |
 
 Gemessen am 25.8.2026: Ein so gestarteter Lauf, nach seinen Werkzeugen gefragt,
-zählt **genau elf** auf — alle aus dieser App. Nach Bash gefragt: „KEIN-BASH".
+zählte **genau elf** auf — alle aus dieser App. Nach Bash gefragt: „KEIN-BASH".
+(Elf waren es an jenem Tag; seit dem 5.9.2026 sind es zwölf. Die Zahl steht hier
+als die gemessene — was sie zeigt, ist nicht ihre Höhe, sondern dass nichts
+Fremdes dabei war.)
 
 Der Unterschied ist wichtig: **ohne `--tools ""` führt derselbe Lauf `echo`
 aus**, obwohl Bash nicht in der Erlaubnisliste steht. `--allowedTools` ist eine
@@ -67,7 +91,7 @@ Regel über Erlaubnis, und die Einstellungen des Rechners können sie weiten.
 Wegnehmen schlägt Verbieten.
 
 Dazu: Der Lauf arbeitet in einem leeren, frisch angelegten Verzeichnis, das
-danach gelöscht wird. Und er darf von den elf Werkzeugen nur fünf — vier zum
+danach gelöscht wird. Und er darf von allen Werkzeugen nur fünf — vier zum
 Lesen (`read_sheet`, `read_page`, `read_subjects`, `read_topics`) und
 `propose_sheet`. Sonst nichts.
 
@@ -98,6 +122,87 @@ Tabelle ohne ein einziges Fachwort —, lässt er es stehen und schreibt in die
 Notiz, dass er es nicht bestimmen konnte. Ein geratenes Fach ist schlimmer als
 ein offen gelassenes: das Blatt liegt danach dort, wo es niemand sucht.
 
+## Die Abschrift
+
+Seit dem 5.9.2026 schreibt der Lauf zusätzlich ab, was auf den Seiten steht —
+wörtlich, Seite für Seite. Sie reist als `transcripts` im Vorschlag mit und
+wird, wie alles andere daran, erst dann geschrieben, wenn **du** den Vorschlag
+übernimmst.
+
+Sie hängt an der **Seite** und nicht am Blatt, weil je Seite gelesen wird
+(`read_page`) und an ein Blatt bis zu zwölf Seiten passen.
+
+Was der Auftrag dafür verlangt:
+
+- **Abschreiben, nicht zusammenfassen.** Jede Zeile so, wie sie dasteht. Was
+  eine Zusammenfassung weglässt, findet später niemand wieder.
+- **Die Schreibweise des Schülers bleibt stehen**, auch die falsche, und die
+  Groß-/Kleinschreibung auch. Wer korrigiert, macht aus dem Heft ein anderes
+  Heft — und der Mensch sucht danach nach seiner eigenen Schreibweise.
+- **Unsicheres kommt in ⟨spitze Klammern⟩.** `⟨Kettenregel⟩` heißt „so lese ich
+  es, sicher bin ich nicht"; `⟨unleserlich⟩` heißt, dass da nichts zu erkennen
+  war. Geraten wird nie ohne Klammern: eine Lücke sieht man, eine glatte
+  Erfindung nicht.
+- **Höchstens 8 000 Zeichen je Seite.** Ein Werkzeugergebnis endet in der
+  Claude-App bei rund 150 000 Zeichen; zwölf Seiten mal 8 000 sind 96 000 und
+  lassen Luft für den Rest.
+
+### Leer ist nicht dasselbe wie fehlt
+
+Auf diesem Unterschied steht die ganze Sache:
+
+| Was ankommt | Was es heißt |
+|---|---|
+| ein leerer Text | gelesen, es stand nichts darauf — die leere Rückseite ist erledigt |
+| die Seite fehlt ganz | diese Seite hat noch niemand gelesen — sie ist später wieder dran |
+
+Deshalb **lässt der Lauf eine Seite, die er nicht lesen kann, weg**, statt sie
+zu raten oder leer zu melden, und schreibt in die Notiz, welche es war.
+
+Und deshalb ist eine unvollständige Abschrift **kein** Grund, den Vorschlag
+ganz zu lassen. Die alte Regel „unscharfes Foto → kein Vorschlag" galt, solange
+alles an einer Frage hing: in welches Fach gehört das Blatt? Die Abschrift hängt
+dagegen an der Seite — elf gestochen scharfe Seiten wegzuwerfen, weil die
+zwölfte verwackelt ist, wäre der schlechtere Handel. Das Foto wird von allein
+nicht besser; die verwackelte Seite bleibt offen und ist nach einer neuen
+Aufnahme wieder dran.
+
+Nur wenn **keine einzige** Seite zu lesen ist, bleibt es beim alten Ergebnis:
+kein Vorschlag.
+
+### Was sie am Lauf ändert
+
+| | vorher | jetzt |
+|---|---|---|
+| Züge (`--max-turns`) | 20 | **40** |
+| Frist | 3 Minuten | **15 Minuten** |
+
+Die Rechnung steht in `kaefig.mts`: sechzehn Werkzeugaufrufe im dichtesten Fall
+und bis zu zwölf Züge, in denen nur geschrieben wird — dazu 96 000 Zeichen
+Ausgabe, die überschlagen acht Minuten dauern. Beide Zahlen sind gerechnet und
+nicht gemessen; was ein Lauf wirklich braucht, steht in jeder Zeile „Vorschlag
+liegt im Korb (… s)". Mit den alten zwanzig Zügen liefe ein zwölfseitiges Blatt
+mitten in der Abschrift aus — also bevor `propose_sheet` an die Reihe käme.
+
+## Ein zähes Blatt hält die Runde nicht auf
+
+Nicht jedes „später" heißt dasselbe, und seit dem 5.9.2026 unterscheidet der
+Postbote die beiden:
+
+| Was passiert | Was er tut |
+|---|---|
+| Kontingent leer (429), API weg, `claude` startet nicht | **Runde abbrechen** — das nächste Blatt liefe in dieselbe Wand |
+| Die Frist ist abgelaufen | **dieses Blatt überspringen**, weiter mit dem nächsten |
+
+Das Kontingent gehört dem Abo, die Frist gehört dem Blatt: dass dieses eine
+zwölf volle Seiten hat, sagt über das nächste nichts. Mit fünfzehn Minuten
+Frist hätte ein einziges zähes Blatt sonst jede Runde aufgehalten.
+
+Gemerkt wird in beiden Fällen nichts — das Blatt ist beim nächsten Durchgang
+wieder dran. Ein Blatt, das jedes Mal in die Frist läuft, kommt allerdings auch
+jedes Mal wieder; es von Hand in `gesehen.json` einzutragen ist der Weg, es
+loszuwerden.
+
 ## Nur einer auf einmal
 
 Zwei Postboten auf derselben `zugang.json` beenden einander. Das
@@ -118,10 +223,12 @@ nur du, im Formular, wie immer. Das ist dieselbe Regel wie für jeden Agenten an
 dieser App, und der Postbote ist keine Ausnahme davon, sondern ihr erster
 Anwendungsfall.
 
-**Er stupst nichts an und wird nicht angestupst.** Die App ruft ihn nicht —
-sie läuft in der Cloud, dein Rechner steht hinter deinem Router, und eine
-ausgehende Verbindung nach draußen hat sie bewusst nicht. Der Korb ist die
-Warteschlange: ein Blatt ohne Vorschlag ist die offene Aufgabe.
+**Er stupst nichts an und wird nicht angestupst.** Die App ruft ihn nicht — sie
+kennt ihn gar nicht, und eine ausgehende Verbindung zu irgendeinem Dienst hat
+sie bewusst nicht. Wo die beiden stehen, ist deshalb gleichgültig: die App
+inzwischen auf dem NAS, der Postbote auf einem Rechner daneben oder auf dem
+Raspberry. Der Korb ist die Warteschlange: ein Blatt ohne Vorschlag ist die
+offene Aufgabe.
 
 **Er wiederholt sich nicht.** Welche Blätter schon einen Lauf hatten, steht in
 `gesehen.json`. Ohne diese Liste käme ein verworfener Vorschlag beim nächsten
@@ -133,8 +240,14 @@ Nichts an Geld — es läuft über dein Claude-Abo, nicht über einen API-Schlü
 Ein `ANTHROPIC_API_KEY` in der Umgebung wird beim Start ausdrücklich entfernt,
 damit nicht versehentlich doch abgerechnet wird.
 
-Es kostet Kontingent: ein Blatt entspricht rund 0,30 $, wenn man denselben Lauf
-über die API bezahlt hätte. `--modell sonnet` drückt das deutlich.
+Es kostet Kontingent: ein einseitiges Blatt entspricht rund 0,30 $, wenn man
+denselben Lauf über die API bezahlt hätte. `--modell sonnet` drückt das
+deutlich.
+
+Die Abschrift macht es teurer, und zwar an der teuren Stelle: sie ist Ausgabe,
+und Ausgabe wiegt schwerer als Eingabe. Ein Blatt mit zwölf vollen Seiten ist
+der Fall, an dem man es merkt — bis zu 96 000 Zeichen, die geschrieben werden
+wollen. Was ein Blatt wirklich gekostet hat, steht am Ende seiner Zeile.
 
 ## Zwei Dateien, die nicht in Git gehören
 
@@ -164,7 +277,11 @@ Vorschläge am selben Blatt.
 |---|---|
 | `Kein Zugang unter …` | `npx tsx harness/zugang.mts` läuft noch nicht |
 | `Die Verbindung gilt nicht mehr` | getrennt, abgelaufen oder ein Token doppelt benutzt — neu zustimmen |
-| `Kontingent erschöpft (429)` | das Abo ist für den Moment leer; er versucht es später wieder |
+| `Kontingent erschöpft (429)` | das Abo ist für den Moment leer; die Runde hört auf, der nächste Durchgang versucht es wieder |
+| `Frist von 15 Minuten überschritten` | dieses Blatt war zu zäh — es wird übersprungen und ist nächste Runde wieder dran |
+| `Runde abgebrochen: …` | nicht das Blatt ist schuld, sondern der Dienst: Kontingent, API oder `claude` selbst |
+| `claude antwortete nicht in JSON` | meistens: nicht angemeldet oder eine andere Fassung von `claude` |
+| `Abschrift: 2 von 3 Seiten` | eine Seite war nicht zu lesen; sie gilt weiter als ungelesen — neu abfotografieren |
 | `Port 41751 ist belegt` | dort lauscht etwas anderes; die Rückadresse ist angemeldet und lässt sich nicht ausweichen |
 | `Es läuft schon ein Postbote` | genau das — die Nummer steht daneben, `kill` sie oder lass den anderen laufen |
 | `Der Lauf wollte etwas, das er nicht darf` | der Käfig hat zugeschlagen — steht auf dem Blatt eine Anweisung? |
