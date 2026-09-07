@@ -84,6 +84,8 @@ type Offen = {
   blatt: BlattZeile;
   seiten: number;
   ungelesen: number;
+  /** Hängt schon ein Vorschlag daran, der auf einen Menschen wartet? */
+  vorschlag: boolean;
 };
 
 function argument(name: string): string | undefined {
@@ -101,6 +103,36 @@ function sagen(satz: string): void {
   console.log(`${jetzt}  ${satz}`);
 }
 
+/** Was ein Fehlschlag zu sagen hat, gleich womit er geworfen wurde. */
+function fehlertext(grund: unknown): string {
+  return grund instanceof Error ? grund.message : String(grund);
+}
+
+/**
+ * Die Blätter, an denen schon ein Vorschlag hängt.
+ *
+ * Ein Vorschlag ist eine Abschrift, die es gibt — sie steht nur noch nicht am
+ * Blatt, weil niemand sie übernommen hat. Für die Nachlese ist das trotzdem
+ * erledigte Arbeit: sie noch einmal zu machen hieße, ein zweites Mal zu
+ * bezahlen und dem Menschen zwei Vorschläge an dasselbe Blatt zu legen, die er
+ * dann gegeneinander halten darf.
+ *
+ * Der Postbote hat diese Regel von Anfang an (`proposals.length === 0` in
+ * `offene()`); der Nachlese fehlte sie, und am 7.9.2026 hätte das nach einem
+ * Lauf, der auf halber Strecke abbrach, prompt sechs Blätter doppelt
+ * abgeschrieben.
+ */
+async function mitVorschlag(verbindung: Verbindung): Promise<Set<string>> {
+  const antwort = await verbindung.werkzeug("read_inbox", { limit: 200 });
+  const zeilen = (antwort.daten ?? []) as KorbZeile[];
+
+  return new Set(
+    zeilen
+      .filter((zeile) => zeile.proposals.length > 0)
+      .map((zeile) => zeile.id),
+  );
+}
+
 /**
  * Sucht die Blätter mit ungelesenen Seiten.
  *
@@ -113,6 +145,7 @@ function sagen(satz: string): void {
 async function offeneBlaetter(verbindung: Verbindung): Promise<Offen[]> {
   const liste = await verbindung.werkzeug("read_material", {});
   const blaetter = (liste.daten ?? []) as BlattZeile[];
+  const haengtSchon = await mitVorschlag(verbindung);
 
   const offen: Offen[] = [];
 
@@ -126,7 +159,12 @@ async function offeneBlaetter(verbindung: Verbindung): Promise<Offen[]> {
     ).length;
 
     if (ungelesen > 0) {
-      offen.push({ blatt, seiten: detail.pages.length, ungelesen });
+      offen.push({
+        blatt,
+        seiten: detail.pages.length,
+        ungelesen,
+        vorschlag: haengtSchon.has(blatt.id),
+      });
     }
   }
 
@@ -174,12 +212,24 @@ async function schweigenGeprueft(
   return verstoesse;
 }
 
-/** Ein Blatt durch den Käfig. Gibt zurück, ob weitergemacht werden darf. */
+/**
+ * Wie ein Blatt ausgegangen ist.
+ *
+ * „ohne" ist kein Fehler und trotzdem kein Erfolg: der Lauf ist zu Ende
+ * gekommen und hat nichts vorgeschlagen — die Frist lief ab, das Modell winkte
+ * ab, oder die API hat die Ausgabe verweigert. Es steht hier als eigener Wert,
+ * weil der Schlusssatz sonst „fertig" meldet und die Blätter verschweigt, die
+ * leer ausgingen. Am 7.9.2026 waren das zwei von vierzehn, und im Log stand
+ * darüber ein grüner Satz.
+ */
+type Ausgang = "vorschlag" | "ohne" | "schluss";
+
+/** Ein Blatt durch den Käfig. */
 async function nachlesen(
   verbindung: Verbindung,
   offen: Offen,
   modell: string | undefined,
-): Promise<"weiter" | "schluss"> {
+): Promise<Ausgang> {
   const kurz = offen.blatt.id.slice(0, 8);
   sagen(
     `→ ${kurz} „${offen.blatt.title}" (${offen.blatt.subject}) — ` +
@@ -205,12 +255,12 @@ async function nachlesen(
 
   if (ergebnis.art === "spaeter") {
     sagen(`   übersprungen, später noch einmal: ${ergebnis.grund}`);
-    return "weiter";
+    return "ohne";
   }
 
   if (ergebnis.art === "nichts") {
     sagen(`   kein Vorschlag: ${ergebnis.grund}`);
-    return "weiter";
+    return "ohne";
   }
 
   const { antwort, kostenUsd, dauerMs } = ergebnis;
@@ -218,7 +268,7 @@ async function nachlesen(
 
   if (antwort.ergebnis !== "vorschlag") {
     sagen(`   kein Vorschlag: ${antwort.grund || "ohne Angabe"} (${dauer})`);
-    return "weiter";
+    return "ohne";
   }
 
   sagen(
@@ -228,20 +278,37 @@ async function nachlesen(
 
   // Die Zahl oben ist die des Modells. Die Zeile hier ist gemessen — und sie
   // ist die einzige, die etwas beweist.
-  const verstoesse = await schweigenGeprueft(verbindung, offen.blatt.id);
-  if (verstoesse.length > 0) {
+  //
+  // Sie darf dabei aber nicht mehr umwerfen als sich selbst. Am 7.9.2026 ist
+  // genau hier ein „fetch failed" hochgeschlagen und hat einen Lauf nach sechs
+  // von vierzehn Blättern beendet — die Kontrollabfrage beendete den Stapel,
+  // den sie kontrollieren sollte, und das ausgerechnet NACH dem Vorschlag: der
+  // lag längst im Korb, die Arbeit war getan und bezahlt. Geht sie schief,
+  // bleibt der Vorschlag eben ungeprüft, und das steht als Zeile da.
+  let verstoesse: string[] | null = null;
+  try {
+    verstoesse = await schweigenGeprueft(verbindung, offen.blatt.id);
+  } catch (grund) {
+    sagen(`   ⚠ nicht geprüft: ${fehlertext(grund)}`);
+    sagen(
+      "     Der Vorschlag liegt trotzdem im Korb — ob er nur Abschriften " +
+        "nennt, zeigt dann erst die Gegenüberstellung.",
+    );
+  }
+
+  if (verstoesse !== null && verstoesse.length > 0) {
     sagen(`   ⚠ ACHTUNG: der Vorschlag nennt auch ${verstoesse.join(", ")}.`);
     sagen(
       "     Beim Übernehmen ersetzt das, was am Blatt steht — sieh dir die " +
         "Gegenüberstellung genau an, statt zu bestätigen.",
     );
-  } else {
+  } else if (verstoesse !== null) {
     sagen("   geprüft: der Vorschlag sagt nur Abschriften, sonst nichts.");
   }
 
   if (antwort.grund) sagen(`   dazu: ${antwort.grund}`);
 
-  return "weiter";
+  return "vorschlag";
 }
 
 async function main(): Promise<void> {
@@ -267,12 +334,28 @@ async function main(): Promise<void> {
     `${offen.length} Blatt/Blätter mit zusammen ${seitenGesamt} ungelesenen Seiten.`,
   );
 
+  const wartend = offen.filter((eintrag) => eintrag.vorschlag).length;
+  if (wartend > 0) {
+    sagen(
+      `Davon ${wartend} mit einem Vorschlag, der auf einen Menschen wartet — ` +
+        "die werden übersprungen.",
+    );
+  }
+
   if (nurDieses) {
     const eintrag = offen.find((kandidat) => kandidat.blatt.id === nurDieses);
     if (!eintrag) {
       sagen(
         `Das Blatt ${nurDieses.slice(0, 8)} steht nicht darunter — es gibt es ` +
           "nicht, oder alle seine Seiten sind schon gelesen.",
+      );
+      return;
+    }
+
+    if (eintrag.vorschlag) {
+      sagen(
+        `An ${nurDieses.slice(0, 8)} hängt schon ein Vorschlag. Übernimm oder ` +
+          "verwirf ihn erst — sonst liegen zwei am selben Blatt.",
       );
       return;
     }
@@ -286,7 +369,8 @@ async function main(): Promise<void> {
     for (const eintrag of offen) {
       console.log(
         `  ${eintrag.blatt.id}  ${eintrag.ungelesen}/${eintrag.seiten} offen  ` +
-          `„${eintrag.blatt.title}" (${eintrag.blatt.subject})`,
+          `„${eintrag.blatt.title}" (${eintrag.blatt.subject})` +
+          (eintrag.vorschlag ? "  — Vorschlag wartet, wird übersprungen" : ""),
       );
     }
     console.log(
@@ -298,16 +382,77 @@ async function main(): Promise<void> {
     return;
   }
 
-  const dran = offen.slice(0, Math.max(0, anzahl));
-  if (dran.length < offen.length) {
+  const anstehend = offen.filter((eintrag) => !eintrag.vorschlag);
+
+  if (anstehend.length === 0) {
+    sagen(
+      "An jedem offenen Blatt hängt schon ein Vorschlag — es gibt nichts zu " +
+        "tun, bis die übernommen oder verworfen sind.",
+    );
+    return;
+  }
+
+  const dran = anstehend.slice(0, Math.max(0, anzahl));
+  if (dran.length < anstehend.length) {
     sagen(`Davon werden ${dran.length} bearbeitet.`);
   }
 
+  /*
+   * Ein Blatt, das scheitert, darf die übrigen nicht mitnehmen.
+   *
+   * Der Lauf ist lang — vierzehn Blätter sind zehn Minuten —, und die
+   * Verbindung geht über den Funnel nach draußen und wieder herein. Ein
+   * „fetch failed" dazwischen ist keine Ausnahme, sondern gehört dazu. Was ein
+   * gescheitertes Blatt kostet, ist ein Blatt; was ein abgebrochener Stapel
+   * kostet, sind alle danach — und beim nächsten Anlauf fangen sie wieder von
+   * vorn an.
+   *
+   * Zwei Ausnahmen bleiben. `ZugangVerloren` trifft jedes weitere Blatt
+   * genauso; da hilft kein Weitermachen, sondern nur eine neue Zustimmung.
+   * Und wer dreimal hintereinander scheitert, scheitert nicht mehr am Blatt —
+   * dann ist der Dienst weg, und die restlichen Läufe wären Wartezeit mit
+   * Kontingent daran.
+   */
+  let hintereinander = 0;
+  let gescheitert = 0;
+  let leer = 0;
+
   for (const eintrag of dran) {
-    if ((await nachlesen(verbindung, eintrag, modell)) === "schluss") break;
+    try {
+      const ausgang = await nachlesen(verbindung, eintrag, modell);
+      if (ausgang === "schluss") break;
+      if (ausgang === "ohne") leer += 1;
+      hintereinander = 0;
+    } catch (grund) {
+      if (grund instanceof ZugangVerloren) throw grund;
+
+      hintereinander += 1;
+      gescheitert += 1;
+      sagen(`   ✗ ${fehlertext(grund)}`);
+      sagen("     Das Blatt bleibt offen und ist beim nächsten Lauf dran.");
+
+      if (hintereinander >= 3) {
+        sagen("Dreimal hintereinander gescheitert — der Lauf hört hier auf.");
+        break;
+      }
+    }
   }
 
-  sagen("Nachlese fertig. Was dabei herauskam, liegt als Vorschlag im Korb.");
+  // Der Schlusssatz nennt beides, was NICHT herauskam. Ein „fertig" über einer
+  // halben Arbeit ist schlimmer als gar keine Zusammenfassung: es wird gelesen
+  // und geglaubt.
+  const offengeblieben = [
+    gescheitert > 0 ? `${gescheitert} mit einem Fehler` : null,
+    leer > 0 ? `${leer} ohne Vorschlag` : null,
+  ].filter((teil): teil is string => teil !== null);
+
+  sagen(
+    offengeblieben.length === 0
+      ? `Nachlese fertig, alle ${dran.length} Blätter liegen als Vorschlag im Korb.`
+      : `Nachlese fertig: ${dran.length - gescheitert - leer} von ` +
+          `${dran.length} Blättern liegen im Korb, ${offengeblieben.join(", ")}. ` +
+          "Die übrigen bleiben offen und sind beim nächsten Lauf wieder dran.",
+  );
 }
 
 main().catch((grund: unknown) => {
