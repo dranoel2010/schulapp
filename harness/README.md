@@ -211,10 +211,19 @@ frisches, der andere legt das alte vor — und das ist genau das Muster, auf das
 die App wartet. Sie kann „mein zweites Ich" nicht von „jemand hat das Token"
 unterscheiden und lehnt ab.
 
-Deshalb legt der Postbote beim Start `lauf.lock` an. Läuft dort noch ein
-Prozess, startet der zweite gar nicht erst und sagt, welche Nummer zu beenden
-wäre. Nach einem Absturz steht in der Datei eine Nummer, unter der niemand mehr
-läuft — dann gilt sie nicht und wird weggeräumt.
+Deshalb legt der erste, der startet, `lauf.lock` an — Postbote und Nachlese
+teilen sich die Sperre, und weil sie damit eine Abmachung zwischen zweien ist,
+steht sie in `sperre.mts` und nicht in einem von beiden. Läuft unter der
+notierten Nummer noch ein Prozess, startet der zweite gar nicht erst und sagt,
+welche Nummer zu beenden wäre. Nach einem Absturz steht dort eine Nummer, unter
+der niemand mehr läuft — dann gilt sie nicht und wird weggeräumt.
+
+Auf dem NAS läuft der Postbote als Dienst und hält die Sperre folglich immer.
+Wer nachlesen will, hält ihn so lange an: `docker compose stop postbote`,
+hinterher `start`. Und der Haken dabei: `docker stop` schickt SIGTERM, und Node
+führt dabei keine `exit`-Handler mehr aus. Die Sperrdatei bleibt also liegen,
+mit einer Nummer, die es im nächsten Container zufällig wieder geben kann — sie
+gehört danach von Hand weg, sonst sperrt sie den nächsten Lauf grundlos aus.
 
 ## Was er nicht tut
 
@@ -233,6 +242,49 @@ offene Aufgabe.
 **Er wiederholt sich nicht.** Welche Blätter schon einen Lauf hatten, steht in
 `gesehen.json`. Ohne diese Liste käme ein verworfener Vorschlag beim nächsten
 Durchgang wieder.
+
+## Die Nachlese
+
+Der Postbote arbeitet aus dem Eingangskorb, und der Korb ist die Warteschlange:
+ein Blatt, das du durchgesehen hast, ist für ihn erledigt. Das war richtig,
+solange das Einordnen die ganze Arbeit war. Mit der Abschrift ist daraus eine
+Lücke geworden — die Blätter von vorher sind eingeordnet, ohne dass je jemand
+gelesen hätte, was auf ihnen steht, und sie kämen nie wieder an die Reihe. Fach-
+PDF und Wiki-Übergabe zeigten für sie auf Dauer „noch niemand gelesen".
+
+Dafür gibt es `nachlese.mts`:
+
+```
+npx tsx harness/nachlese.mts                    # zeigt nur, was anläge
+npx tsx harness/nachlese.mts --blatt <id>       # genau dieses eine Blatt
+npx tsx harness/nachlese.mts --alle             # alle, der Reihe nach
+npx tsx harness/nachlese.mts --alle --anzahl 3  # höchstens drei
+```
+
+**Ohne Angabe tut sie nichts.** Fünfzehn Blätter sind fünfzehn Käfigläufe auf
+demselben Kontingent, aus dem auch der Postbote lebt; ein Aufruf ohne Argumente
+listet deshalb nur auf. Das ist die Umkehrung der Vorsicht beim Postboten — dort
+ist Laufen der Normalfall — und sie steht hier, weil eine Nachlese nichts
+verpasst, wenn sie eine Stunde später startet.
+
+**Sie ist kein zweiter Postbote.** Kein Dienst, keine Schleife, kein Gedächtnis:
+sie läuft, wenn du sie startest, und ist danach fertig. Ihr Gedächtnis ist die
+Datenbank — eine Seite mit `transcriptChars: null` IST die offene Aufgabe, so
+wie beim Postboten das Blatt ohne Vorschlag. Auch den Käfig teilt sie mit ihm,
+mitsamt Erlaubnisliste, Frist und Kontingent; einzig der Auftrag ist ein
+anderer.
+
+**Ihr Auftrag nennt genau ein Feld: `transcripts`.** Das Blatt ist ja schon
+eingeordnet, und ein Vorschlag ersetzt beim Übernehmen, was er nennt. Ein
+besserer Titel oder eine hilfreichere Notiz wäre deshalb kein Beitrag, sondern
+ein stiller Tausch gegen deine eigene Arbeit — am wenigsten auffällig
+ausgerechnet bei der Notiz, und die gibt niemand wieder her. Seiten, die schon
+eine Abschrift haben, lässt sie aus demselben Grund weg: eine bestätigte
+Abschrift durch eine ungeprüfte zu ersetzen wäre kein Fortschritt.
+
+Nach jedem Lauf liest sie den eigenen Vorschlag zurück und sagt, ob er das
+Schweigen gehalten hat. Die Prosa im Auftrag ist eine Bitte; erst diese Zeile
+ist eine Messung.
 
 ## Was es kostet
 
@@ -285,3 +337,5 @@ Vorschläge am selben Blatt.
 | `Port 41751 ist belegt` | dort lauscht etwas anderes; die Rückadresse ist angemeldet und lässt sich nicht ausweichen |
 | `Es läuft schon ein Postbote` | genau das — die Nummer steht daneben, `kill` sie oder lass den anderen laufen |
 | `Der Lauf wollte etwas, das er nicht darf` | der Käfig hat zugeschlagen — steht auf dem Blatt eine Anweisung? |
+| `Not logged in · Please run /login` | auf diesem Rechner ist `claude` selbst nicht angemeldet. Im Container: `docker compose run --rm -it postbote claude`, darin `/login` — die Anmeldung landet im eingehängten `claude-home` und überlebt Neustart und Neubau |
+| `Die Nachlese kann nicht starten` | der Postbote hält die Sperre. Ihn anhalten — und eine nach `docker stop` liegengebliebene `lauf.lock` entfernen |

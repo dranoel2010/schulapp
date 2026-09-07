@@ -156,12 +156,21 @@ export type LaufErgebnis =
  *
  * `token` ist ein frisches Zugriffs-Token des Postboten — es gilt eine Stunde,
  * und der Lauf dauert Minuten; erneuert wird also vor dem Start, nicht während.
+ *
+ * **`auftrag` ist der einzige Weg, denselben Käfig für etwas anderes zu
+ * benutzen** — die Nachlese (harness/nachlese.mts) gibt hier ihren eigenen
+ * Auftrag herein. Alles übrige bleibt gleich, und das ist der Punkt: dieselbe
+ * Erlaubnisliste, dieselbe Frist, dasselbe Kontingent, dasselbe Antwortschema.
+ * Ein zweiter Käfig neben diesem wäre eine zweite Stelle, an der man vergessen
+ * kann, `read_transcript` NICHT zu erlauben. Ohne Angabe gilt der Auftrag zum
+ * Einordnen, und für den Postboten ändert sich damit nichts.
  */
 export async function laufFuerBlatt(
   blattId: string,
   adresse: string,
   token: string,
   modell?: string,
+  auftrag?: string,
 ): Promise<LaufErgebnis> {
   const arbeitsplatz = mkdtempSync(path.join(tmpdir(), "postbote-"));
 
@@ -182,21 +191,26 @@ export async function laufFuerBlatt(
   );
 
   try {
-    return await starten(blattId, arbeitsplatz, mcpDatei, modell);
+    return await starten(
+      auftrag ?? auftragFuer(blattId),
+      arbeitsplatz,
+      mcpDatei,
+      modell,
+    );
   } finally {
     rmSync(arbeitsplatz, { recursive: true, force: true });
   }
 }
 
 function starten(
-  blattId: string,
+  auftrag: string,
   arbeitsplatz: string,
   mcpDatei: string,
   modell: string | undefined,
 ): Promise<LaufErgebnis> {
   const argumente = [
     "-p",
-    auftragFuer(blattId),
+    auftrag,
     "--tools",
     "",
     "--strict-mcp-config",
