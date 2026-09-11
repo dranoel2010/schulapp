@@ -58,3 +58,9 @@ rueckblick.html
 # einziges `git add -A` genügte sonst, und zurücknehmen lässt sich ein Push
 # nicht: die Datei stünde weiter in der Historie.
 *.pdf
+
+# Der Zwischenstand von `drizzle-kit generate`. Der gepflegte Stand liegt in
+# scripts/ als benannte Wanderung mit Begründung im Kopf; dieses Verzeichnis
+# entsteht bei jedem Lauf neu und liefe sonst mit einem `git add -A` als
+# zweiter, ungepflegter Wanderungsstand mit ins Repo.
+/drizzle/

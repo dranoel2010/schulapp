@@ -165,6 +165,11 @@ src/
                       epoche/ trägt den Hauptunterricht auf ein anderes Fach um
       hausaufgaben/   Liste zum Abhaken, anlegen und ändern
       lernen/         der Lernplan — abhaken, Fortschritt, Countdown
+      abruf/          Fragen aus den eigenen Blättern, in festem Takt wieder
+                      vorgelegt: sitzung/ ist der Abend selbst, bausteine/
+                      der Bestand und bausteine/neu/ das Anlegen von Hand.
+                      Die Musterlösung wird NICHT mit der Seite ausgeliefert
+                      — sie kommt erst nach dem abgeschickten Versuch zurück
       klausuren/      Termine eintragen und ändern
       noten/          Schnitt je Fach und gesamt, eintragen und ändern;
                       fach/ zeigt ein Fach mit allen seinen Noten
@@ -288,6 +293,24 @@ src/
     form-errors.ts  wo eine zod-Meldung landet — unter ihrem Feld oder über
                     dem ganzen Formular (getestet)
     theme.ts        hell, dunkel oder dem Gerät überlassen
+
+  recall/         der Abrufkern — ein Paket im Haus, kein Ordner daneben
+    schema.ts       drei eigene Tabellen mit Präfix `recall_`; src/db/schema.ts
+                    bleibt unberührt, weil das der Vertrag ist und dies eine
+                    Wette (g = 0,095 gegen ein gut geführtes Heft, n. s.)
+    schedule.ts     wann ein Baustein wieder drankommt: fester Takt, harter
+                    Klausurtermin, zwei Betriebsarten — und ausdrücklich kein
+                    lernender Algorithmus (g = 0,034 bei I² = 0 %) (getestet)
+    items.ts        anlegen, auflisten, zurückziehen — und die Tür, an der die
+                    Quellbindung durchgesetzt wird: das Zitat muss wörtlich in
+                    der Abschrift stehen und darf keine ⟨Klammern⟩ enthalten
+    sessions.ts     der Abend: was fällig ist, der Versuch, das Urteil. Ein
+                    Termin schließt nur bei einem korrekten Abruf — was
+                    danebengeht, kommt noch am selben Abend wieder
+    source.ts       die EINZIGE Stelle, an der der Kern in den Bestand der
+                    Schulapp sieht. Wird er herausgelöst, ist es diese Datei
+    grenzen.test.ts hält genau das fest — kein .tsx im Kern, nur vier erlaubte
+                    Importe, kein Schreiben in fremde Tabellen (getestet)
 
 harness/          der Postbote — gehört NICHT zur App, sondern benutzt sie
   zugang.mts        einmal zustimmen, danach ein eigener Zugang

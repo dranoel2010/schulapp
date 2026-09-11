@@ -135,6 +135,22 @@ const ITEMS: NavItem[] = [
     ),
   },
   {
+    href: "/abruf",
+    label: "Abruf",
+    // Ein Pfeil, der aus einem Blatt herauszeigt: hier wird herausgeholt, was
+    // darin steht. Nicht noch ein Häkchen — der Punkt daneben hakt ab, dieser
+    // fragt ab, und zwei gleiche Symbole nebeneinander wären zwei Namen für
+    // dieselbe Sache.
+    icon: (
+      <>
+        <path d="M7.5 3.75h6.25L19 9v11.25H7.5z" />
+        <path d="M13.5 3.75V9H19" />
+        <path d="M5 14.5h7" />
+        <path d="m9.25 11.75 2.75 2.75-2.75 2.75" />
+      </>
+    ),
+  },
+  {
     href: "/klausuren",
     label: "Klausuren",
     icon: (
@@ -251,6 +267,10 @@ const SECTION_TITLES: Record<string, string> = {
   "/stundenplan/zeiten": "Stundenzeiten",
   "/stundenplan/epoche": "Epoche wechseln",
   "/lernen": "Lernen",
+  "/abruf": "Abruf",
+  "/abruf/sitzung": "Abend",
+  "/abruf/bausteine": "Bausteine",
+  "/abruf/bausteine/neu": "Baustein anlegen",
   "/klausuren": "Klausuren",
   "/klausuren/neu": "Neue Klausur",
   "/hausaufgaben": "Hausaufgaben",

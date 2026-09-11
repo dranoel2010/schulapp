@@ -263,6 +263,9 @@ function homeData(overrides: Partial<HomeData> = {}): HomeData {
     // rechnen nicht mit ihm. Eine Zahl über null stünde hier als Behauptung
     // über Blätter, die diese Vorgabe gar nicht hat (`materials: []`).
     inboxCount: 0,
+    // Der Abrufkern hat hier keine Rolle: geprüft wird die Startseite, nicht
+    // das Modul. Null heißt „heute nichts fällig" und ist der ruhige Fall.
+    recallDue: 0,
     ...overrides,
   };
 }

@@ -325,6 +325,34 @@ export function HomeTiles({ data }: { data: HomeData }) {
           href="/faecher"
         />
 
+        {/* Der Abruf: die Fragen aus den eigenen Blättern.
+
+            Er steht neben „Lernen" und nicht darunter versteckt, weil er
+            dasselbe beantwortet wie die Kachel daneben — „was ist heute zu
+            tun?" —, nur mit einem anderen Mittel: „Lernen" plant Zeit, „Abruf"
+            fragt ab. Die Warnfarbe steht nur da, wo wirklich etwas wartet;
+            „0 fällig" in Bernstein wäre ein Alarm ohne Anlass.
+
+            Eine Serie, eine Quote oder ein Punktestand stehen hier nicht und
+            sollen nicht: Gamification erreicht 0,22 und 0,27 und ist damit
+            nicht signifikant, und eine sichtbar gebrochene Serie senkt das
+            Weitermachen auf 45,21 gegen 60,90 Prozent ganz ohne Serienanzeige.
+            Bei einem Stundenplan bis 16:50 sind Ausfalltage garantiert — es
+            wirkte also nur der schädliche Zweig. */}
+        <Tile
+          label="Abruf"
+          value={data.recallDue > 0 ? String(data.recallDue) : undefined}
+          caption={
+            data.recallDue > 0
+              ? data.recallDue === 1
+                ? "Baustein wartet"
+                : "Bausteine warten"
+              : "nichts fällig heute"
+          }
+          href="/abruf"
+          warning={data.recallDue > 0}
+        />
+
         {/* Die Blätter, über beide Spalten.
  
             Sie stehen hier, seit die Kameraseite nur noch Kamera ist: dort
@@ -338,8 +366,10 @@ export function HomeTiles({ data }: { data: HomeData }) {
             und eine zweite Kachel, die die meiste Zeit „0" anzeigt, wäre eine
             Zeile Aufmerksamkeit für nichts.
 
-            Über beide Spalten, weil sie die siebte von sechs ist — allein in
-            der letzten Reihe sähe sie wie ein Rest aus. */}
+            Bis zum 11.9.2026 stand sie über beide Spalten, weil sie die
+            siebte von sechs war und allein in der letzten Reihe wie ein Rest
+            aussah. Mit der Abruf-Kachel sind es acht — vier volle Reihen zu
+            zweit, und der Sonderfall erledigt sich von selbst. */}
         <Tile
           label="Blätter"
           value={
@@ -354,7 +384,6 @@ export function HomeTiles({ data }: { data: HomeData }) {
           }
           href={data.inboxCount > 0 ? "/material/eingang" : "/material"}
           warning={data.inboxCount > 0}
-          className="col-span-2"
         />
       </div>
     </div>

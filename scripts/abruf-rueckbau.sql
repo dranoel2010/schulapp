@@ -1,0 +1,55 @@
+-- Der Rückbau des Abrufkerns — der erste DROP dieses Projekts.
+--
+-- ── Warum es diese Datei gibt ────────────────────────────────────────────────
+--
+-- Dieses Repo hat fünf Wanderungsdateien und bis heute keinen einzigen DROP;
+-- jede von ihnen sagt im Kopf ausdrücklich „Kein DROP". Das ist richtig für
+-- Tabellen, die bleiben: Fächer, Blätter, Noten. Der Abrufkern ist anders. Er
+-- ist eine Wette, und der Bericht, aus dem er stammt, beziffert ihren
+-- Zusatznutzen gegenüber einem gut geführten Epochenheft selbst mit
+-- g = 0,095 [-0,005; 0,194], p = 0,062 — also nicht signifikant. Der Schüler,
+-- für den er gebaut wird, führt genau dieses Heft.
+--
+-- Eine Wette ohne Rückweg ist keine Wette, sondern eine Anschaffung. Deshalb
+-- steht diese Datei vor dem ersten CREATE und nicht nach dem letzten Zweifel:
+-- Wer erst dann einen DROP schreibt, wenn er ihn braucht, schreibt ihn in der
+-- Stimmung, in der man Fehler macht — von Hand, auf dem NAS, an derselben
+-- Datenbank, deren letzte unvorsichtige Berührung am 11.9.2026 zwei Stunden
+-- Ausfall gekostet hat.
+--
+-- ── ⚠ WAS DABEI VERLOREN GEHT, UND WARUM ES NICHT WIEDERKOMMT ────────────────
+--
+-- `recall_attempts` ist das Antwortprotokoll. Es ist die einzige Datenlage, die
+-- je beantworten kann, ob das Ganze gewirkt hat — Trefferquote gegen den
+-- zeitlichen Abstand, Prüfpunkte nach drei und sechs Monaten gegen die
+-- Zerfallskurve. Diese Zahlen entstehen nur im Betrieb und lassen sich nicht
+-- nachrechnen.
+--
+-- **Vor dem Rückbau deshalb sichern, nicht danach:**
+--
+--   sudo docker compose exec -T db pg_dump -U schulapp -d schulapp \
+--        -t recall_items -t recall_schedule -t recall_attempts \
+--        > abruf-abzug-$(date +%Y%m%d-%H%M).sql
+--
+-- Der Abzug ist klein (Text, keine Bilder) und gehört NICHT ins Repo: Er
+-- enthält abgetippte Schulinhalte, und dieses Repo ist öffentlich.
+--
+-- ── Reihenfolge ──────────────────────────────────────────────────────────────
+--
+-- Rückwärts zur Anlage, damit kein Fremdschlüssel im Weg steht: erst die
+-- Antworten, dann die Termine, zuletzt die Bausteine. `if exists` macht die
+-- Datei wiederholbar; kein `cascade`, denn keine fremde Tabelle zeigt auf diese
+-- drei — zeigte doch eine darauf, soll es auffallen und nicht stillschweigend
+-- mitgerissen werden.
+--
+--   sudo docker compose exec -T db psql -v ON_ERROR_STOP=1 --single-transaction \
+--        -U schulapp -d schulapp < scripts/abruf-rueckbau.sql
+--
+-- Danach ist die Schulapp wieder die, die sie vorher war: src/db/schema.ts ist
+-- unberührt geblieben, kein bestehender Test kennt eine dieser Tabellen. Was im
+-- Repo bleibt, ist src/recall/ — ein Ordner, den `rm -rf` erledigt, und eine
+-- Zeile in drizzle.config.ts, die wieder auf eine einzelne Datei zeigt.
+
+DROP TABLE IF EXISTS "recall_attempts";
+DROP TABLE IF EXISTS "recall_schedule";
+DROP TABLE IF EXISTS "recall_items";

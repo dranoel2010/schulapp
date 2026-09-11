@@ -20,6 +20,7 @@ import {
 } from "@/lib/homework";
 import { listMaterialCards, type MaterialCard } from "@/lib/materials";
 import { listSubjects } from "@/lib/subjects";
+import { faelligHeute } from "@/recall/sessions";
 import {
   isSchoolDay,
   loadWeek,
@@ -161,6 +162,19 @@ export type HomeData = {
    * ohne Verbund und ohne Bilder ist das Billigste, was diese Seite tut.
    */
   inboxCount: number;
+  /**
+   * Wie viele Bausteine heute abzurufen sind — die Zahl auf der Abruf-Kachel.
+   *
+   * Sie steht hier und nicht in der Kachel, aus demselben Grund wie
+   * `inboxCount`: Hier läuft sie neben den anderen Abfragen, dort hinge sie
+   * hinter ihnen allen am kritischen Pfad von „/".
+   *
+   * Der Abrufkern (@/recall) ist ein eigenständiges Paket; dies ist eine von
+   * drei Stellen, an denen die Schulapp ihn überhaupt anfasst — die beiden
+   * anderen sind der Navigationseintrag und die Kachel. Wird er je
+   * herausgelöst, sind es diese drei Stellen und die Wanderung, sonst nichts.
+   */
+  recallDue: number;
 };
 
 export async function loadHomeData(
@@ -187,6 +201,7 @@ export async function loadHomeData(
     grades,
     materials,
     inboxCount,
+    recallDue,
   ] = await Promise.all([
     db
       .select({ value: count() })
@@ -206,6 +221,7 @@ export async function loadHomeData(
     gradeSummary(userId),
     listMaterialCards(userId, { limit: RECENT_MATERIALS, order: "aufnahme" }),
     countInbox(userId),
+    faelligHeute(userId, today).then((liste) => liste.length),
   ]);
 
   const upcoming = exams.filter((exam) => exam.date >= today);
@@ -238,6 +254,7 @@ export async function loadHomeData(
     grades,
     materials,
     inboxCount,
+    recallDue,
   };
 }
 
