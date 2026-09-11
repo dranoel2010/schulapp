@@ -62,10 +62,11 @@ export const TEMP_PREFIX = ".uebergabe-unfertig-";
  * Stunden.
  *
  * Nicht sofort, und das ist der Sinn der Frist. Zwei Läufe gleichzeitig sind
- * nicht vorgesehen — der Aufgabenplaner ruft einmal am Tag —, aber wer die
- * Route von Hand anstösst, während der geplante Lauf noch schreibt, dürfte ihm
- * nicht den Ordner unter den Händen wegräumen. Alles, was älter als ein Tag
- * ist, kann dagegen nur von einem abgestürzten Lauf stammen.
+ * nicht vorgesehen — der Cron-Eintrag auf dem NAS ruft um 02:30 einmal am
+ * Tag —, aber wer die Route von Hand anstösst, während der geplante Lauf
+ * noch schreibt, dürfte ihm nicht den Ordner unter den Händen wegräumen.
+ * Alles, was älter als ein Tag ist, kann dagegen nur von einem abgestürzten
+ * Lauf stammen.
  */
 const STALE_MS = 24 * 60 * 60 * 1000;
 

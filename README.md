@@ -871,8 +871,12 @@ sudo docker compose up -d --build
 ```
 
 Gebaut wird mit dem `Dockerfile` im Repo — zweistufig, Node 22 auf Alpine, und
-der Server läuft als Benutzer `node` statt als root. Eine Sache muss die
-Compose-Datei dabei mitgeben, und sie fällt sonst niemandem auf:
+der Server läuft als Benutzer `node` statt als root. Auf dem NAS überschreibt
+die Compose-Datei das allerdings mit `user: "1026:100"` — Leonard und die Gruppe
+`users` —, weil der Container in den abgeglichenen Vault schreibt und die
+Dateien dort einem Menschen gehören müssen; die Begründung steht im Kopf von
+`src/app/api/cron/wiki/route.ts`. Eine Sache muss die Compose-Datei dabei
+mitgeben, und sie fällt sonst niemandem auf:
 
 ```yaml
 build:

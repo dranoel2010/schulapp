@@ -1,4 +1,6 @@
-# Stündlicher Auslöser für die Erinnerungs-Route.
+# Stillgelegter Auslöser für die Erinnerungs-Route. Er hat sie von GitHub aus
+# stündlich aufgerufen; seit dem 11.9.2026 tut das der NAS selbst, und dieser
+# Workflow löst nichts mehr aus.
 #
 # Warum nicht der Cron in vercel.json: Auf dem Hobby-Tarif erlaubt Vercel
 # höchstens einen Lauf pro Tag; ein stündlicher Ausdruck lässt das Deployment
@@ -8,31 +10,49 @@
 #
 # (Vercel ist seit dem 30.8.2026 Geschichte — siehe weiter unten. Der Absatz
 # bleibt trotzdem stehen, weil er die Frage beantwortet, die sich sonst jeder
-# neu stellt: warum der Auslöser überhaupt bei GitHub liegt und nicht bei dem,
+# neu stellt: warum der Auslöser überhaupt bei GitHub lag und nicht bei dem,
 # der die App betreibt.)
 #
-# EIN Wert muss im Repo unter Settings → Secrets and variables → Actions
-# hinterlegt sein:
-#   CRON_SECRET  dasselbe Geheimnis wie in der Umgebung der App
+# Wie die Sache ausgegangen ist, am 11.9.2026 nachgemessen: Über die
+# öffentliche GitHub-API nachgezählt ist dieser Workflow in ZWÖLF Läufen in
+# Folge am Schritt „Erinnerungs-Route aufrufen" gescheitert, zurück bis
+# mindestens zum 9.9.2026 — seit dem Umzug am 30.8. ist keine einzige
+# Erinnerung angekommen. Der Verdacht, der hier früher stand, hat sich
+# bestätigt, und er trifft nicht die App: Der Funnel antwortet von außen mit
+# dem Geheimnis aus der `.env` des NAS in 0,77 s mit 200, ohne Geheimnis mit
+# 401. App, Funnel und Route sind in Ordnung; falsch ist allein das Geheimnis,
+# das von hier aus mitgeschickt wird.
 #
-# Achtung — das ist der Absatz, wegen dem diese Datei gerade wahrscheinlich
-# nichts bewirkt: Beim Umzug auf das NAS am 30.8.2026 wurden die VAPID-
-# Schlüssel und das CRON_SECRET neu erzeugt. Die gültigen Werte stehen
-# ausschließlich in der `.env` auf dem NAS; das Secret hier im Repo ist
-# höchstwahrscheinlich noch das alte aus der Vercel-Zeit. Von hier aus ist das
-# nicht zu reparieren: Der Workflow bekommt das Secret zwar zu sehen, kann aber
-# nicht wissen, ob es das richtige ist — die Prüfung unten fragt nur, ob
-# überhaupt etwas drinsteht —, und ändern kann er es schon gar nicht.
+# Repariert wurde deshalb nicht das Geheimnis, sondern der Ort. Seit dem
+# 11.9.2026 steht der Auslöser in `/etc/crontab` auf dem NAS
+# (`5 * * * * root /volume1/docker/schulapp/erinnerungen.sh`) und ruft die
+# Route über localhost auf — ohne Funnel, ohne offenes Netz, ohne GitHub, mit
+# dem Geheimnis aus genau der `.env`, aus der die App es ohnehin liest. Ein
+# Geheimnis, das an zwei Orten gepflegt werden muss, veraltet irgendwann an
+# einem der beiden; dieser Workflow ist die Vorführung davon.
 #
-# So sieht es aus, wenn es zutrifft: Die Route antwortet mit 401 und dem Satz
-# "Nicht erlaubt." (src/app/api/cron/reminders/route.ts). Beides steht im
-# Protokoll dieses Laufs, die Antwort der Route über der Zeile „Die Route hat
-# 401 geantwortet" — man muss nur wissen, dass 401 hier nichts über den
-# Workflow sagt, sondern über ein Textfeld in den Repo-Einstellungen. Bis das
-# Secret nachgezogen ist, kommt keine einzige Erinnerung an, und weder die App
-# noch das Handy merken etwas davon, weil beide gar nicht gefragt werden. Die
-# Reparatur ist reines Abschreiben: CRON_SECRET aus der `.env` auf dem NAS
-# holen und unter Settings → Secrets and variables → Actions neu hinterlegen.
+# Daraus folgt die einzige Regel, die diese Datei noch hat: Sie wird NICHT
+# repariert. Wer das Secret nachzieht und den Zeitplan unten wieder einsetzt,
+# hat keinen Auslöser geheilt, sondern zwei am Laufen — zwei Aufrufe fünf nach
+# voll, zwei Erinnerungen für dieselbe Stunde auf demselben Handy. Wer die
+# Entscheidung wirklich zurückdrehen will, nimmt zuerst die Zeile aus
+# `/etc/crontab` heraus und setzt erst danach den Zeitplan hier wieder ein.
+#
+# Stillgelegt heißt an zwei Stellen. Der `schedule:`-Block ist unten entfernt,
+# `workflow_dispatch:` steht noch da, damit sich ein Lauf von Hand anstoßen
+# lässt. Das allein genügt aber nicht: Zeitpläne liest GitHub aus dem
+# Standardzweig, nicht aus dem Arbeitsverzeichnis — solange dieser Stand nicht
+# gepusht ist, läuft der alte Zeitplan weiter, Commit hin oder her. Und auch
+# danach gehört der Workflow zusätzlich in der Oberfläche abgeschaltet:
+# Actions → Erinnerungen → „···" → „Disable workflow".
+#
+# Der Schritt unten verlangt weiterhin ein Secret CRON_SECRET (Settings →
+# Secrets and variables → Actions). Dort steht noch der Wert aus der
+# Vercel-Zeit; ein Lauf von Hand liefe also in dieselbe 401 wie die zwölf
+# gescheiterten, mit der Antwort „Nicht erlaubt." aus
+# src/app/api/cron/reminders/route.ts im Protokoll. Das ist kein Mangel, der
+# behoben werden will, sondern der Zustand, der zu einer stillgelegten Datei
+# gehört.
 #
 # Die Adresse steht dagegen unten im Klartext. Sie war einmal ein Secret, und
 # genau daran ist der Lauf am 23.8.2026 gescheitert: war sie nicht gesetzt,
@@ -65,12 +85,20 @@
 # Netz, ohne GitHub —, und er darf so lange laufen, wie er will. Das Geheimnis
 # läge dann auch dort, wo die App es ohnehin hat, und die Falle mit dem alten
 # Secret weiter oben wäre gleich mit erledigt.
+#
+# Genau so ist es gekommen — der Absatz darüber hat recht behalten und darf
+# deshalb stehen bleiben. Nur nicht im Aufgabenplaner: Dessen Rückkanal ist
+# eine E-Mail, und auf diesem NAS ist keine eingerichtet (`/etc/crontab`
+# beginnt mit `MAILTO=""`, eine SMTP-Konfiguration gibt es nicht), ein stiller
+# Fehlschlag ist aber genau das, wogegen diese Datei sonst argumentiert. Der
+# Eintrag steht deshalb direkt in `/etc/crontab`, und das Skript daneben
+# schreibt jeden Lauf mit Zeitstempel, Rückgabewert und der Antwort der Route
+# im Wortlaut in ein Protokoll und legt bei einem Fehlschlag höchstens eine
+# Störungsnotiz am Tag in den Vault, die Synology Drive binnen Minuten auf den
+# Windows-Rechner trägt.
 name: Erinnerungen
 
 on:
-  schedule:
-    # Fünf nach voll, damit der Lauf nicht mit der vollen Stunde konkurriert.
-    - cron: "5 * * * *"
   workflow_dispatch:
 
 jobs:

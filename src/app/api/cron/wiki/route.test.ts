@@ -11,9 +11,10 @@ import { WIKI_EXPORT_DIR_ENV, type WikiRunSummary } from "@/lib/wiki/run";
  *
  * Der Fehler, den sie festhält: `/api/cron/wiki` antwortete `{ ok: true }` mit
  * HTTP 200, auch wenn die Übergabe vollständig gescheitert war. `summary.failed`
- * wurde nirgends gelesen. Das `curl` des DSM-Aufgabenplaners endete damit mit 0,
- * die Aufgabe galt als erfolgreich, und die einzige Mail, die es zu dieser Route
- * gibt, meldete Erfolg — während im Vault nichts ankam.
+ * wurde nirgends gelesen. Das `curl` des Auslösers auf dem NAS endete damit mit
+ * 0, im Protokoll stand `exit=0` neben einem `ok: true`, und die Störungsnotiz
+ * im Vault — die einzige Meldung, die von selbst auffällt — blieb aus, während
+ * dort nichts ankam.
  *
  * ── Was hier NICHT geprüft werden kann ───────────────────────────────────────
  *
@@ -55,8 +56,9 @@ describe("handoverFailure", () => {
   });
 
   it("nennt die Zahlen und den Weg zum Grund", () => {
-    // Der Satz ist alles, was in der DSM-Mail steht. Ohne die Zahlen wäre er
-    // eine Behauptung, ohne den Verweis aufs Protokoll eine Sackgasse.
+    // Der Satz ist alles, was im Protokoll des Auslösers und in der
+    // Störungsnotiz im Vault steht. Ohne die Zahlen wäre er eine Behauptung,
+    // ohne den Verweis aufs Container-Protokoll eine Sackgasse.
     const satz = handoverFailure(
       summary({ folder: null, failed: 1, users: 1, neu: 0, geaendert: 0 }),
     );
@@ -153,8 +155,8 @@ describe("GET", () => {
   it("antwortet mit 500 und dem Satz, wenn es den Ordner nicht gibt", async () => {
     // Der Wurf aus `assertHandoverRoot()` — die erste Handlung des Laufs,
     // noch vor jeder Abfrage. Der Satz aus dem Fehler ist die eigentliche
-    // Auskunft; ohne das Auffangen im Handler stünde in der Mail eine
-    // HTML-Seite mit einem Serverfehler.
+    // Auskunft; ohne das Auffangen im Handler stünde im Protokoll und in der
+    // Störungsnotiz eine HTML-Seite mit einem Serverfehler.
     process.env[WIKI_EXPORT_DIR_ENV] = "/gibt/es/nicht/schulapp-uebergabe";
 
     // Der Handler protokolliert den Wurf, und das soll er auch. Im Testlauf

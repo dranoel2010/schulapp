@@ -40,10 +40,10 @@ import { countByKind, manifestText, type WikiRemoval } from "@/lib/wiki/manifest
  * `after()` schickt die Antwort ab und arbeitet danach weiter. Genau das darf
  * dieser Lauf nicht: Seine Antwort IST der Bericht — wie viele Dateien neu
  * sind, was entfallen ist, ob etwas schiefging. Mit `after()` stünde in der
- * Antwort immer nur „angefangen", und der Aufgabenplaner auf dem NAS, dessen
- * einziger Rückkanal diese Antwort ist, meldete jeden Tag Erfolg. Dazu kommt,
- * dass `after()` gar keine Frist verlängert: „after will run for the platform's
- * default or configured max duration of your route" steht in
+ * Antwort immer nur „angefangen", und im Protokoll des Cron-Eintrags auf dem
+ * NAS, das diese Antwort im Wortlaut festhält, stünde jeden Tag ein Erfolg.
+ * Dazu kommt, dass `after()` gar keine Frist verlängert: „after will run for
+ * the platform's default or configured max duration of your route" steht in
  * node_modules/next/dist/docs/01-app/03-api-reference/04-functions/after.md.
  *
  * `maxDuration` wird laut
@@ -56,11 +56,12 @@ import { countByKind, manifestText, type WikiRemoval } from "@/lib/wiki/manifest
  * hingehört: im Hobby-Tarif sind 60 Sekunden das Ende, und ein höherer Wert
  * lässt schon das Deployment scheitern.
  *
- * Deshalb ruft den Lauf der DSM-Aufgabenplaner und nicht GitHub Actions — die
- * Schritte dafür stehen im Route Handler. Der Lauf selbst rechnet nicht mit
- * einer Frist: Ein voller erster Durchgang liest ein Schuljahr und schreibt ein
- * paar hundert kleine Dateien; danach ist er ein Vergleich über denselben
- * Bestand und ein Ordner mit einer Handvoll Dateien darin.
+ * Deshalb ruft den Lauf ein Cron-Eintrag auf dem NAS und nicht GitHub
+ * Actions; warum es nicht der DSM-Aufgabenplaner ist, steht im Route Handler.
+ * Der Lauf selbst rechnet nicht mit einer Frist: Ein voller erster Durchgang
+ * liest ein Schuljahr und schreibt ein paar hundert kleine Dateien; danach ist
+ * er ein Vergleich über denselben Bestand und ein Ordner mit einer Handvoll
+ * Dateien darin.
  */
 
 /** Der Name der Umgebungsvariablen mit dem Übergabeordner. */

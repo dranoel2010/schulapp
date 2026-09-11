@@ -11,9 +11,13 @@ import {
  * Die tägliche Übergabe an das Wiki.
  *
  * Einmal am Tag legt die App alles, was sich seit gestern geändert hat, in
- * einen flachen, datierten Ordner neben dem Obsidian-Vault. Ein eigener Agent
- * räumt es von dort ein. Was in den Dateien steht und warum, steht in
- * @/lib/wiki/documents; wie ein Abbruch mittendrin ausgeht, in @/lib/wiki/run.
+ * einen flachen, datierten Ordner IM Obsidian-Vault — in dessen Eingang
+ * `topics/schule/inbox`. Nicht daneben: Ein Ordner außerhalb wäre eine
+ * Schleuse, die Obsidian gar nicht sieht — dass sie volläuft oder leer bleibt,
+ * fiele dann niemandem auf. So steht die Lieferung dort, wo gearbeitet wird.
+ * Ein eigener Agent räumt sie von dort ein. Was in den Dateien steht und warum,
+ * steht in @/lib/wiki/documents; wie ein Abbruch mittendrin ausgeht, in
+ * @/lib/wiki/run.
  *
  * Hier steht nur die Tür: die Anmeldung, die Umgebungsvariable und die
  * Antwort. Fachlogik gehört nach @/lib und nicht in einen Route Handler.
@@ -30,53 +34,105 @@ import {
  * docker-compose.yml auf dem NAS (die liegt nur dort, nicht im Repo) beim
  * Dienst `app`:
  *
+ *   user: "1026:100"
  *   volumes:
- *     - /volume1/wiki/Schulapp/Übergabe:/uebergabe
+ *     - /volume1/homes/Leonard/Drive/wiki/topics/schule/inbox:/uebergabe
  *   environment:
  *     WIKI_EXPORT_DIR: /uebergabe
  *
- * Der Ordner muss existieren und dem Benutzer gehören, unter dem der Server
- * läuft — das Dockerfile lässt ihn als `node` laufen und nicht als root. Ein
- * Ordner, der root gehört, quittiert das mit „EACCES", und die Übergabe fällt
- * jede Nacht aus. Angelegt wird er ausdrücklich NICHT von der App: ein
- * fehlender Ordner heißt meistens, dass der Vault gerade nicht eingehängt ist,
- * und dann soll nichts geschrieben werden (siehe @/lib/wiki/folder).
+ * Seit dem 11.9.2026 liegt der Übergabeordner IM Vault und nicht mehr daneben,
+ * und der Vault selbst ist aus der `docker`-Freigabe in Leonards persönlichen
+ * Ordner gezogen („My Drive"). Von dort gleicht der Synology-Drive-Client ihn
+ * mit einem Windows-Rechner ab (dort `C:\Users\drano\wiki`), in beide
+ * Richtungen — was die Übergabe schreibt, steht wenige Minuten später auch
+ * dort. Der alte Beispielpfad hier zeigte ins Leere: `ls -ld /volume1/wiki`
+ * antwortet „No such file or directory".
  *
- * **2. Der Aufgabenplaner in DSM.** Nicht GitHub Actions wie bei den
- * Erinnerungen, und das ist der Unterschied: Der Planer auf dem NAS läuft
- * unabhängig von GitHub und vom Tailscale Funnel — er ruft von innen an, also
- * auch dann, wenn draußen etwas klemmt. Und er kennt die Frist nicht, an der
- * `curl` im Workflow abbräche; ein erster, vollständiger Lauf über ein
- * Schuljahr darf hier Minuten dauern.
+ * Die Kennung `1026:100` ist Leonard und die Gruppe `users`, und sie steht
+ * dort, weil der Vault einem Menschen gehört und abgeglichen wird — deshalb
+ * läuft der Container unter Leonards Kennung, statt den Vault für den Server
+ * zu öffnen. Das Bild lässt den Server sonst als `node` (1000:1000) laufen,
+ * und diese Kennung gibt es auf dem NAS gar nicht: gemessen stand der
+ * Tagesordner dann auf „UNKNOWN:UNKNOWN 755", Leonard wurde darin nichts mehr
+ * los, und der einordnende Agent hätte die Dateien nach dem Einräumen nicht
+ * wegräumen können — der Eingang wäre langsam zugewachsen. Ein Ordner, in den
+ * der Server überhaupt nicht schreiben darf, quittiert es schon vorher mit
+ * „EACCES", und die Übergabe fällt jede Nacht aus. Der andere Weg wäre
+ * gewesen, den Ordner für alle aufzumachen; dann stünden weit offene Rechte in
+ * einem Vault, der auf einen fremden Rechner abgeglichen wird. Seit der
+ * Änderung entsteht alles als `Leonard:users`, nachgemessen mit einer
+ * Schreibprobe, und der Eingang steht wieder auf 755. Angelegt wird er
+ * ausdrücklich NICHT von der App: ein fehlender Ordner heißt meistens, dass
+ * der Vault gerade nicht eingehängt ist, und dann soll nichts geschrieben
+ * werden (siehe @/lib/wiki/folder).
  *
- *   DSM → Systemsteuerung → Aufgabenplaner → Erstellen → Geplante Aufgabe
- *        → Benutzerdefiniertes Skript
+ * **2. Der Auslöser sitzt auf dem NAS.** Nicht GitHub Actions — seit dem
+ * 11.9.2026 auch bei den Erinnerungen nicht mehr, und aus demselben Grund: Ein
+ * Auslöser auf dem NAS läuft unabhängig von GitHub und vom Tailscale Funnel —
+ * er ruft von innen an, also auch dann, wenn draußen etwas klemmt. Und er kennt
+ * die 60-Sekunden-Frist nicht, an der `curl` im Workflow abbräche; ein erster,
+ * vollständiger Lauf über ein Schuljahr darf hier Minuten dauern. Wie ernst der
+ * erste Punkt zu nehmen ist, zeigen genau diese Erinnerungen: Ihr Workflow
+ * scheiterte zwölf Läufe in Folge, weil GitHub noch das Geheimnis aus der
+ * Vercel-Zeit schickte, und gemerkt hat es niemand.
  *
- *   Allgemein:   Aufgabenname „Schulapp Wiki-Übergabe", Benutzer `root`
- *                (er darf die `.env` lesen), Aktiviert angehakt.
- *   Zeitplan:    Täglich, 03:30 Uhr. Nachts, weil ein voller Lauf die
- *                Datenbank eine Weile beschäftigt — und weil der Agent das
- *                Wiki morgens vorfinden soll.
- *   Aufgabeneinstellungen: „Details zum Ausführungsergebnis per E-Mail senden"
- *                anhaken. Das ist der einzige Rückkanal: Was hier als Antwort
- *                herauskommt, ist der Bericht des Laufs, und
- *                `curl --fail-with-body` macht aus einem Fehlschlag eine
- *                fehlgeschlagene Aufgabe — ohne den Bericht wegzuwerfen.
- *   Benutzerdefiniertes Skript:
+ * Vorgesehen war dafür der Aufgabenplaner in DSM. Seit dem 11.9.2026 ist es
+ * stattdessen eine Zeile in `/etc/crontab`:
+ *
+ *   30  2  *  *  *  root  /volume1/docker/schulapp/wiki-uebergabe.sh
+ *
+ * Warum nicht der Planer: Sein einziger Rückkanal ist die E-Mail „Details zum
+ * Ausführungsergebnis" — und auf diesem NAS ist keine eingerichtet.
+ * `/etc/crontab` beginnt mit `MAILTO=""`, eine SMTP-Konfiguration gibt es
+ * nicht. Der Planer wäre hier also stumm, und ein stiller Fehlschlag ist
+ * genau das, wogegen der Rest dieser Datei argumentiert. Wer den Planer
+ * trotzdem will, richtet ZUERST eine Benachrichtigung ein — sonst tauscht er
+ * ein Protokoll gegen gar nichts.
+ *
+ * 02:30 und nicht 03:30, weil der DSM-Neustart donnerstags um 03:45 einen
+ * langen Lauf sonst mittendrin abschneidet — und lang wird er, sobald
+ * `wiki_deliveries` geleert wurde. Aus demselben Grund steht `--max-time` auf
+ * 900 und nicht auf 3600: lieber laut scheitern als stillschweigend
+ * zerschnitten werden.
+ *
+ * Das Skript in seinen wesentlichen Zeilen:
  *
  *     set -a; . /volume1/docker/schulapp/.env; set +a
- *     curl --fail-with-body -sS --max-time 3600 \
- *          -H "Authorization: Bearer $CRON_SECRET" \
- *          http://localhost:3000/api/cron/wiki
+ *
+ *     antwort=$(curl --fail-with-body -sS --max-time 900 \
+ *                 -H "Authorization: Bearer $CRON_SECRET" \
+ *                 http://localhost:3000/api/cron/wiki 2>&1)
+ *     code=$?
+ *
+ *     echo "$(date '+%F %T') exit=$code $antwort" >> "$PROTOKOLL"
+ *     [ "$code" -eq 0 ] || stoerungsnotiz "$antwort"   # schreibt in den Vault
+ *
+ * Nachsehen heißt deshalb `tail` und nicht Posteingang:
+ *
+ *   tail -n 20 /volume1/docker/schulapp/wiki-uebergabe.log
+ *
+ * Eine Zeile je Lauf, mit Zeitstempel, Rückgabewert und der Antwort der Route
+ * im Wortlaut; das Skript beschneidet die Datei selbst auf 500 Zeilen, damit
+ * sie nicht auf Jahre anwächst. Der zweite Rückkanal ist der Vault: Bei
+ * `exit != 0` entsteht `topics/schule/SCHULAPP-STOERUNG.md`, Synology Drive
+ * trägt sie binnen Minuten auf den Windows-Rechner, und in Obsidian steht dann
+ * eine Datei, die vorher nicht da war — der Fehlschlag kommt zum Menschen,
+ * statt auf ihn zu warten. Bei Erfolg entsteht nichts. Beides ist vorgeführt:
+ * Ein Lauf gegen einen falschen Port hinterließ die Notiz mit
+ * „curl: (7) Failed to connect" im Wortlaut. `synodsmnotify` wäre der
+ * naheliegende dritte Weg gewesen und ist verworfen — DSM 7.4.1 lehnt einen
+ * freien Titel ab („title: 'Schulapp' is neither mail string key nor i18n
+ * format").
  *
  * `--fail-with-body` und nicht das kürzere `-f`: Beide machen aus einem
  * Fehlerstatus einen Rückgabewert ungleich null, aber `-f` verwirft dabei den
- * Antwortkörper. In der DSM-Mail stünde dann nur „curl: (22) The requested URL
- * returned error: 500" — und gerade NICHT der Satz, der sagt, was zu tun ist.
+ * Antwortkörper. Im Protokoll stünde dann nur „curl: (22) The requested URL
+ * returned error: 500" — und gerade NICHT der Satz, der sagt, was zu tun ist;
+ * dasselbe gälte für die Störungsnotiz, die genau diese Ausgabe weiterreicht.
  * Genau auf diesen Satz beruft sich die Begründung unten an der
  * `WIKI_EXPORT_DIR`-Prüfung; mit `-f` war sie all die Zeit eine Zusage, die
  * das Skript nicht einlöste. Den Schalter gibt es seit curl 7.76 (2021). Ist
- * der auf dem NAS älter, tut es `-fsS` weiterhin — die Aufgabe schlägt dann
+ * der auf dem NAS älter, tut es `-fsS` weiterhin — der Lauf schlägt dann
  * genauso fehl, nur ohne die Erklärung dazu.
  *
  * Die Adresse ist die, unter der der Container vom NAS aus erreichbar ist —
@@ -107,7 +163,7 @@ import {
  * Der nächste Lauf übergibt danach alles, so wie der allererste. Daten gehen
  * dabei keine verloren; in der Tabelle stehen nur Abdrücke.
  *
- * ── Wann die Aufgabe in DSM rot wird ────────────────────────────────────────
+ * ── Wann der Lauf als Fehlschlag im Protokoll steht ─────────────────────────
  *
  * Bei jedem 500, und die gibt es in drei Farben: `CRON_SECRET` fehlt,
  * `WIKI_EXPORT_DIR` fehlt oder der Ordner ist nicht da (dann wirft der Lauf),
@@ -115,12 +171,13 @@ import {
  * geschrieben, obwohl mindestens ein Konto unterwegs gescheitert ist. Warum
  * gerade diese Bedingung, steht bei `handoverFailure()` weiter unten.
  *
- * Grün und trotzdem kein Ordner ist dagegen der Normalfall: an einem Tag, an
- * dem sich nichts geändert hat, gibt es nichts zu übergeben.
+ * `exit=0` und trotzdem kein Ordner ist dagegen der Normalfall: an einem Tag,
+ * an dem sich nichts geändert hat, gibt es nichts zu übergeben.
  *
  * ── Warum hier kein `after()` und kein `maxDuration` steht ───────────────────
  *
- * Weil die Antwort der Bericht ist und der Aufgabenplaner keine Frist setzt.
+ * Weil die Antwort der Bericht ist und der Auslöser auf dem NAS keine Frist
+ * setzt, die kürzer wäre als das `--max-time` im Skript.
  * Ausführlich steht die Begründung samt den Stellen in der Next-Doku am Kopf
  * von @/lib/wiki/run.
  */
@@ -146,9 +203,9 @@ export async function GET(request: Request) {
   // Nicht als „ok, aber nichts zu tun" beantwortet, sondern als Fehler. Ein
   // grüner Lauf, der jede Nacht nichts tut, ist die Antwort, die niemandem
   // auffällt — und die Übergabe fiele monatelang aus, ohne dass es jemand
-  // merkt. `curl --fail-with-body` macht daraus im Aufgabenplaner eine
-  // fehlgeschlagene Aufgabe, und DSM schickt eine Mail mit genau diesem Satz
-  // darin.
+  // merkt. `curl --fail-with-body` macht daraus einen Rückgabewert ungleich
+  // null; das Skript auf dem NAS schreibt genau diesen Satz ins Protokoll und
+  // legt die Störungsnotiz im Vault an.
   if (!root) {
     return Response.json(
       {
@@ -178,9 +235,10 @@ export async function GET(request: Request) {
     return Response.json({ ok: true, ...summary });
   } catch (fehler) {
     // Der Satz aus dem Fehler ist die eigentliche Auskunft — „Den
-    // Übergabeordner gibt es nicht: /uebergabe" sagt in der DSM-Mail alles,
-    // was zu tun ist. Ohne dieses Auffangen stünde dort eine HTML-Seite mit
-    // einem Serverfehler und der Satz im Container-Protokoll.
+    // Übergabeordner gibt es nicht: /uebergabe" sagt im Protokoll und in der
+    // Störungsnotiz alles, was zu tun ist. Ohne dieses Auffangen stünde dort
+    // eine HTML-Seite mit einem Serverfehler und der Satz im
+    // Container-Protokoll.
     console.error("Wiki-Übergabe abgebrochen", fehler);
 
     return Response.json(
@@ -200,7 +258,8 @@ export async function GET(request: Request) {
  * Muss dieser Lauf als Fehlschlag gemeldet werden — und mit welchem Satz?
  *
  * `null` heißt: als Erfolg melden. Sonst ist die Zeichenkette der Satz, der in
- * die Antwort und damit in die DSM-Mail gehört.
+ * die Antwort gehört — und damit ins Protokoll auf dem NAS und in die
+ * Störungsnotiz im Vault.
  *
  * ── Der Fehler, den diese Funktion behebt ────────────────────────────────────
  *
@@ -212,10 +271,13 @@ export async function GET(request: Request) {
  * `plans` damit leer, `written` und `entfallen` sind leer, der Lauf kehrt vor
  * `writeHandover()` zurück, und die Antwort lautete: HTTP 200 mit
  * `{"ok":true,"folder":null,"users":1,"failed":1}`. Das `curl -fsS` des
- * Aufgabenplaners endete also mit 0, DSM verbuchte die Aufgabe als erfolgreich
- * und schickte eine Mail mit der Überschrift „Erfolg" — während im Vault seit
- * Wochen nichts mehr ankam. Genau die Antwort, die diese Datei zwanzig Zeilen
- * über der Stelle für das fehlende `WIKI_EXPORT_DIR` ausdrücklich verwirft:
+ * Auslösers endete also mit 0, im Protokoll stand `exit=0` neben einer
+ * Antwort, die `ok: true` sagte, und weil der Rückgabewert stimmte, entstand
+ * auch keine Störungsnotiz im Vault — während dort seit Wochen nichts mehr
+ * ankam. Ein Rückkanal, den nur der Rückgabewert auslöst, ist genau so viel
+ * wert wie die Ehrlichkeit dieses Rückgabewerts. Genau die Antwort, die diese
+ * Datei zwanzig Zeilen über der Stelle für das fehlende `WIKI_EXPORT_DIR`
+ * ausdrücklich verwirft:
  * „Ein grüner Lauf, der jede Nacht nichts tut, ist die Antwort, die niemandem
  * auffällt."
  *

@@ -16,10 +16,12 @@ import { isPushConfigured, sendToUser, type PushPayload } from "@/lib/push";
 /**
  * Die Zeitsteuerung der Erinnerungen.
  *
- * Etwas von außen ruft diese Route stündlich auf — heute eine GitHub Action
- * (.github/workflows/erinnerungen.yml), früher der Cron von Vercel. Wer es tut,
- * ist der Route gleichgültig, und das ist der Grund, warum sie den Umzug auf
- * das NAS am 30.8.2026 unverändert überstanden hat.
+ * Etwas von außen ruft diese Route stündlich auf — seit dem 11.9.2026 eine
+ * Zeile in `/etc/crontab` auf dem NAS, davor eine GitHub Action
+ * (.github/workflows/erinnerungen.yml, seitdem stillgelegt), davor der Cron von
+ * Vercel. Wer es tut, ist der Route gleichgültig, und das ist der Grund, warum
+ * sie den Umzug auf das NAS am 30.8.2026 unverändert überstanden hat — und den
+ * Umzug des Auslösers zwölf Tage später ebenso.
  *
  * Geplant wird außen in UTC, die Erinnerungszeit des Nutzers gilt aber in
  * Berliner Zeit. Welche Stunde gerade dran ist, entscheidet deshalb die Route

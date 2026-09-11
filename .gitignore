@@ -52,3 +52,9 @@ next-env.d.ts
 # Der Rückblick auf die ersten sieben Tage — ein Andenken, kein Code.
 # Bleibt auf diesem Rechner.
 rueckblick.html
+
+# Berichte als PDF bleiben ebenfalls hier. Sie entstehen aus echten Blättern,
+# zeigen also abgetippte Schulinhalte — und dieses Repo ist öffentlich. Ein
+# einziges `git add -A` genügte sonst, und zurücknehmen lässt sich ein Push
+# nicht: die Datei stünde weiter in der Historie.
+*.pdf

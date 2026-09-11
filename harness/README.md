@@ -29,9 +29,9 @@ Programme*, neben Claude, mit eigenem **Trennen**-Knopf.
 
 ### Die Adresse hat sich geändert
 
-`zugang.json` zeigt hier noch auf `https://schulapp-teal.vercel.app`. Die App
-läuft aber seit dem 30.8.2026 nicht mehr dort, sondern auf dem NAS unter
-`https://treskownas.tail3a40b0.ts.net` (Tailscale Funnel).
+Die App lief bis zum 30.8.2026 unter `https://schulapp-teal.vercel.app` und
+läuft seitdem auf dem NAS unter `https://treskownas.tail3a40b0.ts.net`
+(Tailscale Funnel).
 
 Ein Zugang gilt für die Adresse, unter der zugestimmt wurde — sie steht als
 `origin` und `resource` in `zugang.json`, und das Token ist für genau diese
@@ -40,11 +40,18 @@ die neue Adresse braucht eine neue Zustimmung.** Es ist eine andere App mit
 einer anderen Datenbank; von der alten Zustimmung weiß sie nichts.
 
 ```bash
-npx tsx harness/zugang.mts https://treskownas.tail3a40b0.ts.net
+npx tsx harness/zugang.mts
 ```
 
-Die Adresse muss dabei mitgegeben werden: die Vorgabe in `zugang.mts`
-(`VORGABE_ORIGIN`) ist ebenfalls noch die alte.
+Die Adresse muss seit dem 11.9.2026 nicht mehr mitgegeben werden: `VORGABE_ORIGIN`
+in `zugang.mts` zeigt jetzt aufs NAS. Vorher stand dort die Vercel-Adresse, und
+weil das Projekt dort inzwischen pausiert ist, endete ein Aufruf ohne Adresse in
+einem 503 — einer Meldung, die nach einem kaputten Netz aussieht und keine war.
+
+Auf diesem Rechner lag bis zum 11.9.2026 noch die alte `zugang.json` gegen
+Vercel. Sie ist entfernt worden; das Token darin war für eine App ausgestellt,
+die es unter dieser Adresse nicht mehr gibt. Der Postbote auf dem NAS hat seine
+eigene und war davon nie betroffen.
 
 ## Laufen lassen
 
@@ -323,6 +330,32 @@ Kurz: Der Postbote braucht Node, ein angemeldetes Claude Code und diesen Ordner
 nehmen sich beide das Token weg. Und es läuft immer nur einer, sonst liegen zwei
 Vorschläge am selben Blatt.
 
+## Der Handgriff nach jedem Commit
+
+Genau das „sonst nichts" hat einen Preis: Wo der Postbote läuft, liegt eine
+**Kopie dieses Ordners und kein Klon**. Auf dem NAS ist das
+`/volume1/docker/postbote/harness/`, und `git pull` im Repo daneben rührt sie
+nicht an.
+
+Das war schon einmal die Fehlerursache, und es war eine teure: Anfang September
+lief der Postbote sieben Tage mit Code vom 29.8. und scheiterte in fast jeder
+Runde mit „fetch failed". Gesucht wurde tagelang beim Zugang — dort, wo der
+Fehler nie war.
+
+Deshalb nach jedem Commit, der `harness/` berührt, erst vergleichen und dann
+kopieren:
+
+```bash
+ssh nas 'cd /volume1/docker/schulapp/repo/harness && md5sum *.mts README.md | sort' > /tmp/repo.txt
+ssh nas 'cd /volume1/docker/postbote/harness   && md5sum *.mts README.md | sort' > /tmp/nas.txt
+diff /tmp/repo.txt /tmp/nas.txt && echo "gleich"
+```
+
+Die `README.md` steht in der Liste mit Absicht. Am 11.9.2026 stimmten alle
+sieben `.mts` überein und nur sie war alt — die Fassung dort kannte die
+Nachlese noch gar nicht. Eine Anleitung, die das halbe Werkzeug verschweigt,
+fällt niemandem auf, solange man sie nicht liest.
+
 ## Wenn etwas klemmt
 
 | Was dasteht | Was es heißt |
@@ -339,3 +372,4 @@ Vorschläge am selben Blatt.
 | `Der Lauf wollte etwas, das er nicht darf` | der Käfig hat zugeschlagen — steht auf dem Blatt eine Anweisung? |
 | `Not logged in · Please run /login` | auf diesem Rechner ist `claude` selbst nicht angemeldet. Im Container: `docker compose run --rm -it postbote claude`, darin `/login` — die Anmeldung landet im eingehängten `claude-home` und überlebt Neustart und Neubau |
 | `Die Nachlese kann nicht starten` | der Postbote hält die Sperre. Ihn anhalten — und eine nach `docker stop` liegengebliebene `lauf.lock` entfernen |
+| `API Error: Output blocked by content filtering policy` | nicht die Frist und nicht das Kontingent: dieses Blatt kommt mit diesem Modell nie durch. Am 7.9.2026 dreimal gleich gemessen, an denselben zwei englischen Blättern — im Stapellauf und zwanzig Minuten später noch einmal einzeln. Einmal `--modell sonnet` versuchen; scheitert das auch, die Seite von Hand im Formular eintippen. Liegenlassen kostet in **jedem** künftigen Stapellauf wieder eine halbe Minute, denn die Nachlese hat keine Merkliste — ihr Gedächtnis ist die Datenbank, und dort steht das Blatt weiter als ungelesen |

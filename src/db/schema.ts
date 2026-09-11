@@ -1041,12 +1041,13 @@ export const oauthGrants = pgTable(
 /**
  * Was schon im Wiki liegt — das Gedächtnis der täglichen Übergabe.
  *
- * Einmal am Tag legt die App alles in einen flachen, datierten Ordner; ein
- * eigener Agent räumt es von dort in den Obsidian-Vault ein. Ohne diese Tabelle
- * wäre jede Übergabe eine vollständige: nach vierzehn Tagen lägen vierzehn
- * Fassungen desselben Blattes im Vault, und der Agent müsste jeden Morgen alles
- * noch einmal einsortieren. Mit ihr enthält der Ordner ab dem zweiten Lauf nur
- * noch das, was sich wirklich unterscheidet.
+ * Einmal am Tag legt die App alles in einen flachen, datierten Ordner im
+ * Eingang des Vaults, `topics/schule/inbox`; ein eigener Agent räumt es von
+ * dort an seinen Platz ein. Ohne diese Tabelle wäre jede Übergabe eine
+ * vollständige: nach vierzehn Tagen lägen vierzehn Fassungen desselben
+ * Blattes im Vault, und der Agent müsste jeden Morgen alles noch einmal
+ * einsortieren. Mit ihr enthält der Ordner ab dem zweiten Lauf nur noch das,
+ * was sich wirklich unterscheidet.
  *
  * ── `doc_id`: die feste Kennung ──────────────────────────────────────────────
  *

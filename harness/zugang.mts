@@ -7,7 +7,7 @@ import { schreibeZugang, ZUGANG_DATEI, type Zugang } from "./mcp.mts";
 /**
  * Die einmalige Zustimmung: der Postbote holt sich seinen eigenen Zugang.
  *
- *   npx tsx harness/zugang.mts [https://schulapp-teal.vercel.app]
+ *   npx tsx harness/zugang.mts [https://treskownas.tail3a40b0.ts.net]
  *
  * Was hier passiert, ist genau das, was die Claude-App auch tut — nur dass der
  * Client kein Fenster hat und deshalb selbst eines aufmacht. Am Ende steht die
@@ -28,7 +28,16 @@ import { schreibeZugang, ZUGANG_DATEI, type Zugang } from "./mcp.mts";
  * Rückadresse stimmt nicht" und wird gar nicht erst umgeleitet.
  */
 
-const VORGABE_ORIGIN = "https://schulapp-teal.vercel.app";
+/**
+ * Bis zum 11.9.2026 stand hier `https://schulapp-teal.vercel.app`, und das war
+ * eine stille Falle: Die App läuft seit dem 30.8.2026 auf dem NAS, das
+ * Vercel-Projekt ist seitdem pausiert und antwortet mit 503. Wer den Befehl
+ * ohne Adresse aufrief, bekam also keine Fehlermeldung über einen falschen
+ * Ort, sondern eine über einen unerreichbaren — und suchte den Fehler bei
+ * sich. Die Vorgabe zeigt deshalb dorthin, wo die App wirklich läuft; eine
+ * mitgegebene Adresse gewinnt weiterhin.
+ */
+const VORGABE_ORIGIN = "https://treskownas.tail3a40b0.ts.net";
 const PORT = 41751;
 const RUECKADRESSE = `http://127.0.0.1:${PORT}/callback`;
 
