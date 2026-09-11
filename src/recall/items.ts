@@ -1,10 +1,10 @@
-import { and, asc, desc, eq, gte, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
 import { exams, materialPages, materials, subjects } from "@/db/schema";
-import { todayInBerlin } from "@/lib/dates";
-import { uncertainSpans } from "@/lib/transcripts";
-import { planeFaelligkeiten } from "@/recall/schedule";
+import { berlinDay, todayInBerlin } from "@/lib/dates";
+import { UNCERTAIN_CLOSE, UNCERTAIN_OPEN } from "@/lib/transcripts";
+import { planeFaelligkeiten, type PlanWarnung } from "@/recall/schedule";
 import { recallItems, recallSchedule } from "@/recall/schema";
 
 /**
@@ -73,7 +73,16 @@ export type NeuerBaustein = {
 };
 
 export type AnlageErgebnis =
-  | { ok: true; id: string; termine: number }
+  | {
+      ok: true;
+      id: string;
+      /** Abrufgelegenheiten VOR dem Klausurtermin — die Zahl, an der A6 hängt */
+      vorKlausur: number;
+      /** Termine der Erhaltung nach der Klausur; zählen für A6 ausdrücklich nicht */
+      nachKlausur: number;
+      /** Was die Planung zu melden hatte — leer heißt: sie ist aufgegangen */
+      warnungen: PlanWarnung[];
+    }
   | { ok: false; fehler: AnlageFehler };
 
 /**
@@ -110,6 +119,23 @@ async function seiteMitAbschrift(
  * keinen Prüfungstag. Genau deshalb liegt die Planung hier und nicht in einer
  * Bibliothek.
  */
+/**
+ * Welche Prüfungsarten als „der harte Termin" gelten.
+ *
+ * Nicht alle. `exams` führt vier Arten — klausur, test, referat, muendlich —,
+ * und nur die ersten beiden sind das, worauf A7 und A8 zielen: ein schriftlicher
+ * Abruf des Stoffs zu einem festen Tag. Ein Referat ist ein Vortrag, eine
+ * mündliche Prüfung ein Gespräch; beide prüfen etwas anderes und liegen oft
+ * Wochen vor der eigentlichen Klausur.
+ *
+ * Ohne diese Einschränkung passierte Folgendes: Steht in Deutsch am 18.9. ein
+ * Referat und am 9.10. die Klausur, zöge die Planung alle Übungstermine auf die
+ * Tage vor dem Referat zusammen und schaltete danach in den 21-Tage-Takt der
+ * Erhaltung. Für die Klausur drei Wochen später bliebe genau ein Abruf übrig —
+ * und der läge auf dem Klausurtag selbst.
+ */
+const HARTE_TERMINE = ["klausur", "test"] as const;
+
 async function naechsteKlausur(
   userId: string,
   subjectId: string,
@@ -123,6 +149,7 @@ async function naechsteKlausur(
         eq(exams.userId, userId),
         eq(exams.subjectId, subjectId),
         gte(exams.date, heute),
+        inArray(exams.kind, [...HARTE_TERMINE]),
       ),
     )
     .orderBy(asc(exams.date))
@@ -159,7 +186,16 @@ export async function createItem(
   if (!seite.transcript.includes(zitat)) {
     return { ok: false, fehler: "zitat-nicht-gefunden" };
   }
-  if (uncertainSpans(zitat).length > 0) {
+
+  // Jede einzelne Klammer zählt, nicht nur das vollständige Paar.
+  //
+  // `uncertainSpans()` sucht nach ⟨…⟩ als Ganzem und übersieht damit den Fall,
+  // der beim Herauskopieren mit der Maus am leichtesten passiert: Der Schüler
+  // zieht über einen Satzteil, der MITTEN in einer Markierung beginnt, und
+  // erwischt nur deren schließende Klammer. Das Zitat steht dann wörtlich in
+  // der Abschrift, enthält aber Text, der beim Abschreiben ausdrücklich als
+  // unsicher markiert war — und trüge ihn als Prüfstoff in die Datenbank.
+  if (zitat.includes(UNCERTAIN_OPEN) || zitat.includes(UNCERTAIN_CLOSE)) {
     return { ok: false, fehler: "zitat-unsicher" };
   }
 
@@ -189,7 +225,13 @@ export async function createItem(
   // eine Eigenschaft der Planung und keine Filterregel beim Ausliefern — sonst
   // wäre die Trennung eine Absprache und keine Struktur.
   if (role === "messung") {
-    return { ok: true, id: angelegt.id, termine: 0 };
+    return {
+      ok: true,
+      id: angelegt.id,
+      vorKlausur: 0,
+      nachKlausur: 0,
+      warnungen: [],
+    };
   }
 
   const plan = planeFaelligkeiten({
@@ -210,7 +252,114 @@ export async function createItem(
     );
   }
 
-  return { ok: true, id: angelegt.id, termine: plan.faelligkeiten.length };
+  // Getrennt gezählt, und die Warnungen kommen mit.
+  //
+  // Vorher stand hier eine einzige Zahl über alle Termine — und die zählte die
+  // Erhaltungstermine NACH der Klausur mit. Wer am Abend vor der Klausur einen
+  // Baustein anlegte, las „3 Termine geplant" und hatte in Wahrheit keinen
+  // einzigen Abruf vor der Prüfung: Die drei lagen 21, 42 und 63 Tage danach.
+  // Die Planung erkennt genau diesen Fall und setzt die Warnung `keine-tage` —
+  // sie wurde nur nie gelesen. Eine Zahl, die im Zusammenhang „vor der Klausur
+  // angelegt" als Vorbereitung verstanden wird, darf nicht etwas anderes
+  // zählen als das, wonach sie aussieht.
+  return {
+    ok: true,
+    id: angelegt.id,
+    vorKlausur: plan.faelligkeiten.filter((f) => f.mode === "klausur").length,
+    nachKlausur: plan.faelligkeiten.filter((f) => f.mode === "erhaltung").length,
+    warnungen: plan.warnungen,
+  };
+}
+
+/**
+ * Die offenen Termine aller Bausteine neu rechnen.
+ *
+ * ── Warum es das geben muss ──────────────────────────────────────────────────
+ *
+ * Weil beim Anlegen genau einmal geplant wird und der Klausurtermin sich
+ * danach bewegt. Drei Fälle, und alle drei sind Alltag:
+ *
+ *   1. Die Bausteine entstehen, bevor die Klausur im Kalender steht. Dann
+ *      plant `createItem` ohne Ziel — vier Termine im Grundtakt, keine
+ *      Erhaltung. Wird die Klausur später eingetragen, liegen Termine dahinter,
+ *      und A7 ist verletzt, ohne dass jemand etwas falsch gemacht hätte.
+ *   2. Die Klausur wird verschoben. Der Plan bleibt auf dem alten Datum.
+ *   3. Eine zweite, frühere Klausur kommt dazu.
+ *
+ * ── Was dabei NICHT angerührt wird ───────────────────────────────────────────
+ *
+ * Erledigte Termine. Sie sind Vergangenheit und tragen als einzige einen
+ * gemessenen Abruf; sie neu zu rechnen hieße, Geschehenes umzuschreiben. Es
+ * verschwinden also nur offene Termine, und an ihre Stelle tritt der Plan, der
+ * zum heutigen Kalender passt. Dasselbe Verfahren wie beim Lernplan der
+ * Klausuren, wo auch nur `status = 'open'` neu verteilt wird.
+ *
+ * Bausteine des Messvorrats bleiben außen vor — sie bekommen nie einen Termin
+ * (A12), auch nicht beim Neurechnen.
+ */
+export async function neuPlanen(
+  userId: string,
+  heute: string = todayInBerlin(),
+): Promise<{ bausteine: number; termine: number }> {
+  const offene = await db
+    .select({
+      id: recallItems.id,
+      subjectId: recallItems.subjectId,
+      createdAt: recallItems.createdAt,
+    })
+    .from(recallItems)
+    .where(
+      and(
+        eq(recallItems.userId, userId),
+        isNull(recallItems.retiredAt),
+        eq(recallItems.role, "uebung"),
+      ),
+    );
+
+  if (offene.length === 0) return { bausteine: 0, termine: 0 };
+
+  // Der Klausurtag je Fach einmal holen, nicht je Baustein — bei sechzig
+  // Bausteinen in einem Fach wären das sechzig gleiche Abfragen.
+  const klausurtage = new Map<string, string | null>();
+  for (const faecherId of new Set(offene.map((b) => b.subjectId))) {
+    klausurtage.set(faecherId, await naechsteKlausur(userId, faecherId, heute));
+  }
+
+  let termine = 0;
+  let bausteine = 0;
+
+  for (const baustein of offene) {
+    await db
+      .delete(recallSchedule)
+      .where(
+        and(
+          eq(recallSchedule.itemId, baustein.id),
+          isNull(recallSchedule.doneAt),
+        ),
+      );
+
+    const plan = planeFaelligkeiten({
+      heute,
+      aufgenommenAm: berlinDay(baustein.createdAt),
+      klausurtag: klausurtage.get(baustein.subjectId) ?? null,
+    });
+
+    if (plan.faelligkeiten.length > 0) {
+      await db.insert(recallSchedule).values(
+        plan.faelligkeiten.map((f) => ({
+          itemId: baustein.id,
+          dueOn: f.dueOn,
+          round: f.round,
+          mode: f.mode,
+          sortOrder: f.sortOrder,
+        })),
+      );
+      termine += plan.faelligkeiten.length;
+    }
+    bausteine += 1;
+  }
+
+  return { bausteine, termine };
 }
 
 export type BausteinZeile = {

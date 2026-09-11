@@ -57,6 +57,8 @@ type Aufgeloest = {
   attemptId: string;
   solution: string;
   misconception: string;
+  sourceQuote: string;
+  materialId: string | null;
 };
 
 export function SessionView({
@@ -126,6 +128,8 @@ export function SessionView({
         attemptId: ergebnis.attemptId,
         solution: ergebnis.solution,
         misconception: ergebnis.misconception,
+        sourceQuote: ergebnis.sourceQuote,
+        materialId: ergebnis.materialId,
       });
     });
   }
@@ -226,6 +230,27 @@ export function SessionView({
                 </ol>
                 <p className="text-sm text-muted">{geloest.misconception}</p>
               </div>
+
+              {/* Der Rückweg zur Quelle (A5). Erst hier, weil das Zitat der
+                  Wortlaut ist, aus dem die Antwort stammt — vorher gezeigt
+                  wäre es die Lösung mit Umweg. Und ohne ihn müsste der
+                  Meldeknopf darunter blind gedrückt werden. */}
+              <details className="rounded-control border border-border bg-surface px-3.5 py-2">
+                <summary className="cursor-pointer text-xs font-medium text-muted">
+                  Das stand im Heft
+                </summary>
+                <p className="mt-2 text-sm whitespace-pre-wrap text-foreground">
+                  {geloest.sourceQuote}
+                </p>
+                {geloest.materialId ? (
+                  <Link
+                    href={`/material/${geloest.materialId}`}
+                    className="mt-2 inline-block text-xs text-muted underline underline-offset-2"
+                  >
+                    Blatt ansehen
+                  </Link>
+                ) : null}
+              </details>
 
               <div className="flex flex-wrap items-center gap-3">
                 <Button type="button" onClick={() => urteilen(true)} loading={laeuft}>

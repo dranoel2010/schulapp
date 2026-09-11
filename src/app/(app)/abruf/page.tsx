@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { ButtonLink } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireUser } from "@/lib/auth";
@@ -8,6 +8,8 @@ import { subjectColor } from "@/lib/colors";
 import { formatGerman, todayInBerlin } from "@/lib/dates";
 import { listItems } from "@/recall/items";
 import { faelligHeute, tagesbericht } from "@/recall/sessions";
+
+import { neuPlanenAction } from "./actions";
 
 /**
  * Der Abruf: hier wird abgefragt, nicht verwaltet.
@@ -140,8 +142,21 @@ export default async function AbrufPage() {
               Baustein anlegen
             </ButtonLink>
           </div>
+          {/* Der Weg zurück, wenn der Kalender sich bewegt hat.
+              Die Termine entstehen beim Anlegen, ein Klausurtermin danach
+              nicht mehr: Wer Bausteine baut, bevor die Klausur eingetragen
+              ist, hat Termine ohne Ziel — und wer eine Klausur verschiebt,
+              hat welche dahinter. Erledigtes bleibt dabei stehen. */}
+          <form action={neuPlanenAction}>
+            <Button type="submit" variant="secondary">
+              Termine neu rechnen
+            </Button>
+          </form>
+
           <p className="text-sm text-subtle">
-            Heute ist der {formatGerman(heute, "lang")}.
+            Heute ist der {formatGerman(heute, "lang")}. Trägst du eine Klausur
+            nach oder verschiebst sie, rechne die Termine neu — sie entstehen
+            beim Anlegen und wissen von der Änderung sonst nichts.
           </p>
         </section>
       ) : null}

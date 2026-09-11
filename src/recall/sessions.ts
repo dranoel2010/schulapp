@@ -1,8 +1,8 @@
-import { and, asc, desc, eq, isNull, lte } from "drizzle-orm";
+import { and, asc, countDistinct, desc, eq, isNull, lte } from "drizzle-orm";
 
 import { db } from "@/db";
-import { subjects } from "@/db/schema";
-import { daysBetween, todayInBerlin } from "@/lib/dates";
+import { materialPages, subjects } from "@/db/schema";
+import { berlinDay, daysBetween, todayInBerlin } from "@/lib/dates";
 import { recallAttempts, recallItems, recallSchedule } from "@/recall/schema";
 
 /**
@@ -60,12 +60,28 @@ export type FaelligerBaustein = {
 };
 
 /**
- * Was heute ansteht, überfällig zuerst.
+ * Was heute ansteht, überfällig zuerst — höchstens EIN Termin je Baustein.
  *
  * Überfälliges kommt nach vorn, weil es sonst nie wieder drankäme: Der
  * Terminplan legt keine neuen Termine für Verpasstes an, und er soll es auch
  * nicht — dann rutschte der ganze Plan mit. Ein liegengebliebener Termin
  * wartet, und Warten ist sichtbar, wenn er oben steht.
+ *
+ * ── Warum je Baustein nur einer ──────────────────────────────────────────────
+ *
+ * Weil sonst genau das entsteht, wogegen dieser ganze Bau gerichtet ist. Drei
+ * Abende nicht dazugekommen — und bei einem Takt von drei Tagen, im Endspurt
+ * täglich, ist das keine Nachlässigkeit, sondern der Normalfall bei Unterricht
+ * bis 16:50 — heißt: für einen Baustein stehen vier Termine offen. Ohne diese
+ * Zusammenfassung käme dieselbe Frage viermal hintereinander. Nach dem ersten
+ * Mal steht die Musterlösung im Kopf; die drei übrigen Termine schließen sich
+ * trivial, und in der Datenbank sieht es aus, als wären die vier Begegnungen
+ * aus A6 erfüllt. In Wahrheit fanden sie massiert an einem Abend statt, und
+ * genau das misst der Unterschied 0,41 gegen 0,69.
+ *
+ * Die übrigen offenen Termine verfallen dabei nicht — sie bleiben offen und
+ * kommen an den folgenden Abenden, einer nach dem anderen. Der Rückstand baut
+ * sich also ab, ohne dass ein einziger Abend ihn vortäuscht.
  */
 export async function faelligHeute(
   userId: string,
@@ -103,6 +119,16 @@ export async function faelligHeute(
 
   if (zeilen.length === 0) return [];
 
+  // Je Baustein bleibt der ÄLTESTE offene Termin stehen, die übrigen fallen für
+  // heute weg. Die Abfrage kommt schon nach `dueOn` und `sortOrder` sortiert
+  // herein, also ist der erste Treffer je Baustein der richtige.
+  const gesehen = new Set<string>();
+  const jeBaustein = zeilen.filter((z) => {
+    if (gesehen.has(z.itemId)) return false;
+    gesehen.add(z.itemId);
+    return true;
+  });
+
   // Wie oft heute schon danebengegangen: entscheidet die Reihenfolge und
   // später die Formatstufe (A9). Eine Abfrage über den ganzen Tag, nicht je
   // Baustein eine — bei zwanzig fälligen Bausteinen wären das zwanzig Abfragen
@@ -120,7 +146,7 @@ export async function faelligHeute(
     daneben.set(v.itemId, (daneben.get(v.itemId) ?? 0) + 1);
   }
 
-  const mitZahl = zeilen.map((z) => ({
+  const mitZahl = jeBaustein.map((z) => ({
     ...z,
     heuteDaneben: daneben.get(z.itemId) ?? 0,
   }));
@@ -133,6 +159,40 @@ export async function faelligHeute(
     ...mitZahl.filter((z) => z.heuteDaneben === 0),
     ...mitZahl.filter((z) => z.heuteDaneben > 0),
   ];
+}
+
+/**
+ * Nur die Zahl: wie viele Bausteine heute anstehen.
+ *
+ * Für die Kachel auf der Startseite, und deshalb eigens. `faelligHeute()` holt
+ * je fälligem Termin Frage, Musterlösung, Fehlersatz und Zitat und macht dazu
+ * eine zweite Abfrage über die Versuche des Tages — im Dauerbetrieb sind das
+ * hundert Zeilen Volltext, von denen die Startseite genau eine Zahl behält, und
+ * das bei jedem einzelnen Aufruf von „/". Hier zählt die Datenbank.
+ *
+ * `countDistinct` auf den Baustein und nicht auf den Termin: Ein Baustein mit
+ * drei offenen Runden ist an einem Abend eine Aufgabe, nicht drei — dieselbe
+ * Zusammenfassung, die `faelligHeute()` vornimmt. Sonst stünde auf der Kachel
+ * eine größere Zahl, als der Abend dann zeigt.
+ */
+export async function zahlFaellig(
+  userId: string,
+  heute: string = todayInBerlin(),
+): Promise<number> {
+  const [zeile] = await db
+    .select({ anzahl: countDistinct(recallSchedule.itemId) })
+    .from(recallSchedule)
+    .innerJoin(recallItems, eq(recallItems.id, recallSchedule.itemId))
+    .where(
+      and(
+        eq(recallItems.userId, userId),
+        isNull(recallItems.retiredAt),
+        isNull(recallSchedule.doneAt),
+        lte(recallSchedule.dueOn, heute),
+      ),
+    );
+
+  return zeile?.anzahl ?? 0;
 }
 
 export type Versuch = {
@@ -151,6 +211,21 @@ export type VersuchErgebnis =
       /** Die Musterlösung — erst JETZT, nie vorher (A2) */
       solution: string;
       misconception: string;
+      /**
+       * Die Stelle im Heft, auf der die Frage beruht — der Rückweg aus A5.
+       *
+       * Auch sie kommt erst nach dem Versuch, und aus demselben Grund wie die
+       * Musterlösung: Das Zitat ist der Wortlaut, aus dem die Antwort stammt.
+       * Vorher gezeigt wäre es die Lösung mit Umweg.
+       *
+       * Ohne diese Angabe müsste der Meldeknopf „stand so nicht im Heft" blind
+       * gedrückt werden — der Schüler sähe das Zitat sonst nur ein einziges
+       * Mal, beim Anlegen. Ein Knopf, der einen Baustein endgültig zurückzieht,
+       * darf nicht auf Erinnerung angewiesen sein.
+       */
+      sourceQuote: string;
+      /** Für den Weg zum Blatt selbst; leer, wenn die Seite gelöscht wurde */
+      materialId: string | null;
     };
 
 /**
@@ -189,8 +264,14 @@ async function abstandSeitZuletzt(
 
   if (!baustein) return 0;
 
-  const angelegt = baustein.createdAt.toISOString().slice(0, 10);
-  return Math.max(0, daysBetween(angelegt, heute));
+  // `berlinDay()` und nicht `toISOString().slice(0, 10)`: Das ist die einzige
+  // Stelle im Kern, die aus einem Zeitstempel einen Kalendertag macht, und der
+  // Server läuft in UTC. Ein Baustein, der um 00:30 Berliner Zeit entsteht,
+  // trägt einen `created_at` vom Vortag — der Abstand wäre dauerhaft um einen
+  // Tag zu groß. Ausgerechnet dieser Wert trägt die ganze Erfolgsmessung
+  // (unter einem Tag 0,41 gegen 0,69 darüber), und weil er beim Schreiben
+  // festgehalten wird, ist er später nicht mehr zu berichtigen.
+  return Math.max(0, daysBetween(berlinDay(baustein.createdAt), heute));
 }
 
 /**
@@ -232,9 +313,15 @@ export async function versuchFesthalten(
       role: recallItems.role,
       solution: recallItems.solution,
       misconception: recallItems.misconception,
+      sourceQuote: recallItems.sourceQuote,
+      // Ein LEFT JOIN, kein innerer: `page_id` steht auf `set null`, ein
+      // gelöschtes Blatt darf den Abend nicht anhalten. Dann fehlt eben der
+      // Weg zurück, und die Frage bleibt trotzdem beantwortbar.
+      materialId: materialPages.materialId,
     })
     .from(recallSchedule)
     .innerJoin(recallItems, eq(recallItems.id, recallSchedule.itemId))
+    .leftJoin(materialPages, eq(materialPages.id, recallItems.pageId))
     .where(
       and(
         eq(recallSchedule.id, versuch.scheduleId),
@@ -270,6 +357,8 @@ export async function versuchFesthalten(
     attemptId: angelegt.id,
     solution: termin.solution,
     misconception: termin.misconception,
+    sourceQuote: termin.sourceQuote,
+    materialId: termin.materialId,
   };
 }
 

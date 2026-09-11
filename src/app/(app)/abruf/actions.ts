@@ -6,7 +6,12 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { todayInBerlin } from "@/lib/dates";
 import { formErrors, type FieldErrors } from "@/lib/form-errors";
-import { createItem, retireItem, type AnlageFehler } from "@/recall/items";
+import {
+  createItem,
+  neuPlanen,
+  retireItem,
+  type AnlageFehler,
+} from "@/recall/items";
 import {
   urteilFesthalten,
   versuchFesthalten,
@@ -43,7 +48,8 @@ type BausteinFeld =
   | "solution"
   | "misconception"
   | "sourceQuote"
-  | "materialKind";
+  | "materialKind"
+  | "role";
 
 export type BausteinFormState = {
   message?: string;
@@ -76,6 +82,16 @@ const bausteinSchema = z.object({
     .min(10, "Das Zitat ist zu kurz, um eine Stelle zu bezeichnen.")
     .max(1000, "Ein Zitat über 1000 Zeichen bezeichnet keine Stelle mehr."),
   materialKind: z.enum(["begriff", "anschauung", "verfahren", "ereignis"]),
+  /**
+   * A12: Übungsvorrat oder Messvorrat — und zwar BEIM ANLEGEN.
+   *
+   * Ohne dieses Feld wurde jeder Baustein stillschweigend „uebung", und der
+   * Messvorrat war eine Behauptung ohne Weg dorthin. Nachträglich lässt er sich
+   * nicht herstellen: Eine Frage, die schon geübt wurde, taugt nicht mehr als
+   * unabhängige Schätzung. Für die erste Epoche — die einzige, über die gar
+   * nichts bekannt ist — wäre die Gelegenheit dann ein für alle Mal vorbei.
+   */
+  role: z.enum(["uebung", "messung"]),
 });
 
 /**
@@ -92,7 +108,7 @@ const A5_MELDUNGEN: Record<AnlageFehler, string> = {
   "zitat-nicht-gefunden":
     "Dieses Zitat steht so nicht in der Abschrift. Kopiere die Stelle wörtlich heraus, statt sie nachzuerzählen.",
   "zitat-unsicher":
-    "Im Zitat stehen ⟨spitze Klammern⟩ — dort war schon das Abschreiben unsicher. Eine Frage darauf zu bauen hieße, eine Vermutung abzufragen; wähle eine andere Stelle oder berichtige zuerst die Abschrift.",
+    "Im Zitat steht eine ⟨spitze Klammer⟩ — dort war schon das Abschreiben unsicher, und es genügt eine einzelne: Wer mitten in einer Markierung zu kopieren anfängt, nimmt den unsicheren Text mit. Eine Frage darauf zu bauen hieße, eine Vermutung abzufragen; wähle eine Stelle außerhalb der Hervorhebung oder berichtige zuerst die Abschrift.",
 };
 
 /** Einen Baustein anlegen. Die Termine entstehen dabei gleich mit. */
@@ -110,6 +126,7 @@ export async function createItemAction(
     misconception: formData.get("misconception"),
     sourceQuote: formData.get("sourceQuote"),
     materialKind: formData.get("materialKind") ?? "begriff",
+    role: formData.get("role") ?? "uebung",
   });
 
   if (!geprueft.success) {
@@ -133,13 +150,54 @@ export async function createItemAction(
   // Kein redirect(): Nach einem angelegten Baustein will man meistens den
   // nächsten aus derselben Seite bauen. Das Formular leert sich selbst und
   // bleibt stehen; der Weg zurück steht daneben.
-  return {
-    angelegt: true,
-    message:
-      ergebnis.termine > 0
-        ? `Angelegt — ${ergebnis.termine} Termine geplant.`
-        : "Angelegt. Termine gibt es keine: Bausteine des Messvorrats werden nie geübt.",
-  };
+  return { angelegt: true, message: anlageSatz(ergebnis) };
+}
+
+/**
+ * Was nach dem Anlegen dasteht — und zwar das, was wirklich gilt.
+ *
+ * Die Planung rechnet Warnungen aus; vorher wurden sie weggeworfen und der
+ * Schüler las eine Zahl, die Erhaltungstermine NACH der Klausur mitzählte. Wer
+ * am Abend vor der Prüfung einen Baustein anlegte, sah „3 Termine geplant" und
+ * hatte in Wahrheit keinen einzigen Abruf davor. Eine Zahl, die nach
+ * Vorbereitung aussieht, muss Vorbereitung zählen.
+ */
+function anlageSatz(ergebnis: {
+  vorKlausur: number;
+  nachKlausur: number;
+  warnungen: readonly string[];
+}): string {
+  if (ergebnis.vorKlausur === 0 && ergebnis.nachKlausur === 0) {
+    return "Angelegt. Termine gibt es keine: Bausteine des Messvorrats werden nie geübt.";
+  }
+
+  if (ergebnis.warnungen.includes("keine-tage")) {
+    return `Angelegt — aber bis zur Klausur bleibt kein Tag mehr, an dem dieser Baustein drankäme. Die ${ergebnis.nachKlausur} geplanten Termine liegen alle danach.`;
+  }
+
+  if (ergebnis.warnungen.includes("zu-knapp")) {
+    return `Angelegt — aber es reicht nur für ${ergebnis.vorKlausur} ${ergebnis.vorKlausur === 1 ? "Abruf" : "Abrufe"} vor der Klausur statt der vier, die nötig wären. Dafür ist es zu spät; beim nächsten Mal früher.`;
+  }
+
+  if (ergebnis.warnungen.includes("kein-termin")) {
+    return `Angelegt — ${ergebnis.vorKlausur} Termine im Grundtakt. In diesem Fach steht keine Klausur an; sobald du eine einträgst, rechne die Termine neu.`;
+  }
+
+  return `Angelegt — ${ergebnis.vorKlausur} ${ergebnis.vorKlausur === 1 ? "Abruf" : "Abrufe"} vor der Klausur, danach ${ergebnis.nachKlausur} zum Behalten.`;
+}
+
+/**
+ * Die offenen Termine aller Bausteine neu rechnen.
+ *
+ * Der Weg zurück, wenn der Kalender sich bewegt hat: Klausur nachgetragen,
+ * verschoben, oder eine frühere kommt dazu. Erledigte Termine bleiben stehen —
+ * sie sind Vergangenheit und tragen als einzige einen gemessenen Abruf.
+ */
+export async function neuPlanenAction(): Promise<void> {
+  const user = await requireUser();
+
+  await neuPlanen(user.id, todayInBerlin());
+  revalidateAbruf();
 }
 
 /**

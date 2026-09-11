@@ -186,6 +186,20 @@ export function ItemForm({
         )}
       </Field>
 
+      <Field
+        id="role"
+        label="Wofür"
+        hint="Der Messvorrat wird NIE geübt. Er ist die einzige Möglichkeit, später ehrlich zu messen, ob das Üben etwas gebracht hat — an Fragen, die der Schüler nie gesehen hat. Nachträglich lässt sich das nicht herstellen."
+        error={state.errors?.role}
+      >
+        {(control) => (
+          <Select {...control} name="role" defaultValue="uebung">
+            <option value="uebung">Zum Üben</option>
+            <option value="messung">Messvorrat — nie üben, nur zum Prüfen</option>
+          </Select>
+        )}
+      </Field>
+
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" loading={pending}>
           Baustein anlegen

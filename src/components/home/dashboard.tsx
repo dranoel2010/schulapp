@@ -125,6 +125,37 @@ function headlineFor(data: HomeData): string {
   return `${tasks}, ${learn} heute.`;
 }
 
+/**
+ * Was heute abzurufen ist.
+ *
+ * Sie steht hier, weil `recallDue` sonst am großen Bildschirm geladen und
+ * weggeworfen würde: Ab dem md-Umbruch blendet die Startseite das Kachelmenü
+ * aus, und die Abruf-Kachel mit ihrer Zahl verschwindet mit ihm. Sieben fällige
+ * Bausteine wären dann nur noch am Navigationssymbol zu erraten.
+ *
+ * Keine Quote und keine Serie, aus demselben Grund wie auf der Kachel: Die
+ * Trefferquote des laufenden Abends steigt, weil der Stoff frisch ist, und sagt
+ * über die Klausur nichts (0,41 gegen 0,69). Hier steht eine Zählung.
+ */
+function RecallCard({ due }: { due: number }) {
+  return (
+    <section className={CARD}>
+      <p className="text-[13px] text-muted">Abruf</p>
+      <p className="mt-2 text-[15px] text-foreground">
+        {due === 0
+          ? "Heute nichts fällig."
+          : `${due} ${due === 1 ? "Baustein wartet" : "Bausteine warten"}.`}
+      </p>
+      <Link
+        href={due === 0 ? "/abruf/bausteine/neu" : "/abruf/sitzung"}
+        className="mt-3 inline-block text-[13px] font-medium text-accent hover:underline"
+      >
+        {due === 0 ? "Baustein anlegen" : "Abend anfangen"}
+      </Link>
+    </section>
+  );
+}
+
 export function HomeDashboard({ data }: { data: HomeData }) {
   const upcoming = data.upcoming.slice(0, UPCOMING_LIMIT);
 
@@ -150,6 +181,7 @@ export function HomeDashboard({ data }: { data: HomeData }) {
         <div className="flex min-h-0 flex-col gap-4">
           <NextExamCard exam={data.nextExam} days={data.daysToNextExam} />
           <TodayCard data={data} />
+          <RecallCard due={data.recallDue} />
         </div>
 
         <div className="flex min-h-0 flex-col gap-4">

@@ -166,9 +166,16 @@ if (!angelegt.ok) process.exit(1);
 // ── Zusage 2: mindestens vier Begegnungen bis zur Klausur (A6) ──────────────
 
 console.log("\nA6 — die Dosis:");
+// `vorKlausur` und nicht die Gesamtzahl: Die Erhaltungstermine liegen NACH der
+// Klausur und zählen für A6 ausdrücklich nicht mit. Genau diese Vermischung war
+// der Fehler, den die Abnahme am 11.9.2026 gefunden hat.
 pruefe(
-  angelegt.termine >= 4,
-  `${angelegt.termine} Termine bis zur Klausur geplant (mindestens vier verlangt)`,
+  angelegt.vorKlausur >= 4,
+  `${angelegt.vorKlausur} Abrufe vor der Klausur geplant (mindestens vier verlangt), dazu ${angelegt.nachKlausur} zum Behalten danach`,
+);
+pruefe(
+  angelegt.warnungen.length === 0,
+  `die Planung meldet keine Warnung${angelegt.warnungen.length ? ": " + angelegt.warnungen.join(", ") : ""}`,
 );
 
 const { rows: [hinter] } = await pg.query<{ n: number }>(
@@ -251,6 +258,56 @@ await urteilFesthalten(nutzer.id, zweiter.attemptId, true);
 pruefe(
   (await faelligHeute(nutzer.id, ERSTER_TERMIN)).length === 0,
   "nach „saß“ ist der Abend durch",
+);
+
+// ── Zusage 5: ein Rückstand täuscht keine Dosis vor ─────────────────────────
+//
+// Der Befund der Abnahme vom 11.9.2026, und der schwerste: Stehen mehrere
+// Termine desselben Bausteins offen, kamen sie alle in denselben Abend. Nach
+// dem ersten Mal stand die Musterlösung auf dem Bildschirm, die übrigen Termine
+// schlossen sich trivial — und in der Datenbank sah es aus, als wären die vier
+// Begegnungen aus A6 erfüllt. Sie fanden massiert an einem Abend statt.
+
+console.log("\nDer Rückstand — mehrere offene Termine desselben Bausteins:");
+
+const { rows: [offen] } = await pg.query<{ n: number }>(
+  "select count(*)::int as n from recall_schedule where done_at is null",
+);
+pruefe(offen.n >= 3, `${offen.n} weitere Termine stehen noch offen`);
+
+// Ein Tag weit in der Zukunft: dann sind alle übrigen Termine überfällig.
+const SPAET = "2026-10-08";
+const rueckstand = await faelligHeute(nutzer.id, SPAET);
+
+pruefe(
+  rueckstand.length === 1,
+  `am ${SPAET} ist trotz ${offen.n} offener Termine genau EIN Baustein fällig`,
+);
+
+const { rows: [immerNochOffen] } = await pg.query<{ n: number }>(
+  "select count(*)::int as n from recall_schedule where done_at is null",
+);
+pruefe(
+  immerNochOffen.n === offen.n,
+  "die übrigen Termine verfallen dabei nicht — sie warten auf die nächsten Abende",
+);
+
+// ── Zusage 6: eine einzelne ⟨Klammer⟩ genügt zum Abweisen (A5) ──────────────
+//
+// Ebenfalls aus der Abnahme: Wer mit der Maus MITTEN in einer Markierung zu
+// kopieren anfängt, erwischt nur deren schließende Klammer. Das Zitat steht
+// dann wörtlich in der Abschrift, trägt aber unsicheren Text.
+
+console.log("\nA5 — auch die halbe Markierung:");
+
+const halb = await createItem(
+  nutzer.id,
+  { ...grundform, sourceQuote: "Ableitung⟩ der inneren Funktion." },
+  HEUTE,
+);
+pruefe(
+  !halb.ok && halb.fehler === "zitat-unsicher",
+  "ein Zitat mit nur EINER spitzen Klammer wird abgewiesen",
 );
 
 const bericht = await tagesbericht(nutzer.id, ERSTER_TERMIN);

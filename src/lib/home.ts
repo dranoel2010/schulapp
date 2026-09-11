@@ -20,7 +20,7 @@ import {
 } from "@/lib/homework";
 import { listMaterialCards, type MaterialCard } from "@/lib/materials";
 import { listSubjects } from "@/lib/subjects";
-import { faelligHeute } from "@/recall/sessions";
+import { zahlFaellig } from "@/recall/sessions";
 import {
   isSchoolDay,
   loadWeek,
@@ -221,7 +221,25 @@ export async function loadHomeData(
     gradeSummary(userId),
     listMaterialCards(userId, { limit: RECENT_MATERIALS, order: "aufnahme" }),
     countInbox(userId),
-    faelligHeute(userId, today).then((liste) => liste.length),
+    // Die einzige Abfrage dieser Seite, die eine 0 statt eines Fehlers liefern
+    // darf — und das ist Absicht, keine Bequemlichkeit.
+    //
+    // Der Abrufkern ist ein eigenständiges Paket und ausdrücklich eine Wette:
+    // Seine Tabellen können eines Tages per scripts/abruf-rueckbau.sql wieder
+    // verschwinden. Ohne dieses Auffangen risse die Ablehnung das ganze
+    // Promise.all mit, `StartPage` würfe, und weil es unter src/app keine
+    // error.tsx gibt, stünde statt der Startseite Nexts Fehlerseite. Am Handy
+    // IST „/" die ganze Oberfläche — Kamera, Kachelmenü und Tagesspur hängen an
+    // diesem einen HomeData. Ein aufgegebenes Lernmodul darf die Schulapp nicht
+    // mitnehmen; genau das verspricht der Kopf der Rückbau-Datei.
+    //
+    // Die Kachel zeigt dann „nichts fällig heute". Das ist nach einem Rückbau
+    // die Wahrheit, und bei einem echten Datenbankfehler fällt es an jeder
+    // anderen Kachel derselben Seite ohnehin sofort auf.
+    zahlFaellig(userId, today).catch((fehler) => {
+      console.error("Abruf-Zahl nicht ermittelbar", fehler);
+      return 0;
+    }),
   ]);
 
   const upcoming = exams.filter((exam) => exam.date >= today);
