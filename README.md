@@ -182,7 +182,8 @@ src/
                       gegen Token
       material/       liefert die Bilder aus: /api/material/<seite> das
                       Vollbild, .../vorschau die Vorschau
-      push/, cron/    Anmeldung der Geräte und der stündliche Anstoß
+      push/, cron/    Anmeldung der Geräte, der stündliche Anstoß für die
+                      Erinnerungen und die tägliche Übergabe ans Wiki
     layout.tsx      Wurzel: Schriften, Metadaten, Service Worker,
                     hell/dunkel
     manifest.ts     PWA-Manifest
@@ -228,6 +229,11 @@ src/
     materials.ts    Datenzugriff für die Blätter, ihre Seiten und die
                     Themen daran, dazu der Filter nach einem Thema;
                     Titelvorschlag und Formular getestet
+    transcripts.ts  die Abschrift auf dem Bildschirm: die ⟨spitzen Klammern⟩
+                    des Agenten finden, kürzen, und die Formularfelder
+                    benennen und wieder auslesen — reine Rechnung, ohne
+                    Datenbank, damit das Kamera-Formular sie importieren
+                    darf (getestet)
     inbox.ts        der Eingangskorb: was noch keiner durchgesehen hat, die
                     Vorschläge dazu und die Vorbelegung des Handformulars
                     daraus (getestet)
@@ -243,6 +249,42 @@ src/
                     Rückfrage, wenn es mehrere sein könnten (getestet)
       run.ts        was die Werkzeuge tun — auf derselben @/lib wie die
                     Oberfläche
+    pdf/
+      subject-pdf.ts  das Fach-PDF von der Datenbank bis zu den Bytes: die
+                    eine Tür zwischen Route und Dokument, samt den Grenzen
+                    für Blätter und Bilddaten (getestet)
+      subject-document.ts  der Satz selbst — Fach → Thema → Blatt, jedes
+                    Blatt mit Foto und Abschrift; rechnet nichts aus, was
+                    nicht hereingereicht wurde, und ist deshalb ohne
+                    Datenbank prüfbar (getestet)
+      fonts.ts      Geist setzen, DejaVu auffangen: laden, einstellen und
+                    den Text zeichenweise auf beide verteilen (getestet)
+      font-coverage.ts  welche Zeichen eine Schriftdatei wirklich zeichnen
+                    kann — aus ihrer cmap gelesen, nicht geraten (getestet)
+      image-info.ts Format und Maße eines Fotos aus den Bytes, weil pdfkit
+                    nur JPEG und PNG einbetten kann (getestet)
+      filename.ts   wie die Datei heißt, die dabei herauskommt, und was von
+                    dem Namen übrig bleibt, wenn nur ASCII erlaubt ist
+                    (getestet)
+    wiki/
+      run.ts        der Lauf: vergleichen, schreiben, und erst danach die
+                    Abdrücke festhalten — die Reihenfolge ist die ganze
+                    Sicherung dieser Stufe
+      collect.ts    was hineinkommt: der Bestand eines Nutzers, vollständig
+                    — was hier fehlt, gilt als gelöscht
+      documents.ts  aus einer Datenbankzeile wird eine Datei: flach, mit
+                    der festen Kennung „<art>-<uuid>" (getestet)
+      markdown.ts   die Schicht, die feindlichen Text einpackt — kurze
+                    Werte maskiert, freier Text im Codeblock (getestet)
+      manifest.ts   der Übergabeschein, den der Agent zuerst liest, in
+                    Klartext und nicht als JSON (getestet)
+      folder.ts     das Schreiben: versteckter Ordner, dann ein Umbenennen
+                    — der einzige Ort, an dem die App Dateien anlegt
+                    (getestet)
+      deliveries.ts das Gedächtnis der Übergabe: die Tabelle
+                    `wiki_deliveries`
+      example.ts    ein erfundener, absichtlich bösartiger Bestand — die
+                    Probe ohne Datenbank
     form-errors.ts  wo eine zod-Meldung landet — unter ihrem Feld oder über
                     dem ganzen Formular (getestet)
     theme.ts        hell, dunkel oder dem Gerät überlassen
@@ -250,8 +292,14 @@ src/
 harness/          der Postbote — gehört NICHT zur App, sondern benutzt sie
   zugang.mts        einmal zustimmen, danach ein eigener Zugang
   postbote.mts      alle paar Minuten nachsehen und Claude ansetzen
+  nachlese.mts      schreibt Blätter nach, die längst eingeordnet sind —
+                    kein zweiter Dienst, sondern ein Lauf auf Zuruf
   kaefig.mts        der Lauf ohne Bash, ohne Dateien, ohne fremde Server
   auftrag.mts       was Claude an einem Blatt tun soll
+  mcp.mts           der Draht zur App: ein MCP-Client aus fetch und sonst
+                    nichts, dazu der eigene Zugang in zugang.json
+  sperre.mts        immer nur einer — zwei Läufe auf derselben zugang.json
+                    nehmen einander das Erneuerungs-Token
 ```
 
 **Lernen und Verwalten sind getrennt.** Unter *Klausuren* trägt man Termine
@@ -383,7 +431,7 @@ dort zurück auf dieselbe Seite (`?weiter=`) — sonst stündest du nach dem
 Anmelden auf der Startseite, während in der Claude-App ein Fenster auf eine
 Antwort wartet.
 
-**Die Werkzeuge.** Zehn lesen, eines schreibt:
+**Die Werkzeuge.** Elf lesen, eines schreibt:
 
 | Werkzeug | Was es liefert |
 |---|---|
@@ -396,6 +444,7 @@ Antwort wartet.
 | `read_material` | die Ablage, gefiltert nach Fach und Thema |
 | `read_sheet` | ein Blatt mit allen Seiten |
 | `read_page` | das Foto einer Seite, als Bild zum Lesen |
+| `read_transcript` | dasselbe Blatt als Text: die Abschrift je Seite — leer heißt gelesen und es stand nichts darauf, `null` heißt, es hat noch niemand gelesen |
 | `read_inbox` | Eingangskorb: was wartet und welche Vorschläge daran hängen |
 | `propose_sheet` | legt einen Vorschlag in den Eingangskorb |
 
@@ -469,17 +518,34 @@ offenen Port im Router. `DATABASE_URL` setzt die Compose-Datei auf dem NAS und
 zeigt auf den Datenbank-Container.
 
 > **Davor, vom 23. bis 30.8.2026:** Vercel als Hosting, eine Neon-Datenbank in
-> Frankfurt, die Adresse `schulapp-teal.vercel.app`. Beides ist abgeschaltet.
-> Wo im Repo noch die alte Adresse steht, ist es ein Rest und keine Auskunft.
+> Frankfurt, die Adresse `schulapp-teal.vercel.app`. Wo im Repo noch die alte
+> Adresse steht, ist es Vorgeschichte und keine Auskunft.
+>
+> **„Abgeschaltet" wäre allerdings zu viel gesagt** — am 11.9.2026 nachgesehen:
+> Das Vercel-Projekt ist **pausiert, nicht gelöscht** (`live: false`, die letzte
+> Produktionsfassung steht weiterhin auf `READY`, beide Adressen sind zugeordnet),
+> und die Neon-Datenbank antwortet noch und hält den eingefrorenen Stand vom
+> Umzugstag: ein Nutzer, 15 Blätter, 15 Seiten, keine Noten. Ein Klick auf
+> *Unpause* weckt also eine zweite, ältere Schulapp — mit einer zweiten
+> Datenbank, in der Schulinhalte liegen. Wer das nicht will, löscht beides
+> bewusst; es ist der letzte Stand von vor dem Umzug, und danach ist er weg.
 
 Dass die eine Datenbank **auch beim Entwickeln** gilt, war und bleibt Absicht:
 liefe `npm run dev` gegen eine eigene Datei-Datenbank, gäbe es zwei Bestände.
 Eine Hausaufgabe, am Laptop eingetragen, käme am Handy nie an — und gemerkt
-hätte man es erst, wenn sie in der Schule fehlt. Mit dem Umzug ist diese Frage
-allerdings offen: die `DATABASE_URL` in der lokalen `.env.local` zeigt weiterhin
-auf Neon und damit ins Leere. Wer lokal entwickelt, entscheidet sich also
-zwischen der Datei-Datenbank (Variable herausnehmen) und einem Tunnel auf das
-NAS — beides ist vertretbar, nur nicht der jetzige Zustand.
+hätte man es erst, wenn sie in der Schule fehlt.
+
+Mit dem Umzug aufs NAS hat sich diese Frage gedreht, und am 11.9.2026 ist sie
+entschieden worden. Die `DATABASE_URL` in der lokalen `.env.local` zeigte
+weiterhin auf Neon — und das war schlimmer als „ins Leere": Neon antwortet noch.
+Ein `npm run dev` hätte also nicht in die echte Datenbank geschrieben, sondern
+in die alte Cloud-Kopie, die niemand mehr ansieht. Genau die Verwechslung, gegen
+die der Absatz oben argumentiert, nur andersherum.
+
+Die Zeile ist deshalb aus `.env.local` heraus: Lokal läuft wieder die
+Datei-Datenbank, ein Spielplatz, der niemandem wehtut. Wer wirklich gegen den
+Bestand des NAS entwickeln will, öffnet dort den Postgres-Port — das ist eine
+Entscheidung und kein Handgriff nebenbei.
 
 Ohne `DATABASE_URL` fällt dieselbe App auf **PGlite** zurück: ein echtes
 Postgres, das als Datei unter `.data/pglite` im Projekt liegt. Kein Server,
@@ -625,32 +691,40 @@ Der Versand wird von `/api/cron/reminders` ausgelöst. Die Route ist durch
 dich gemeint ist, entscheidet die Route anhand deiner Erinnerungszeit in
 Berliner Zeit.
 
-Ausgelöst wird sie von `.github/workflows/erinnerungen.yml` und **nicht** von
-`vercel.json`. Der Grund ist eine Grenze des Hobby-Tarifs: dort ist höchstens
-ein Cron-Lauf pro Tag erlaubt, und ein stündlicher Ausdruck lässt schon das
-Deployment scheitern („Hobby accounts are limited to daily cron jobs"). Einmal
-am Tag geht die Rechnung aber nicht auf, weil die Route die passende Stunde
-selbst sucht.
+Ausgelöst wird sie seit dem 11.9.2026 **von einer Zeile in `/etc/crontab` auf
+dem NAS**, fünf nach jeder vollen Stunde: Sie ruft `erinnerungen.sh`, und das
+Skript schreibt Zeitstempel, Rückgabewert und die Antwort der Route im Wortlaut
+in ein Protokoll neben die Compose-Datei. Scheitert ein Lauf, entsteht im Vault
+eine `SCHULAPP-STOERUNG.md` — höchstens eine je Tag, sonst stünden nach einer
+durchgefallenen Nacht vierundzwanzig gleichlautende Absätze darin.
 
-Dafür muss im GitHub-Repo unter *Settings → Secrets and variables → Actions*
-ein Wert stehen: `CRON_SECRET`, dasselbe wie in der Umgebung der App. Und zwar
-als **Repository secret** — ein *Environment secret* sieht dieser Workflow
-nicht, weil sein Job keiner Umgebung zugeordnet ist.
+Bis dahin lag der Auslöser bei GitHub, in `.github/workflows/erinnerungen.yml`.
+Dort war er gelandet, weil der Hobby-Tarif von Vercel höchstens einen Cron-Lauf
+pro Tag erlaubt und ein stündlicher Ausdruck schon das Deployment scheitern ließ
+(„Hobby accounts are limited to daily cron jobs") — einmal am Tag geht die
+Rechnung aber nicht auf, weil die Route die passende Stunde selbst sucht. Mit
+dem Umzug aufs NAS hat dieser Grund aufgehört zu gelten, und der Workflow hat es
+niemandem gesagt: Über die öffentliche GitHub-API nachgezählt, scheiterten
+**zwölf Läufe in Folge** am Schritt „Erinnerungs-Route aufrufen", zurück bis
+mindestens zum 9.9. — seit dem Umzug am 30.8.2026 ist keine einzige Erinnerung
+angekommen.
 
-Die Adresse der App steht dagegen im Klartext in `erinnerungen.yml`. Sie war
-einmal ein zweites Secret, und genau daran ist der erste Lauf gescheitert: war
-`APP_URL` nicht gesetzt, rief `curl` die Route ohne Host auf und brach mit Exit
-3 ab — im Protokoll stand nur „Process completed with exit code 3", was nach
-einem kaputten Workflow aussieht und keiner war. Ein Geheimnis war die Adresse
-ohnehin nie; sie steht auf jedem Handy in der Adressleiste. Wer die App
-woanders betreibt, überschreibt sie mit einem Secret oder einer Variablen
-namens `APP_URL`, ohne die Datei anzufassen.
+Die Ursache ist eingekreist und liegt nicht in der App: Der Funnel antwortet von
+außen mit dem Geheimnis aus der `.env` des NAS in 0,77 s mit **200**, ohne
+Geheimnis mit **401**. App, Funnel und Route sind also in Ordnung; GitHub legt
+das alte `CRON_SECRET` aus der Vercel-Zeit vor, denn beim Umzug wurde es neu
+erzeugt. **Repariert wurde deshalb nicht das Geheimnis, sondern der Ort** —
+genau so, wie der Kopf von `erinnerungen.yml` es selbst vorschlägt: Der Auslöser
+sitzt jetzt neben der App auf demselben Gerät, erreicht sie ohne Funnel und ohne
+GitHub, und das Geheimnis liegt dort, wo die App es ohnehin hat.
 
-GitHubs Planer ist nicht auf die Minute genau und kann unter Last einige
-Minuten spät kommen. Verschiebt sich ein Lauf über die volle Stunde hinaus,
-fällt die Erinnerung dieser Stunde aus — sie wird nicht nachgeholt. Für eine
-tägliche Lernerinnerung ist das verschmerzbar; wer es genauer braucht, nimmt
-den Vercel-Pro-Tarif und trägt den Cron wieder in `vercel.json` ein.
+> **Der Workflow ist damit stillgelegt und darf NICHT repariert werden.** Der
+> `schedule:`-Block ist heraus; wer ihn wieder einsetzt und dazu das Secret im
+> Repo nachzieht, hat keinen Auslöser geheilt, sondern zwei für dieselbe Stunde
+> — zwei Erinnerungen je Stunde auf demselben Handy. Und stillgelegt ist er
+> erst, wenn dieser Stand im Standardzweig steht: Zeitpläne liest GitHub von
+> dort und nicht aus einem Arbeitsverzeichnis. Bis dahin läuft der alte weiter
+> — folgenlos nur, weil er an der 401 hängenbleibt.
 
 Lokal testest du sie so:
 
@@ -689,8 +763,12 @@ Dokument, und der Schluss zählt sie noch einmal auf.
 
 ## Die Wiki-Übergabe
 
-Einmal täglich legt die App ihren ganzen Bestand als Markdown in einen Ordner.
-Ein **eigener Agent** holt ihn dort ab und ordnet ihn in ein Obsidian-Vault ein.
+Einmal täglich legt die App ihren ganzen Bestand als Markdown in einen Ordner —
+seit dem 11.9.2026 im Obsidian-Vault selbst, in dessen Eingang
+`topics/schule/inbox`, und nicht mehr daneben: Ein Ordner außerhalb wäre eine
+Schleuse, die Obsidian gar nicht sieht, und ob sie volläuft oder leer bleibt,
+fiele dann niemandem auf. Ein **eigener Agent** holt die Lieferung dort ab und
+ordnet sie an ihren Platz ein.
 
 **Die App ist Lieferant, nicht Bibliothekar.** Sie baut keine Fächer-Ordner nach
 und entscheidet nicht, wo im Vault etwas landet — das wäre eine Ordnung, die der
@@ -729,13 +807,27 @@ Rückwärtsstrich-Folge darin. Auch die Raute wird maskiert — sonst verschlagw
 sich ein Blatt in Obsidian selbst. Und die `MANIFEST.md` sagt dem Agenten in
 Klartext, dass in einem Codeblock Inhalt steht und kein Auftrag.
 
-Eingerichtet wird der Lauf im **DSM-Aufgabenplaner** und nicht als GitHub Action:
-er läuft unabhängig von GitHub und vom Tailscale Funnel und kennt die
-60-Sekunden-Frist von `curl` nicht. Die Schritte stehen vollständig im Kopf von
-`src/app/api/cron/wiki/route.ts` — samt dem Volume-Mount des Vaults in den
-Container und der Umgebungsvariablen `WIKI_EXPORT_DIR`. Fehlt sie, antwortet die
-Route mit einem Fehler und **nicht** mit „nichts zu tun": ein grüner Lauf, der
-jede Nacht nichts tut, fällt niemandem auf.
+Angestoßen wird der Lauf **auf dem NAS selbst** und nicht als GitHub Action: er
+läuft damit unabhängig von GitHub und vom Tailscale Funnel und kennt die
+60-Sekunden-Frist von `curl` nicht. Vorgesehen war dafür der
+**DSM-Aufgabenplaner**; seit dem 11.9.2026 steht stattdessen eine Zeile in
+`/etc/crontab`, die um 02:30 `wiki-uebergabe.sh` ruft und Zeitstempel,
+Rückgabewert und die Antwort der Route im Wortlaut in ein Protokoll schreibt.
+Der Grund ist der Rückkanal: Der Planer meldet sein Ergebnis per E-Mail, und auf
+diesem NAS ist keine eingerichtet — `/etc/crontab` beginnt mit `MAILTO=""`, eine
+SMTP-Konfiguration gibt es nicht. Er wäre also still, und ein stiller Fehlschlag
+ist genau das, wogegen diese Stufe sonst argumentiert. Das Skript legt deshalb
+bei einem Rückgabewert ungleich null eine `SCHULAPP-STOERUNG.md` in den Vault;
+Synology Drive trägt sie binnen Minuten auf den Windows-Rechner, und in Obsidian
+steht dann eine Datei, die vorher nicht da war. Die Uhrzeit ist 02:30 und nicht
+03:30, weil DSM donnerstags um 03:45 sein Update einspielt und neu startet — ein
+erster, vollständiger Lauf darf da nicht hineinlaufen.
+
+Die Schritte stehen vollständig im Kopf von `src/app/api/cron/wiki/route.ts` —
+samt dem Volume-Mount des Vaults in den Container und der Umgebungsvariablen
+`WIKI_EXPORT_DIR`. Fehlt sie, antwortet die Route mit einem Fehler und **nicht**
+mit „nichts zu tun": ein grüner Lauf, der jede Nacht nichts tut, fällt niemandem
+auf.
 
 ## Betrieb
 
@@ -749,14 +841,25 @@ bleibt dabei zu, es gibt keine Portfreigabe.
   repo/                <- der Klon dieses Repos, zugleich der Build-Kontext
   docker-compose.yml   <- beide Container; liegt NUR auf dem NAS
   .env                 <- die Geheimnisse; liegt NUR auf dem NAS
-  data/postgres/       <- die Datenbankdateien
+  data/postgres.alt-…  <- die ALTEN Datenbankdateien, seit 11.9.2026 stillgelegt
+  wiki-uebergabe.sh    <- was die Crontab-Zeile um 02:30 ruft
+  wiki-uebergabe.log   <- eine Zeile je Lauf: Zeit, Rückgabewert, Antwort
+  erinnerungen.sh      <- dasselbe, stündlich, für die Erinnerungen
+  erinnerungen.log     <- ebenso; beide beschneidet ihr Skript auf 500 Zeilen
+
+/volume1/@docker/volumes/schulapp_pgdata/_data   <- die Datenbank selbst,
+                          bewusst AUSSERHALB der Freigabe; warum, steht unten
 ```
 
-Zwei der vier Einträge stehen bewusst nicht im Repo. Die Compose-Datei
-beschreibt eine bestimmte Maschine, und die `.env` trägt die Geheimnisse —
-darunter die VAPID-Schlüssel und das `CRON_SECRET`, die beim Umzug **neu erzeugt
-wurden**. Die Werte in der lokalen `.env.local` sind seitdem nicht mehr die
-gültigen.
+**Nur `repo/` kommt aus Git**, alles andere gehört zu dieser einen Maschine. Die
+Compose-Datei beschreibt sie, und die `.env` trägt die Geheimnisse — darunter
+die VAPID-Schlüssel und das `CRON_SECRET`, die beim Umzug **neu erzeugt wurden**.
+Die Werte in der lokalen `.env.local` sind seitdem nicht mehr die gültigen. Die
+beiden Skripte und ihre Protokolle hängen genauso an diesem NAS: Sie kennen
+seine Pfade, seinen Vault und die Crontab-Zeilen, die sie rufen. Im Repo wären
+sie eine Anleitung, die für jede andere Maschine falsch ist — dieselbe
+Begründung wie bei der Compose-Datei, und ein Protokoll ist ohnehin ein
+Messwert und kein Quelltext.
 
 Eine neue Fassung geht so hinein (SSH ist in DSM vorher kurz einzuschalten):
 
@@ -784,12 +887,12 @@ Einstellungen steht nur noch der Satz über die fehlenden Schlüssel. Das
 Dockerfile schreibt deshalb drei Warnzeilen ins Bau-Protokoll, wenn das Argument
 leer ankommt.
 
-> **Auf dem NAS liegt ein unversioniertes `Dockerfile` im selben Ordner** — es
-> wurde dort von Hand angelegt, bevor eines im Repo stand. Sobald das
-> eingecheckte ankommt, bricht `git pull` dort mit „untracked working tree files
-> would be overwritten" ab. Vorher wegräumen — und am besten einmal gegen das
-> hier halten, denn das dort ist das erprobte Original und dieses hier der
-> Nachbau.
+> **Erledigt:** Auf dem NAS lag ein unversioniertes `Dockerfile` im selben
+> Ordner, von Hand angelegt, bevor eines im Repo stand — und solange es so hieß,
+> brach `git pull` dort mit „untracked working tree files would be overwritten"
+> ab. Die Handfassung steht inzwischen unter eigenem Namen daneben
+> (`Dockerfile-vom-NAS-20260905-214552`), im Repo-Ordner liegt das eingecheckte,
+> und der Pull läuft durch — am 11.9.2026 zuletzt, drei Commits auf einmal.
 
 Der Postbote läuft ebenfalls auf dem NAS, unter `/volume1/docker/postbote` mit
 einer eigenen `zugang.json`. Ein zweiter darf nirgendwo sonst laufen; warum,
@@ -797,6 +900,139 @@ steht in [harness/README.md](harness/README.md). Und weil ein Zugang immer für
 die Adresse gilt, unter der zugestimmt wurde, braucht er nach dem Umzug eine
 **neue** Zustimmung gegen die NAS-Adresse — die alte zeigt auf Vercel und wird
 nirgends automatisch nachgezogen.
+
+### Der Ausfall vom 11.9.2026 — die Freigabe entzieht der Datenbank die Rechte
+
+Am 11.9.2026 antwortete die App ab 17:38 auf **jeder** Seite mit 500. Der
+Vorfall ist hier so ausführlich festgehalten, weil seine Ursache zwei Stunden
+vor der Wirkung liegt und der Zusammenhang deshalb nicht zu sehen ist.
+
+**Was geschah.** Der gemeinsame Ordner `/volume1/docker` bekam um 15:17 eine
+Synology-ACL, die sich nach unten vererbte. In `data/`, `data/postgres/` und
+`data/postgres/18/` standen danach nur noch Einträge für `root` — kein
+`everyone`, wie ihn die Nachbarordner behalten haben. Im ACL-Modus zählen die
+`777`-Bits nicht mehr, und Postgres läuft im Bild als uid 70. Es stand damit in
+keinem einzigen Eintrag und kam an sein eigenes Datenverzeichnis nicht mehr
+heran.
+
+**Warum erst zwei Stunden später.** Ein laufendes Postgres hält seine Dateien
+offen und merkt entzogene Rechte nicht. Es stolpert erst beim nächsten
+Checkpoint — um 17:37:59:
+
+```
+PANIC:  could not open file ".../18/docker/global/pg_control": Permission denied
+LOG:    checkpointer process (PID 120) was terminated by signal 6: Aborted
+FATAL:  could not stat data directory "/var/lib/postgresql/18/docker": Permission denied
+mkdir: can't create directory '/var/lib/postgresql/18/': Permission denied
+```
+
+Danach lief der Container in einer Neustartschleife, und die App meldete
+`getaddrinfo ENOTFOUND db` — den Namen `db` gibt es im Docker-Netz nur, solange
+der Container läuft.
+
+**Warum es wie ein Fehler im Code aussah.** Am selben Tag waren drei Commits
+aufs NAS gezogen und neu gebaut worden. Die fassen aber nur `harness/` und
+`scripts/` an, keinen App-Quelltext — der Neubau war unschuldig.
+
+**Woran man es erkennt.** Die Startseite zeigte `ERROR 1912664400`, `/login` den
+Digest `2211390317`. Das sind keine Fehlernummern, sondern Next-Digests,
+gebildet aus dem jeweiligen Fehler — zwei verschiedene Stacks, dieselbe Wurzel.
+Die verräterische Messung dauert zehn Sekunden:
+
+| Antwort | Bedeutung |
+|---|---|
+| `/manifest.webmanifest`, `/favicon.ico` → 200 | Server und Funnel sind gesund |
+| jede gerenderte Seite → 500 in ~0,3 s | zu schnell für einen Timeout, also kein Netz-Problem |
+| **auch `/login` → 500** | die Datenbank; `login/page.tsx` ruft als erstes `hasAccount()` |
+
+Dass sogar die nackte Anmeldeseite fällt, ist der Fingerzeig: Ohne Postgres
+kommt sie keinen Schritt weit.
+
+**Warum es den Postboten nicht traf.** Er läuft als uid 1000 und schreibt nach
+`/volume1/docker/postbote/claude-home`. Dieser Ordner ist Linux-Modus geblieben,
+und die ACL des Elternordners lässt `everyone` wenigstens durchlaufen. Postgres
+dagegen musste durch drei Ebenen, die ihm genau das verwehrten.
+
+**Was dagegen getan wurde.** Auf `data/`, `data/postgres/` und `data/postgres/18/`
+steht nun je ein ergänzter Eintrag für uid 70:
+
+```bash
+synoacltool -addace <pfad> "user:70:allow:rwxpdDaARWc--:fd--"
+```
+
+Ergänzt und nicht gelöscht — das ist umkehrbar und lässt die übrigen Einträge
+stehen. Die Datenbank kam ohne Datenverlust hoch, die Wiederherstellung lief
+sauber durch, und ein anschließender sauberer Neustart brauchte gar keine mehr.
+
+Das war allerdings ein Pflaster: Drei Einträge, die ein Klick in DSM auf
+*Ordnerrechte → auf Unterordner anwenden* wieder überschreibt. Deshalb ist die
+Datenbank am selben Abend aus der Freigabe herausgezogen worden.
+
+### Die Datenbank liegt seit dem 11.9.2026 in einem Docker-Volume
+
+`db.volumes` zeigt nicht mehr auf `./data/postgres`, sondern auf das Volume
+`pgdata`. Dessen Dateien liegen unter
+`/volume1/@docker/volumes/schulapp_pgdata/_data` — **außerhalb jeder Freigabe**,
+und der ganze `@docker`-Zweig ist nachgemessen Linux-Modus ohne eine einzige
+ACL. Dorthin reicht keine Rechtevergabe aus DSM, und damit ist der Ausfall von
+oben strukturell nicht mehr möglich, statt nur repariert.
+
+So lief der Umzug — nachvollziehbar, falls er je rückgängig gemacht werden muss:
+
+```bash
+cd /volume1/docker/schulapp
+sudo docker volume create --label com.docker.compose.project=schulapp \
+     --label com.docker.compose.volume=pgdata schulapp_pgdata
+sudo docker compose stop app db          # sauber anhalten, nicht abwürgen
+# erst weiter, wenn im Log "database system is shut down" steht
+sudo docker run --rm -v /volume1/docker/schulapp/data/postgres:/von:ro \
+     -v schulapp_pgdata:/nach alpine:3 sh -c 'cp -a /von/. /nach/'
+# dazwischen die docker-compose.yml ändern, siehe darunter
+sudo docker compose up -d
+sudo mv data/postgres data/postgres.alt-20260911   # erst nach der Prüfung
+```
+
+Die Etiketten beim `volume create` sind kein Schmuck: Ohne sie hält Compose das
+Volume für fremd und legt daneben ein eigenes an — mit einer leeren Datenbank.
+
+In der Compose-Datei wurde aus der einen Zeile unter `db.volumes`
+
+```yaml
+    volumes:
+      - pgdata:/var/lib/postgresql   # vorher: ./data/postgres:/var/lib/postgresql
+```
+
+und am Dateiende kam der Block dazu, der das Volume überhaupt erklärt:
+
+```yaml
+volumes:
+  pgdata:
+```
+
+**Gemessen wurde dabei:** 1403 Dateien auf beiden Seiten, **jede einzelne
+Prüfsumme gleich**, Eigentümer erhalten. Postgres meldete beim Start
+„Skipping initialization" — es hat den Bestand also erkannt und nicht neu
+angelegt — und kam ohne Wiederherstellung hoch. Alle elf Tabellenzahlen vorher
+und nachher identisch. Ausfall: **51 Sekunden**. Ein anschließender Neustart des
+Containers lief sauber durch.
+
+Der alte Ordner ist **nicht gelöscht**, er steht als
+`data/postgres.alt-20260911` daneben (74 MB) — und dass die App nach dem
+Umbenennen unverändert weiterlief, ist zugleich der Beweis, dass wirklich das
+Volume gelesen wird.
+
+**Sicherungen dieses Tages**, beide auf dem NAS und damit nicht gegen einen
+Plattenschaden gut:
+
+- `/volume1/docker/schulapp/abzug-20260911-vor-umzug.dump` — 9,4 MB, 132
+  Objekte, `pg_dump --format=custom` aus der wieder gesunden Datenbank.
+- `/volume1/docker/schulapp-postgres-20260911-1800.tgz` — 26 MB, 1434 Dateien,
+  der Dateistand vor jedem Eingriff.
+
+**Und eine Lücke, die der Vorfall sichtbar gemacht hat:** Von 17:38 bis zur
+Meldung durch einen Menschen hat niemand etwas bemerkt. `erinnerungen.log`
+schrieb um 18:05 brav `exit=22 curl: (22) … error: 500`, und
+`wiki-uebergabe.log` hätte um 02:30 dasselbe getan. Gelesen wird beides nicht.
 
 ## Stand
 
@@ -836,7 +1072,7 @@ dorthin steht in der Ablage immer und auf der Startseite dann, wenn wirklich
 etwas wartet.
 
 **Web MCP** — die App bietet ihre Fähigkeiten als Werkzeuge an, und ein Agent
-in der Claude-App benutzt sie: zehn zum Lesen, eines legt einen Vorschlag in
+in der Claude-App benutzt sie: elf zum Lesen, eines legt einen Vorschlag in
 den Eingangskorb. Verbunden wird über die Zustimmungsseite `/verbinden`,
 getrennt unter *Einstellungen*. Wie das im Einzelnen läuft, steht oben unter
 *Der Web MCP*.
