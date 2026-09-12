@@ -299,7 +299,19 @@ async function runde(
   nurDiese: string | undefined,
   trocken: boolean,
 ): Promise<void> {
-  const antwort = await verbindung.werkzeug("read_exams", {});
+  // `include_past` nur bei --klausur: Der Schalter verspricht „genau diese,
+  // auch wenn sie nicht dran wäre", und ohne diese Zeile hielt er das nicht —
+  // read_exams lässt geschriebene Prüfungen von sich aus weg, und eine id, die
+  // nicht in der Liste steht, findet die Runde nicht. Am 12.9.2026 im Betrieb
+  // aufgefallen: Alle drei Prüfungen der App lagen in der Vergangenheit, und
+  // --klausur konnte keine davon erreichen.
+  //
+  // In der Runde OHNE Schalter bleibt es dabei: Für eine geschriebene Klausur
+  // zu lernen ist kein Fall, den ein Dienst von selbst aufgreifen soll.
+  const antwort = await verbindung.werkzeug(
+    "read_exams",
+    nurDiese ? { include_past: true } : {},
+  );
   const klausuren = (antwort.daten ?? []) as Klausur[];
 
   // Ohne Themen gibt es keinen Schlüssel zum Stoff — das ist keine Absage,
@@ -312,8 +324,8 @@ async function runde(
   if (kandidaten.length === 0) {
     sagen(
       nurDiese
-        ? "Diese Prüfung steht nicht in read_exams — schon geschrieben oder falsche id."
-        : "Keine anstehende Prüfung mit Themen.",
+        ? "Diese Prüfung gibt es nicht — falsche id."
+        : "Keine anstehende Prüfung mit Themen. Trag eine Klausur ein und häng Themen daran, dann hat dieser Lauf einen Schlüssel zum Stoff.",
     );
     return;
   }
