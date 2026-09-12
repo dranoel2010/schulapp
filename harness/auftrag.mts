@@ -1,3 +1,5 @@
+import { laufFuerAufgabe, zahlAus, type LaufErgebnis } from "./kaefig.mts";
+
 /**
  * Was Claude tun soll, wenn der Postbote ihn auf ein Blatt ansetzt.
  *
@@ -283,3 +285,82 @@ export type Antwort = {
   abschriften: number;
   grund: string;
 };
+
+/**
+ * Die Aufgabe „ordne dieses Blatt ein" — Auftrag, Werkzeuge, Schema, Formen.
+ *
+ * Der `auftrag` bleibt leer und wird beim Start eingesetzt: Er hängt am Blatt
+ * (`auftragFuer()`), alles Übrige nicht. So steht die Aufgabe trotzdem an
+ * EINER Stelle, statt sich auf Käfig und Postbote zu verteilen.
+ *
+ * `read_subjects` steht seit dem 25.8.2026 auf der Liste, und ohne das Werkzeug
+ * war die ganze Fachzuordnung eine Fassade: der Lauf konnte ein Fach
+ * vorschlagen, kannte aber die Fächer nicht, die es gibt. `propose_sheet`
+ * trifft eine Schreibweise nur, wenn sie auf Name oder Kürzel eines vorhandenen
+ * Fachs passt — „Erdkunde" für ein Fach namens „Geografie" wäre still nichts
+ * geworden.
+ *
+ * `read_transcript` fehlt mit Absicht: Dieser Lauf SCHREIBT die Abschrift, er
+ * liest sie nicht. Er soll das Foto abschreiben und nicht eine fremde Abschrift
+ * fortschreiben — und was schon abgeschrieben ist, kommt ohnehin nicht in den
+ * Korb.
+ */
+export const BLATT_AUFGABE = {
+  auftrag: "",
+  erlaubt: [
+    "mcp__schulapp__read_sheet",
+    "mcp__schulapp__read_page",
+    "mcp__schulapp__read_subjects",
+    "mcp__schulapp__read_topics",
+    "mcp__schulapp__propose_sheet",
+  ],
+  schema: ANTWORT_SCHEMA,
+  formen: (roh: Record<string, unknown>): Antwort | null => {
+    if (typeof roh.ergebnis !== "string") return null;
+
+    return {
+      ergebnis: roh.ergebnis as Antwort["ergebnis"],
+      vorschlagId:
+        typeof roh.vorschlagId === "string" ? roh.vorschlagId : undefined,
+      themen: Array.isArray(roh.themen)
+        ? roh.themen.filter((t): t is string => typeof t === "string")
+        : [],
+      // Zahl oder nichts: `?? 0` ließe eine "9" aus dem Modell als Zeichenkette
+      // durch, und die stünde später im Mitlesen als „9 von 12" da, während
+      // jede Rechnung damit schiefginge.
+      seiten: zahlAus(roh.seiten),
+      abschriften: zahlAus(roh.abschriften),
+      grund: typeof roh.grund === "string" ? roh.grund : "",
+    };
+  },
+} as const;
+
+/**
+ * Setzt Claude auf ein Blatt an — der Einstieg für Postbote und Nachlese.
+ *
+ * Er stand bis zum 12.9.2026 in kaefig.mts, und dort war er die einzige Tür.
+ * Mit dem zweiten Lauf ging das nicht mehr auf: Der Käfig hätte dann beide
+ * Aufgaben importieren müssen, und jede Aufgabe importiert den Käfig — ein
+ * Ring, der nur so lange trägt, wie zufällig eine hochgezogene Funktion darin
+ * steht. Jetzt kennt der Käfig keine Aufgabe, und jede Aufgabe bringt ihren
+ * Einstieg selbst mit.
+ *
+ * `auftrag` überschreibt den Auftrag zum Einordnen — das ist der Weg, auf dem
+ * die Nachlese denselben Käfig mit ihrer eigenen Anweisung benutzt. Alles
+ * übrige bleibt gleich, und das ist der Punkt: dieselbe Erlaubnisliste,
+ * dieselbe Frist, dasselbe Kontingent, dasselbe Antwortschema.
+ */
+export function laufFuerBlatt(
+  blattId: string,
+  adresse: string,
+  token: string,
+  modell?: string,
+  auftrag?: string,
+): Promise<LaufErgebnis<Antwort>> {
+  return laufFuerAufgabe(
+    { ...BLATT_AUFGABE, auftrag: auftrag ?? auftragFuer(blattId) },
+    adresse,
+    token,
+    modell,
+  );
+}

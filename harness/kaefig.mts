@@ -3,8 +3,6 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { ANTWORT_SCHEMA, auftragFuer, type Antwort } from "./auftrag.mts";
-
 /**
  * Der Käfig: ein Claude-Lauf, der nichts kann außer den Werkzeugen dieser App.
  *
@@ -41,21 +39,40 @@ import { ANTWORT_SCHEMA, auftragFuer, type Antwort } from "./auftrag.mts";
  */
 
 /**
- * Was der Lauf rufen darf. Weniger geht nicht, mehr braucht er nicht.
+ * Eine Aufgabe für den Käfig: was zu tun ist, was dafür erlaubt ist, und wie
+ * die Antwort aussieht.
  *
- * `read_subjects` steht seit dem 25.8.2026 dabei, und ohne das Werkzeug war die
- * ganze Fachzuordnung eine Fassade: der Lauf konnte ein Fach vorschlagen, kannte
- * aber die Fächer nicht, die es gibt. `propose_sheet` trifft eine Schreibweise
- * nur, wenn sie auf Name oder Kürzel eines vorhandenen Fachs passt — „Erdkunde"
- * für ein Fach namens „Geografie" wäre still nichts geworden.
+ * ── Warum die Erlaubnisliste hier steht und nicht weiter oben ───────────────
+ *
+ * Bis zum 12.9.2026 war sie eine Konstante dieser Datei — eine Liste für alle
+ * Läufe, weil es nur einen gab (das Einordnen) und die Nachlese dieselben
+ * Werkzeuge braucht. Mit dem Fragenlauf gilt das nicht mehr: Er liest
+ * `read_exam_material` und schreibt `propose_questions`, und beides hat auf der
+ * Liste des Einordnens nichts zu suchen. Umgekehrt braucht er `read_page`
+ * nicht — er arbeitet auf Abschriften und nicht auf Fotos.
+ *
+ * Eine gemeinsame Liste aus allen Werkzeugen beider Läufe wäre die bequeme
+ * Antwort und die falsche: Sie erlaubte dem Einordner, Fragen vorzuschlagen,
+ * und dem Fragenlauf, an Blättern zu schreiben. Die Zusage des Käfigs bleibt
+ * davon unberührt — sie lautet „nichts außer den Werkzeugen dieser App",
+ * und die hält `--tools ""` zusammen mit `--strict-mcp-config`, nicht diese
+ * Liste. WELCHE der App-Werkzeuge ein Lauf ruft, ist Sache der Aufgabe.
+ *
+ * `formen` ist die Stelle, an der die Antwort des Modells Feld für Feld
+ * abgeschrieben wird. Sie gehört zur Aufgabe, weil das Schema dazugehört —
+ * ausführlich steht der Grund an `auswerten()` weiter unten: Ein neues Feld im
+ * Schema, das hier niemand abschreibt, verschwindet still.
  */
-const ERLAUBT = [
-  "mcp__schulapp__read_sheet",
-  "mcp__schulapp__read_page",
-  "mcp__schulapp__read_subjects",
-  "mcp__schulapp__read_topics",
-  "mcp__schulapp__propose_sheet",
-];
+export type Aufgabe<A> = {
+  /** Was das Modell tun soll — der einzige Text, den es bekommt. */
+  auftrag: string;
+  /** Die Werkzeuge dieses Laufs, voll qualifiziert (`mcp__schulapp__…`). */
+  erlaubt: readonly string[];
+  /** Das JSON-Schema der Antwort, wie `--json-schema` es erwartet. */
+  schema: unknown;
+  /** Feld für Feld abschreiben. `null` heißt: unverwertbar. */
+  formen: (roh: Record<string, unknown>) => A | null;
+};
 
 /**
  * Wie lange ein Lauf höchstens dauern darf.
@@ -134,8 +151,8 @@ const MAX_ZUEGE = 40;
  * es steht ja weiterhin vorn im Korb. Mit einer Frist von fünfzehn Minuten
  * wäre aus dem Schönheitsfehler ein Dienst geworden, der nichts mehr schafft.
  */
-export type LaufErgebnis =
-  | { art: "antwort"; antwort: Antwort; kostenUsd: number; dauerMs: number }
+export type LaufErgebnis<A> =
+  | { art: "antwort"; antwort: A; kostenUsd: number; dauerMs: number }
   /**
    * Nicht dieser Lauf war das Problem, sondern das, worauf jeder Lauf sich
    * stützt: Kontingent leer, API weg, `claude` startet nicht. Die Runde hört
@@ -152,7 +169,7 @@ export type LaufErgebnis =
   | { art: "nichts"; grund: string };
 
 /**
- * Setzt Claude auf ein Blatt an.
+ * Setzt Claude auf eine Aufgabe an.
  *
  * `token` ist ein frisches Zugriffs-Token des Postboten — es gilt eine Stunde,
  * und der Lauf dauert Minuten; erneuert wird also vor dem Start, nicht während.
@@ -165,13 +182,18 @@ export type LaufErgebnis =
  * kann, `read_transcript` NICHT zu erlauben. Ohne Angabe gilt der Auftrag zum
  * Einordnen, und für den Postboten ändert sich damit nichts.
  */
-export async function laufFuerBlatt(
-  blattId: string,
+/**
+ * Setzt Claude auf eine Aufgabe an.
+ *
+ * `token` ist ein frisches Zugriffs-Token des Postboten — es gilt eine Stunde,
+ * und der Lauf dauert Minuten; erneuert wird also vor dem Start, nicht während.
+ */
+export async function laufFuerAufgabe<A>(
+  aufgabe: Aufgabe<A>,
   adresse: string,
   token: string,
   modell?: string,
-  auftrag?: string,
-): Promise<LaufErgebnis> {
+): Promise<LaufErgebnis<A>> {
   const arbeitsplatz = mkdtempSync(path.join(tmpdir(), "postbote-"));
 
   const mcpDatei = path.join(arbeitsplatz, "mcp.json");
@@ -191,33 +213,28 @@ export async function laufFuerBlatt(
   );
 
   try {
-    return await starten(
-      auftrag ?? auftragFuer(blattId),
-      arbeitsplatz,
-      mcpDatei,
-      modell,
-    );
+    return await starten(aufgabe, arbeitsplatz, mcpDatei, modell);
   } finally {
     rmSync(arbeitsplatz, { recursive: true, force: true });
   }
 }
 
-function starten(
-  auftrag: string,
+function starten<A>(
+  aufgabe: Aufgabe<A>,
   arbeitsplatz: string,
   mcpDatei: string,
   modell: string | undefined,
-): Promise<LaufErgebnis> {
+): Promise<LaufErgebnis<A>> {
   const argumente = [
     "-p",
-    auftrag,
+    aufgabe.auftrag,
     "--tools",
     "",
     "--strict-mcp-config",
     "--mcp-config",
     mcpDatei,
     "--allowedTools",
-    ERLAUBT.join(" "),
+    aufgabe.erlaubt.join(" "),
     "--output-format",
     "json",
     // Das Schema geht als JSON in die Zeile, nicht als Pfad: `claude` liest
@@ -225,7 +242,7 @@ function starten(
     // „is not valid JSON" (ausprobiert). Über spawn mit Argumentliste gibt es
     // keine Shell, die daran etwas zu deuten hätte.
     "--json-schema",
-    JSON.stringify(ANTWORT_SCHEMA),
+    JSON.stringify(aufgabe.schema),
     "--max-turns",
     String(MAX_ZUEGE),
     ...(modell ? ["--model", modell] : []),
@@ -284,7 +301,7 @@ function starten(
         return;
       }
 
-      fertig(auswerten(aus, fehlerAus, code));
+      fertig(auswerten(aufgabe, aus, fehlerAus, code));
     });
   });
 }
@@ -316,7 +333,12 @@ function starten(
  * `seiten` und `abschriften` passiert. Wer das Schema erweitert, erweitert
  * diese Stelle mit.
  */
-function auswerten(aus: string, fehlerAus: string, code: number | null): LaufErgebnis {
+function auswerten<A>(
+  aufgabe: Aufgabe<A>,
+  aus: string,
+  fehlerAus: string,
+  code: number | null,
+): LaufErgebnis<A> {
   let ergebnis: {
     is_error?: boolean;
     subtype?: string;
@@ -365,9 +387,14 @@ function auswerten(aus: string, fehlerAus: string, code: number | null): LaufErg
     };
   }
 
-  const antwort = ergebnis.structured_output as Antwort | undefined;
+  const roh = ergebnis.structured_output;
 
-  if (!antwort || typeof antwort.ergebnis !== "string") {
+  const antwort =
+    roh && typeof roh === "object"
+      ? aufgabe.formen(roh as Record<string, unknown>)
+      : null;
+
+  if (!antwort) {
     return {
       art: "nichts",
       grund: `Keine verwertbare Antwort: ${(ergebnis.result ?? "").slice(0, 200)}`,
@@ -376,17 +403,7 @@ function auswerten(aus: string, fehlerAus: string, code: number | null): LaufErg
 
   return {
     art: "antwort",
-    antwort: {
-      ergebnis: antwort.ergebnis,
-      vorschlagId: antwort.vorschlagId,
-      themen: antwort.themen ?? [],
-      // Zahl oder nichts: `?? 0` ließe eine "9" aus dem Modell als Zeichenkette
-      // durch, und die stünde später im Mitlesen als „9 von 12" da, während
-      // jede Rechnung damit schiefginge.
-      seiten: zahl(antwort.seiten),
-      abschriften: zahl(antwort.abschriften),
-      grund: antwort.grund ?? "",
-    },
+    antwort,
     kostenUsd: ergebnis.total_cost_usd ?? 0,
     dauerMs: ergebnis.duration_ms ?? 0,
   };
@@ -403,7 +420,7 @@ function auswerten(aus: string, fehlerAus: string, code: number | null): LaufErg
  * Stelle die ehrlichste Antwort: sie sagt „unbekannt" und rechnet sich nicht
  * heimlich als NaN durch das Mitlesen.
  */
-function zahl(wert: unknown): number {
+export function zahlAus(wert: unknown): number {
   return typeof wert === "number" && Number.isFinite(wert) && wert >= 0
     ? Math.round(wert)
     : 0;

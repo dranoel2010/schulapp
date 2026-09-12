@@ -1,5 +1,5 @@
 import { nachleseAuftragFuer } from "./auftrag.mts";
-import { laufFuerBlatt } from "./kaefig.mts";
+import { laufFuerBlatt } from "./auftrag.mts";
 import {
   liesZugang,
   Verbindung,

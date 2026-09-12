@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { laufFuerBlatt } from "./kaefig.mts";
+import { laufFuerBlatt } from "./auftrag.mts";
 import {
   liesZugang,
   Verbindung,

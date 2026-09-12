@@ -293,6 +293,64 @@ Nach jedem Lauf liest sie den eigenen Vorschlag zurück und sagt, ob er das
 Schweigen gehalten hat. Die Prosa im Auftrag ist eine Bitte; erst diese Zeile
 ist eine Messung.
 
+## Der Fragenlauf
+
+Der Postbote und die Nachlese arbeiten an Blättern. Der Fragenlauf arbeitet an
+**Klausuren** — und er ist der Weg, den du vorgegeben hast: eine Prüfung
+eintragen, Themen daran hängen, und der Lernstoff entsteht aus den Themen.
+
+```
+npx tsx harness/fragen.mts                 # alle Prüfungen, die dran sind
+npx tsx harness/fragen.mts --trocken       # nur zeigen, was er täte
+npx tsx harness/fragen.mts --klausur <id>  # genau diese, auch wenn sie nicht dran wäre
+npx tsx harness/fragen.mts --modell sonnet
+```
+
+**Die Kette ist die des Datenmodells, nicht eine neue:**
+
+```
+exams → exam_topics.subject_topic_id → subject_topics ← material_topics
+      → materials → material_pages.transcript
+```
+
+Die Klausur sagt, WAS geprüft wird; ihre Themen sind der Schlüssel; darüber
+hängen genau die Blätter, die dazugehören. Kein Blatt wird ausgewählt.
+
+**Er entscheidet VOR dem Lauf, ob sich einer lohnt** — und zwar mit zwei Zahlen,
+die `read_exam_material` selbst liefert (`stock`). Er startet kein Modell, wenn
+
+- noch unentschiedene Fragen im Eingang liegen (dann ist der Mensch am Zug),
+- zu den Themen keine abgeschriebene Seite gehört (dann ist nichts zu binden —
+  und meist steckt ein Thema im falschen Fach),
+- die Klausur ihr Ziel an Bausteinen erreicht hat (`ZIEL_JE_KLAUSUR`, 24).
+
+Das ist dieselbe Rolle, die beim Postboten der Blick in den Korb spielt: Es
+kostet keinen Token und beantwortet die Frage, ob es etwas zu tun gibt.
+
+**Er hat kein Gedächtnis, und braucht keines.** Der Postbote muss sich merken,
+welche Blätter dran waren (`gesehen.json`); hier gibt die App die Auskunft
+selbst. Nichts kann zwischen Dienst und App auseinanderlaufen, und nach Wochen
+Stillstand ist nichts aufzuräumen.
+
+**Sein Käfig ist derselbe, seine Erlaubnisliste nicht.** Er darf genau zwei
+Werkzeuge rufen: `read_exam_material` und `propose_questions`. Kein
+`read_page`, kein `read_material`, kein `propose_sheet` — ein Weg zu Blättern
+außerhalb dieser Klausur ist kein fehlendes Werkzeug, sondern die Absicht.
+Umgekehrt kennt die Liste des Postboten die beiden neuen nicht.
+
+**Was im Korb landet, ist ein Vorschlag und nichts sonst.** Beim Übernehmen
+geht jede Frage durch dieselbe Prüfung wie eine von Hand angelegte, und die
+härteste ist das Zitat: Es muss wörtlich in der Abschrift stehen. Eine
+nacherzählte Stelle fällt durch — sichtbar, mit Grund im Protokoll, denn die
+Zahl dieser Abweisungen ist das einzige Maß dafür, wie zuverlässig der Lauf
+arbeitet.
+
+**Die 24 sind eine Schätzung und gehören dir.** Ein Baustein bekommt bei vier
+Wochen Vorlauf 13 bis 16 Termine; für einen Abend sind sechs bis acht Fragen
+vorgesehen. Bei 24 Bausteinen ist die Spitzenwoche damit schon überfüllt — mehr
+Fragen machen die Abende nicht besser, sondern unerfüllbar. Die Zahl steht in
+`fragen.mts` bei `ZIEL_JE_KLAUSUR`.
+
 ## Was es kostet
 
 Nichts an Geld — es läuft über dein Claude-Abo, nicht über einen API-Schlüssel.
