@@ -60,6 +60,7 @@ for (const anweisung of roh
 );
 
 const { createItem } = await import("@/recall/items");
+const { stoffZuKlausur } = await import("@/recall/source");
 const { faelligHeute, tagesbericht, urteilFesthalten, versuchFesthalten } =
   await import("@/recall/sessions");
 
@@ -333,6 +334,81 @@ pruefe(
 pruefe(
   protokoll.gap_days > 0,
   `der Abstand zur letzten Begegnung ist mitgeschrieben (${protokoll.gap_days} Tage)`,
+);
+
+// ── Zusage 7: von der Klausur zu ihrem Stoff (der Weg, den der Nutzer will) ──
+//
+// Nicht „wähle ein Blatt", sondern: Die Klausur sagt, was geprüft wird, ihre
+// Themen sind der Schlüssel, und darüber sind die Blätter erreichbar. Die Kette
+// bestand schon vor dem Abrufkern — hier wird sie zum ersten Mal in dieser
+// Richtung gelesen, und geprüft wird auch der Fall, den man sonst erst in den
+// echten Daten merkt: ein Klausurthema, das mit keiner Vokabel verknüpft ist.
+
+console.log("\nVon der Klausur zum Stoff:");
+
+const { rows: [vokabel] } = await pg.query<{ id: string }>(
+  `insert into subject_topics (user_id, subject_id, title, match_key, origin, last_seen_at)
+   values ($1, $2, 'Kettenregel', 'kettenregel', 'blatt', $3) returning id`,
+  [nutzer.id, fach.id, HEUTE],
+);
+await pg.query(
+  "insert into material_topics (material_id, subject_topic_id) values ($1, $2)",
+  [blatt.id, vokabel.id],
+);
+
+const { rows: [pruefung] } = await pg.query<{ id: string }>(
+  `select id from exams where subject_id = $1 limit 1`,
+  [fach.id],
+);
+// Ein verknüpftes Thema und ein freies, damit beide Fälle im Ergebnis stehen.
+await pg.query(
+  `insert into exam_topics (exam_id, title, sort_order, subject_topic_id)
+   values ($1, 'Kettenregel', 0, $2), ($1, 'Nur hingeschrieben', 1, null)`,
+  [pruefung.id, vokabel.id],
+);
+
+const stoff = await stoffZuKlausur(nutzer.id, pruefung.id);
+pruefe(stoff !== null, "die Klausur wird gefunden");
+if (!stoff) process.exit(1);
+
+pruefe(stoff.themen.length === 2, `${stoff.themen.length} Themen an der Klausur`);
+// EINE Seite: Das Probeblatt oben hat genau eine. Die Zahl stand hier zuerst
+// auf zwei — aus dem Saatgut-Skript übernommen, das ein zweiseitiges Blatt
+// anlegt. Die Probe hat die falsche Zusage gefunden, nicht den falschen Code.
+pruefe(
+  stoff.themen[0].verknuepft && stoff.themen[0].seiten.length === 1,
+  `das verknüpfte Thema führt zu ${stoff.themen[0].seiten.length} Seite`,
+);
+pruefe(
+  !stoff.themen[1].verknuepft && stoff.themen[1].seiten.length === 0,
+  "das freie Thema kommt als NICHT verknüpft zurück, nicht als leer",
+);
+pruefe(
+  stoff.seitenGesamt.length === 1 && stoff.zeichenGesamt > 200,
+  `der Vorrat: ${stoff.seitenGesamt.length} Seite, ${stoff.zeichenGesamt} Zeichen`,
+);
+
+// Dieselbe Seite an zwei Themen darf im Vorrat nur einmal stehen — sonst
+// zählt die Zeichenzahl doppelt und der Agent liest sie zweimal.
+const { rows: [zweite] } = await pg.query<{ id: string }>(
+  `insert into subject_topics (user_id, subject_id, title, match_key, origin, last_seen_at)
+   values ($1, $2, 'Ableiten', 'ableiten', 'blatt', $3) returning id`,
+  [nutzer.id, fach.id, HEUTE],
+);
+await pg.query(
+  "insert into material_topics (material_id, subject_topic_id) values ($1, $2)",
+  [blatt.id, zweite.id],
+);
+await pg.query(
+  `insert into exam_topics (exam_id, title, sort_order, subject_topic_id)
+   values ($1, 'Ableiten', 2, $2)`,
+  [pruefung.id, zweite.id],
+);
+
+const nochmal = await stoffZuKlausur(nutzer.id, pruefung.id);
+pruefe(
+  nochmal?.seitenGesamt.length === 1 && nochmal?.themen.length === 3,
+  "dieselbe Seite hängt jetzt an zwei Themen und steht im Vorrat trotzdem nur einmal",
 );
 
 console.log("\nAlle Zusagen gehalten — ein Abend läuft von der Heftseite bis zum geschlossenen Termin.");
