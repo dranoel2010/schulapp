@@ -61,6 +61,12 @@ for (const anweisung of roh
 
 const { createItem } = await import("@/recall/items");
 const { stoffZuKlausur } = await import("@/recall/source");
+const {
+  offeneVorschlaege,
+  vorschlagAnlegen,
+  vorschlagUebernehmen,
+  vorschlagVerwerfen,
+} = await import("@/recall/proposals");
 const { faelligHeute, tagesbericht, urteilFesthalten, versuchFesthalten } =
   await import("@/recall/sessions");
 
@@ -409,6 +415,132 @@ const nochmal = await stoffZuKlausur(nutzer.id, pruefung.id);
 pruefe(
   nochmal?.seitenGesamt.length === 1 && nochmal?.themen.length === 3,
   "dieselbe Seite hängt jetzt an zwei Themen und steht im Vorrat trotzdem nur einmal",
+);
+
+// ── Zusage 8: die Quellbindung gilt auch für die KI ─────────────────────────
+//
+// Die wichtigste Zusage des ganzen Agenten. Ein Vorschlag wird NICHT in den
+// Bestand kopiert, sondern durch createItem() geschickt — dieselbe Tür wie eine
+// von Hand angelegte Frage. Eine Frage, deren Zitat nicht wörtlich in der
+// Abschrift steht, fällt durch, ganz gleich wer sie vorgeschlagen hat. Und sie
+// fällt SICHTBAR durch: mit Grund, nicht gelöscht, denn die Zahl der
+// Abweisungen ist das einzige Maß dafür, wie zuverlässig der Agent arbeitet.
+
+console.log("\nDer Agent schlägt vor, der Mensch übernimmt:");
+
+const vorgeschlagen = await vorschlagAnlegen(
+  nutzer.id,
+  pruefung.id,
+  [
+    {
+      pageId: seite.id,
+      promptFree: "Was besagt die Kettenregel?",
+      solution: "Äußere Ableitung mal innere Ableitung",
+      misconception: "Wird mit der Produktregel verwechselt.",
+      sourceQuote: "Ist f(x) = g(h(x)), so gilt f'(x) = g'(h(x)) · h'(x).",
+    },
+    {
+      pageId: seite.id,
+      promptFree: "Was ist der Faktor bei sin(3x)?",
+      solution: "Die Ableitung der inneren Funktion",
+      misconception: "Wird mit dem Wert verwechselt.",
+      // Nacherzählt statt zitiert — muss beim Übernehmen durchfallen.
+      sourceQuote: "Die Kettenregel besagt sinngemäß, dass man verschachtelt ableitet.",
+    },
+    {
+      pageId: seite.id,
+      promptFree: "Wofür gilt die Produktregel?",
+      solution: "Für ein Produkt zweier Funktionen",
+      misconception: "Wird mit der Kettenregel verwechselt.",
+      sourceQuote: "Man leitet also die äußere Funktion ab, setzt die innere ein und",
+    },
+  ],
+  "Eine Stelle war unsicher, sie wurde weggelassen.",
+);
+pruefe(
+  vorgeschlagen.ok && vorgeschlagen.fragen === 3,
+  `der Vorschlag liegt mit ${vorgeschlagen.ok ? vorgeschlagen.fragen : 0} Fragen im Eingang`,
+);
+if (!vorgeschlagen.ok) process.exit(1);
+
+// Ein Vorschlag auf eine fremde Seite ist kein schwacher Vorschlag, sondern
+// ein Angriff — und wird gar nicht abgelegt.
+const fremd = await vorschlagAnlegen(nutzer.id, pruefung.id, [
+  {
+    pageId: "00000000-0000-0000-0000-000000000000",
+    promptFree: "Frage zu einer fremden Seite",
+    solution: "egal",
+    misconception: "egal",
+    sourceQuote: "egal",
+  },
+]);
+pruefe(!fremd.ok, "ein Vorschlag auf eine fremde Seite wird abgelehnt");
+
+const eingang = await offeneVorschlaege(nutzer.id);
+pruefe(
+  eingang.length === 1 && eingang[0].fragen.length === 3,
+  `im Eingang liegt ${eingang.length} Vorschlag mit ${eingang[0]?.fragen.length} Fragen`,
+);
+pruefe(
+  eingang[0].note !== null && eingang[0].fragen[0].blattTitel === "Kettenregel",
+  "jede Frage weiß, aus welchem Blatt sie stammt, und die Notiz des Laufs steht dabei",
+);
+
+// Zwei von drei wählen: die gute und die nacherzählte. Die dritte abwählen.
+const ergebnis = await vorschlagUebernehmen(
+  nutzer.id,
+  vorgeschlagen.proposalId,
+  [eingang[0].fragen[0].id, eingang[0].fragen[1].id],
+  HEUTE,
+);
+pruefe(ergebnis !== null, "das Übernehmen läuft");
+if (!ergebnis) process.exit(1);
+
+pruefe(
+  ergebnis.uebernommen === 1,
+  `${ergebnis.uebernommen} Frage übernommen (die mit dem wörtlichen Zitat)`,
+);
+pruefe(
+  ergebnis.abgewiesen.length === 1 &&
+    ergebnis.abgewiesen[0].grund === "zitat-nicht-gefunden",
+  "die nacherzählte Frage wird abgewiesen — die Quellbindung gilt auch für die KI",
+);
+pruefe(
+  ergebnis.abgewaehlt === 1,
+  `${ergebnis.abgewaehlt} Frage vom Menschen abgewählt`,
+);
+
+const { rows: [grund] } = await pg.query<{ n: number }>(
+  "select count(*)::int as n from recall_proposal_items where rejected_reason is not null",
+);
+pruefe(
+  grund.n === 2,
+  "beide nicht übernommenen Fragen bleiben MIT GRUND stehen, statt zu verschwinden",
+);
+
+pruefe(
+  (await offeneVorschlaege(nutzer.id)).length === 0,
+  "der abgearbeitete Vorschlag liegt nicht mehr im Eingang",
+);
+
+// Und der Weg, der nichts übernimmt.
+const zweiterVorschlag = await vorschlagAnlegen(nutzer.id, pruefung.id, [
+  {
+    pageId: seite.id,
+    promptFree: "Noch eine Frage",
+    solution: "Antwort",
+    misconception: "Verwechslung",
+    sourceQuote: "multipliziert mit der Ableitung der inneren Funktion.",
+  },
+]);
+if (!zweiterVorschlag.ok) process.exit(1);
+pruefe(
+  await vorschlagVerwerfen(nutzer.id, zweiterVorschlag.proposalId),
+  "ein ganzer Vorschlag lässt sich verwerfen",
+);
+pruefe(
+  (await offeneVorschlaege(nutzer.id)).length === 0,
+  "danach ist der Eingang wieder leer",
 );
 
 console.log("\nAlle Zusagen gehalten — ein Abend läuft von der Heftseite bis zum geschlossenen Termin.");

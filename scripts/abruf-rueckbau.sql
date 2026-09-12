@@ -50,6 +50,9 @@
 -- Repo bleibt, ist src/recall/ — ein Ordner, den `rm -rf` erledigt, und eine
 -- Zeile in drizzle.config.ts, die wieder auf eine einzelne Datei zeigt.
 
+-- Rückwärts zur Anlage: die Vorschläge zuerst, sie hängen an den Bausteinen.
+DROP TABLE IF EXISTS "recall_proposal_items";
+DROP TABLE IF EXISTS "recall_proposals";
 DROP TABLE IF EXISTS "recall_attempts";
 DROP TABLE IF EXISTS "recall_schedule";
 DROP TABLE IF EXISTS "recall_items";

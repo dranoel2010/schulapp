@@ -271,6 +271,8 @@ const SECTION_TITLES: Record<string, string> = {
   "/abruf/sitzung": "Abend",
   "/abruf/bausteine": "Bausteine",
   "/abruf/bausteine/neu": "Baustein anlegen",
+  "/abruf/klausur": "Stoff einer Klausur",
+  "/abruf/eingang": "Vorschläge",
   "/klausuren": "Klausuren",
   "/klausuren/neu": "Neue Klausur",
   "/hausaufgaben": "Hausaufgaben",

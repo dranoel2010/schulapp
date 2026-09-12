@@ -11,7 +11,13 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { materialPages, subjectTopics, subjects, users } from "@/db/schema";
+import {
+  exams,
+  materialPages,
+  subjectTopics,
+  subjects,
+  users,
+} from "@/db/schema";
 
 /**
  * Der Abrufkern: Fragen aus dem eigenen Heft, in festem Takt wieder vorgelegt.
@@ -382,5 +388,135 @@ export const recallAttempts = pgTable(
     index("recall_attempts_user_idx").on(t.userId),
     index("recall_attempts_item_idx").on(t.itemId),
     index("recall_attempts_answered_idx").on(t.answeredOn),
+  ],
+);
+
+/**
+ * Ein Vorschlag: was ein Agent an Fragen gebaut hat, bevor ein Mensch es
+ * übernimmt.
+ *
+ * ── Warum es diese Zwischenstufe gibt ────────────────────────────────────────
+ *
+ * Weil die KI nicht in den Bestand schreiben darf, und das ist keine
+ * Vorsichtsmaßnahme, sondern die Grundlage des ganzen Baus: Maschinell erzeugte
+ * Fragen erreichen eine Trennschärfe von 0,28 [0,21; 0,35] — unter dem
+ * Zielwert 0,3 — bei drei dokumentierten Halluzinationstypen. Eine erfundene
+ * Musterlösung fällt nicht auf, sobald sie als Prüfstoff dasteht.
+ *
+ * Dasselbe Muster benutzt der Postbote seit dem 5.9.2026 für Abschriften:
+ * `material_proposals` liegt im Eingangskorb, und erst das Übernehmen im
+ * Formular schreibt in den Bestand. Der Unterschied ist die Prüfbarkeit — eine
+ * Abschrift kann man gegen das Foto halten, eine Musterlösung nicht. Deshalb
+ * ist hier die Quellbindung die Sperre: Jede vorgeschlagene Frage trägt ihr
+ * Zitat mit, und beim Übernehmen läuft sie durch `createItem()` wie eine von
+ * Hand angelegte. Was die Prüfung nicht besteht, kommt nicht in den Bestand,
+ * ganz gleich wer es vorgeschlagen hat.
+ *
+ * ── Warum der Vorschlag an der Klausur hängt und nicht am Blatt ──────────────
+ *
+ * Weil man für eine Klausur lernt und nicht für einen Stapel. Der Lauf nimmt
+ * die Themen der Klausur, holt darüber die Seiten und baut daraus Fragen; der
+ * Vorschlag ist deshalb „die Fragen zu dieser Klausur" und nicht „die Fragen zu
+ * diesem Blatt". `exam_id` steht auf `cascade`: Wird die Klausur gelöscht, ist
+ * ein Vorschlag für sie gegenstandslos.
+ */
+export const recallProposals = pgTable(
+  "recall_proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    examId: uuid("exam_id")
+      .notNull()
+      .references(() => exams.id, { onDelete: "cascade" }),
+    /** agent | manuell — woher der Vorschlag kommt */
+    origin: text("origin").notNull().default("agent"),
+    /**
+     * Was der Lauf zu berichten hatte: unsichere Stellen, übersprungene
+     * Seiten, Zweifel. Freier Text, vom Menschen zu lesen — nicht auszuwerten.
+     */
+    note: text("note"),
+    /** Gesetzt, sobald ein Mensch den Vorschlag abgearbeitet hat */
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("recall_proposals_user_idx").on(t.userId, t.createdAt),
+    index("recall_proposals_exam_idx").on(t.examId),
+  ],
+);
+
+/**
+ * Eine einzelne vorgeschlagene Frage.
+ *
+ * Dieselben Felder wie ein Baustein, denn genau das soll sie werden — und
+ * dieselbe Pflicht: Frage, Musterlösung, Verwechslungssatz und Zitat. Fehlt
+ * eines, ist es keine auslieferbare Aufgabe (A2, A3, A5), und dann hat sie
+ * hier auch nichts zu suchen.
+ *
+ * `pageId` auf `cascade`: Verschwindet die Seite, ist der Vorschlag zu ihr
+ * gegenstandslos — anders als beim fertigen Baustein, wo `set null` gilt, weil
+ * dort schon Antworten daran hängen können. Ein Vorschlag hat keine
+ * Vergangenheit, die zu schützen wäre.
+ *
+ * `accepted` merkt sich, was schon übernommen wurde. Ohne das würde ein
+ * zweites Drücken auf „übernehmen" dieselben Fragen ein zweites Mal in den
+ * Bestand legen — und doppelte Bausteine sind schlimmer als keine: Sie
+ * verdoppeln die Termine und täuschen die Dosis aus A6 vor.
+ */
+export const recallProposalItems = pgTable(
+  "recall_proposal_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    proposalId: uuid("proposal_id")
+      .notNull()
+      .references(() => recallProposals.id, { onDelete: "cascade" }),
+    pageId: uuid("page_id")
+      .notNull()
+      .references(() => materialPages.id, { onDelete: "cascade" }),
+    subjectTopicId: uuid("subject_topic_id").references(
+      () => subjectTopics.id,
+      { onDelete: "set null" },
+    ),
+    sortOrder: integer("sort_order").notNull().default(0),
+
+    promptFree: text("prompt_free").notNull(),
+    solution: text("solution").notNull(),
+    misconception: text("misconception").notNull(),
+    sourceQuote: text("source_quote").notNull(),
+    materialKind: text("material_kind").notNull().default("begriff"),
+
+    /** Gesetzt beim Übernehmen — verhindert, dass dieselbe Frage zweimal landet */
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    /** Der Baustein, der daraus geworden ist */
+    itemId: uuid("item_id").references(() => recallItems.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * Warum diese Frage NICHT übernommen wurde — vom Menschen abgewählt oder
+     * von der Quellbindung abgewiesen. Der zweite Fall ist der wichtigere: Er
+     * ist das Maß dafür, wie zuverlässig der Agent arbeitet, und ohne
+     * Aufschreiben wäre er nach dem Übernehmen verschwunden.
+     */
+    rejectedReason: text("rejected_reason"),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("recall_proposal_items_proposal_idx").on(t.proposalId, t.sortOrder),
+    index("recall_proposal_items_page_idx").on(t.pageId),
+    check(
+      "recall_proposal_items_misconception_not_blank",
+      sql`length(btrim(${t.misconception})) > 0`,
+    ),
+    check(
+      "recall_proposal_items_solution_not_blank",
+      sql`length(btrim(${t.solution})) > 0`,
+    ),
   ],
 );

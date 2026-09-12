@@ -13,6 +13,11 @@ import {
   type AnlageFehler,
 } from "@/recall/items";
 import {
+  vorschlagUebernehmen,
+  vorschlagVerwerfen,
+  type UebernahmeErgebnis,
+} from "@/recall/proposals";
+import {
   urteilFesthalten,
   versuchFesthalten,
   type VersuchErgebnis,
@@ -34,6 +39,36 @@ import {
 
 /** Nach jeder Änderung: Startseite, Übersicht, Sitzung und Bausteinliste. */
 function revalidateAbruf(): void {
+  revalidatePath("/");
+  revalidatePath("/abruf");
+  revalidatePath("/abruf/sitzung");
+  revalidatePath("/abruf/bausteine");
+  revalidatePath("/abruf/eingang");
+}
+
+/**
+ * Dasselbe, aber OHNE die Eingangsseite — für das Übernehmen von Vorschlägen.
+ *
+ * ── Warum diese Ausnahme sein muss ───────────────────────────────────────────
+ *
+ * Am 12.9.2026 im Browser gefunden, und erst beim zweiten Anlauf verstanden.
+ * `revalidatePath()` auf die GERADE OFFENE Route lässt Next ihren Baum im
+ * Ergebnis der Aktion mitschicken. Die Vorschlagsliste ist danach leer, die
+ * Seite zeigt ihren Leerzustand — und die Komponente, die eben den Bericht
+ * gesetzt hat, wird dabei ersetzt. Sichtbar war: „Kein Vorschlag im Eingang".
+ * Unsichtbar blieb, dass eine Frage abgewiesen wurde, weil die KI ihr Zitat
+ * nacherzählt hatte.
+ *
+ * Das ist die einzige Zahl, die beantwortet, ob man dem Agenten trauen kann.
+ * Sie darf nicht an einer Auffrischung verlorengehen. Die Eingangsseite ist
+ * ohnehin dynamisch (`force-dynamic` im Gruppenlayout), also ist sie beim
+ * nächsten echten Aufruf von selbst frisch — die Auffrischung hier war nie
+ * nötig, nur schädlich.
+ *
+ * Beim VERWERFEN gilt das nicht: Dort gibt es keinen Bericht zu lesen, und der
+ * Leerzustand ist genau das richtige Ergebnis.
+ */
+function revalidateAbrufOhneEingang(): void {
   revalidatePath("/");
   revalidatePath("/abruf");
   revalidatePath("/abruf/sitzung");
@@ -308,5 +343,40 @@ export async function retireItemAction(
   const user = await requireUser();
 
   await retireItem(user.id, itemId, grund);
+  revalidateAbruf();
+}
+
+/**
+ * Ausgewählte Vorschläge übernehmen.
+ *
+ * Jede Frage geht durch `createItem()` und damit durch die Quellbindung — die
+ * KI bekommt hier keinen kürzeren Weg als ein Mensch. Was durchfällt, fällt
+ * SICHTBAR durch: Das Ergebnis nennt die abgewiesenen Fragen samt Grund, und
+ * im Protokoll bleiben sie mit diesem Grund stehen. Die Zahl der Abweisungen
+ * ist das einzige Maß dafür, wie zuverlässig der Agent arbeitet.
+ */
+export async function vorschlagUebernehmenAction(
+  proposalId: string,
+  gewaehlteIds: string[],
+): Promise<UebernahmeErgebnis | null> {
+  const user = await requireUser();
+
+  const ergebnis = await vorschlagUebernehmen(
+    user.id,
+    proposalId,
+    gewaehlteIds,
+    todayInBerlin(),
+  );
+  revalidateAbrufOhneEingang();
+  return ergebnis;
+}
+
+/** Einen ganzen Vorschlag verwerfen, ohne etwas zu übernehmen. */
+export async function vorschlagVerwerfenAction(
+  proposalId: string,
+): Promise<void> {
+  const user = await requireUser();
+
+  await vorschlagVerwerfen(user.id, proposalId);
   revalidateAbruf();
 }

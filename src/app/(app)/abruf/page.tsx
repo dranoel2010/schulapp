@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { subjectColor } from "@/lib/colors";
 import { formatGerman, todayInBerlin } from "@/lib/dates";
 import { listItems } from "@/recall/items";
+import { offeneVorschlaege } from "@/recall/proposals";
 import { faelligHeute, tagesbericht } from "@/recall/sessions";
 
 import { neuPlanenAction } from "./actions";
@@ -43,11 +44,14 @@ export default async function AbrufPage() {
   const user = await requireUser();
   const heute = todayInBerlin();
 
-  const [faellig, bericht, bausteine] = await Promise.all([
+  const [faellig, bericht, bausteine, vorschlaege] = await Promise.all([
     faelligHeute(user.id, heute),
     tagesbericht(user.id, heute),
     listItems(user.id),
+    offeneVorschlaege(user.id),
   ]);
+
+  const offeneFragen = vorschlaege.reduce((s, v) => s + v.fragen.length, 0);
 
   const aktive = bausteine.filter((b) => b.retiredAt === null);
   const ueberfaellig = faellig.filter((f) => f.dueOn < heute).length;
@@ -68,6 +72,20 @@ export default async function AbrufPage() {
                 }.`}
         </p>
       </header>
+
+      {/* Ein Vorschlag im Eingang ist Arbeit, die wartet — und sie steht ganz
+          oben, weil sie den Bestand füllt, aus dem alles Übrige lebt. */}
+      {offeneFragen > 0 ? (
+        <Card className="border-accent/40">
+          <CardContent className="space-y-3">
+            <p className="text-foreground">
+              {offeneFragen} {offeneFragen === 1 ? "Frage wartet" : "Fragen warten"}{" "}
+              im Eingang — die KI hat sie gebaut, übernommen ist noch keine.
+            </p>
+            <ButtonLink href="/abruf/eingang">Vorschläge ansehen</ButtonLink>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {aktive.length === 0 ? (
         <EmptyState
@@ -137,6 +155,9 @@ export default async function AbrufPage() {
           <div className="flex flex-wrap items-center gap-3">
             <ButtonLink href="/abruf/bausteine" variant="secondary">
               {aktive.length} {aktive.length === 1 ? "Baustein" : "Bausteine"}
+            </ButtonLink>
+            <ButtonLink href="/abruf/klausur" variant="secondary">
+              Stoff einer Klausur
             </ButtonLink>
             <ButtonLink href="/abruf/bausteine/neu" variant="secondary">
               Baustein anlegen

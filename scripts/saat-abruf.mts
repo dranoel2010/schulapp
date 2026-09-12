@@ -291,3 +291,74 @@ if (process.argv.includes("--faellig-heute")) {
     console.log(`Ein Termin auf heute (${HEUTE}) gezogen.`);
   }
 }
+
+/**
+ * `--vorschlag` legt ein Vorschlagspaket ab, wie es ein Agentenlauf hinterließe.
+ *
+ * Darunter absichtlich eine Frage mit NACHERZÄHLTEM Zitat: Nur so lässt sich im
+ * Browser sehen, dass die Quellbindung beim Übernehmen auch für die KI greift
+ * und die Abweisung samt Grund sichtbar wird.
+ */
+if (process.argv.includes("--vorschlag")) {
+  const { vorschlagAnlegen } = await import("@/recall/proposals");
+  const { materialPages: seitenTab, materials: blaetterTab } = await import(
+    "@/db/schema"
+  );
+
+  const [nutzer] = await db.select({ id: users.id }).from(users).limit(1);
+  const [pruefung] = await db
+    .select({ id: exams.id })
+    .from(exams)
+    .where(and(eq(exams.userId, nutzer.id), gte(exams.date, HEUTE)))
+    .limit(1);
+  const seiten = await db
+    .select({ id: seitenTab.id, transcript: seitenTab.transcript })
+    .from(seitenTab)
+    .innerJoin(blaetterTab, eq(blaetterTab.id, seitenTab.materialId))
+    .where(eq(blaetterTab.userId, nutzer.id))
+    .limit(2);
+
+  if (!pruefung || seiten.length === 0) {
+    console.log("Keine Klausur oder keine Seite da — erst ohne Schalter säen.");
+  } else {
+    const ergebnis = await vorschlagAnlegen(
+      nutzer.id,
+      pruefung.id,
+      [
+        {
+          pageId: seiten[0].id,
+          promptFree: "Was besagt die Kettenregel?",
+          solution:
+            "Äußere Funktion ableiten\nInnere Funktion einsetzen\nMit der Ableitung der inneren multiplizieren",
+          misconception:
+            "Wird mit der Produktregel verwechselt — dort stehen zwei Faktoren nebeneinander, hier eine Funktion IN einer Funktion.",
+          sourceQuote: "Ist f(x) = g(h(x)), so gilt f'(x) = g'(h(x)) · h'(x).",
+        },
+        {
+          pageId: seiten[0].id,
+          promptFree: "Wie lautet die Ableitung von sin(3x)?",
+          solution: "3 · cos(3x)",
+          misconception:
+            "Der Faktor 3 wird vergessen — das ist die Ableitung der inneren Funktion.",
+          sourceQuote:
+            "Beispiel: f(x) = sin(3x) hat die Ableitung f'(x) = 3 · cos(3x).",
+        },
+        {
+          pageId: seiten[0].id,
+          promptFree: "Worin unterscheiden sich Ketten- und Produktregel?",
+          solution: "Kettenregel: Funktion in Funktion\nProduktregel: Produkt zweier Funktionen",
+          misconception: "Beide werden verwechselt, weil beide zwei Teile haben.",
+          // NACHERZÄHLT, nicht zitiert — muss beim Übernehmen abgewiesen werden.
+          sourceQuote:
+            "Die Kettenregel gilt bei Verschachtelung, die Produktregel bei einem Produkt.",
+        },
+      ],
+      "Eine Stelle des Blattes war beim Abschreiben unsicher und wurde ausgelassen.",
+    );
+    console.log(
+      ergebnis.ok
+        ? `Vorschlag mit ${ergebnis.fragen} Fragen abgelegt (eine davon mit nacherzähltem Zitat).`
+        : "Vorschlag konnte nicht abgelegt werden.",
+    );
+  }
+}
