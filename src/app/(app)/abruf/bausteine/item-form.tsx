@@ -27,6 +27,23 @@ import type { BausteinFormState } from "../actions";
  * Stelle herauszukopieren ist deshalb der schnellste Weg, und die ⟨spitzen
  * Klammern⟩ bleiben dabei sichtbar: Sie markieren, was schon beim Abschreiben
  * unsicher war, und genau darauf darf keine Frage gebaut werden.
+ *
+ * ── Warum jedes Feld in `useState` liegt ─────────────────────────────────────
+ *
+ * Weil React die Felder sonst nach JEDER Aktion leert — auch nach einer
+ * abgelehnten. Das ist kein Versehen von React, sondern dokumentiertes
+ * Verhalten von `useActionState`: Unkontrollierte Felder werden nach dem
+ * Absenden zurückgesetzt.
+ *
+ * Beim ersten Durchklicken am 12.9.2026 sah das so aus: vier Felder ausgefüllt,
+ * abgeschickt, die Quellbindung wies das Zitat zurecht ab — und darunter stand
+ * ein leeres Formular. Die Meldung erklärte geduldig, welche Stelle besser
+ * gewählt wäre, aber die Frage, die Musterlösung und der Verwechslungssatz
+ * waren weg. Ein Formular, das Arbeit verschluckt, wird zweimal benutzt und
+ * danach nicht mehr.
+ *
+ * Die anderen Formulare des Hauses halten ihre Werte aus demselben Grund in
+ * `useState` (siehe hausaufgaben/homework-form.tsx, klausuren/exam-form.tsx).
  */
 
 const EMPTY_STATE: BausteinFormState = {};
@@ -52,24 +69,66 @@ export function ItemForm({
   zurueckHref: string;
 }) {
   const [state, formAction, pending] = useActionState(action, EMPTY_STATE);
+
   const [pageId, setPageId] = useState(seiten[0]?.pageId ?? "");
-  // Nach einem angelegten Baustein leeren sich die Felder, die Seite bleibt:
-  // meistens kommt der nächste Baustein aus derselben Stelle.
-  const [runde, setRunde] = useState(0);
+  const [sourceQuote, setSourceQuote] = useState("");
+  const [promptFree, setPromptFree] = useState("");
+  const [solution, setSolution] = useState("");
+  const [misconception, setMisconception] = useState("");
+  const [materialKind, setMaterialKind] = useState("begriff");
+  const [role, setRole] = useState("uebung");
+
+  /**
+   * Bei jedem NEUEN Zustand die Felder angleichen.
+   *
+   * ── Warum nicht einfach `useState(state.werte?.…)` ───────────────────────────
+   *
+   * Weil die Reihenfolge dagegen spricht, und das war am 12.9.2026 im Browser
+   * nur durch Hinsehen zu finden: Beim Abschicken wird dieses Formular NEU
+   * AUFGEBAUT, und es wird mit einem LEEREN Zustand aufgebaut — das Ergebnis
+   * der Aktion trifft erst danach ein. Die Anfangswerte von `useState` sind zu
+   * diesem Zeitpunkt längst gelaufen. Gemessen sah das so aus: Die
+   * Fehlermeldung stand da, die vier Felder darunter waren leer.
+   *
+   * Deshalb wird hier auf die IDENTITÄT des Zustands geschaut. `useActionState`
+   * liefert bei jedem Lauf ein neues Objekt; sobald ein anderes ankommt als das
+   * zuletzt gesehene, werden die Felder daraus gesetzt. Das greift auf beiden
+   * Wegen — ob die Komponente neu aufgebaut wurde oder bloß neu gerendert.
+   *
+   * Angeglichen beim Rendern und nicht in einem Effekt: So sieht der Nutzer
+   * nichts aufblitzen, und die Lint-Regel react-hooks/set-state-in-effect
+   * verbietet die Effekt-Fassung ohnehin.
+   */
+  const [gesehenerZustand, setGesehenerZustand] =
+    useState<BausteinFormState>(state);
+
+  if (state !== gesehenerZustand) {
+    setGesehenerZustand(state);
+
+    if (state.werte) {
+      // Ein Fehler: alles kommt zurück, wie es dastand.
+      setPageId(state.werte.pageId || (seiten[0]?.pageId ?? ""));
+      setSourceQuote(state.werte.sourceQuote);
+      setPromptFree(state.werte.promptFree);
+      setSolution(state.werte.solution);
+      setMisconception(state.werte.misconception);
+      setMaterialKind(state.werte.materialKind);
+      setRole(state.werte.role);
+    } else if (state.angelegt) {
+      // Angelegt: die vier Textfelder leeren, Seite, Art und Wofür bleiben —
+      // der nächste Baustein kommt meistens aus derselben Stelle.
+      setSourceQuote("");
+      setPromptFree("");
+      setSolution("");
+      setMisconception("");
+    }
+  }
 
   const seite = seiten.find((s) => s.pageId === pageId) ?? seiten[0];
   const teile = seite ? splitTranscript(seite.transcript) : [];
 
   return (
-    <form
-      action={formAction}
-      className="space-y-6"
-      noValidate
-      key={state.angelegt ? runde : undefined}
-      onSubmit={() => {
-        if (state.angelegt) setRunde((r) => r + 1);
-      }}
-    >
+    <form action={formAction} className="space-y-6" noValidate>
       {state.message ? (
         <p
           role="alert"
@@ -139,7 +198,13 @@ export function ItemForm({
         error={state.errors?.sourceQuote}
       >
         {(control) => (
-          <Textarea {...control} name="sourceQuote" rows={3} />
+          <Textarea
+            {...control}
+            name="sourceQuote"
+            rows={3}
+            value={sourceQuote}
+            onChange={(e) => setSourceQuote(e.target.value)}
+          />
         )}
       </Field>
 
@@ -149,7 +214,14 @@ export function ItemForm({
         hint="Offen gestellt, nicht zum Ankreuzen — so wie sie in der Klausur stünde."
         error={state.errors?.promptFree}
       >
-        {(control) => <Input {...control} name="promptFree" />}
+        {(control) => (
+          <Input
+            {...control}
+            name="promptFree"
+            value={promptFree}
+            onChange={(e) => setPromptFree(e.target.value)}
+          />
+        )}
       </Field>
 
       <Field
@@ -158,7 +230,15 @@ export function ItemForm({
         hint="Eine Sinneinheit je Zeile. Was in eigenen Worten dastehen muss, damit es zählt."
         error={state.errors?.solution}
       >
-        {(control) => <Textarea {...control} name="solution" rows={4} />}
+        {(control) => (
+          <Textarea
+            {...control}
+            name="solution"
+            rows={4}
+            value={solution}
+            onChange={(e) => setSolution(e.target.value)}
+          />
+        )}
       </Field>
 
       <Field
@@ -167,7 +247,15 @@ export function ItemForm({
         hint="Ein bis zwei Sätze. Ohne sie wird der Baustein nicht ausgeliefert — dieser Teil ist der Unterschied zwischen halber und ganzer Wirkung."
         error={state.errors?.misconception}
       >
-        {(control) => <Textarea {...control} name="misconception" rows={2} />}
+        {(control) => (
+          <Textarea
+            {...control}
+            name="misconception"
+            rows={2}
+            value={misconception}
+            onChange={(e) => setMisconception(e.target.value)}
+          />
+        )}
       </Field>
 
       <Field
@@ -177,7 +265,12 @@ export function ItemForm({
         error={state.errors?.materialKind}
       >
         {(control) => (
-          <Select {...control} name="materialKind" defaultValue="begriff">
+          <Select
+            {...control}
+            name="materialKind"
+            value={materialKind}
+            onChange={(e) => setMaterialKind(e.target.value)}
+          >
             <option value="begriff">Begriff oder Definition</option>
             <option value="anschauung">Anschauung, Beispiel, Bild</option>
             <option value="verfahren">Verfahren, Rechenweg</option>
@@ -193,7 +286,12 @@ export function ItemForm({
         error={state.errors?.role}
       >
         {(control) => (
-          <Select {...control} name="role" defaultValue="uebung">
+          <Select
+            {...control}
+            name="role"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+          >
             <option value="uebung">Zum Üben</option>
             <option value="messung">Messvorrat — nie üben, nur zum Prüfen</option>
           </Select>

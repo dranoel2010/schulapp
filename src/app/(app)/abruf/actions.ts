@@ -51,12 +51,64 @@ type BausteinFeld =
   | "materialKind"
   | "role";
 
+/**
+ * Was der Schüler abgeschickt hat, unverändert — damit es nach einem Fehler
+ * wieder im Formular steht.
+ *
+ * ── Warum der Server das zurückschicken muss ─────────────────────────────────
+ *
+ * Weil das Formular beim Abschicken NEU AUFGEBAUT wird und dabei jeden
+ * Zustand im Browser verliert. Am 12.9.2026 im Browser gemessen: vier Felder
+ * ausgefüllt, abgeschickt, die Quellbindung weist das Zitat zurecht ab — und
+ * darunter steht ein leeres Formular. Sogar das Auswahlfeld „Art" springt auf
+ * seinen Anfangswert zurück, und genau das ist der Beweis: Ein bloßes
+ * Neu-Rendern würde eine getroffene Auswahl behalten.
+ *
+ * Kontrollierte Felder allein reichen dagegen nicht — sie überleben ein
+ * Neu-Rendern, aber keinen Neuaufbau. Was überlebt, ist nur, was der Server
+ * zurückgibt. Deshalb reisen die Werte mit der Fehlermeldung zurück und das
+ * Formular beginnt damit.
+ *
+ * Ein Formular, das Arbeit verschluckt, wird zweimal benutzt und danach nicht
+ * mehr — und dieses hier verlangt fünf ausgefüllte Felder, bevor es etwas
+ * annimmt.
+ */
+export type BausteinWerte = {
+  pageId: string;
+  sourceQuote: string;
+  promptFree: string;
+  solution: string;
+  misconception: string;
+  materialKind: string;
+  role: string;
+};
+
 export type BausteinFormState = {
   message?: string;
   errors?: FieldErrors<BausteinFeld>;
   /** Steht nach einem angelegten Baustein da, damit das Formular leer bleiben kann. */
   angelegt?: boolean;
+  /** Nach einem Fehler: was dastand, damit es wieder dasteht. */
+  werte?: BausteinWerte;
 };
+
+/** Die rohen Eingaben aus dem Formular, ohne Prüfung — nur zum Zurückgeben. */
+function werteAus(formData: FormData): BausteinWerte {
+  const text = (name: string): string => {
+    const wert = formData.get(name);
+    return typeof wert === "string" ? wert : "";
+  };
+
+  return {
+    pageId: text("pageId"),
+    sourceQuote: text("sourceQuote"),
+    promptFree: text("promptFree"),
+    solution: text("solution"),
+    misconception: text("misconception"),
+    materialKind: text("materialKind") || "begriff",
+    role: text("role") || "uebung",
+  };
+}
 
 const bausteinSchema = z.object({
   pageId: z.string().min(1, "Wähle die Seite, aus der die Frage stammt."),
@@ -130,7 +182,10 @@ export async function createItemAction(
   });
 
   if (!geprueft.success) {
-    return { ...formErrors<BausteinFeld>(geprueft.error.issues) };
+    return {
+      ...formErrors<BausteinFeld>(geprueft.error.issues),
+      werte: werteAus(formData),
+    };
   }
 
   const ergebnis = await createItem(user.id, geprueft.data, todayInBerlin());
@@ -142,6 +197,7 @@ export async function createItemAction(
     return {
       message: A5_MELDUNGEN[ergebnis.fehler],
       errors: amFeld ? { sourceQuote: A5_MELDUNGEN[ergebnis.fehler] } : undefined,
+      werte: werteAus(formData),
     };
   }
 

@@ -43,6 +43,14 @@ next-env.d.ts
 # Lokale Datenbank (PGlite)
 .data/
 
+# Beiseitegelegte Datenbanken tragen denselben Inhalt wie `.data/` — echte,
+# abgetippte Schulblätter — und `.data/` allein deckt sie nicht, weil der Name
+# ein anderer ist. Am 12.9.2026 lag eine veraltete Entwicklungsdatenbank als
+# `.data.alt-20260912-104707/` daneben: ein `git add -A` hätte sie in ein
+# öffentliches Repo geschrieben, und ein Push nimmt man nicht zurück.
+.data.alt-*/
+.data.*/
+
 # Vorlage darf mit
 !.env.example
 
