@@ -92,9 +92,19 @@ export default async function AbrufPage() {
           title="Noch nichts abzurufen"
           description="Ein Baustein ist eine Frage, ihre Musterlösung und ein Satz dazu, womit man sie verwechselt — alle drei aus einer Seite, die schon abgeschrieben ist."
           action={
-            <ButtonLink href="/abruf/bausteine/neu">
-              Ersten Baustein anlegen
-            </ButtonLink>
+            // Zwei Wege und nicht einer. „Stoff einer Klausur" stand bisher nur
+            // im Bestand — also genau dann nicht da, wenn man ihn braucht: Wer
+            // noch keinen Baustein hat, will zuerst sehen, ob überhaupt Stoff
+            // erreichbar ist. Im Browser aufgefallen, als die leere Seite den
+            // einzigen Knopf zum Formular zeigte.
+            <div className="flex flex-wrap items-center gap-3">
+              <ButtonLink href="/abruf/bausteine/neu">
+                Ersten Baustein anlegen
+              </ButtonLink>
+              <ButtonLink href="/abruf/klausur" variant="secondary">
+                Stoff einer Klausur
+              </ButtonLink>
+            </div>
           }
         />
       ) : faellig.length > 0 ? (

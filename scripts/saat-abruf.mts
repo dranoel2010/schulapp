@@ -2,8 +2,10 @@ import { and, eq, gte } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
+  examTopics,
   exams,
   materialPages,
+  materialTopics,
   materials,
   subjectTopics,
   subjects,
@@ -139,16 +141,21 @@ async function saat(): Promise<void> {
     )
     .limit(1);
 
-  if (!themaVorhanden) {
-    await db.insert(subjectTopics).values({
-      userId: nutzerId,
-      subjectId: fachId,
-      title: "Ableitungsregeln",
-      matchKey: "ableitungsregeln",
-      origin: "blatt",
-      lastSeenAt: HEUTE,
-    });
-  }
+  const themaId =
+    themaVorhanden?.id ??
+    (
+      await db
+        .insert(subjectTopics)
+        .values({
+          userId: nutzerId,
+          subjectId: fachId,
+          title: "Ableitungsregeln",
+          matchKey: "ableitungsregeln",
+          origin: "blatt",
+          lastSeenAt: HEUTE,
+        })
+        .returning({ id: subjectTopics.id })
+    )[0].id;
 
   // ── Die Klausur: vier Wochen hin, damit die Planung Luft hat ──────────────
   const klausurtag = addDays(HEUTE, 28);
@@ -169,15 +176,50 @@ async function saat(): Promise<void> {
     )
     .limit(1);
 
-  if (!klausurVorhanden) {
-    await db.insert(exams).values({
-      userId: nutzerId,
-      subjectId: fachId,
-      kind: "klausur",
-      date: klausurtag,
-      title: "Analysis",
+  const klausurId =
+    klausurVorhanden?.id ??
+    (
+      await db
+        .insert(exams)
+        .values({
+          userId: nutzerId,
+          subjectId: fachId,
+          kind: "klausur",
+          date: klausurtag,
+          title: "Analysis",
+        })
+        .returning({ id: exams.id })
+    )[0].id;
+
+  if (!klausurVorhanden) console.log(`Klausur am ${klausurtag} angelegt.`);
+
+  // ── Das Thema AN die Klausur hängen ──────────────────────────────────────
+  //
+  // Ohne diese Zeilen fehlt genau das Glied, um das es dem Nutzer geht: „ich
+  // stelle einen Test ein, dann kommen die Tags dran, und dann wird der
+  // Lernstoff durch die Tags gemacht." Die Saat legte Klausur UND Thema an und
+  // verband beide nie — die Klausur hatte null Themen, /abruf/klausur zeigte
+  // „kein Stoff erreichbar", und der Fragenlauf hätte lokal nichts zu tun
+  // gehabt. Am 12.9.2026 im Browser aufgefallen, nachdem die Seite drei Tage
+  // als „gebaut" galt.
+  const [postenVorhanden] = await db
+    .select({ id: examTopics.id })
+    .from(examTopics)
+    .where(
+      and(eq(examTopics.examId, klausurId), eq(examTopics.title, "Ableitungsregeln")),
+    )
+    .limit(1);
+
+  if (!postenVorhanden) {
+    await db.insert(examTopics).values({
+      examId: klausurId,
+      title: "Ableitungsregeln",
+      sortOrder: 0,
+      // DAS ist der Schlüssel: ein Klausurthema ohne subjectTopicId ist freier
+      // Text und führt zu keinem Blatt.
+      subjectTopicId: themaId,
     });
-    console.log(`Klausur am ${klausurtag} angelegt.`);
+    console.log("Das Thema hängt jetzt an der Klausur.");
   }
 
   // ── Das Blatt mit zwei abgeschriebenen Seiten ─────────────────────────────
@@ -239,6 +281,38 @@ async function saat(): Promise<void> {
       })),
     );
     console.log("Probeblatt mit zwei abgeschriebenen Seiten angelegt.");
+  }
+
+  // ── Und das Blatt an dasselbe Thema ──────────────────────────────────────
+  //
+  // Die zweite Hälfte derselben Kette: Über `material_topics` findet das Thema
+  // die Blätter. Fehlt sie, hat die Klausur ein Thema und das Thema kein Blatt
+  // — die Oberfläche sagt dann „kein abgeschriebenes Blatt", und es sieht aus
+  // wie ein Fehler im Abruf.
+  const [blattJetzt] = await db
+    .select({ id: materials.id })
+    .from(materials)
+    .where(and(eq(materials.userId, nutzerId), eq(materials.title, "Ableitungsregeln")))
+    .limit(1);
+
+  if (blattJetzt) {
+    const [verbunden] = await db
+      .select({ materialId: materialTopics.materialId })
+      .from(materialTopics)
+      .where(
+        and(
+          eq(materialTopics.materialId, blattJetzt.id),
+          eq(materialTopics.subjectTopicId, themaId),
+        ),
+      )
+      .limit(1);
+
+    if (!verbunden) {
+      await db
+        .insert(materialTopics)
+        .values({ materialId: blattJetzt.id, subjectTopicId: themaId });
+      console.log("Das Blatt hängt jetzt am Thema — die Kette ist vollständig.");
+    }
   }
 
   console.log(
@@ -362,3 +436,19 @@ if (process.argv.includes("--vorschlag")) {
     );
   }
 }
+
+/**
+ * Die Datenbank zumachen — sonst endet dieses Skript nie.
+ *
+ * PGlite hält die Ereignisschleife offen, solange die Datei-Datenbank offen
+ * ist. Ohne diese Zeile schreibt das Saatgut „Fertig." und läuft weiter; wer es
+ * durch eine Pipe schickt (`| tail`), bekommt sogar gar nichts zu sehen, weil
+ * die Pipe erst beim Ende schließt. Am 12.9.2026 hat das zwanzig Minuten
+ * gekostet: Das Skript sah aus wie hängend und war längst fertig.
+ *
+ * `close()` und nicht `process.exit()`. Der harte Abbruch lässt
+ * `.data/pglite/postmaster.pid` liegen, und die NÄCHSTE Instanz wartet dann auf
+ * einen Prozess, den es nicht mehr gibt — genau daran hing dieselbe Stunde ein
+ * zweites Mal. Ein ordentliches `close()` räumt die Datei weg.
+ */
+await (db as unknown as { $client: { close: () => Promise<void> } }).$client.close();

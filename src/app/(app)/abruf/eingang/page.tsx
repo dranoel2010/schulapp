@@ -134,7 +134,10 @@ export default async function EingangPage({
                 id: v.id,
                 subjectName: v.subjectName,
                 subjectColorHex: subjectColor(v.subjectColor).hex,
-                klausurtag: formatGerman(v.klausurtag, "kurz"),
+                // Die lange Form und nicht die kurze: „Mi, 14.9." endet selbst
+                // mit einem Punkt, und im Satz „…am Mi, 14.9.." stehen dann
+                // zwei. Im Browser gesehen, nicht im Test.
+                klausurtag: formatGerman(v.klausurtag),
                 note: v.note,
                 fragen: v.fragen.map((f) => ({
                   id: f.id,

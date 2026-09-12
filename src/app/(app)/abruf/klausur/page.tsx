@@ -71,7 +71,10 @@ export default async function KlausurStoffPage({
             <span style={{ color: farbe.hex }}>{gewaehlt.subjectName}</span> ·{" "}
             {formatGerman(gewaehlt.klausurtag, "lang")} ·{" "}
             {formatCountdown(heute, gewaehlt.klausurtag)} ·{" "}
-            <Link href="/abruf/klausur" className="underline underline-offset-2">
+            <Link
+              href="/abruf/klausur"
+              className="underline underline-offset-2"
+            >
               andere Klausur
             </Link>
           </p>
@@ -84,13 +87,34 @@ export default async function KlausurStoffPage({
         >
           <CardContent className="space-y-1">
             <p className="text-foreground">
-              {gewaehlt.seitenGesamt.length === 0
-                ? "Zu dieser Klausur ist kein abgeschriebener Stoff erreichbar."
-                : `${gewaehlt.seitenGesamt.length} ${gewaehlt.seitenGesamt.length === 1 ? "Seite" : "Seiten"} mit Abschrift, ${gewaehlt.zeichenGesamt.toLocaleString("de-DE")} Zeichen.`}
+              {/* Drei Fälle und nicht zwei. „Kein Stoff erreichbar" stimmt
+                  auch bei einer Klausur ohne jedes Thema — es ist nur die
+                  falsche Auskunft: Dort fehlt nicht das Blatt, sondern der
+                  Schlüssel dazu, und der nächste Schritt ist ein anderer. Im
+                  Browser aufgefallen, wo unter der Meldung eine leere
+                  Überschrift stand. */}
+              {gewaehlt.themen.length === 0
+                ? "Diese Klausur hat noch keine Themen."
+                : gewaehlt.seitenGesamt.length === 0
+                  ? "Zu dieser Klausur ist kein abgeschriebener Stoff erreichbar."
+                  : `${gewaehlt.seitenGesamt.length} ${gewaehlt.seitenGesamt.length === 1 ? "Seite" : "Seiten"} mit Abschrift, ${gewaehlt.zeichenGesamt.toLocaleString("de-DE")} Zeichen.`}
             </p>
             <p className="text-sm text-muted">
-              Daraus entstehen die Fragen — jede mit einem wörtlichen Zitat aus
-              dem Heft.
+              {gewaehlt.themen.length === 0 ? (
+                <>
+                  Die Themen sind der Schlüssel zum Stoff: Sie sagen, welche
+                  Blätter dazugehören. Häng sie unter{" "}
+                  <Link
+                    href={`/klausuren/${gewaehlt.examId}`}
+                    className="underline underline-offset-2"
+                  >
+                    Klausuren
+                  </Link>{" "}
+                  an, dann führt der Weg von hier zu den Seiten.
+                </>
+              ) : (
+                "Daraus entstehen die Fragen — jede mit einem wörtlichen Zitat aus dem Heft."
+              )}
             </p>
           </CardContent>
         </Card>
@@ -100,13 +124,13 @@ export default async function KlausurStoffPage({
             <CardContent className="space-y-1">
               <p className="text-sm font-medium text-foreground">
                 {ohneVerknuepfung.length}{" "}
-                {ohneVerknuepfung.length === 1 ? "Thema ist" : "Themen sind"} mit
-                keinem Blatt verbunden
+                {ohneVerknuepfung.length === 1 ? "Thema ist" : "Themen sind"}{" "}
+                mit keinem Blatt verbunden
               </p>
               <p className="text-sm text-muted">
                 {ohneVerknuepfung.map((t) => t.title).join(", ")} — auf der
-                Klausur steht nur der Text, nicht die Vokabel des Fachs. Von dort
-                führt kein Weg zu Blättern. Das lässt sich unter{" "}
+                Klausur steht nur der Text, nicht die Vokabel des Fachs. Von
+                dort führt kein Weg zu Blättern. Das lässt sich unter{" "}
                 <Link
                   href={`/klausuren/${gewaehlt.examId}`}
                   className="underline underline-offset-2"
@@ -137,44 +161,49 @@ export default async function KlausurStoffPage({
           </Card>
         ) : null}
 
-        <section className="space-y-3">
-          <h2 className="text-sm font-medium text-muted">
-            Themen und ihre Seiten
-          </h2>
+        {gewaehlt.themen.length > 0 ? (
+          <section className="space-y-3">
+            <h2 className="text-sm font-medium text-muted">
+              Themen und ihre Seiten
+            </h2>
 
-          <ul className="space-y-3">
-            {gewaehlt.themen.map((thema) => (
-              <li key={thema.examTopicId}>
-                <Card>
-                  <CardContent className="space-y-2">
-                    <div className="flex flex-wrap items-baseline gap-2">
-                      <p className="font-medium text-foreground">
-                        {thema.title}
-                      </p>
-                      <span className="text-xs text-subtle">
-                        {!thema.verknuepft
-                          ? "nicht verbunden"
-                          : thema.seiten.length === 0
-                            ? "kein Blatt"
-                            : `${thema.seiten.length} ${thema.seiten.length === 1 ? "Seite" : "Seiten"}`}
-                      </span>
-                    </div>
+            <ul className="space-y-3">
+              {gewaehlt.themen.map((thema) => (
+                <li key={thema.examTopicId}>
+                  <Card>
+                    <CardContent className="space-y-2">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <p className="font-medium text-foreground">
+                          {thema.title}
+                        </p>
+                        <span className="text-xs text-subtle">
+                          {!thema.verknuepft
+                            ? "nicht verbunden"
+                            : thema.seiten.length === 0
+                              ? "kein Blatt"
+                              : `${thema.seiten.length} ${thema.seiten.length === 1 ? "Seite" : "Seiten"}`}
+                        </span>
+                      </div>
 
-                    {thema.seiten.length > 0 ? (
-                      <ul className="space-y-1.5">
-                        {thema.seiten.map((seite) => (
-                          <li key={seite.pageId} className="text-sm text-muted">
-                            {transcriptPreview(seite.transcript, 90)}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </CardContent>
-                </Card>
-              </li>
-            ))}
-          </ul>
-        </section>
+                      {thema.seiten.length > 0 ? (
+                        <ul className="space-y-1.5">
+                          {thema.seiten.map((seite) => (
+                            <li
+                              key={seite.pageId}
+                              className="text-sm text-muted"
+                            >
+                              {transcriptPreview(seite.transcript, 90)}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         {gewaehlt.seitenGesamt.length > 0 ? (
           <ButtonLink href="/abruf/bausteine/neu" variant="secondary">
@@ -200,7 +229,9 @@ export default async function KlausurStoffPage({
         <EmptyState
           title="Keine Klausur eingetragen"
           description="Der Stoff hängt an den Themen einer Klausur. Trag eine ein, häng die Themen dran, dann steht hier, welche Blätter dazu passen."
-          action={<ButtonLink href="/klausuren/neu">Klausur eintragen</ButtonLink>}
+          action={
+            <ButtonLink href="/klausuren/neu">Klausur eintragen</ButtonLink>
+          }
         />
       ) : (
         <ul className="space-y-3">
