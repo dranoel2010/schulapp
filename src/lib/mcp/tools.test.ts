@@ -4,6 +4,15 @@ import { describe, it } from "node:test";
 import { MAX_PAGES } from "@/lib/images";
 import { PROPOSAL_TRANSCRIPT_MAX } from "@/lib/inbox";
 import { isToolName, TOOLS, toolList } from "@/lib/mcp/tools";
+import { MATERIALARTEN } from "@/recall/items";
+import {
+  FRAGE_MAX,
+  FRAGEN_MAX,
+  LOESUNG_MAX,
+  NOTIZ_MAX,
+  VERWECHSLUNG_MAX,
+  ZITAT_MAX,
+} from "@/recall/proposals";
 
 /**
  * Das Verzeichnis, so wie ein Client es zu sehen bekommt.
@@ -26,12 +35,18 @@ describe("der Werkzeugkasten", () => {
     }
   });
 
-  it("schreibt genau an einer Stelle — dem Eingangskorb", () => {
+  it("schreibt nur in die zwei Eingangskörbe und nirgends sonst", () => {
     const schreibend = Object.entries(TOOLS)
       .filter(([, spec]) => !spec.readOnly)
       .map(([name]) => name);
 
-    assert.deepEqual(schreibend, ["propose_sheet"]);
+    // Diese Liste ist mit Absicht länger geworden als der eine Eintrag, mit
+    // dem sie angefangen hat: Seit dem Abruf gibt es einen zweiten Korb, den
+    // für Abruffragen. Beide sind Körbe und keine Tabellen — was darin liegt,
+    // ändert nichts, bis ein Mensch es im Formular übernimmt. Ein dritter
+    // Eintrag hier ist deshalb kein Versehen, sondern eine Entscheidung, und
+    // dieser Test ist die Stelle, an der sie auffällt.
+    assert.deepEqual(schreibend, ["propose_sheet", "propose_questions"]);
   });
 
   it("hält sich an die Namensregeln des Protokolls", () => {
@@ -91,13 +106,15 @@ describe("toolList", () => {
     }
   });
 
-  it("nennt den einzigen Schreiber ausdrücklich nicht zerstörend", () => {
-    const proposal = list.find((tool) => tool.name === "propose_sheet");
-    const annotations = proposal?.annotations as Record<string, unknown>;
+  it("nennt jeden Schreiber ausdrücklich nicht zerstörend", () => {
+    for (const name of ["propose_sheet", "propose_questions"]) {
+      const proposal = list.find((tool) => tool.name === name);
+      const annotations = proposal?.annotations as Record<string, unknown>;
 
-    // Ohne diese Zeile gilt die Vorgabe der Spezifikation: „zerstörend".
-    assert.equal(annotations.destructiveHint, false);
-    assert.equal(annotations.idempotentHint, false);
+      // Ohne diese Zeile gilt die Vorgabe der Spezifikation: „zerstörend".
+      assert.equal(annotations.destructiveHint, false, name);
+      assert.equal(annotations.idempotentHint, false, name);
+    }
   });
 });
 
@@ -351,5 +368,182 @@ describe("read_transcript", () => {
     // read_sheet nennt je Seite nur die Länge. Ohne diesen Verweis läse ein
     // Modell die Zahl und wüsste nicht, wie es an den Text kommt.
     assert.match(TOOLS.read_sheet.description, /read_transcript/);
+  });
+});
+
+describe("der Weg von der Klausur zu den Fragen", () => {
+  /** Eine Frage, an der alles stimmt — die Grundlage jeder Abwandlung unten. */
+  const frage = {
+    page: "11111111-1111-1111-1111-111111111111",
+    question: "Was besagt die Kettenregel?",
+    solution: "Äußere Ableitung mal innere Ableitung.",
+    misconception: "Wird mit der Produktregel verwechselt.",
+    quote: "Ist f(x) = g(h(x)), so gilt f'(x) = g'(h(x)) · h'(x).",
+  };
+
+  const vorschlag = (fragen: unknown[], rest: Record<string, unknown> = {}) => ({
+    exam: "22222222-2222-2222-2222-222222222222",
+    questions: fragen,
+    ...rest,
+  });
+
+  it("verlangt für den Stoff eine Klausur und nimmt ein Thema freiwillig", () => {
+    assert.equal(TOOLS.read_exam_material.args.safeParse({}).success, false);
+    assert.equal(
+      TOOLS.read_exam_material.args.safeParse({ exam: "" }).success,
+      false,
+    );
+    assert.equal(
+      TOOLS.read_exam_material.args.safeParse({ exam: "x" }).success,
+      true,
+    );
+    assert.equal(
+      TOOLS.read_exam_material.args.safeParse({ exam: "x", topic: "Kettenregel" })
+        .success,
+      true,
+    );
+  });
+
+  it("nimmt eine vollständige Frage an", () => {
+    assert.equal(TOOLS.propose_questions.args.safeParse(vorschlag([frage])).success, true);
+  });
+
+  it("verlangt alle vier Teile — jeder einzeln", () => {
+    // Der Verwechslungssatz ist der, den man am ehesten weglassen würde: Er
+    // ist Arbeit und sieht nach Beiwerk aus. Er ist der Unterschied zwischen
+    // 0,73 und 0,39, und deshalb steht er hier neben den anderen drei.
+    for (const teil of ["question", "solution", "misconception", "quote"] as const) {
+      const ohne = { ...frage };
+      delete (ohne as Record<string, unknown>)[teil];
+
+      assert.equal(
+        TOOLS.propose_questions.args.safeParse(vorschlag([ohne])).success,
+        false,
+        `${teil} fehlt und wird trotzdem angenommen`,
+      );
+
+      assert.equal(
+        TOOLS.propose_questions.args.safeParse(vorschlag([{ ...frage, [teil]: "   " }]))
+          .success,
+        false,
+        `${teil} besteht aus Leerraum und wird trotzdem angenommen`,
+      );
+    }
+  });
+
+  it("weist ein leeres Zitat ab — es stünde sonst wörtlich in JEDER Abschrift", () => {
+    // `"abc".includes("")` ist wahr. Ein leeres Zitat käme also durch die
+    // Quellbindung, und in der Datenbank stünde eine Frage, deren Quelle
+    // nichts belegt. Der Kern weist es seit heute ebenfalls ab
+    // („zitat-leer"); diese Tür lässt es gar nicht erst hinein.
+    assert.equal(
+      TOOLS.propose_questions.args.safeParse(vorschlag([{ ...frage, quote: "" }])).success,
+      false,
+    );
+  });
+
+  it("nimmt keinen Vorschlag ohne Frage und keinen mit zu vielen", () => {
+    assert.equal(TOOLS.propose_questions.args.safeParse(vorschlag([])).success, false);
+
+    const gerade = Array.from({ length: FRAGEN_MAX }, () => frage);
+    assert.equal(TOOLS.propose_questions.args.safeParse(vorschlag(gerade)).success, true);
+    assert.equal(
+      TOOLS.propose_questions.args.safeParse(vorschlag([...gerade, frage])).success,
+      false,
+    );
+  });
+
+  it("kennt nur die vier Materialarten", () => {
+    for (const art of MATERIALARTEN) {
+      assert.equal(
+        TOOLS.propose_questions.args.safeParse(vorschlag([{ ...frage, kind: art }]))
+          .success,
+        true,
+        art,
+      );
+    }
+
+    assert.equal(
+      TOOLS.propose_questions.args.safeParse(vorschlag([{ ...frage, kind: "vokabel" }]))
+        .success,
+      false,
+    );
+  });
+
+  it("weist ein Argument ab, das es nicht gibt — auch innerhalb einer Frage", () => {
+    assert.equal(
+      TOOLS.propose_questions.args.safeParse(vorschlag([frage], { fach: "Mathe" })).success,
+      false,
+    );
+    assert.equal(
+      TOOLS.propose_questions.args
+        .safeParse(vorschlag([{ ...frage, hint: "Kettenregel" }]))
+        .success,
+      false,
+    );
+  });
+
+  it("hält an jedem Feld die Grenze, die der Abrufkern prüft", () => {
+    // Der eigentliche Punkt dieses Tests ist nicht die Zahl, sondern WOHER sie
+    // kommt. Die Grenzen stehen in @/recall/proposals, weil dort geprüft wird;
+    // stünde in tools.ts eine eigene, versprächen die zwei Türen dem Agenten
+    // Verschiedenes — und die engere wiese ab, was die weitere zugesagt hat.
+    // Genau das fällt hier auf, sobald jemand eine Zahl von Hand einträgt.
+    const grenzen = [
+      ["question", FRAGE_MAX],
+      ["solution", LOESUNG_MAX],
+      ["misconception", VERWECHSLUNG_MAX],
+      ["quote", ZITAT_MAX],
+    ] as const;
+
+    for (const [feld, grenze] of grenzen) {
+      assert.equal(
+        TOOLS.propose_questions.args
+          .safeParse(vorschlag([{ ...frage, [feld]: "x".repeat(grenze) }]))
+          .success,
+        true,
+        `${feld} bei genau ${grenze} Zeichen wird abgewiesen`,
+      );
+      assert.equal(
+        TOOLS.propose_questions.args
+          .safeParse(vorschlag([{ ...frage, [feld]: "x".repeat(grenze + 1) }]))
+          .success,
+        false,
+        `${feld} über ${grenze} Zeichen wird angenommen`,
+      );
+    }
+
+    assert.equal(
+      TOOLS.propose_questions.args
+        .safeParse(vorschlag([frage], { note: "x".repeat(NOTIZ_MAX + 1) }))
+        .success,
+      false,
+    );
+  });
+
+  it("schreibt die Grenzen auch in das Verzeichnis, das das Modell liest", () => {
+    // Eine Prüfung, die abweist, ohne dass das Modell die Regel lesen konnte,
+    // ist eine Falle. `z.toJSONSchema()` überträgt `.max()` als `maxLength` —
+    // anders als eine Verfeinerung, die still wegfällt (siehe propose_sheet).
+    const schema = toolList().find((tool) => tool.name === "propose_questions")
+      ?.inputSchema as Record<string, unknown>;
+    const felder = (
+      (
+        (schema.properties as Record<string, Record<string, unknown>>).questions
+          .items as Record<string, unknown>
+      ).properties as Record<string, Record<string, unknown>>
+    );
+
+    assert.equal(felder.question.maxLength, FRAGE_MAX);
+    assert.equal(felder.solution.maxLength, LOESUNG_MAX);
+    assert.equal(felder.misconception.maxLength, VERWECHSLUNG_MAX);
+    assert.equal(felder.quote.maxLength, ZITAT_MAX);
+    assert.equal(
+      (
+        (schema.properties as Record<string, Record<string, unknown>>)
+          .questions as Record<string, unknown>
+      ).maxItems,
+      FRAGEN_MAX,
+    );
   });
 });

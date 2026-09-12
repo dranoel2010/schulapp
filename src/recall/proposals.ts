@@ -1,10 +1,21 @@
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
-import { exams, materialPages, materials, subjects } from "@/db/schema";
+import {
+  exams,
+  materialPages,
+  materials,
+  subjectTopics,
+  subjects,
+} from "@/db/schema";
 import { todayInBerlin } from "@/lib/dates";
+import { istId } from "@/recall/ids";
 import { createItem, type AnlageFehler } from "@/recall/items";
-import { recallProposalItems, recallProposals } from "@/recall/schema";
+import {
+  recallItems,
+  recallProposalItems,
+  recallProposals,
+} from "@/recall/schema";
 
 /**
  * Vorschläge: was ein Agent an Fragen gebaut hat, und der Weg in den Bestand.
@@ -41,6 +52,82 @@ export type VorschlagsFrage = {
 };
 
 /**
+ * Wie lang die vier Teile einer vorgeschlagenen Frage werden dürfen.
+ *
+ * Die Zahlen stehen HIER, weil hier geprüft wird. Das Werkzeugverzeichnis
+ * (@/lib/mcp/tools) holt sie von hier und schreibt sie dem Modell in die
+ * Beschreibung — stünden dort eigene, versprächen die zwei Türen dem Agenten
+ * Verschiedenes, und die engere wiese ab, was die weitere zugesagt hat. Es ist
+ * dieselbe Regel, nach der `PROPOSAL_TRANSCRIPT_MAX` aus @/lib/inbox kommt und
+ * nicht aus dem Verzeichnis.
+ *
+ * Die Höhe ist an der Sache gemessen und nicht gerundet: Eine Abruffrage, die
+ * länger ist als ein Absatz, ist keine Frage mehr, sondern eine
+ * Aufgabenstellung — und A1 verlangt freien Abruf, nicht Textverständnis. Die
+ * Musterlösung darf ein Vielfaches sein, weil dort Rechenwege in mehreren
+ * Zeilen stehen. Der Verwechslungssatz ist ein Satz. Und das Zitat ist ein
+ * Ausschnitt einer Seite, die bei 8000 Zeichen endet: Was darüber liegt,
+ * zitiert nicht mehr, sondern kopiert die Seite — und ein Zitat, das die ganze
+ * Seite ist, belegt nichts mehr, weil es nicht mehr auf eine Stelle zeigt.
+ *
+ * `FRAGEN_MAX` deckelt den einzelnen Vorschlag, nicht den Tag. Die Zahl ist die
+ * Geduld eines Menschen am Abend: Der Eingang wird von Hand durchgesehen, Frage
+ * für Frage mit Lösung, Verwechslungssatz und Zitat daneben. Eine Liste mit
+ * fünfzig Einträgen wird nicht sorgfältiger durchgesehen, sondern gar nicht.
+ */
+export const FRAGE_MAX = 500;
+export const LOESUNG_MAX = 2000;
+export const VERWECHSLUNG_MAX = 500;
+export const ZITAT_MAX = 1000;
+export const FRAGEN_MAX = 20;
+
+/**
+ * Und wie kurz sie ausfallen dürfen.
+ *
+ * Diese vier Zahlen standen bis heute im Formularschema unter /abruf — von
+ * Hand getippt, zusammen mit den vier oben. Sie gehören hierher, weil es sie
+ * seit dem Eingangskorb zweimal gibt: Was ein Mensch tippen darf, muss die KI
+ * auch schicken dürfen, und umgekehrt. Wären die zwei Türen verschieden,
+ * bekäme entweder der Mensch eine Abweisung für etwas, das die KI durchbringt,
+ * oder die KI eine für etwas, das im Formular erlaubt ist — und beides fiele
+ * erst auf, wenn jemand beide Wege nebeneinander ausprobiert.
+ *
+ * Das Zitat hat die höchste Untergrenze und den Grund dafür in `createItem()`:
+ * Geprüft wird mit `includes()`, und je kürzer der Ausschnitt, desto
+ * beliebiger die Stelle, die er trifft. Ein einzelnes Wort steht auf einer
+ * halben Seite zehnmal; zehn Zeichen bezeichnen eine.
+ */
+export const FRAGE_MIN = 5;
+export const LOESUNG_MIN = 1;
+export const VERWECHSLUNG_MIN = 5;
+export const ZITAT_MIN = 10;
+
+/**
+ * Der Satz, den der Agent dem Menschen mitschickt.
+ *
+ * Er steht über der Liste im Eingang und beantwortet „was hast du
+ * weggelassen und warum" — ein Absatz, kein Bericht. Wäre er länger als die
+ * Liste, wäre er das, was gelesen wird, und die Fragen wären es nicht.
+ */
+export const NOTIZ_MAX = 500;
+
+/**
+ * Warum ein Vorschlag gar nicht abgelegt wurde.
+ *
+ * Nicht zu verwechseln mit `AnlageFehler`: der sagt, warum eine EINZELNE Frage
+ * beim Übernehmen durchfiel, und der gehört ins Protokoll. Dieser hier sagt,
+ * warum überhaupt keine Zeile entstand — und er geht an den Agenten zurück,
+ * der es gleich noch einmal versucht. „Es hat nicht geklappt" wäre für beide
+ * Leser dieselbe nutzlose Auskunft.
+ */
+export type VorschlagAbweisung =
+  | "keine-klausur"
+  | "keine-fragen"
+  | "zu-kurz"
+  | "zu-lang"
+  | "fremde-seiten";
+
+/**
  * Einen Vorschlag ablegen.
  *
  * Hier wird NICHT geprüft, ob die Zitate stimmen — das passiert beim
@@ -49,22 +136,69 @@ export type VorschlagsFrage = {
  * geliefert hat. Die Zahl der abgewiesenen Fragen IST das Maß dafür, wie
  * zuverlässig er arbeitet; sie darf nicht stillschweigend auf null sinken.
  *
- * Geprüft wird nur, dass die Seite zu diesem Nutzer gehört. Ein Vorschlag auf
- * eine fremde Seite ist kein schwacher Vorschlag, sondern ein Angriff.
+ * Geprüft wird zweierlei, und beides sind Eigenschaften der Zeile und nicht
+ * ihres Inhalts: dass die Seite zu diesem Nutzer gehört — ein Vorschlag auf
+ * eine fremde Seite ist kein schwacher Vorschlag, sondern ein Angriff — und
+ * dass die Texte in die Grenzen oben passen. Das zweite ist keine
+ * Qualitätsprüfung durch die Hintertür: eine 50 000 Zeichen lange
+ * „Musterlösung" ist keine schlechte Antwort, sondern keine, und sie macht die
+ * Liste unlesbar, in der sie steht.
  */
 export async function vorschlagAnlegen(
   userId: string,
   examId: string,
   fragen: readonly VorschlagsFrage[],
   note?: string | null,
-): Promise<{ ok: true; proposalId: string; fragen: number } | { ok: false }> {
+): Promise<
+  | {
+      ok: true;
+      proposalId: string;
+      fragen: number;
+      /** Fragen, deren Thema nicht zu diesem Schüler gehörte — es blieb leer. */
+      themenVerworfen: number;
+    }
+  | { ok: false; grund: VorschlagAbweisung }
+> {
+  if (!istId(examId)) return { ok: false, grund: "keine-klausur" };
+
   const [klausur] = await db
-    .select({ id: exams.id })
+    .select({ id: exams.id, subjectId: exams.subjectId })
     .from(exams)
     .where(and(eq(exams.id, examId), eq(exams.userId, userId)))
     .limit(1);
 
-  if (!klausur || fragen.length === 0) return { ok: false };
+  if (!klausur) return { ok: false, grund: "keine-klausur" };
+  if (fragen.length === 0 || fragen.length > FRAGEN_MAX) {
+    return { ok: false, grund: "keine-fragen" };
+  }
+
+  // Gemessen wird am getrimmten Text, weil genau der gespeichert wird. Und
+  // abgewiesen wird der GANZE Vorschlag, nicht die zu lange Frage: Eine Liste,
+  // aus der still eine Frage verschwindet, sieht vollständig aus. Der Agent
+  // bekommt seine zwanzig Fragen zurück und weiß, dass er kürzen muss — ein
+  // Mensch bekäme sonst neunzehn und erführe nie, dass es zwanzig waren.
+  const zuLang = fragen.some(
+    (f) =>
+      f.promptFree.trim().length > FRAGE_MAX ||
+      f.solution.trim().length > LOESUNG_MAX ||
+      f.misconception.trim().length > VERWECHSLUNG_MAX ||
+      f.sourceQuote.trim().length > ZITAT_MAX,
+  );
+  if (zuLang || (note ?? "").trim().length > NOTIZ_MAX) {
+    return { ok: false, grund: "zu-lang" };
+  }
+
+  // Und dieselbe Prüfung von unten. Der leere Verwechslungssatz ist der Fall,
+  // auf den es dabei ankommt: In der Datenbank steht dafür eine CHECK-Regel,
+  // und sie käme als englischer Postgres-Fehler durch die MCP-Tür zurück.
+  const zuKurz = fragen.some(
+    (f) =>
+      f.promptFree.trim().length < FRAGE_MIN ||
+      f.solution.trim().length < LOESUNG_MIN ||
+      f.misconception.trim().length < VERWECHSLUNG_MIN ||
+      f.sourceQuote.trim().length < ZITAT_MIN,
+  );
+  if (zuKurz) return { ok: false, grund: "zu-kurz" };
 
   // Alle Seiten in EINER Abfrage prüfen, nicht je Frage eine.
   const eigene = new Set(
@@ -83,7 +217,58 @@ export async function vorschlagAnlegen(
   );
 
   const erlaubt = fragen.filter((f) => eigene.has(f.pageId));
-  if (erlaubt.length === 0) return { ok: false };
+  if (erlaubt.length === 0) return { ok: false, grund: "fremde-seiten" };
+
+  // Die Themen: dieselbe Frage wie bei den Seiten, mit einer anderen Antwort.
+  //
+  // Ein Thema, das gar keine id ist, käme beim Einfügen als
+  // Fremdschlüsselfehler zurück: englisch, aus Postgres, mitten in einem
+  // Werkzeugaufruf. Die Frage deswegen wegzuwerfen wäre aber
+  // unverhältnismäßig: Das Thema ist die Einordnung, die Frage ist die Arbeit,
+  // und ohne Thema bleibt sie vollständig beantwortbar. Sie wird also behalten
+  // und das Thema fallen gelassen — gezählt allerdings, damit der Satz an den
+  // Agenten es sagen kann. Stillschweigend wäre es die Art Fehler, die man
+  // erst Wochen später in einer leeren Themenspalte sieht.
+  //
+  // Gefragt wird nach dem FACH DER KLAUSUR und nicht nach dem Schüler. Das ist
+  // die engere Frage, und sie ist die richtige: „Passé composé" gehört diesem
+  // Schüler, an einer Mathematikklausur ist es trotzdem falsch. Der Baustein
+  // trüge dann `subject_id` = Mathematik und daneben ein französisches Thema —
+  // eine Zeile, die sich selbst widerspricht, und beim Üben nach Thema tauchte
+  // die Frage im falschen Fach auf. Die Probe vom 12.9.2026 hat genau diese
+  // zu weite Prüfung gefunden.
+  const genannt = [
+    ...new Set(
+      erlaubt
+        .map((f) => f.subjectTopicId)
+        .filter((id): id is string => typeof id === "string" && istId(id)),
+    ),
+  ];
+
+  const eigeneThemen = new Set(
+    genannt.length === 0
+      ? []
+      : (
+          await db
+            .select({ id: subjectTopics.id })
+            .from(subjectTopics)
+            .where(
+              and(
+                inArray(subjectTopics.id, genannt),
+                eq(subjectTopics.subjectId, klausur.subjectId),
+              ),
+            )
+        ).map((z) => z.id),
+  );
+
+  const themaVon = (f: VorschlagsFrage): string | null =>
+    f.subjectTopicId && eigeneThemen.has(f.subjectTopicId)
+      ? f.subjectTopicId
+      : null;
+
+  const themenVerworfen = erlaubt.filter(
+    (f) => f.subjectTopicId && themaVon(f) === null,
+  ).length;
 
   const [vorschlag] = await db
     .insert(recallProposals)
@@ -94,7 +279,7 @@ export async function vorschlagAnlegen(
     erlaubt.map((f, i) => ({
       proposalId: vorschlag.id,
       pageId: f.pageId,
-      subjectTopicId: f.subjectTopicId ?? null,
+      subjectTopicId: themaVon(f),
       sortOrder: i,
       promptFree: f.promptFree.trim(),
       solution: f.solution.trim(),
@@ -104,7 +289,89 @@ export async function vorschlagAnlegen(
     })),
   );
 
-  return { ok: true, proposalId: vorschlag.id, fragen: erlaubt.length };
+  return {
+    ok: true,
+    proposalId: vorschlag.id,
+    fragen: erlaubt.length,
+    themenVerworfen,
+  };
+}
+
+/**
+ * Was zu dieser Klausur schon da ist.
+ *
+ * ── Warum das an der Auskunft hängt und nicht in einer Merkliste ─────────────
+ *
+ * Der Postbote hat eine Merkliste (harness/gesehen.json), und sie ist dort mit
+ * Bedacht die EINZIGE: „der Korb ist die Warteschlange". Für Fragen gibt es
+ * diesen Korb auch — nur konnte ihn von außen niemand sehen. Ein Lauf, der das
+ * nicht weiß, legt jede Nacht zwanzig neue Fragen auf dieselbe Klausur, und der
+ * Mensch sieht am Morgen sechzig, von denen vierzig Dubletten sind.
+ *
+ * Also dieselbe Antwort wie beim Postboten, nur ohne Datei: Die Zahl steht in
+ * der Auskunft, die ohnehin der erste Aufruf jedes Laufs ist. Damit gibt es
+ * nichts, was zwischen App und Dienst auseinanderlaufen könnte — und nichts
+ * aufzuräumen, wenn der Dienst wochenlang aus war.
+ *
+ * `seitenIds` kommt vom Aufrufer und wird hier nicht noch einmal hergeleitet:
+ * Wer diese Zahl braucht, hat den Stoff gerade geholt (`stoffZuKlausur`) und
+ * kennt die Seiten. Ein zweiter Weg über exam_topics wäre eine zweite Fassung
+ * derselben Kette — und die erste, die sich ändert, wäre die falsche.
+ */
+export type KlausurVorrat = {
+  /** Bausteine, die an einer Seite dieses Klausurstoffs hängen */
+  bausteine: number;
+  /** Fragen, die im Eingang liegen und noch niemand entschieden hat */
+  offeneFragen: number;
+};
+
+export async function vorratZuKlausur(
+  userId: string,
+  examId: string,
+  seitenIds: readonly string[],
+): Promise<KlausurVorrat> {
+  if (!istId(examId)) return { bausteine: 0, offeneFragen: 0 };
+
+  const [fragen] = await db
+    .select({ n: count() })
+    .from(recallProposalItems)
+    .innerJoin(
+      recallProposals,
+      and(
+        eq(recallProposals.id, recallProposalItems.proposalId),
+        eq(recallProposals.userId, userId),
+        eq(recallProposals.examId, examId),
+        isNull(recallProposals.settledAt),
+      ),
+    )
+    .where(
+      and(
+        isNull(recallProposalItems.acceptedAt),
+        isNull(recallProposalItems.rejectedReason),
+      ),
+    );
+
+  // Ohne Seiten gibt es nichts zu zählen — und `inArray` mit einer leeren Liste
+  // ist in SQL kein leeres Ergebnis, sondern ein Fehler.
+  if (seitenIds.length === 0) {
+    return { bausteine: 0, offeneFragen: Number(fragen?.n ?? 0) };
+  }
+
+  const [bausteine] = await db
+    .select({ n: count() })
+    .from(recallItems)
+    .where(
+      and(
+        eq(recallItems.userId, userId),
+        isNull(recallItems.retiredAt),
+        inArray(recallItems.pageId, [...seitenIds]),
+      ),
+    );
+
+  return {
+    bausteine: Number(bausteine?.n ?? 0),
+    offeneFragen: Number(fragen?.n ?? 0),
+  };
 }
 
 export type OffeneFrage = {
@@ -218,7 +485,13 @@ export type UebernahmeErgebnis = {
 /** Die Sätze, mit denen eine abgewiesene Frage im Protokoll stehen bleibt. */
 const ABWEISUNG: Record<AnlageFehler, string> = {
   "keine-seite": "Die Seite gibt es nicht mehr.",
+  // Über diesen Weg unerreichbar: Das Fach kommt beim Übernehmen aus der
+  // Klausur und nicht aus dem Vorschlag. Der Satz steht trotzdem da, weil die
+  // Liste vollständig sein muss — und weil „unerreichbar" eine Aussage über
+  // heutigen Code ist und nicht über morgigen.
+  "kein-fach": "Zur Klausur gehörte kein gültiges Fach.",
   "keine-abschrift": "Die Seite hat keine Abschrift.",
+  "zitat-leer": "Zu der Frage stand kein Zitat da.",
   "zitat-nicht-gefunden":
     "Das Zitat steht nicht wörtlich in der Abschrift — der Agent hat es nacherzählt.",
   "zitat-unsicher":
@@ -245,6 +518,11 @@ export async function vorschlagUebernehmen(
   gewaehlteIds: readonly string[],
   heute: string = todayInBerlin(),
 ): Promise<UebernahmeErgebnis | null> {
+  // Die gewählten ids brauchen keinen Wächter: Sie werden gegen echte ids
+  // verglichen und stehen in keiner Abfrage. Der Vorschlag selbst steht in
+  // einer.
+  if (!istId(proposalId)) return null;
+
   const [vorschlag] = await db
     .select({ id: recallProposals.id, subjectId: exams.subjectId })
     .from(recallProposals)
@@ -334,6 +612,8 @@ export async function vorschlagVerwerfen(
   userId: string,
   proposalId: string,
 ): Promise<boolean> {
+  if (!istId(proposalId)) return false;
+
   const [zeile] = await db
     .update(recallProposals)
     .set({ settledAt: new Date() })
@@ -396,6 +676,8 @@ export async function vorschlagsErgebnis(
   userId: string,
   proposalId: string,
 ): Promise<VorschlagsErgebnis | null> {
+  if (!istId(proposalId)) return null;
+
   const [kopf] = await db
     .select({ id: recallProposals.id, subjectName: subjects.name })
     .from(recallProposals)

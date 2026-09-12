@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { User } from "@/db/schema";
-import { formatGerman, todayInBerlin } from "@/lib/dates";
+import { daysBetween, formatGerman, todayInBerlin } from "@/lib/dates";
 import { getExam, listExams } from "@/lib/exams";
 import { formatAverage, gradeLabel } from "@/lib/grade-scale";
 import { gradeSummary, gradesBySubject } from "@/lib/grades";
@@ -24,6 +24,14 @@ import {
   type MaterialPageTranscript,
 } from "@/lib/materials";
 import { listSubjects } from "@/lib/subjects";
+import {
+  vorratZuKlausur,
+  vorschlagAnlegen,
+  FRAGEN_MAX,
+  ZITAT_MIN,
+  type VorschlagAbweisung,
+} from "@/recall/proposals";
+import { stoffZuKlausur, type KlausurStoff } from "@/recall/source";
 import { listTopics, listTopicsForSubjects } from "@/lib/subject-topics";
 import { loadWeek, WEEKDAYS } from "@/lib/timetable";
 
@@ -688,7 +696,217 @@ const HANDLERS: Handlers = {
       },
     );
   },
+
+  async read_exam_material(user, args) {
+    const stoff = await stoffZuKlausur(user.id, args.exam);
+    if (!stoff) return fehler("Diese Prüfung gibt es nicht.");
+
+    const themen = args.topic ? einThema(stoff, args.topic) : stoff.themen;
+    if ("fehler" in themen) return themen.fehler;
+
+    // Die Seiten werden HIER noch einmal zusammengefasst und nicht aus
+    // `seitenGesamt` genommen: Das gilt für alle Themen, und mit `topic` ist
+    // nur eines gemeint. Stünde dort die Gesamtliste, lieferte die engere Frage
+    // dieselbe Datenmenge wie die weite — genau das, was `topic` verhindern
+    // soll — und dazu Seiten, die zum genannten Thema nicht gehören.
+    const gesehen = new Set<string>();
+    const seiten: { id: string; sortOrder: number; chars: number; transcript: string }[] =
+      [];
+
+    for (const thema of themen) {
+      for (const seite of thema.seiten) {
+        if (gesehen.has(seite.pageId)) continue;
+        gesehen.add(seite.pageId);
+        seiten.push({
+          id: seite.pageId,
+          sortOrder: seite.sortOrder,
+          chars: seite.transcript.length,
+          transcript: seite.transcript,
+        });
+      }
+    }
+
+    // Der Vorrat wird über die Seiten DIESER Antwort gezählt und nicht über
+    // alle der Klausur: Mit `topic` ist nur ein Thema gemeint, und „18
+    // Bausteine" neben einem Thema, zu dem keiner gehört, wäre eine Zahl, die
+    // zur falschen Frage antwortet.
+    const vorrat = await vorratZuKlausur(
+      user.id,
+      stoff.examId,
+      seiten.map((seite) => seite.id),
+    );
+
+    const heute = todayInBerlin();
+    const tage = daysBetween(heute, stoff.klausurtag);
+    const ohneBlatt = themen.filter((t) => !t.verknuepft).length;
+    const ohneAbschrift = themen.filter(
+      (t) => t.verknuepft && t.seiten.length === 0,
+    ).length;
+
+    return daten(
+      // Der Satz sagt zuerst, was da ist, und dann, was fehlt — in dieser
+      // Reihenfolge, weil das Fehlende den nächsten Schritt bestimmt. Null
+      // Seiten bei vorhandenen Themen ist der Fall aus dem 11.9.: vier Themen
+      // standen im falschen Fach, und der Stoff war trotzdem da.
+      `${stoff.subjectName} am ${formatGerman(stoff.klausurtag)}${
+        tage >= 0 ? ` (in ${tage} ${tage === 1 ? "Tag" : "Tagen"})` : ""
+      }: ${zahl(themen.length, "Thema", "Themen")}, ${zahl(seiten.length, "abgeschriebene Seite", "abgeschriebene Seiten", "f")} mit ${tausender(seiten.reduce((summe, seite) => summe + seite.chars, 0))} Zeichen.${
+        ohneBlatt > 0
+          ? ` ${ohneBlatt} ${ohneBlatt === 1 ? "Thema hängt" : "Themen hängen"} an keinem Blatt.`
+          : ""
+      }${
+        ohneAbschrift > 0
+          ? ` ${ohneAbschrift} ${ohneAbschrift === 1 ? "Thema hat Blätter" : "Themen haben Blätter"}, aber keine Abschrift.`
+          : ""
+      }${
+        seiten.length === 0
+          ? " Ohne abgeschriebene Seite lässt sich keine Frage stellen — melde das, statt eine zu erfinden. Häufigste Ursache: das Thema steht im falschen Fach."
+          : ""
+      }${
+        vorrat.offeneFragen > 0
+          ? ` Im Eingang liegen schon ${vorrat.offeneFragen} unentschiedene ${vorrat.offeneFragen === 1 ? "Frage" : "Fragen"} zu dieser Klausur — schlag nichts vor, was dort schon liegt.`
+          : ""
+      }${
+        vorrat.bausteine > 0
+          ? ` ${vorrat.bausteine} ${vorrat.bausteine === 1 ? "Baustein" : "Bausteine"} sind aus diesem Stoff bereits gebaut.`
+          : ""
+      }`,
+      {
+        exam: stoff.examId,
+        subject: stoff.subjectName,
+        subjectId: stoff.subjectId,
+        kind: stoff.kind,
+        date: stoff.klausurtag,
+        today: heute,
+        topics: themen.map((thema) => ({
+          id: thema.examTopicId,
+          title: thema.title,
+          /** Für das Feld `topic` an propose_questions. NULL heißt: freier Text. */
+          subjectTopicId: thema.subjectTopicId,
+          linked: thema.verknuepft,
+          // Die ids und nicht die Seiten selbst: Eine Seite kann an mehreren
+          // Themen hängen, und ihr Wortlaut stünde sonst mehrfach in derselben
+          // Antwort — bei zwei Themen das Doppelte an Kosten für nichts.
+          pages: thema.seiten.map((seite) => seite.pageId),
+        })),
+        pages: seiten,
+        /**
+         * Was zu dieser Klausur schon da ist — die Antwort auf „liegt da schon
+         * was?". Ohne sie legt ein unbeaufsichtigter Lauf jede Nacht dieselben
+         * Fragen noch einmal in den Korb.
+         */
+        stock: {
+          items: vorrat.bausteine,
+          openQuestions: vorrat.offeneFragen,
+        },
+      },
+      "read_exam_material nimmt `topic` — damit kommt nur ein Thema dieser Klausur, und die Antwort wird entsprechend kleiner.",
+    );
+  },
+
+  async propose_questions(user, args) {
+    const ergebnis = await vorschlagAnlegen(
+      user.id,
+      args.exam,
+      args.questions.map((frage) => ({
+        pageId: frage.page,
+        subjectTopicId: frage.topic ?? null,
+        promptFree: frage.question,
+        solution: frage.solution,
+        misconception: frage.misconception,
+        sourceQuote: frage.quote,
+        materialKind: frage.kind,
+      })),
+      args.note ?? null,
+    );
+
+    if (!ergebnis.ok) return fehler(ABWEISUNG_SATZ[ergebnis.grund]);
+
+    // Die Zahl aus dem Ergebnis und nicht die der Anfrage. Sie kann kleiner
+    // sein: Fragen auf eine fremde Seite fallen weg, und ein Satz, der die
+    // hereingekommene Zahl wiederholte, behauptete etwas, das nicht in der
+    // Datenbank steht.
+    const weg = args.questions.length - ergebnis.fragen;
+
+    return daten(
+      `${zahl(ergebnis.fragen, "Frage liegt", "Fragen liegen", "f")} im Eingangskorb.${
+        weg > 0
+          ? weg === 1
+            ? " Eine Frage nannte eine Seite, die nicht zu diesem Schüler gehört; sie wurde nicht abgelegt."
+            : ` ${weg} Fragen nannten Seiten, die nicht zu diesem Schüler gehören; sie wurden nicht abgelegt.`
+          : ""
+      }${
+        ergebnis.themenVerworfen > 0
+          ? ` Bei ${ergebnis.themenVerworfen} ${ergebnis.themenVerworfen === 1 ? "Frage gehörte das genannte Thema" : "Fragen gehörten die genannten Themen"} nicht zum Fach dieser Klausur; ${ergebnis.themenVerworfen === 1 ? "sie liegt" : "sie liegen"} ohne Thema im Korb. In „topic“ gehört die subjectTopicId aus read_exam_material — nicht die id des Klausurthemas und keine aus einem anderen Fach.`
+          : ""
+      } Es ändert sich nichts, bis ein Mensch sie übernimmt; dann wird jedes Zitat gegen die Abschrift geprüft.`,
+      {
+        id: ergebnis.proposalId,
+        exam: args.exam,
+        questions: ergebnis.fragen,
+        skipped: weg,
+        topicsDropped: ergebnis.themenVerworfen,
+      },
+    );
+  },
 };
+
+/**
+ * Warum gar kein Vorschlag entstand — als Satz, der sagt, was zu tun ist.
+ *
+ * Die Gründe kommen aus dem Abrufkern (`VorschlagAbweisung`); die Sätze stehen
+ * hier, weil sie an ein Modell gehen und nicht in ein Protokoll. `Record<…>`
+ * und nicht `switch`: Kommt im Kern ein Grund dazu, hält der Compiler diese
+ * Stelle an, statt sie stillschweigend „unbekannter Fehler" antworten zu
+ * lassen.
+ */
+const ABWEISUNG_SATZ: Record<VorschlagAbweisung, string> = {
+  "keine-klausur":
+    "Diese Prüfung gibt es nicht. read_exams zeigt, welche anstehen — die id daraus gehört in `exam`.",
+  "keine-fragen": `Ohne Fragen gibt es keinen Vorschlag, und mehr als ${FRAGEN_MAX} nimmt diese Tür nicht. Schick sie in zwei Aufrufen, wenn es mehr sein sollen.`,
+  "zu-lang":
+    "Eine der Fragen ist zu lang — die Grenzen stehen an den einzelnen Feldern im Verzeichnis. Abgelegt wurde nichts: Aus einer Liste still eine Frage zu entfernen hieße, dass der Mensch eine unvollständige für eine vollständige hält.",
+  "zu-kurz": `Eine der Fragen ist zu kurz. Ein Zitat unter ${ZITAT_MIN} Zeichen bezeichnet keine Stelle — je kürzer der Ausschnitt, desto beliebiger die Stelle, die er trifft —, und der Verwechslungssatz darf nicht bloß ein Wort sein. Abgelegt wurde nichts.`,
+  "fremde-seiten":
+    "Keine der genannten Seiten gehört zu diesem Schüler. Die ids der Seiten stehen in `pages` von read_exam_material — die id eines Blattes oder eines Themas ist eine andere.",
+};
+
+/**
+ * Ein einzelnes Thema einer Klausur — oder ein Satz, warum es nicht eindeutig
+ * war.
+ *
+ * `satzZuMatch()` steht hier nicht: Der rät zu read_subjects, und das ist an
+ * dieser Tür der falsche Rat. Wer ein Thema dieser Klausur sucht, findet die
+ * Liste in derselben Antwort, die er gerade bekommen hat — ohne `topic`.
+ */
+function einThema(
+  stoff: KlausurStoff,
+  frage: string,
+): KlausurStoff["themen"] | { fehler: ToolOutcome } {
+  const treffer = matchTopic(
+    stoff.themen.map((thema) => ({ id: thema.examTopicId, title: thema.title })),
+    frage,
+  );
+
+  if (treffer.art === "mehrere") {
+    return {
+      fehler: fehler(
+        `„${frage}“ passt auf mehrere Themen dieser Klausur: ${treffer.namen.join(", ")}.`,
+      ),
+    };
+  }
+
+  if (treffer.art === "keins") {
+    return {
+      fehler: fehler(
+        `Ein Thema namens „${frage}“ steht nicht auf dieser Klausur. Ohne „topic“ kommen alle ${stoff.themen.length} Themen mit.`,
+      ),
+    };
+  }
+
+  const gemeint = treffer.treffer.id;
+  return stoff.themen.filter((thema) => thema.examTopicId === gemeint);
+}
 
 /**
  * Wie schwer ein Bild in einem Tool-Ergebnis sein darf.

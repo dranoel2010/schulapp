@@ -3,6 +3,7 @@ import { and, asc, countDistinct, desc, eq, isNull, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { materialPages, subjects } from "@/db/schema";
 import { berlinDay, daysBetween, todayInBerlin } from "@/lib/dates";
+import { istId } from "@/recall/ids";
 import { recallAttempts, recallItems, recallSchedule } from "@/recall/schema";
 
 /**
@@ -302,6 +303,10 @@ export async function versuchFesthalten(
   versuch: Versuch,
   heute: string = todayInBerlin(),
 ): Promise<VersuchErgebnis> {
+  // Derselbe nackte POST kann auch eine id schicken, die keine ist — dann
+  // antwortete nicht die App, sondern Postgres. Siehe @/recall/ids.
+  if (!istId(versuch.scheduleId) || !istId(versuch.itemId)) return { ok: false };
+
   // Der Nachweis, dass dieser Termin zu diesem Nutzer gehört. Server Actions
   // sind auch als nackter POST erreichbar; die Anmeldung allein sagt, WER
   // schreibt, nicht WORAUF er schreiben darf.
@@ -381,6 +386,8 @@ export async function urteilFesthalten(
   attemptId: string,
   correct: boolean,
 ): Promise<{ ok: boolean; wiederholt: boolean }> {
+  if (!istId(attemptId)) return { ok: false, wiederholt: false };
+
   const [versuch] = await db
     .update(recallAttempts)
     .set({ correct })

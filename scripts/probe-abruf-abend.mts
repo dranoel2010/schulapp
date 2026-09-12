@@ -465,16 +465,40 @@ if (!vorgeschlagen.ok) process.exit(1);
 
 // Ein Vorschlag auf eine fremde Seite ist kein schwacher Vorschlag, sondern
 // ein Angriff — und wird gar nicht abgelegt.
+// Alle vier Texte sind ausformuliert, und zwar mit Absicht: „egal" hat vier
+// Zeichen und fiele seit dem 12.9.2026 schon an der Längenprüfung durch. Die
+// Zusage hier wäre damit still zu einer anderen geworden — abgelehnt ja, aber
+// aus dem falschen Grund. Deshalb steht der Grund jetzt in der Prüfung.
 const fremd = await vorschlagAnlegen(nutzer.id, pruefung.id, [
   {
     pageId: "00000000-0000-0000-0000-000000000000",
     promptFree: "Frage zu einer fremden Seite",
-    solution: "egal",
-    misconception: "egal",
-    sourceQuote: "egal",
+    solution: "Die Antwort spielt hier keine Rolle.",
+    misconception: "Auch der Verwechslungssatz nicht.",
+    sourceQuote: "Ist f(x) = g(h(x)), so gilt",
   },
 ]);
-pruefe(!fremd.ok, "ein Vorschlag auf eine fremde Seite wird abgelehnt");
+pruefe(
+  !fremd.ok && fremd.grund === "fremde-seiten",
+  `ein Vorschlag auf eine fremde Seite wird abgelehnt${fremd.ok ? "" : ` (${fremd.grund})`}`,
+);
+
+// Und die Längenprüfung selbst, an dem Feld, an dem es darauf ankommt: Für den
+// leeren Verwechslungssatz steht in der Datenbank eine CHECK-Regel, und die
+// käme sonst als englischer Postgres-Fehler durch die MCP-Tür zurück.
+const knapp = await vorschlagAnlegen(nutzer.id, pruefung.id, [
+  {
+    pageId: seite.id,
+    promptFree: "Was besagt die Kettenregel?",
+    solution: "Äußere mal innere Ableitung.",
+    misconception: "",
+    sourceQuote: "Ist f(x) = g(h(x)), so gilt",
+  },
+]);
+pruefe(
+  !knapp.ok && knapp.grund === "zu-kurz",
+  "eine Frage ohne Verwechslungssatz wird abgewiesen, bevor Postgres es tut",
+);
 
 const eingang = await offeneVorschlaege(nutzer.id);
 pruefe(

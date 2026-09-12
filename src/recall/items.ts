@@ -5,6 +5,7 @@ import { exams, materialPages, materials, subjects } from "@/db/schema";
 import { berlinDay, todayInBerlin } from "@/lib/dates";
 import { UNCERTAIN_CLOSE, UNCERTAIN_OPEN } from "@/lib/transcripts";
 import { planeFaelligkeiten, type PlanWarnung } from "@/recall/schedule";
+import { istId } from "@/recall/ids";
 import { recallItems, recallSchedule } from "@/recall/schema";
 
 /**
@@ -45,9 +46,34 @@ import { recallItems, recallSchedule } from "@/recall/schema";
  * Eine Aufzählung und keine freie Zeichenkette, damit die Oberfläche für jeden
  * Fall einen eigenen Satz hat — „ungültig" ist keine Auskunft.
  */
+/**
+ * Wovon eine Frage handelt — die vier Arten, und nur diese vier.
+ *
+ * Die Liste stand bis heute dreimal da: als Aufzählung im Formularschema, als
+ * vier `<option>` in der Oberfläche und als Satz im Kommentar der Spalte. Drei
+ * Fassungen derselben Abmachung, und die Tür für den Agenten wäre die vierte
+ * geworden. Sie steht deshalb hier, neben der Funktion, die den Wert in die
+ * Datenbank schreibt.
+ *
+ * Beliebig sind die Werte nicht: A10 mischt über den Materialtyp, und gemischt
+ * wird nur Verwechselbares. Anschauungsklassen gewinnen dabei bis 0,67,
+ * Begriff-Definition-Paare verlieren mit -0,39 — eine fünfte Art, hastig
+ * hinzugefügt, wäre eine Klasse ohne Befund, die später mitgemischt wird.
+ */
+export const MATERIALARTEN = [
+  "begriff",
+  "anschauung",
+  "verfahren",
+  "ereignis",
+] as const;
+
+export type Materialart = (typeof MATERIALARTEN)[number];
+
 export type AnlageFehler =
   | "keine-seite"
+  | "kein-fach"
   | "keine-abschrift"
+  | "zitat-leer"
   | "zitat-nicht-gefunden"
   | "zitat-unsicher";
 
@@ -172,6 +198,14 @@ export async function createItem(
   eingabe: NeuerBaustein,
   heute: string = todayInBerlin(),
 ): Promise<AnlageErgebnis> {
+  // Eine fehlgeformte id ist dasselbe wie eine, die es nicht gibt. Ohne diese
+  // zwei Zeilen wirft Postgres mitten in einem Werkzeugaufruf — die Begründung
+  // steht in @/recall/ids. Eine wohlgeformte, aber fremde id fängt weiterhin
+  // erst der Fremdschlüssel: Das ist eine Ausnahme, die niemand außer einem
+  // gefälschten Formular auslöst, und sie schreibt nichts.
+  if (!istId(eingabe.pageId)) return { ok: false, fehler: "keine-seite" };
+  if (!istId(eingabe.subjectId)) return { ok: false, fehler: "kein-fach" };
+
   const seite = await seiteMitAbschrift(userId, eingabe.pageId);
   if (!seite) return { ok: false, fehler: "keine-seite" };
 
@@ -183,6 +217,15 @@ export async function createItem(
   }
 
   const zitat = eingabe.sourceQuote.trim();
+
+  // Der leere String steht wörtlich in JEDER Abschrift: `"abc".includes("")`
+  // ist wahr. Ohne diese Zeile ließe sich A5 mit einem leeren Zitat umgehen —
+  // die Prüfung darunter sagte ja, und in der Datenbank stünde eine Frage,
+  // deren Quelle nichts belegt. Das Handformular verlangt den Wortlaut zwar
+  // ohnehin, aber die Regel gehört an die Tür und nicht in das Formular: durch
+  // diese Tür kommt seit dem Eingangskorb auch die KI.
+  if (zitat === "") return { ok: false, fehler: "zitat-leer" };
+
   if (!seite.transcript.includes(zitat)) {
     return { ok: false, fehler: "zitat-nicht-gefunden" };
   }
@@ -426,6 +469,8 @@ export async function retireItem(
   itemId: string,
   grund: string,
 ): Promise<boolean> {
+  if (!istId(itemId)) return false;
+
   const [zeile] = await db
     .update(recallItems)
     .set({ retiredAt: new Date(), retiredReason: grund.trim() || "ohne Angabe" })

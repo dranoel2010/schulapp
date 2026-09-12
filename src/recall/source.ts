@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, isNotNull, ne } from "drizzle-orm";
+import { istId } from "@/recall/ids";
 
 import { db } from "@/db";
 import {
@@ -194,6 +195,10 @@ export async function stoffZuKlausur(
   userId: string,
   examId: string,
 ): Promise<KlausurStoff | null> {
+  // Eine fehlgeformte id ist dasselbe wie eine, die es nicht gibt. Ohne diese
+  // Zeile wirft Postgres — siehe @/recall/ids.
+  if (!istId(examId)) return null;
+
   const [klausur] = await db
     .select({
       examId: exams.id,

@@ -10,8 +10,19 @@ import {
   createItem,
   neuPlanen,
   retireItem,
+  MATERIALARTEN,
   type AnlageFehler,
 } from "@/recall/items";
+import {
+  FRAGE_MAX,
+  FRAGE_MIN,
+  LOESUNG_MAX,
+  LOESUNG_MIN,
+  VERWECHSLUNG_MAX,
+  VERWECHSLUNG_MIN,
+  ZITAT_MAX,
+  ZITAT_MIN,
+} from "@/recall/proposals";
 import {
   vorschlagUebernehmen,
   vorschlagVerwerfen,
@@ -148,27 +159,44 @@ function werteAus(formData: FormData): BausteinWerte {
 const bausteinSchema = z.object({
   pageId: z.string().min(1, "Wähle die Seite, aus der die Frage stammt."),
   subjectId: z.string().min(1, "Ohne Fach lässt sich nichts einordnen."),
+  // Die acht Zahlen stehen im Abrufkern und nicht hier. Bis zum Eingangskorb
+  // war dieses Schema die einzige Stelle, an der sie vorkamen; seit es eine
+  // zweite Tür gibt, wären zwei Fassungen zwei Versprechen — und dann bekäme
+  // entweder der Mensch eine Abweisung für etwas, das die KI durchbringt, oder
+  // umgekehrt. Die Sätze bleiben hier: Sie sind für einen Menschen am
+  // Formular geschrieben und nicht für ein Modell.
   promptFree: z
     .string()
     .trim()
-    .min(5, "Die Frage braucht mehr als ein Wort.")
-    .max(500, "Eine Frage über 500 Zeichen ist keine Frage mehr."),
+    .min(FRAGE_MIN, "Die Frage braucht mehr als ein Wort.")
+    .max(FRAGE_MAX, `Eine Frage über ${FRAGE_MAX} Zeichen ist keine Frage mehr.`),
   solution: z
     .string()
     .trim()
-    .min(1, "Ohne Musterlösung ist die Aufgabe nicht auslieferbar.")
-    .max(2000, "Die Musterlösung ist zu lang — höchstens 2000 Zeichen."),
+    .min(LOESUNG_MIN, "Ohne Musterlösung ist die Aufgabe nicht auslieferbar.")
+    .max(
+      LOESUNG_MAX,
+      `Die Musterlösung ist zu lang — höchstens ${LOESUNG_MAX} Zeichen.`,
+    ),
   misconception: z
     .string()
     .trim()
-    .min(5, "Der Satz zur Verwechslung fehlt — ohne ihn wird nicht ausgeliefert.")
-    .max(500, "Ein bis zwei Sätze genügen."),
+    .min(
+      VERWECHSLUNG_MIN,
+      "Der Satz zur Verwechslung fehlt — ohne ihn wird nicht ausgeliefert.",
+    )
+    .max(VERWECHSLUNG_MAX, "Ein bis zwei Sätze genügen."),
   sourceQuote: z
     .string()
     .trim()
-    .min(10, "Das Zitat ist zu kurz, um eine Stelle zu bezeichnen.")
-    .max(1000, "Ein Zitat über 1000 Zeichen bezeichnet keine Stelle mehr."),
-  materialKind: z.enum(["begriff", "anschauung", "verfahren", "ereignis"]),
+    .min(ZITAT_MIN, "Das Zitat ist zu kurz, um eine Stelle zu bezeichnen.")
+    .max(
+      ZITAT_MAX,
+      `Ein Zitat über ${ZITAT_MAX} Zeichen bezeichnet keine Stelle mehr.`,
+    ),
+  // Die vier Arten kommen aus dem Kern und stehen nicht hier: eine zweite
+  // Liste wäre genau dann falsch, wenn eine fünfte Art dazukäme.
+  materialKind: z.enum(MATERIALARTEN),
   /**
    * A12: Übungsvorrat oder Messvorrat — und zwar BEIM ANLEGEN.
    *
@@ -184,14 +212,18 @@ const bausteinSchema = z.object({
 /**
  * Warum A5 nicht durchging — in Sätzen, die sagen, was zu tun ist.
  *
- * „Ungültig" ist keine Auskunft. Jeder dieser vier Fälle hat einen anderen
+ * „Ungültig" ist keine Auskunft. Jeder dieser sechs Fälle hat einen anderen
  * nächsten Schritt, und die Oberfläche ist die einzige Stelle, an der das
  * jemand erfährt.
  */
 const A5_MELDUNGEN: Record<AnlageFehler, string> = {
   "keine-seite": "Diese Seite gibt es nicht mehr.",
+  "kein-fach":
+    "Das Fach ist weggekommen — lade die Seite neu und wähle die Quelle noch einmal.",
   "keine-abschrift":
     "Diese Seite hat noch keine Abschrift — ohne Wortlaut lässt sich keine Frage daran binden.",
+  "zitat-leer":
+    "Ohne Zitat geht es nicht — markiere die Stelle in der Abschrift, auf die die Frage sich stützt.",
   "zitat-nicht-gefunden":
     "Dieses Zitat steht so nicht in der Abschrift. Kopiere die Stelle wörtlich heraus, statt sie nachzuerzählen.",
   "zitat-unsicher":
