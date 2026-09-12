@@ -739,6 +739,13 @@ const HANDLERS: Handlers = {
     const heute = todayInBerlin();
     const tage = daysBetween(heute, stoff.klausurtag);
     const ohneBlatt = themen.filter((t) => !t.verknuepft).length;
+    // „Verknüpft, aber ohne Seite" ist EIN Fall und nicht zwei: Die Abfrage
+    // liefert nur Seiten MIT Abschrift, also sieht ein Thema ohne jedes Blatt
+    // genauso aus wie eines, dessen Blätter noch niemand abgeschrieben hat. Der
+    // Satz darf die Unterscheidung deshalb nicht behaupten — bis zum 12.9.2026
+    // stand dort „hat Blätter, aber keine Abschrift", und das war bei einem
+    // Thema ohne jedes Blatt einfach falsch. Die Oberfläche unter
+    // /abruf/klausur sagt es seit dem ersten Tag richtig; hier stand es anders.
     const ohneAbschrift = themen.filter(
       (t) => t.verknuepft && t.seiten.length === 0,
     ).length;
@@ -756,7 +763,7 @@ const HANDLERS: Handlers = {
           : ""
       }${
         ohneAbschrift > 0
-          ? ` ${ohneAbschrift} ${ohneAbschrift === 1 ? "Thema hat Blätter" : "Themen haben Blätter"}, aber keine Abschrift.`
+          ? ` Zu ${ohneAbschrift} ${ohneAbschrift === 1 ? "Thema führt kein abgeschriebenes Blatt" : "Themen führt kein abgeschriebenes Blatt"} — entweder ist keines abfotografiert, oder es ist noch nicht abgeschrieben.`
           : ""
       }${
         seiten.length === 0
@@ -769,6 +776,10 @@ const HANDLERS: Handlers = {
       }${
         vorrat.bausteine > 0
           ? ` ${vorrat.bausteine} ${vorrat.bausteine === 1 ? "Baustein" : "Bausteine"} sind aus diesem Stoff bereits gebaut.`
+          : ""
+      }${
+        vorrat.verworfen > 0
+          ? ` ${vorrat.verworfen} ${vorrat.verworfen === 1 ? "Frage wollte der Mensch" : "Fragen wollte der Mensch"} zu dieser Klausur nicht — bau nicht dasselbe noch einmal.`
           : ""
       }`,
       {
@@ -798,6 +809,13 @@ const HANDLERS: Handlers = {
         stock: {
           items: vorrat.bausteine,
           openQuestions: vorrat.offeneFragen,
+          /**
+           * Fragen, die der Mensch zu dieser Klausur NICHT wollte. Ohne diese
+           * Zahl baute ein Lauf nach einem verworfenen Vorschlag dieselben
+           * Fragen noch einmal — `openQuestions` fällt beim Verwerfen ja auf
+           * null.
+           */
+          discardedQuestions: vorrat.verworfen,
         },
       },
       "read_exam_material nimmt `topic` — damit kommt nur ein Thema dieser Klausur, und die Antwort wird entsprechend kleiner.",
@@ -832,8 +850,8 @@ const HANDLERS: Handlers = {
       `${zahl(ergebnis.fragen, "Frage liegt", "Fragen liegen", "f")} im Eingangskorb.${
         weg > 0
           ? weg === 1
-            ? " Eine Frage nannte eine Seite, die nicht zu diesem Schüler gehört; sie wurde nicht abgelegt."
-            : ` ${weg} Fragen nannten Seiten, die nicht zu diesem Schüler gehören; sie wurden nicht abgelegt.`
+            ? " Eine Frage nannte eine Seite, die nicht zum Stoff dieser Prüfung gehört; sie wurde nicht abgelegt."
+            : ` ${weg} Fragen nannten Seiten, die nicht zum Stoff dieser Prüfung gehören; sie wurden nicht abgelegt.`
           : ""
       }${
         ergebnis.themenVerworfen > 0
@@ -868,7 +886,7 @@ const ABWEISUNG_SATZ: Record<VorschlagAbweisung, string> = {
     "Eine der Fragen ist zu lang — die Grenzen stehen an den einzelnen Feldern im Verzeichnis. Abgelegt wurde nichts: Aus einer Liste still eine Frage zu entfernen hieße, dass der Mensch eine unvollständige für eine vollständige hält.",
   "zu-kurz": `Eine der Fragen ist zu kurz. Ein Zitat unter ${ZITAT_MIN} Zeichen bezeichnet keine Stelle — je kürzer der Ausschnitt, desto beliebiger die Stelle, die er trifft —, und der Verwechslungssatz darf nicht bloß ein Wort sein. Abgelegt wurde nichts.`,
   "fremde-seiten":
-    "Keine der genannten Seiten gehört zu diesem Schüler. Die ids der Seiten stehen in `pages` von read_exam_material — die id eines Blattes oder eines Themas ist eine andere.",
+    "Keine der genannten Seiten gehört zum Stoff dieser Prüfung. Die erlaubten ids stehen in `pages` von read_exam_material zu genau dieser Prüfung — die id eines Blattes oder eines Themas ist eine andere, und eine Seite aus einem anderen Fach zählt nicht dazu.",
 };
 
 /**

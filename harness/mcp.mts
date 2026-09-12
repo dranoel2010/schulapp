@@ -2,6 +2,8 @@ import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { FRIST_MS } from "./kaefig.mts";
+
 /**
  * Der Draht zur Schulapp — ein MCP-Client aus fetch und sonst nichts.
  *
@@ -134,9 +136,22 @@ export class Verbindung {
    * Stunde, danach ist die Datei im Zweifel nur noch Papier. Erneuert wird
    * ausdrücklich VOR dem Lauf, nicht während — ein Lauf dauert Minuten, und
    * mitten darin ein neues Token zu schieben ginge nicht.
+   *
+   * ── Und deshalb genügt „gültig" hier nicht ──────────────────────────────
+   *
+   * Für eine eigene Anfrage reicht eine Minute Restlaufzeit; für einen Lauf
+   * nicht. Ein Lauf darf `FRIST_MS` dauern (fünfzehn Minuten), und bis zum
+   * 12.9.2026 gab diese Methode ein Token heraus, das in zwei Minuten ablief:
+   * Der Käfig bekam es als Datei, arbeitete zehn Minuten, und die Abschrift der
+   * achten Seite lief in eine 401 — mitten in einem Lauf, in dem niemand mehr
+   * nachlegen kann. Der Kommentar oben versprach dabei genau das Gegenteil.
+   *
+   * Verlangt wird deshalb die volle Frist plus eine Minute Luft. Die Zahl kommt
+   * aus kaefig.mts und steht nicht hier: Eine zweite Fassung wäre die falsche,
+   * sobald jemand die Frist ändert.
    */
   async zugriffstoken(): Promise<string> {
-    return this.gueltigesToken(false);
+    return this.gueltigesToken(false, FRIST_MS + 60_000);
   }
 
   /**
@@ -235,10 +250,14 @@ export class Verbindung {
   }
 
   /** Ein gültiges Zugriffs-Token — aus dem Speicher oder frisch erneuert. */
-  private async gueltigesToken(erzwingen: boolean): Promise<string> {
-    // Eine Minute Vorlauf: ein Token, das während der Anfrage abläuft, wäre
-    // eine 401, die keiner braucht.
-    if (!erzwingen && this.token && Date.now() < this.laeuftAb - 60_000) {
+  private async gueltigesToken(
+    erzwingen: boolean,
+    vorlaufMs = 60_000,
+  ): Promise<string> {
+    // Eine Minute Vorlauf für eine eigene Anfrage: ein Token, das während der
+    // Anfrage abläuft, wäre eine 401, die keiner braucht. Wer es weitergibt,
+    // verlangt mehr — siehe `zugriffstoken()`.
+    if (!erzwingen && this.token && Date.now() < this.laeuftAb - vorlaufMs) {
       return this.token;
     }
 

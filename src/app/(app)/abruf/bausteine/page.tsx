@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireUser } from "@/lib/auth";
 import { subjectColor } from "@/lib/colors";
+import { MATERIALARTEN, MATERIALART_NAMEN } from "@/recall/arten";
 import { listItems } from "@/recall/items";
 
 /**
@@ -25,12 +26,17 @@ export const metadata: Metadata = {
   title: "Bausteine",
 };
 
-const ART_LABELS: Record<string, string> = {
-  begriff: "Begriff",
-  anschauung: "Anschauung",
-  verfahren: "Verfahren",
-  ereignis: "Ereignis",
-};
+/**
+ * Die kurzen Namen der Arten — aus dem Kern, nicht noch einmal getippt.
+ *
+ * `Record<string, …>` und nicht `Record<Materialart, …>`: Die Spalte in der
+ * Datenbank ist `text`, also kann dort nach einer Wanderung ein Wert stehen,
+ * den die Aufzählung nicht kennt. Dann steht er unverändert da (siehe unten),
+ * statt die Seite zu sprengen.
+ */
+const ART_LABELS: Record<string, string> = Object.fromEntries(
+  MATERIALARTEN.map((art) => [art, MATERIALART_NAMEN[art].kurz]),
+);
 
 export default async function BausteinePage() {
   const user = await requireUser();

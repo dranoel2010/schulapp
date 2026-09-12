@@ -103,6 +103,27 @@ describe("Die Grenze des Abrufkerns", () => {
     assert.ok(dateien().includes(TUER), `${TUER} fehlt — die Tür ist weg`);
   });
 
+  it("hält arten.ts frei von JEDEM Import — die Oberfläche liest sie mit", () => {
+    // Die einzige Datei des Kerns, die auch eine CLIENT-Komponente importiert
+    // (das Formular unter /abruf/bausteine/neu braucht die vier Namen für sein
+    // Auswahlfeld). Kommt dort ein Import hinzu, wandert er in das
+    // Browserpaket — und wenn er über @/db führt, bricht der Bau mit „Module
+    // not found: Can't resolve 'fs'". Genau das ist am 12.9.2026 passiert, beim
+    // Versuch, die Liste an eine Stelle zu legen: Sie lag zuerst in items.ts,
+    // und items.ts spricht mit der Datenbank.
+    //
+    // Die Regel ist deshalb schärfer als die Liste oben: nicht „nur Erlaubtes",
+    // sondern NICHTS. Eine Abmachung über vier Wörter braucht keinen Import,
+    // und wer hier einen setzt, hat vermutlich die falsche Datei gewählt.
+    const inhalt = readFileSync(path.join(KERN, "arten.ts"), "utf8");
+
+    assert.deepEqual(
+      [...inhalt.matchAll(/^import\s/gm)].map((m) => m[0]),
+      [],
+      "arten.ts importiert etwas — das landet im Browserpaket",
+    );
+  });
+
   it("schreibt nirgends in den Bestand der Schulapp", () => {
     // Der Kern liest aus materials/material_pages/subjects/exams und schreibt
     // ausschließlich in seine eigenen recall_-Tabellen. Ein `update(materials)`

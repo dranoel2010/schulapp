@@ -162,10 +162,23 @@ export function ProposalView({ vorschlag }: { vorschlag: Vorschlag }) {
       </ul>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" onClick={uebernehmen} loading={laeuft}>
+        {/* Bei null Ausgewählten gesperrt. „0 von 5 übernehmen" tat etwas
+            anderes, als es sagte: Es setzte bei JEDER Frage den Vermerk
+            „abgewählt" und schloss den Vorschlag endgültig ab — unter einem
+            Knopf, der „übernehmen" heißt, und der Bericht danach war mit
+            „Übernommen" überschrieben. Wer alles wegwerfen will, hat den Knopf
+            daneben. */}
+        <Button
+          type="button"
+          onClick={uebernehmen}
+          loading={laeuft}
+          disabled={gewaehlt.size === 0}
+        >
           {gewaehlt.size === alle
             ? `Alle ${alle} übernehmen`
-            : `${gewaehlt.size} von ${alle} übernehmen`}
+            : gewaehlt.size === 0
+              ? "Keine ausgewählt"
+              : `${gewaehlt.size} von ${alle} übernehmen`}
         </Button>
         <Button
           type="button"

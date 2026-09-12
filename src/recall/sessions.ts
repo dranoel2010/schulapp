@@ -410,7 +410,18 @@ export async function urteilFesthalten(
 
 export type Tagesbericht = {
   versuche: number;
-  richtig: number;
+  /**
+   * Bausteine, deren ERSTER Versuch des Tages saß.
+   *
+   * Nicht „alle richtigen Versuche": Wer daneben lag, bekommt den Baustein am
+   * selben Abend noch einmal (A6), und der zweite Anlauf mit der Lösung im Kopf
+   * ist kein Treffer auf Anhieb. Die Oberfläche schrieb bis zum 12.9.2026
+   * „davon N auf Anhieb richtig" über eine Zahl, die jeden richtigen Versuch
+   * zählte — bei einem einzigen Baustein, erst daneben, dann richtig, standen
+   * dort „2 Versuche … davon 1 auf Anhieb richtig". Das ist genau die Sorte
+   * Zahl, gegen die dieser Bericht geschrieben ist.
+   */
+  aufAnhieb: number;
   bausteine: number;
   offen: number;
 };
@@ -433,18 +444,41 @@ export async function tagesbericht(
   heute: string = todayInBerlin(),
 ): Promise<Tagesbericht> {
   const versuche = await db
-    .select({ itemId: recallAttempts.itemId, correct: recallAttempts.correct })
+    .select({
+      id: recallAttempts.id,
+      itemId: recallAttempts.itemId,
+      correct: recallAttempts.correct,
+    })
     .from(recallAttempts)
     .where(
       and(eq(recallAttempts.userId, userId), eq(recallAttempts.answeredOn, heute)),
-    );
+    )
+    // Die Reihenfolge des Abends, sonst ist „der erste Versuch" eine Vermutung.
+    .orderBy(asc(recallAttempts.createdAt));
 
   const offen = await faelligHeute(userId, heute);
 
+  // `item_id` steht auf SET NULL: Ein gelöschtes Blatt oder ein stillgelegter
+  // Baustein lässt das Protokoll stehen (A11), und dann ist die Zeile ihr
+  // eigener Baustein — sonst fielen alle verwaisten Versuche des Tages zu einem
+  // einzigen zusammen und der Bericht zählte zu wenig.
+  const schluessel = (v: { id: string; itemId: string | null }) =>
+    v.itemId ?? `verwaist:${v.id}`;
+
+  const gesehen = new Set<string>();
+  let aufAnhieb = 0;
+
+  for (const versuch of versuche) {
+    const key = schluessel(versuch);
+    if (gesehen.has(key)) continue;
+    gesehen.add(key);
+    if (versuch.correct) aufAnhieb += 1;
+  }
+
   return {
     versuche: versuche.length,
-    richtig: versuche.filter((v) => v.correct).length,
-    bausteine: new Set(versuche.map((v) => v.itemId)).size,
+    aufAnhieb,
+    bausteine: gesehen.size,
     offen: offen.length,
   };
 }

@@ -103,7 +103,7 @@ export type Aufgabe<A> = {
  * Genau deshalb bricht ein Zeitablauf seit dem 5.9.2026 nur noch dieses eine
  * Blatt ab und nicht mehr die ganze Runde — siehe `LaufErgebnis`.
  */
-const FRIST_MS = 900_000;
+export const FRIST_MS = 900_000;
 
 /**
  * Wie viele Züge ein Lauf hat.
@@ -171,22 +171,17 @@ export type LaufErgebnis<A> =
 /**
  * Setzt Claude auf eine Aufgabe an.
  *
- * `token` ist ein frisches Zugriffs-Token des Postboten — es gilt eine Stunde,
- * und der Lauf dauert Minuten; erneuert wird also vor dem Start, nicht während.
+ * `token` ist ein Zugriffs-Token des Postboten, das die ganze Frist übersteht —
+ * `zugriffstoken()` in mcp.mts verlangt dafür ausdrücklich `FRIST_MS` Vorlauf.
+ * Nachgelegt wird während des Laufs nicht: Das Token geht als Datei in den
+ * Käfig, und danach führt kein Weg mehr hinein.
  *
- * **`auftrag` ist der einzige Weg, denselben Käfig für etwas anderes zu
- * benutzen** — die Nachlese (harness/nachlese.mts) gibt hier ihren eigenen
- * Auftrag herein. Alles übrige bleibt gleich, und das ist der Punkt: dieselbe
- * Erlaubnisliste, dieselbe Frist, dasselbe Kontingent, dasselbe Antwortschema.
- * Ein zweiter Käfig neben diesem wäre eine zweite Stelle, an der man vergessen
- * kann, `read_transcript` NICHT zu erlauben. Ohne Angabe gilt der Auftrag zum
- * Einordnen, und für den Postboten ändert sich damit nichts.
- */
-/**
- * Setzt Claude auf eine Aufgabe an.
- *
- * `token` ist ein frisches Zugriffs-Token des Postboten — es gilt eine Stunde,
- * und der Lauf dauert Minuten; erneuert wird also vor dem Start, nicht während.
+ * **`aufgabe` ist der einzige Weg, denselben Käfig für etwas anderes zu
+ * benutzen** — der Postbote ordnet Blätter ein, die Nachlese schreibt
+ * Abschriften nach, der Fragenlauf baut Abruffragen. Alles übrige bleibt
+ * gleich, und das ist der Punkt: dieselben Schalter, dieselbe Frist, dasselbe
+ * Kontingent. Ein zweiter Käfig neben diesem wäre eine zweite Stelle, an der
+ * man vergessen kann, `--tools ""` zu setzen.
  */
 export async function laufFuerAufgabe<A>(
   aufgabe: Aufgabe<A>,

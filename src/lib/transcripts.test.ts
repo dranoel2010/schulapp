@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-  UNCERTAIN_CLOSE,
-  UNCERTAIN_OPEN,
+  onlyInUncertainSpans,
   outdatedTranscriptPages,
   splitTranscript,
   transcriptBaseline,
@@ -12,6 +11,8 @@ import {
   transcriptFieldName,
   transcriptPreview,
   transcriptsFromForm,
+  UNCERTAIN_CLOSE,
+  UNCERTAIN_OPEN,
   uncertainSpans,
 } from "@/lib/transcripts";
 
@@ -461,5 +462,56 @@ describe("transcriptsFromForm gegen einen überholten Bildschirm", () => {
 
     assert.deepEqual(transcriptsFromForm(formData, seiten), []);
     assert.deepEqual(outdatedTranscriptPages(formData, seiten), []);
+  });
+});
+
+describe("onlyInUncertainSpans", () => {
+  // Der Fall, der die Quellbindung am 12.9.2026 umgehen konnte: Der Schüler
+  // zieht mit der Maus INNERHALB der Hervorhebung und erwischt den Inhalt ohne
+  // die Klammern. Das Zitat steht wörtlich in der Abschrift, trägt kein
+  // Klammerzeichen — und ist trotzdem eine Vermutung. Die Oberfläche
+  // versprach dabei das Gegenteil.
+  const SEITE = [
+    "Die Kettenregel",
+    "Ist f(x) = g(h(x)), so gilt f'(x) = g'(h(x)) · h'(x).",
+    "Der Faktor 3 ist die ⟨Ableitung der inneren Funktion⟩, nicht ihr Wert.",
+  ].join("\n");
+
+  it("erkennt ein Zitat, das ganz in der Markierung liegt — ohne jede Klammer darin", () => {
+    assert.equal(onlyInUncertainSpans(SEITE, "Ableitung der inneren Funktion"), true);
+  });
+
+  it("lässt eine Stelle außerhalb durch", () => {
+    assert.equal(
+      onlyInUncertainSpans(SEITE, "Ist f(x) = g(h(x)), so gilt"),
+      false,
+    );
+  });
+
+  it("lässt ein Zitat durch, das nur bis an die Klammer stößt", () => {
+    // „Der Faktor 3 ist die " endet genau vor dem ⟨. Dort ist der Text sicher,
+    // und eine Abweisung wäre eine Falle: Berührung ist keine Überschneidung.
+    assert.equal(onlyInUncertainSpans(SEITE, "Der Faktor 3 ist die "), false);
+  });
+
+  it("weist Text ab, der in die Markierung hineinreicht", () => {
+    assert.equal(onlyInUncertainSpans(SEITE, "die ⟨Ableitung"), true);
+  });
+
+  it("lässt durch, was AUCH sauber vorkommt", () => {
+    // Dasselbe Wort zweimal auf der Seite: einmal markiert, einmal nicht. Dann
+    // gibt es eine saubere Lesart, und die gilt — sonst bekäme der Schüler
+    // einen Fehler über eine Stelle, die er nie angefasst hat.
+    const zweimal = "die Ableitung von sin(3x)\nund ⟨die Ableitung von sin(3x)⟩";
+    assert.equal(onlyInUncertainSpans(zweimal, "die Ableitung von sin(3x)"), false);
+  });
+
+  it("sagt nein, wenn die Seite gar keine Markierung hat", () => {
+    assert.equal(onlyInUncertainSpans("Ganz sauber abgeschrieben.", "sauber"), false);
+  });
+
+  it("sagt nein zu einem Zitat, das gar nicht vorkommt — das prüft createItem selbst", () => {
+    assert.equal(onlyInUncertainSpans(SEITE, "Produktregel"), false);
+    assert.equal(onlyInUncertainSpans(SEITE, ""), false);
   });
 });

@@ -63,9 +63,8 @@ for (const anweisung of roh
 });
 
 const { callTool } = await import("@/lib/mcp/run");
-const { offeneVorschlaege, vorschlagUebernehmen } = await import(
-  "@/recall/proposals"
-);
+const { offeneVorschlaege, vorschlagUebernehmen, vorschlagVerwerfen, vorschlagsErgebnis } =
+  await import("@/recall/proposals");
 const { listItems } = await import("@/recall/items");
 
 function pruefe(bedingung: boolean, satz: string): void {
@@ -290,9 +289,13 @@ const satzStoff = (await callTool(mensch, "read_exam_material", {
   exam: pruefung.id,
 })) as { satz: string };
 pruefe(
-  satzStoff.satz.includes("keine Abschrift") ||
-    satzStoff.satz.includes("keine Abschrift."),
-  `der Satz benennt das Thema ohne Abschrift: „${satzStoff.satz}"`,
+  // Nicht auf „hat Blätter, aber keine Abschrift" prüfen: Diese Unterscheidung
+  // geben die Daten nicht her — die Abfrage liefert nur Seiten MIT Abschrift,
+  // also sieht ein Thema ohne jedes Blatt genauso aus. Der Satz sagt seit dem
+  // 12.9.2026 beides als möglich, und die Probe prüft genau das.
+  satzStoff.satz.includes("kein abgeschriebenes Blatt") &&
+    satzStoff.satz.includes("oder es ist noch nicht abgeschrieben"),
+  `der Satz benennt das Thema ohne abgeschriebenes Blatt, ohne die Ursache zu behaupten`,
 );
 pruefe(
   satzStoff.satz.includes("kein Blatt") || satzStoff.satz.includes("keinem Blatt"),
@@ -379,6 +382,27 @@ pruefe(
     }),
   ),
   "ohne Verwechslungssatz geht es nicht durch",
+);
+
+// Die eigene französische Seite: Sie gehört dem Schüler, hängt aber an keinem
+// Thema DIESER Klausur. Bis zum 12.9.2026 prüfte diese Tür nur das Eigentum —
+// eine Frage über ein französisches Blatt konnte im Eingang einer
+// Mathematikklausur landen, und der Mensch sah im Formular nur Frage, Lösung
+// und Zitat.
+const ausFremdemFach = await callTool(mensch, "propose_questions", {
+  exam: pruefung.id,
+  questions: [
+    {
+      ...gut,
+      page: seiteFranz,
+      quote: "Gebildet wird es aus avoir oder être",
+      topic: undefined,
+    },
+  ],
+});
+pruefe(
+  istFehler(ausFremdemFach) && ausFremdemFach.satz.includes("Stoff dieser Prüfung"),
+  "eine eigene Seite aus einem anderen Fach wird abgewiesen — Eigentum genügt nicht",
 );
 
 const fremdeSeite = await callTool(mensch, "propose_questions", {
@@ -515,6 +539,29 @@ pruefe(
   `${termine.n} Übungstermine vor der Klausur — mindestens vier je Baustein (A6)`,
 );
 
+// Ein ganzer Vorschlag, den der Mensch verwirft — danach muss der Vorrat ihn
+// als abgelehnt kennen. Ohne diese Zahl baute der Fragenlauf in der nächsten
+// Nacht dieselben Fragen noch einmal: Beim Verwerfen fällt `openQuestions` auf
+// null, und die Klausur sähe unberührt aus.
+const zumVerwerfen = daten(
+  await callTool(mensch, "propose_questions", {
+    exam: pruefung.id,
+    questions: [{ ...gut, question: "Eine Frage, die verworfen wird?" }],
+  }),
+);
+pruefe(
+  await vorschlagVerwerfen(nutzer.id, zumVerwerfen.id as string),
+  "ein Vorschlag lässt sich verwerfen",
+);
+
+const nachVerwerfen = daten(
+  await callTool(mensch, "read_exam_material", { exam: pruefung.id }),
+).stock as Record<string, number>;
+pruefe(
+  nachVerwerfen.discardedQuestions > 0,
+  `der Vorrat meldet ${nachVerwerfen.discardedQuestions} abgelehnte Fragen — sonst käme derselbe Vorschlag wieder`,
+);
+
 const zumSchluss = daten(
   await callTool(mensch, "read_exam_material", { exam: pruefung.id }),
 ).stock as Record<string, number>;
@@ -526,6 +573,20 @@ pruefe(
 pruefe(
   zumSchluss.openQuestions === 1,
   `und ${zumSchluss.openQuestions} offene Frage — entschiedene zählen nicht mehr mit`,
+);
+
+// Der Bericht, den der Mensch nach dem Übernehmen liest: Er muss sagen, wie oft
+// die übernommenen Fragen vor der Klausur drankommen. Bis zum 12.9.2026 warf
+// das Übernehmen diese Zahl weg, und im Bericht stand nur „N Fragen sind jetzt
+// Bausteine" — auch dann, wenn keine einzige mehr drangekommen wäre.
+const bericht = await vorschlagsErgebnis(nutzer.id, vorschlagDaten.id as string);
+pruefe(
+  bericht !== null && bericht.wenigsteAbrufe !== null && bericht.wenigsteAbrufe >= 4,
+  `der Bericht nennt ${bericht?.wenigsteAbrufe} Abrufe vor der Klausur (A6 verlangt vier)`,
+);
+pruefe(
+  bericht !== null && bericht.fragen.some((f) => !f.uebernommen && !f.abgewaehlt),
+  "und er unterscheidet die abgewiesene Frage von einer abgewählten, ohne im Text zu suchen",
 );
 
 console.log("\nAlles durch.");

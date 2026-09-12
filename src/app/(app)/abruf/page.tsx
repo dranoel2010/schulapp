@@ -54,6 +54,7 @@ export default async function AbrufPage() {
   const offeneFragen = vorschlaege.reduce((s, v) => s + v.fragen.length, 0);
 
   const aktive = bausteine.filter((b) => b.retiredAt === null);
+  const zurueckgezogen = bausteine.length - aktive.length;
   const ueberfaellig = faellig.filter((f) => f.dueOn < heute).length;
 
   return (
@@ -62,13 +63,20 @@ export default async function AbrufPage() {
         <h1 className="text-xl font-semibold text-foreground">Abruf</h1>
         <p className="mt-1 text-muted">
           {aktive.length === 0
-            ? "Noch keine Bausteine — jede Frage stammt aus einer Seite deiner Blätter."
+            ? zurueckgezogen > 0
+              ? // „Noch keine" hieße: es gab noch nie welche. Bei
+                // zurückgezogenen ist das falsch, und die Bestandsliste zeigt
+                // sie zur selben Zeit an — zwei Seiten, zwei Auskünfte.
+                `Kein Baustein im Bestand. ${zurueckgezogen} ${zurueckgezogen === 1 ? "ist zurückgezogen" : "sind zurückgezogen"} und ${zurueckgezogen === 1 ? "kommt" : "kommen"} nicht mehr dran.`
+              : "Noch keine Bausteine — jede Frage stammt aus einer Seite deiner Blätter."
             : faellig.length === 0
               ? bericht.versuche > 0
                 ? "Für heute durch. Der nächste Termin kommt von selbst."
                 : "Heute ist nichts fällig."
               : `${faellig.length} ${faellig.length === 1 ? "Baustein wartet" : "Bausteine warten"}${
-                  ueberfaellig > 0 ? ` — ${ueberfaellig} davon länger als heute` : ""
+                  ueberfaellig > 0
+                    ? ` — ${ueberfaellig} davon länger als heute`
+                    : ""
                 }.`}
         </p>
       </header>
@@ -79,8 +87,9 @@ export default async function AbrufPage() {
         <Card className="border-accent/40">
           <CardContent className="space-y-3">
             <p className="text-foreground">
-              {offeneFragen} {offeneFragen === 1 ? "Frage wartet" : "Fragen warten"}{" "}
-              im Eingang — die KI hat sie gebaut, übernommen ist noch keine.
+              {offeneFragen}{" "}
+              {offeneFragen === 1 ? "Frage wartet" : "Fragen warten"} im Eingang
+              — die KI hat sie gebaut, übernommen ist noch keine.
             </p>
             <ButtonLink href="/abruf/eingang">Vorschläge ansehen</ButtonLink>
           </CardContent>
@@ -89,7 +98,11 @@ export default async function AbrufPage() {
 
       {aktive.length === 0 ? (
         <EmptyState
-          title="Noch nichts abzurufen"
+          title={
+            zurueckgezogen > 0
+              ? "Nichts mehr abzurufen"
+              : "Noch nichts abzurufen"
+          }
           description="Ein Baustein ist eine Frage, ihre Musterlösung und ein Satz dazu, womit man sie verwechselt — alle drei aus einer Seite, die schon abgeschrieben ist."
           action={
             // Zwei Wege und nicht einer. „Stoff einer Klausur" stand bisher nur
@@ -148,7 +161,7 @@ export default async function AbrufPage() {
           <CardContent className="space-y-2">
             <p className="text-foreground">
               {bericht.versuche > 0
-                ? `${bericht.versuche} ${bericht.versuche === 1 ? "Versuch" : "Versuche"} über ${bericht.bausteine} ${bericht.bausteine === 1 ? "Baustein" : "Bausteine"}, davon ${bericht.richtig} auf Anhieb richtig.`
+                ? `${bericht.versuche} ${bericht.versuche === 1 ? "Versuch" : "Versuche"} über ${bericht.bausteine} ${bericht.bausteine === 1 ? "Baustein" : "Bausteine"}, davon ${bericht.aufAnhieb} auf Anhieb richtig.`
                 : "Heute war nichts fällig."}
             </p>
             <p className="text-sm text-muted">

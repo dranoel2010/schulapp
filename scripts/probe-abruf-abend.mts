@@ -88,7 +88,7 @@ const ABSCHRIFT = [
   "Man leitet also die äußere Funktion ab, setzt die innere ein und",
   "multipliziert mit der Ableitung der inneren Funktion.",
   "Beispiel: f(x) = sin(3x) hat die Ableitung f'(x) = 3 · cos(3x).",
-  "Der Faktor 3 ist die ⟨Ableitung⟩ der inneren Funktion.",
+  "Der Faktor 3 ist die ⟨Ableitung der inneren Funktion, nicht deren Wert⟩.",
 ].join("\n");
 
 const { rows: [nutzer] } = await pg.query<{ id: string }>(
@@ -150,12 +150,52 @@ pruefe(
 
 const unsicher = await createItem(
   nutzer.id,
-  { ...grundform, sourceQuote: "Der Faktor 3 ist die ⟨Ableitung⟩ der inneren Funktion." },
+  {
+    ...grundform,
+    sourceQuote: "Der Faktor 3 ist die ⟨Ableitung der inneren Funktion, nicht deren Wert⟩.",
+  },
   HEUTE,
 );
 pruefe(
   !unsicher.ok && unsicher.fehler === "zitat-unsicher",
   "ein Zitat mit ⟨spitzen Klammern⟩ wird abgewiesen",
+);
+
+// Und derselbe Fall OHNE Klammer im Zitat — der Weg, der die Quellbindung bis
+// zum 12.9.2026 umgehen konnte. Wer mit der Maus innerhalb der Hervorhebung
+// zieht, erwischt nur den Inhalt: wörtlich in der Abschrift, kein
+// Klammerzeichen darin, und trotzdem eine Vermutung. Gefunden von einer
+// Abnahme, nicht von einem Test — deshalb steht er jetzt hier.
+const ausDerKlammer = await createItem(
+  nutzer.id,
+  { ...grundform, sourceQuote: "nicht deren Wert" },
+  HEUTE,
+);
+pruefe(
+  !ausDerKlammer.ok && ausDerKlammer.fehler === "zitat-unsicher",
+  "auch der Inhalt einer Markierung wird abgewiesen, ohne dass eine Klammer im Zitat steht",
+);
+
+// Die Gegenprobe zur Regel „alle Vorkommen": Dieses Stück steht zweimal auf
+// der Seite — einmal in der Markierung, einmal sauber. Dann gilt die saubere
+// Lesart, sonst wäre die Abweisung eine Falle für ein Zitat, das der Schüler
+// gar nicht aus der Hervorhebung genommen hat.
+const auchSauber = await createItem(
+  nutzer.id,
+  {
+    ...grundform,
+    sourceQuote: "der Ableitung der inneren Funktion",
+    // In den Messvorrat und nicht in den Übungsvorrat: Ein Baustein mit
+    // Terminen würde den Abend weiter unten verändern, und diese Zusage handelt
+    // nur davon, ob das Zitat durchgeht. A12 sichert zu, dass der Messvorrat
+    // NIE einen Termin bekommt — hier ist das genau das Werkzeug dafür.
+    role: "messung",
+  },
+  HEUTE,
+);
+pruefe(
+  auchSauber.ok,
+  "ein Stück, das AUCH außerhalb der Markierung steht, geht durch",
 );
 
 const angelegt = await createItem(
@@ -309,7 +349,7 @@ console.log("\nA5 — auch die halbe Markierung:");
 
 const halb = await createItem(
   nutzer.id,
-  { ...grundform, sourceQuote: "Ableitung⟩ der inneren Funktion." },
+  { ...grundform, sourceQuote: "Funktion, nicht deren Wert⟩." },
   HEUTE,
 );
 pruefe(
@@ -319,8 +359,12 @@ pruefe(
 
 const bericht = await tagesbericht(nutzer.id, ERSTER_TERMIN);
 pruefe(
-  bericht.versuche === 2 && bericht.richtig === 1 && bericht.bausteine === 1,
-  `der Tagesbericht zählt ${bericht.versuche} Versuche über ${bericht.bausteine} Baustein, davon ${bericht.richtig} richtig`,
+  // NULL auf Anhieb, obwohl einer der beiden Versuche richtig war: Der erste
+  // ging daneben, der zweite saß mit der Lösung im Kopf. Genau diese Zahl stand
+  // bis zum 12.9.2026 auf 1 und log dabei — die Oberfläche schrieb „davon 1 auf
+  // Anhieb richtig" über einen Baustein, der beim ersten Anlauf nicht saß.
+  bericht.versuche === 2 && bericht.aufAnhieb === 0 && bericht.bausteine === 1,
+  `der Tagesbericht zählt ${bericht.versuche} Versuche über ${bericht.bausteine} Baustein, davon ${bericht.aufAnhieb} auf Anhieb`,
 );
 
 // ── Und der Abstand, an dem die Erfolgsmessung hängt (A11) ──────────────────

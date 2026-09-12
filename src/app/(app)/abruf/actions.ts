@@ -10,9 +10,9 @@ import {
   createItem,
   neuPlanen,
   retireItem,
-  MATERIALARTEN,
   type AnlageFehler,
 } from "@/recall/items";
+import { MATERIALARTEN } from "@/recall/arten";
 import {
   FRAGE_MAX,
   FRAGE_MIN,
@@ -227,7 +227,7 @@ const A5_MELDUNGEN: Record<AnlageFehler, string> = {
   "zitat-nicht-gefunden":
     "Dieses Zitat steht so nicht in der Abschrift. Kopiere die Stelle wörtlich heraus, statt sie nachzuerzählen.",
   "zitat-unsicher":
-    "Im Zitat steht eine ⟨spitze Klammer⟩ — dort war schon das Abschreiben unsicher, und es genügt eine einzelne: Wer mitten in einer Markierung zu kopieren anfängt, nimmt den unsicheren Text mit. Eine Frage darauf zu bauen hieße, eine Vermutung abzufragen; wähle eine Stelle außerhalb der Hervorhebung oder berichtige zuerst die Abschrift.",
+    "Dieses Zitat stammt aus einer hervorgehobenen Stelle — dort war schon das Abschreiben unsicher. Es genügt dafür eine einzelne ⟨spitze Klammer⟩ im Zitat, und es genügt auch, den Text INNERHALB der Hervorhebung zu nehmen, ohne die Klammern mitzukopieren. Eine Frage darauf zu bauen hieße, eine Vermutung abzufragen; wähle eine Stelle außerhalb der Hervorhebung oder berichtige zuerst die Abschrift.",
 };
 
 /** Einen Baustein anlegen. Die Termine entstehen dabei gleich mit. */

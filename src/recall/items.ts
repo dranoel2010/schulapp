@@ -3,7 +3,11 @@ import { and, asc, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { exams, materialPages, materials, subjects } from "@/db/schema";
 import { berlinDay, todayInBerlin } from "@/lib/dates";
-import { UNCERTAIN_CLOSE, UNCERTAIN_OPEN } from "@/lib/transcripts";
+import {
+  onlyInUncertainSpans,
+  UNCERTAIN_CLOSE,
+  UNCERTAIN_OPEN,
+} from "@/lib/transcripts";
 import { planeFaelligkeiten, type PlanWarnung } from "@/recall/schedule";
 import { istId } from "@/recall/ids";
 import { recallItems, recallSchedule } from "@/recall/schema";
@@ -46,29 +50,6 @@ import { recallItems, recallSchedule } from "@/recall/schema";
  * Eine Aufzählung und keine freie Zeichenkette, damit die Oberfläche für jeden
  * Fall einen eigenen Satz hat — „ungültig" ist keine Auskunft.
  */
-/**
- * Wovon eine Frage handelt — die vier Arten, und nur diese vier.
- *
- * Die Liste stand bis heute dreimal da: als Aufzählung im Formularschema, als
- * vier `<option>` in der Oberfläche und als Satz im Kommentar der Spalte. Drei
- * Fassungen derselben Abmachung, und die Tür für den Agenten wäre die vierte
- * geworden. Sie steht deshalb hier, neben der Funktion, die den Wert in die
- * Datenbank schreibt.
- *
- * Beliebig sind die Werte nicht: A10 mischt über den Materialtyp, und gemischt
- * wird nur Verwechselbares. Anschauungsklassen gewinnen dabei bis 0,67,
- * Begriff-Definition-Paare verlieren mit -0,39 — eine fünfte Art, hastig
- * hinzugefügt, wäre eine Klasse ohne Befund, die später mitgemischt wird.
- */
-export const MATERIALARTEN = [
-  "begriff",
-  "anschauung",
-  "verfahren",
-  "ereignis",
-] as const;
-
-export type Materialart = (typeof MATERIALARTEN)[number];
-
 export type AnlageFehler =
   | "keine-seite"
   | "kein-fach"
@@ -228,6 +209,16 @@ export async function createItem(
 
   if (!seite.transcript.includes(zitat)) {
     return { ok: false, fehler: "zitat-nicht-gefunden" };
+  }
+
+  // Und derselbe Fall ohne jede Klammer im Zitat: Der Schüler zieht mit der
+  // Maus INNERHALB der Markierung oder doppelklickt ein Wort darin. Das Zitat
+  // steht dann wörtlich in der Abschrift, trägt kein Klammerzeichen und besteht
+  // trotzdem nur aus Text, der beim Abschreiben unsicher war — die Prüfung
+  // darunter hätte ja gesagt. Die Begründung samt der Regel „alle Vorkommen"
+  // steht an `onlyInUncertainSpans()` in @/lib/transcripts.
+  if (onlyInUncertainSpans(seite.transcript, zitat)) {
+    return { ok: false, fehler: "zitat-unsicher" };
   }
 
   // Jede einzelne Klammer zählt, nicht nur das vollständige Paar.

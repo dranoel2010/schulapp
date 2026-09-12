@@ -320,8 +320,11 @@ hängen genau die Blätter, die dazugehören. Kein Blatt wird ausgewählt.
 die `read_exam_material` selbst liefert (`stock`). Er startet kein Modell, wenn
 
 - noch unentschiedene Fragen im Eingang liegen (dann ist der Mensch am Zug),
+- die Klausur noch keine Themen hat (dann fehlt der Schlüssel zum Stoff),
 - zu den Themen keine abgeschriebene Seite gehört (dann ist nichts zu binden —
   und meist steckt ein Thema im falschen Fach),
+- der Mensch die Fragen zu dieser Klausur schon abgelehnt hat und keine einzige
+  übernommen ist (aus demselben Stoff käme dasselbe heraus),
 - die Klausur ihr Ziel an Bausteinen erreicht hat (`ZIEL_JE_KLAUSUR`, 24).
 
 Das ist dieselbe Rolle, die beim Postboten der Blick in den Korb spielt: Es

@@ -41,26 +41,29 @@ export default async function EingangPage({
       : null;
 
   if (ergebnis) {
-    const abgewiesen = ergebnis.fragen.filter(
-      (f) => !f.uebernommen && f.grund?.includes("Zitat"),
-    );
+    // Die Unterscheidung kommt aus dem Kern und wird hier nicht aus dem
+    // Grundtext geraten. Bis zum 12.9.2026 stand hier eine Textsuche nach dem
+    // Wort „Zitat" — und „Die Seite hat keine Abschrift." landete damit unter
+    // „hast du abgewählt", während der Grund nirgends auf dem Bildschirm
+    // erschien. Vier unabhängige Prüfer haben denselben Fehler gemeldet.
     const abgewaehlt = ergebnis.fragen.filter(
-      (f) => !f.uebernommen && !f.grund?.includes("Zitat"),
+      (f) => !f.uebernommen && f.abgewaehlt,
+    );
+    const abgewiesen = ergebnis.fragen.filter(
+      (f) => !f.uebernommen && !f.abgewaehlt,
     );
 
     return (
       <div className="space-y-6 md:max-w-3xl">
         <header className="space-y-1">
-          <h1 className="text-xl font-semibold text-foreground">
-            Übernommen
-          </h1>
+          <h1 className="text-xl font-semibold text-foreground">Übernommen</h1>
           <p className="text-sm text-muted">
             {ergebnis.uebernommen === 1
               ? "Eine Frage ist jetzt ein Baustein"
               : `${ergebnis.uebernommen} Fragen sind jetzt Bausteine`}{" "}
             in {ergebnis.subjectName}
             {abgewaehlt.length > 0
-              ? `, ${abgewaehlt.length} ${abgewaehlt.length === 1 ? "hast du abgewählt" : "hast du abgewählt"}`
+              ? `, ${abgewaehlt.length} hast du abgewählt`
               : ""}
             {abgewiesen.length > 0
               ? `, ${abgewiesen.length} ${abgewiesen.length === 1 ? "hat" : "haben"} die Quellbindung abgewiesen`
@@ -68,6 +71,35 @@ export default async function EingangPage({
             .
           </p>
         </header>
+
+        {/* Die Dosis, die dabei herauskam. Ohne diesen Kasten sagte der
+            Bericht „12 Fragen sind jetzt Bausteine" und verschwieg, dass vor
+            der Klausur kein einziger Abruf mehr passt — das Handformular sagt
+            genau das nach jedem einzelnen Anlegen. */}
+        {ergebnis.uebernommen > 0 && ergebnis.wenigsteAbrufe !== null ? (
+          <Card
+            className={
+              ergebnis.wenigsteAbrufe < 4 ? "border-warning/40" : undefined
+            }
+          >
+            <CardContent className="space-y-1">
+              <p className="text-sm font-medium text-foreground">
+                {ergebnis.wenigsteAbrufe === 0
+                  ? "Vor der Klausur kommt keiner davon mehr dran."
+                  : ergebnis.wenigsteAbrufe < 4
+                    ? `Bis zur Klausur reicht es nur für ${ergebnis.wenigsteAbrufe} ${ergebnis.wenigsteAbrufe === 1 ? "Abruf" : "Abrufe"} statt der vier, die nötig wären.`
+                    : `Jede übernommene Frage kommt mindestens ${ergebnis.wenigsteAbrufe} Mal vor der Klausur dran.`}
+              </p>
+              {ergebnis.wenigsteAbrufe < 4 ? (
+                <p className="text-sm text-muted">
+                  Vier Begegnungen sind die Dosis, ab der Abrufen messbar mehr
+                  bringt als Wiederlesen. Dafür ist es diesmal zu spät — die
+                  Fragen bleiben trotzdem im Bestand und laufen weiter.
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
 
         {abgewiesen.length > 0 ? (
           <Card className="border-warning/40">

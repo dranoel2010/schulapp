@@ -106,6 +106,60 @@ export function uncertainSpans(text: string): string[] {
 }
 
 /**
+ * Liegt dieses Zitat in einer unsicheren Stelle — auch ohne Klammer darin?
+ *
+ * ── Die Lücke, die das schließt ──────────────────────────────────────────────
+ *
+ * `zitat.includes("⟨")` fängt nur den halben Fall. Der andere ist der
+ * naheliegendere: Wer mit der Maus INNERHALB der Markierung zieht oder ein Wort
+ * darin doppelklickt, erwischt den Inhalt ohne die Klammern. Das Zitat steht
+ * dann wörtlich in der Abschrift, enthält kein einziges Klammerzeichen — und
+ * besteht ausschließlich aus Text, der beim Abschreiben ausdrücklich als
+ * unsicher markiert war. Die Oberfläche verspricht dabei das Gegenteil
+ * („Hervorgehobenes … wird abgewiesen"), und ab dem Eingangskorb steht das
+ * Zitat als schlichter Text ohne Markierung: Danach kann niemand mehr sehen,
+ * dass diese Stelle eine Vermutung war. Am 12.9.2026 von einer Abnahme
+ * gefunden, mit dem Text aus dem eigenen Saatgut nachgerechnet.
+ *
+ * ── Warum „alle Vorkommen" und nicht „irgendeins" ────────────────────────────
+ *
+ * Dasselbe Stück Text kann zweimal auf der Seite stehen: einmal in einer
+ * Markierung, einmal sauber. Abgewiesen wird nur, wenn ALLE Vorkommen in einer
+ * Markierung liegen — dann gibt es keine saubere Lesart. Läge auch nur eines
+ * daneben, wäre die Abweisung eine Falle: Der Schüler markiert eine Zeile, die
+ * gar nicht hervorgehoben ist, und bekommt einen Fehler über eine Stelle, die
+ * er nie angefasst hat.
+ *
+ * Diese Funktion gehört hierher und nicht in den Abrufkern, aus demselben Grund
+ * wie `UNCERTAIN_OPEN`: Die ⟨spitzen Klammern⟩ sind eine Abmachung der
+ * Abschrift. Wer sie ändert, ändert diese Prüfung mit.
+ */
+export function onlyInUncertainSpans(text: string, quote: string): boolean {
+  if (quote === "") return false;
+
+  const markiert: [number, number][] = [];
+  const muster = new RegExp(UNCERTAIN_SOURCE, "g");
+  for (let treffer = muster.exec(text); treffer; treffer = muster.exec(text)) {
+    markiert.push([treffer.index, treffer.index + treffer[0].length]);
+  }
+
+  if (markiert.length === 0) return false;
+
+  let gefunden = false;
+  for (let von = text.indexOf(quote); von !== -1; von = text.indexOf(quote, von + 1)) {
+    gefunden = true;
+    const bis = von + quote.length;
+    // Überschneidung zweier Bereiche: der eine fängt an, bevor der andere
+    // aufhört, und umgekehrt. Ein Zitat, das nur bis an die Klammer STÖSST,
+    // überschneidet sich nicht — dort ist der Text sicher.
+    const beruehrt = markiert.some(([ms, me]) => von < me && ms < bis);
+    if (!beruehrt) return false;
+  }
+
+  return gefunden;
+}
+
+/**
  * Die erste Zeile, gekürzt — das, was an einer zugeklappten Seite steht.
  *
  * Die erste Zeile und nicht die ersten achtzig Zeichen: auf einem Blatt steht

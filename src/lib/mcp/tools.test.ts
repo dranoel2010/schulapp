@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { MAX_PAGES } from "@/lib/images";
 import { PROPOSAL_TRANSCRIPT_MAX } from "@/lib/inbox";
 import { isToolName, TOOLS, toolList } from "@/lib/mcp/tools";
-import { MATERIALARTEN } from "@/recall/items";
+import { MATERIALARTEN } from "@/recall/arten";
 import {
   FRAGE_MAX,
   FRAGEN_MAX,

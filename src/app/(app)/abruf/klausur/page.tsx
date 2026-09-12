@@ -6,8 +6,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireUser } from "@/lib/auth";
 import { subjectColor } from "@/lib/colors";
-import { formatCountdown, formatGerman, todayInBerlin } from "@/lib/dates";
-import { listExams } from "@/lib/exams";
+import {
+  daysBetween,
+  formatCountdown,
+  formatGerman,
+  todayInBerlin,
+} from "@/lib/dates";
+import { listExams, type ExamListItem } from "@/lib/exams";
 import { transcriptPreview } from "@/lib/transcripts";
 import { stoffZuKlausur } from "@/recall/source";
 
@@ -48,8 +53,18 @@ export default async function KlausurStoffPage({
   const heute = todayInBerlin();
   const { klausur } = await searchParams;
 
-  const klausuren = await listExams(user.id);
+  // MIT den geschriebenen. Ohne sie war diese Seite genau dann unerreichbar,
+  // wenn man sie braucht: Am 12.9.2026 lagen alle drei Prüfungen der App in der
+  // Vergangenheit, die Seite sagte „Keine Klausur eingetragen" — und zu keinem
+  // Stoff führte mehr ein Weg, obwohl die Blätter dalagen. Eine geschriebene
+  // Klausur ist auch kein toter Posten: Ihre Themen sind derselbe Schlüssel zu
+  // denselben Blättern, und nach der Arbeit lernt man weiter (die
+  // Erhaltungstermine liegen ausdrücklich DANACH, siehe schedule.ts).
+  const klausuren = await listExams(user.id, { includePast: true });
   const kommende = klausuren.filter((k) => k.date >= heute);
+  const geschrieben = klausuren
+    .filter((k) => k.date < heute)
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
 
   const gewaehlt =
     typeof klausur === "string" ? await stoffZuKlausur(user.id, klausur) : null;
@@ -225,7 +240,7 @@ export default async function KlausurStoffPage({
         </p>
       </header>
 
-      {kommende.length === 0 ? (
+      {klausuren.length === 0 ? (
         <EmptyState
           title="Keine Klausur eingetragen"
           description="Der Stoff hängt an den Themen einer Klausur. Trag eine ein, häng die Themen dran, dann steht hier, welche Blätter dazu passen."
@@ -234,35 +249,98 @@ export default async function KlausurStoffPage({
           }
         />
       ) : (
-        <ul className="space-y-3">
-          {kommende.map((k) => {
-            const farbe = subjectColor(k.subject.color);
-            return (
-              <li key={k.id}>
-                <Link href={`/abruf/klausur?klausur=${k.id}`} className="block">
-                  <Card
-                    className="transition-shadow hover:shadow-lift"
-                    style={{
-                      backgroundColor: `color-mix(in oklab, ${farbe.hex} 7%, var(--surface))`,
-                    }}
+        <>
+          {kommende.length > 0 ? (
+            <ul className="space-y-3">
+              {kommende.map((k) => (
+                <KlausurZeile key={k.id} klausur={k} heute={heute} />
+              ))}
+            </ul>
+          ) : (
+            <Card>
+              <CardContent className="space-y-1">
+                <p className="text-foreground">Keine Klausur steht an.</p>
+                <p className="text-sm text-muted">
+                  Der Stoff der geschriebenen bleibt trotzdem erreichbar — die
+                  Themen sind dieselben, und die Blätter auch.{" "}
+                  <Link
+                    href="/klausuren/neu"
+                    className="underline underline-offset-2"
                   >
-                    <CardContent className="space-y-1">
-                      <p className="font-medium text-foreground">
-                        {k.title ?? k.subject.name}
-                      </p>
-                      <p className="text-xs" style={{ color: farbe.hex }}>
-                        {k.subject.name} · {formatGerman(k.date, "kurz")} ·{" "}
-                        {formatCountdown(heute, k.date)} · {k.topicCount}{" "}
-                        {k.topicCount === 1 ? "Thema" : "Themen"}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+                    Nächste Klausur eintragen
+                  </Link>
+                  .
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {geschrieben.length > 0 ? (
+            <section className="space-y-3">
+              <h2 className="text-sm font-medium text-muted">
+                Schon geschrieben
+              </h2>
+              <ul className="space-y-3">
+                {geschrieben.map((k) => (
+                  <KlausurZeile key={k.id} klausur={k} heute={heute} />
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </>
       )}
     </div>
+  );
+}
+
+/**
+ * Eine Klausur in der Liste.
+ *
+ * Als eigene Funktion, weil sie jetzt zweimal vorkommt — oben die kommenden,
+ * darunter die geschriebenen. Zwei Kopien desselben Kartenaufbaus wären die
+ * Art Verdopplung, bei der die zweite nach dem dritten Feinschliff anders
+ * aussieht als die erste.
+ */
+function KlausurZeile({
+  klausur,
+  heute,
+}: {
+  klausur: ExamListItem;
+  heute: string;
+}) {
+  const farbe = subjectColor(klausur.subject.color);
+  const vorbei = klausur.date < heute;
+
+  return (
+    <li>
+      <Link href={`/abruf/klausur?klausur=${klausur.id}`} className="block">
+        <Card
+          className="transition-shadow hover:shadow-lift"
+          style={{
+            backgroundColor: vorbei
+              ? undefined
+              : `color-mix(in oklab, ${farbe.hex} 7%, var(--surface))`,
+          }}
+        >
+          <CardContent className="space-y-1">
+            <p className="font-medium text-foreground">
+              {klausur.title ?? klausur.subject.name}
+            </p>
+            <p className="text-xs" style={{ color: farbe.hex }}>
+              {klausur.subject.name} · {formatGerman(klausur.date, "kurz")} ·{" "}
+              {/* „vor 3 Tagen" statt „in -3 Tagen": formatCountdown() rechnet
+                  nach vorn. Bei einer geschriebenen Klausur ist der Abstand
+                  kein Countdown mehr, sondern eine Angabe darüber, wie alt der
+                  Stoff ist. */}
+              {vorbei
+                ? `geschrieben${daysBetween(klausur.date, heute) > 0 ? ` vor ${daysBetween(klausur.date, heute)} ${daysBetween(klausur.date, heute) === 1 ? "Tag" : "Tagen"}` : " heute"}`
+                : formatCountdown(heute, klausur.date)}{" "}
+              · {klausur.topicCount}{" "}
+              {klausur.topicCount === 1 ? "Thema" : "Themen"}
+            </p>
+          </CardContent>
+        </Card>
+      </Link>
+    </li>
   );
 }

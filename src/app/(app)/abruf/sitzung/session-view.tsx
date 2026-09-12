@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
+import { formatGerman } from "@/lib/dates";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
 
@@ -180,7 +181,10 @@ export function SessionView({
             </span>
             {aktuell.ueberfaellig ? (
               <span className="text-warning">
-                seit {aktuell.dueOn} offen
+                {/* Auf Deutsch und nicht als „2026-09-09": Diese Zeile liest
+                    ein Schüler, und die App schreibt Datumsangaben überall
+                    sonst mit `formatGerman()`. */}
+                seit {formatGerman(aktuell.dueOn, "kurz")} offen
               </span>
             ) : null}
           </div>
@@ -294,7 +298,8 @@ export function SessionView({
         <Link href="/abruf" className="underline underline-offset-2">
           Abbrechen
         </Link>{" "}
-        — was du beantwortet hast, ist festgehalten. Stand: {heute}.
+        — was du beantwortet hast, ist festgehalten. Stand:{" "}
+        {formatGerman(heute, "kurz")}.
       </p>
     </div>
   );

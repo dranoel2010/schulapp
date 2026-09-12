@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -11,10 +11,12 @@ import {
 import { todayInBerlin } from "@/lib/dates";
 import { istId } from "@/recall/ids";
 import { createItem, type AnlageFehler } from "@/recall/items";
+import { stoffZuKlausur } from "@/recall/source";
 import {
   recallItems,
   recallProposalItems,
   recallProposals,
+  recallSchedule,
 } from "@/recall/schema";
 
 /**
@@ -161,13 +163,12 @@ export async function vorschlagAnlegen(
 > {
   if (!istId(examId)) return { ok: false, grund: "keine-klausur" };
 
-  const [klausur] = await db
-    .select({ id: exams.id, subjectId: exams.subjectId })
-    .from(exams)
-    .where(and(eq(exams.id, examId), eq(exams.userId, userId)))
-    .limit(1);
-
-  if (!klausur) return { ok: false, grund: "keine-klausur" };
+  // Der Stoff und nicht bloß die Zeile: `stoffZuKlausur()` beantwortet in einem
+  // Zug, ob es die Klausur gibt, zu welchem Fach sie gehört und WELCHE SEITEN
+  // zu ihr führen. Die dritte Auskunft ist der Grund — siehe unten bei den
+  // erlaubten Seiten.
+  const stoff = await stoffZuKlausur(userId, examId);
+  if (!stoff) return { ok: false, grund: "keine-klausur" };
   if (fragen.length === 0 || fragen.length > FRAGEN_MAX) {
     return { ok: false, grund: "keine-fragen" };
   }
@@ -200,23 +201,21 @@ export async function vorschlagAnlegen(
   );
   if (zuKurz) return { ok: false, grund: "zu-kurz" };
 
-  // Alle Seiten in EINER Abfrage prüfen, nicht je Frage eine.
-  const eigene = new Set(
-    (
-      await db
-        .select({ id: materialPages.id })
-        .from(materialPages)
-        .innerJoin(
-          materials,
-          and(
-            eq(materials.id, materialPages.materialId),
-            eq(materials.userId, userId),
-          ),
-        )
-    ).map((z) => z.id),
-  );
+  // Erlaubt ist, was zum STOFF DIESER KLAUSUR gehört — nicht alles, was dem
+  // Schüler gehört.
+  //
+  // Bis zum 12.9.2026 stand hier die weite Frage („gehört die Seite diesem
+  // Nutzer?"), und damit prüfte dieselbe Funktion die Seite lockerer als das
+  // Thema ein paar Zeilen weiter unten. Ein Lauf, der sich verrennt, konnte
+  // eine Frage über ein französisches Blatt in den Eingang einer
+  // Mathematikklausur legen; der Mensch sähe im Formular nur Frage, Lösung und
+  // Zitat und hätte keinen Anlass zu prüfen, aus welchem Fach das Blatt stammt.
+  // Der Agent bekommt seine Seiten ohnehin nur aus read_exam_material — genau
+  // diese Liste ist es, gegen die hier geprüft wird. Damit kann durch diese Tür
+  // nichts hereinkommen, was der Lauf nicht auch gesehen hat.
+  const imStoff = new Set(stoff.seitenGesamt.map((seite) => seite.pageId));
 
-  const erlaubt = fragen.filter((f) => eigene.has(f.pageId));
+  const erlaubt = fragen.filter((f) => imStoff.has(f.pageId));
   if (erlaubt.length === 0) return { ok: false, grund: "fremde-seiten" };
 
   // Die Themen: dieselbe Frage wie bei den Seiten, mit einer anderen Antwort.
@@ -255,7 +254,7 @@ export async function vorschlagAnlegen(
             .where(
               and(
                 inArray(subjectTopics.id, genannt),
-                eq(subjectTopics.subjectId, klausur.subjectId),
+                eq(subjectTopics.subjectId, stoff.subjectId),
               ),
             )
         ).map((z) => z.id),
@@ -323,6 +322,17 @@ export type KlausurVorrat = {
   bausteine: number;
   /** Fragen, die im Eingang liegen und noch niemand entschieden hat */
   offeneFragen: number;
+  /**
+   * Fragen, die der Mensch NICHT wollte — abgewählt, verworfen, abgewiesen.
+   *
+   * Ohne diese Zahl war das Gedächtnis der App löchrig, und zwar an der
+   * teuersten Stelle: Wer einen ganzen Vorschlag verwirft, setzt `settledAt`,
+   * damit fällt `offeneFragen` auf null, und der nächste Lauf baut aus demselben
+   * Stoff dieselben Fragen noch einmal. `fragen.mts` beschreibt genau das als
+   * unmöglich („die App gibt die Auskunft selbst"). Am 12.9.2026 von einer
+   * Abnahme gefunden.
+   */
+  verworfen: number;
 };
 
 export async function vorratZuKlausur(
@@ -330,10 +340,23 @@ export async function vorratZuKlausur(
   examId: string,
   seitenIds: readonly string[],
 ): Promise<KlausurVorrat> {
-  if (!istId(examId)) return { bausteine: 0, offeneFragen: 0 };
+  if (!istId(examId)) return { bausteine: 0, offeneFragen: 0, verworfen: 0 };
 
+  // Beide Zahlen in EINER Abfrage: offen heißt „noch nicht entschieden",
+  // verworfen heißt „mit Grund liegengeblieben". Der Kopf wird dafür nicht mehr
+  // auf `settledAt` gefiltert — ein verworfener Vorschlag ist abgeschlossen,
+  // und genau seine Fragen sind die, die nicht wiederkommen sollen.
   const [fragen] = await db
-    .select({ n: count() })
+    .select({
+      offen: count(
+        sql`case when ${recallProposalItems.acceptedAt} is null
+                  and ${recallProposalItems.rejectedReason} is null
+             then 1 end`,
+      ),
+      verworfen: count(
+        sql`case when ${recallProposalItems.rejectedReason} is not null then 1 end`,
+      ),
+    })
     .from(recallProposalItems)
     .innerJoin(
       recallProposals,
@@ -341,20 +364,17 @@ export async function vorratZuKlausur(
         eq(recallProposals.id, recallProposalItems.proposalId),
         eq(recallProposals.userId, userId),
         eq(recallProposals.examId, examId),
-        isNull(recallProposals.settledAt),
-      ),
-    )
-    .where(
-      and(
-        isNull(recallProposalItems.acceptedAt),
-        isNull(recallProposalItems.rejectedReason),
       ),
     );
 
   // Ohne Seiten gibt es nichts zu zählen — und `inArray` mit einer leeren Liste
   // ist in SQL kein leeres Ergebnis, sondern ein Fehler.
   if (seitenIds.length === 0) {
-    return { bausteine: 0, offeneFragen: Number(fragen?.n ?? 0) };
+    return {
+      bausteine: 0,
+      offeneFragen: Number(fragen?.offen ?? 0),
+      verworfen: Number(fragen?.verworfen ?? 0),
+    };
   }
 
   const [bausteine] = await db
@@ -370,7 +390,8 @@ export async function vorratZuKlausur(
 
   return {
     bausteine: Number(bausteine?.n ?? 0),
-    offeneFragen: Number(fragen?.n ?? 0),
+    offeneFragen: Number(fragen?.offen ?? 0),
+    verworfen: Number(fragen?.verworfen ?? 0),
   };
 }
 
@@ -473,7 +494,18 @@ export async function offeneVorschlaege(
     jeVorschlag.set(z.proposalId, liste);
   }
 
-  return koepfe.map((k) => ({ ...k, fragen: jeVorschlag.get(k.id) ?? [] }));
+  // Ein Kopf ohne Fragen kommt nicht mit.
+  //
+  // Der Fall entsteht, wenn das Blatt gelöscht wird, zu dem die Fragen gehören:
+  // `page_id` steht auf CASCADE, also gehen die Fragen mit, während der Kopf
+  // stehen bleibt (er hängt an der KLAUSUR). Im Eingang stand dann „0 Fragen
+  // für Mathematik" mit einem Knopf „Alle 0 übernehmen" — eine Karte, die
+  // nichts enthält und nichts tut. Weggelassen statt angezeigt: Es gibt daran
+  // nichts zu entscheiden, und die Zeile bleibt in der Datenbank stehen, wo sie
+  // für die Zählung der abgelehnten Fragen weiterhin zählt.
+  return koepfe
+    .map((k) => ({ ...k, fragen: jeVorschlag.get(k.id) ?? [] }))
+    .filter((k) => k.fragen.length > 0);
 }
 
 export type UebernahmeErgebnis = {
@@ -481,6 +513,21 @@ export type UebernahmeErgebnis = {
   abgewiesen: Array<{ frage: string; grund: AnlageFehler }>;
   abgewaehlt: number;
 };
+
+/**
+ * Der Vermerk, mit dem eine vom Menschen abgewählte Frage stehen bleibt.
+ *
+ * Als Konstante, weil der Bericht im Eingang die beiden Fälle auseinanderhalten
+ * muss: „der Mensch wollte sie nicht" und „die Prüfung hat sie abgewiesen".
+ * Bis zum 12.9.2026 unterschied er sie durch eine Textsuche nach dem Wort
+ * „Zitat" im Grundtext — und damit fielen drei der sechs Abweisungsgründe auf
+ * die falsche Seite: „Die Seite hat keine Abschrift." stand als „hast du
+ * abgewählt" da, und der Grund erschien nirgends. Genau diese Zahl nennt der
+ * Code an vier Stellen das einzige Maß für die Zuverlässigkeit des Agenten;
+ * sie dem Menschen zuzuschreiben war der Fehler, den vier Prüfer unabhängig
+ * gefunden haben.
+ */
+export const ABGEWAEHLT = "Vom Menschen abgewählt.";
 
 /** Die Sätze, mit denen eine abgewiesene Frage im Protokoll stehen bleibt. */
 const ABWEISUNG: Record<AnlageFehler, string> = {
@@ -495,7 +542,7 @@ const ABWEISUNG: Record<AnlageFehler, string> = {
   "zitat-nicht-gefunden":
     "Das Zitat steht nicht wörtlich in der Abschrift — der Agent hat es nacherzählt.",
   "zitat-unsicher":
-    "Das Zitat reicht in eine ⟨unsichere Stelle⟩ der Abschrift hinein.",
+    "Das Zitat liegt in einer ⟨unsicheren Stelle⟩ der Abschrift oder reicht hinein.",
 };
 
 /**
@@ -560,7 +607,7 @@ export async function vorschlagUebernehmen(
     if (!gewaehlt.has(frage.id)) {
       await db
         .update(recallProposalItems)
-        .set({ rejectedReason: "Vom Menschen abgewählt." })
+        .set({ rejectedReason: ABGEWAEHLT })
         .where(eq(recallProposalItems.id, frage.id));
       ergebnis.abgewaehlt += 1;
       continue;
@@ -645,6 +692,14 @@ export type ErledigteFrage = {
   promptFree: string;
   uebernommen: boolean;
   grund: string | null;
+  /**
+   * Hat der MENSCH sie weggelassen? Sonst hat die Prüfung sie abgewiesen.
+   *
+   * Die Unterscheidung entsteht hier und nicht in der Oberfläche. Eine
+   * Textsuche im Grundtext wäre eine zweite, schlechtere Fassung derselben
+   * Regel — und sie war es: siehe `ABGEWAEHLT`.
+   */
+  abgewaehlt: boolean;
 };
 
 export type VorschlagsErgebnis = {
@@ -652,6 +707,24 @@ export type VorschlagsErgebnis = {
   subjectName: string;
   uebernommen: number;
   fragen: ErledigteFrage[];
+  /**
+   * Die kleinste Zahl von Abrufen VOR der Klausur unter den übernommenen
+   * Fragen — `null`, wenn keine übernommen wurde.
+   *
+   * Das Handformular sagt das nach jedem einzelnen Anlegen („es reicht nur für
+   * 2 Abrufe vor der Klausur statt der vier"). Beim Übernehmen aus dem Eingang
+   * fehlte es bis zum 12.9.2026: Zwölf Fragen konnten am Abend vor der Klausur
+   * zu zwölf Bausteinen werden, die kein einziges Mal mehr drankommen, und im
+   * Bericht stand nur „12 Fragen sind jetzt Bausteine". Eine Zahl, die nach
+   * Vorbereitung aussieht, muss Vorbereitung zählen.
+   *
+   * Gezählt werden die Termine mit `mode = 'klausur'`: Das sind genau die vor
+   * dem Termin — die der Erhaltung liegen danach und heißen deshalb anders.
+   * Gerechnet wird aus der Datenbank und nicht aus dem Rückgabewert des
+   * Übernehmens, weil dieser Bericht hinter einer Adresse steht und ein
+   * Neuladen überleben soll.
+   */
+  wenigsteAbrufe: number | null;
 };
 
 /**
@@ -698,6 +771,7 @@ export async function vorschlagsErgebnis(
       promptFree: recallProposalItems.promptFree,
       acceptedAt: recallProposalItems.acceptedAt,
       rejectedReason: recallProposalItems.rejectedReason,
+      itemId: recallProposalItems.itemId,
     })
     .from(recallProposalItems)
     .where(eq(recallProposalItems.proposalId, proposalId))
@@ -707,12 +781,43 @@ export async function vorschlagsErgebnis(
     promptFree: z.promptFree,
     uebernommen: z.acceptedAt !== null,
     grund: z.rejectedReason,
+    abgewaehlt: z.rejectedReason === ABGEWAEHLT,
   }));
+
+  // Je übernommener Frage: wie viele Übungstermine hat ihr Baustein bekommen?
+  const uebernommene = zeilen
+    .map((z) => z.itemId)
+    .filter((id): id is string => id !== null);
+
+  let wenigsteAbrufe: number | null = null;
+
+  if (uebernommene.length > 0) {
+    const zaehlung = await db
+      .select({ itemId: recallSchedule.itemId, n: count() })
+      .from(recallSchedule)
+      .where(
+        and(
+          inArray(recallSchedule.itemId, uebernommene),
+          eq(recallSchedule.mode, "klausur"),
+        ),
+      )
+      .groupBy(recallSchedule.itemId);
+
+    const jeBaustein = new Map(zaehlung.map((z) => [z.itemId, Number(z.n)]));
+
+    // Über ALLE übernommenen und nicht nur über die gezählten: Ein Baustein
+    // ohne einen einzigen Übungstermin steht in der Gruppierung gar nicht, und
+    // genau er ist der Fall, den dieser Satz meldet.
+    wenigsteAbrufe = Math.min(
+      ...uebernommene.map((id) => jeBaustein.get(id) ?? 0),
+    );
+  }
 
   return {
     id: kopf.id,
     subjectName: kopf.subjectName,
     uebernommen: fragen.filter((f) => f.uebernommen).length,
+    wenigsteAbrufe,
     fragen,
   };
 }

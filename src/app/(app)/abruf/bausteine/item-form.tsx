@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { MATERIALARTEN, MATERIALART_NAMEN } from "@/recall/arten";
 import { Field } from "@/components/ui/field";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { splitTranscript } from "@/lib/transcripts";
@@ -185,8 +186,9 @@ export function ItemForm({
             )}
           </div>
           <p className="text-xs text-subtle">
-            Hervorgehobenes war schon beim Abschreiben unsicher. Ein Zitat, das
-            so etwas enthält, wird abgewiesen.
+            Hervorgehobenes war schon beim Abschreiben unsicher. Ein Zitat aus
+            einer dieser Stellen wird abgewiesen — auch dann, wenn du die
+            Klammern nicht mitkopierst.
           </p>
         </div>
       ) : null}
@@ -271,10 +273,11 @@ export function ItemForm({
             value={materialKind}
             onChange={(e) => setMaterialKind(e.target.value)}
           >
-            <option value="begriff">Begriff oder Definition</option>
-            <option value="anschauung">Anschauung, Beispiel, Bild</option>
-            <option value="verfahren">Verfahren, Rechenweg</option>
-            <option value="ereignis">Ereignis, Datum, Ablauf</option>
+            {MATERIALARTEN.map((art) => (
+              <option key={art} value={art}>
+                {MATERIALART_NAMEN[art].lang}
+              </option>
+            ))}
           </Select>
         )}
       </Field>
@@ -293,7 +296,9 @@ export function ItemForm({
             onChange={(e) => setRole(e.target.value)}
           >
             <option value="uebung">Zum Üben</option>
-            <option value="messung">Messvorrat — nie üben, nur zum Prüfen</option>
+            <option value="messung">
+              Messvorrat — nie üben, nur zum Prüfen
+            </option>
           </Select>
         )}
       </Field>
