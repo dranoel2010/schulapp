@@ -705,4 +705,19 @@ pruefe(
   `${verwaist.n} ${verwaist.n === 1 ? "Versuch hat seinen Baustein" : "Versuche haben ihren Baustein"} verloren und steht trotzdem da — item_id auf SET NULL`,
 );
 
+// Und die Seite, die der Mensch danach öffnet. Sie liest die Versuche des
+// Tages — die jetzt keinen Baustein mehr haben. Ein Bericht, der dabei
+// abstürzt oder eine erfundene Zahl nennt, wäre das Erste, was nach dem
+// Löschen auffiele.
+const { tagesbericht } = await import("@/recall/sessions");
+const bericht2 = await tagesbericht(nutzer.id);
+pruefe(
+  bericht2.versuche === 1 && bericht2.bausteine === 1,
+  `der Tagesbericht steht auch ohne Bausteine: ${bericht2.versuche} Versuch über ${bericht2.bausteine} verwaiste Zeile`,
+);
+pruefe(
+  bericht2.offen === 0,
+  "und er meldet nichts mehr als offen — die Termine sind mit der Klausur gegangen",
+);
+
 console.log("\nAlles durch.");
