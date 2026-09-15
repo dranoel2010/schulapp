@@ -63,6 +63,33 @@ warte_bis_wach() {
   return 1
 }
 
+# Das laufende Bild festnageln, BEVOR gebaut wird.
+#
+# Ein SCHEITERNDER Bau ist harmlos — der alte Container läuft einfach weiter.
+# Gefährlich ist der Bau, der GELINGT und eine kaputte App hochbringt: dann
+# hat `up -d --build` den Tag schon überschrieben, und das Vorgängerbild liegt
+# nur noch namenlos (<none>) herum. `zurueck` baut es neu, und das kostet im
+# Bus dieselben Minuten ein zweites Mal.
+#
+# Ein Tag kostet nichts und macht den Rückweg zu einer Sache von Sekunden.
+# Klappt es nicht, läuft der Deploy trotzdem weiter: das hier ist die Zugabe,
+# nicht die Absicherung. Die Absicherung ist `zurueck`.
+sichere_bild() {
+  local repo id gesichert
+  gesichert=0
+  while read -r repo id; do
+    [ -z "$repo" ] && continue
+    [ "$repo" = "<none>" ] && continue
+    [ -z "$id" ] && continue
+    if docker tag "$id" "$repo:rueckfall" 2>/dev/null; then
+      echo "  Rückfallbild gesetzt: $repo:rueckfall"
+      gesichert=1
+    fi
+  done <<< "$( cd "$APP" && $DC images 2>/dev/null | awk 'NR>1 {print $2, $4}' )"
+  [ "$gesichert" = "0" ] && echo "  (kein Rückfallbild gesetzt — der Weg über \"zurueck\" bleibt davon unberührt)"
+  return 0
+}
+
 # ---------------------------------------------------------------- stand
 stand() {
   finde_dc
@@ -150,6 +177,9 @@ hoch() {
   git -C "$APP/repo" log --oneline "$vorher..$nachher" | sed 's/^/  /'
   echo
 
+  echo "Nagle den laufenden Stand fest ..."
+  sichere_bild
+
   echo "Baue und starte ... (das dauert auf dem NAS mehrere Minuten)"
   ( cd "$APP" && $DC up -d --build ) || {
     echo >&2
@@ -170,7 +200,10 @@ hoch() {
     echo "Erst ins Protokoll sehen:" >&2
     echo "  cd $APP && $DC logs --tail=50" >&2
     echo "Und wenn es nicht offensichtlich ist, zurück:" >&2
-    echo "  sudo $0 zurueck" >&2
+    echo "  sudo $0 zurueck        (baut den alten Stand neu, dauert)" >&2
+    echo "Schneller, falls oben ein Rückfallbild gesetzt wurde:" >&2
+    echo "  docker images | grep rueckfall     dann das Bild zurücktaggen" >&2
+    echo "  und  cd $APP && $DC up -d          ohne --build" >&2
     exit 1
   fi
 }
