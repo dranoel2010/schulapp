@@ -72,3 +72,11 @@ rueckblick.html
 # entsteht bei jedem Lauf neu und liefe sonst mit einem `git add -A` als
 # zweiter, ungepflegter Wanderungsstand mit ins Repo.
 /drizzle/
+
+# Der „Hermes Agent Installer" von NousResearch. Er landete am 11.9.2026 im
+# Arbeitsverzeichnis, hat mit dieser App nichts zu tun, stand nie in der
+# Historie — und war bis heute weder gelöscht noch ignoriert. 3890 Zeilen,
+# die an jedem `git add -A` hingen: ein Push in ein öffentliches Repo nimmt
+# man nicht zurück. Gelöscht wird er nicht von hier aus; das ist deine
+# Entscheidung, und bis dahin ist er wenigstens außer Reichweite.
+install.sh
