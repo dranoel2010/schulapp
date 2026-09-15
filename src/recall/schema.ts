@@ -105,6 +105,46 @@ export const recallItems = pgTable(
     ),
 
     /**
+     * Die Klausur, für die dieser Baustein gebaut wurde — und die ihn wieder
+     * mitnimmt.
+     *
+     * ── Warum CASCADE, wo der Kern sonst nichts löscht ───────────────────────
+     *
+     * Weil der Nutzer es am 15.9.2026 ausdrücklich verlangt hat: „wenn die
+     * prüfung gelöscht wird muss auch der abruf weg". Bis dahin überlebten die
+     * Bausteine das Löschen ihrer Klausur — sie hängen ja an Fach und Seite —,
+     * und zurück blieben Fragen mit Terminen für eine Prüfung, die es nicht
+     * mehr gibt. `exam_topics`, `study_blocks` und `recall_proposals` gingen
+     * schon immer mit; die Bausteine waren die Ausnahme.
+     *
+     * Was dabei NICHT mitgeht, ist das Protokoll: `recall_attempts.item_id`
+     * steht auf `set null` (A11). Welche Frage wann saß, überlebt also auch das
+     * Löschen der Klausur — nur die Frage selbst und ihre offenen Termine sind
+     * weg (`recall_schedule.item_id` kaskadiert vom Baustein).
+     *
+     * ── Warum NULL erlaubt ist ───────────────────────────────────────────────
+     *
+     * Ein von Hand über /abruf/bausteine/neu angelegter Baustein gehört keiner
+     * Klausur: Das Formular fragt nach Seite, Fach und Thema, nicht nach einer
+     * Prüfung. Er bleibt deshalb NULL und überlebt jedes Löschen — er wurde
+     * nicht für diese Prüfung gemacht. Gefüllt wird die Spalte nur dort, wo die
+     * Zugehörigkeit feststeht: beim Übernehmen aus einem Vorschlag, und der
+     * hängt per Bauart an genau einer Klausur.
+     *
+     * ── Und warum sie nicht dasselbe ist wie der Termin ──────────────────────
+     *
+     * Die Termine richten sich nach der NÄCHSTEN Klausur des Fachs
+     * (`naechsteKlausur()` in items.ts), nicht nach dieser Spalte. Beides kann
+     * auseinandergehen: Ein Baustein aus einem Vorschlag zur Klausur am 26.
+     * wird auf eine frühere Arbeit am 20. geplant, wenn eine dazwischenkommt.
+     * Das ist richtig so — gelernt wird auf den nächsten Termin hin, und die
+     * Spalte hier sagt nur, wessen Kind der Baustein ist.
+     */
+    examId: uuid("exam_id").references(() => exams.id, {
+      onDelete: "cascade",
+    }),
+
+    /**
      * Die Frage im freien Format — das Standardformat (A1).
      *
      * Nicht Multiple Choice, und das ist keine Vorliebe: gewählte Distraktoren

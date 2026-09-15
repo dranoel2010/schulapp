@@ -571,7 +571,15 @@ export async function vorschlagUebernehmen(
   if (!istId(proposalId)) return null;
 
   const [vorschlag] = await db
-    .select({ id: recallProposals.id, subjectId: exams.subjectId })
+    // `examId` MUSS mit: Ohne diese Spalte bekäme jeder übernommene Baustein
+    // still `exam_id = NULL`, der Übersetzer bliebe stumm (das Feld an
+    // `NeuerBaustein` ist freiwillig), alle Tests blieben grün — und es fiele
+    // erst auf, wenn jemand eine Prüfung löscht und der Abruf stehen bleibt.
+    .select({
+      id: recallProposals.id,
+      examId: recallProposals.examId,
+      subjectId: exams.subjectId,
+    })
     .from(recallProposals)
     .innerJoin(exams, eq(exams.id, recallProposals.examId))
     .where(
@@ -618,6 +626,9 @@ export async function vorschlagUebernehmen(
       {
         pageId: frage.pageId,
         subjectId: vorschlag.subjectId,
+        // Von hier kommt die Bindung an die Klausur — der einzige Weg, auf dem
+        // ein Baustein sie je bekommt.
+        examId: vorschlag.examId,
         subjectTopicId: frage.subjectTopicId,
         promptFree: frage.promptFree,
         solution: frage.solution,

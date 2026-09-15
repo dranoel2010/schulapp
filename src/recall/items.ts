@@ -1,4 +1,14 @@
-import { and, asc, desc, eq, gte, inArray, isNull } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  countDistinct,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+} from "drizzle-orm";
 
 import { db } from "@/db";
 import { exams, materialPages, materials, subjects } from "@/db/schema";
@@ -63,6 +73,17 @@ export type NeuerBaustein = {
   pageId: string;
   subjectId: string;
   subjectTopicId?: string | null;
+  /**
+   * Die Klausur, für die dieser Baustein entsteht — und die ihn wieder
+   * mitnimmt (siehe `examId` an `recallItems`).
+   *
+   * FREIWILLIG, und das ist der Punkt: Das Handformular kennt keine Klausur
+   * (`bausteinSchema` in @/app/(app)/abruf/actions fragt Seite, Fach, Thema),
+   * und ein Pflichtfeld bräche dort den Typ. Gesetzt wird es nur beim
+   * Übernehmen aus einem Vorschlag — der hängt per Bauart an genau einer
+   * Prüfung.
+   */
+  examId?: string | null;
   /** Die Frage im freien Format (A1) */
   promptFree: string;
   /** Dieselbe Frage mit Hinweisreiz und als Lückentext (A9), beide freiwillig */
@@ -243,6 +264,13 @@ export async function createItem(
       pageId: eingabe.pageId,
       subjectId: eingabe.subjectId,
       subjectTopicId: eingabe.subjectTopicId ?? null,
+      // Eine fehlgeformte id kommt hier gar nicht erst in den INSERT: Sie wäre
+      // ein Fremdschlüsselfehler auf Englisch aus Postgres, mitten in einem
+      // Werkzeugaufruf. Dieselbe Begründung wie an @/recall/ids, wo diese
+      // Funktion namentlich steht — nur fällt es hier NICHT durch, sondern auf
+      // NULL: Ein Baustein ohne Klausur ist ein gültiger Baustein.
+      examId:
+        eingabe.examId && istId(eingabe.examId) ? eingabe.examId : null,
       promptFree: eingabe.promptFree.trim(),
       promptCue: eingabe.promptCue?.trim() || null,
       promptCloze: eingabe.promptCloze?.trim() || null,
@@ -445,6 +473,59 @@ export async function listItems(userId: string): Promise<BausteinZeile[]> {
   for (const t of termine) offen.set(t.itemId, (offen.get(t.itemId) ?? 0) + 1);
 
   return zeilen.map((z) => ({ ...z, offeneTermine: offen.get(z.id) ?? 0 }));
+}
+
+/**
+ * Was am Löschen dieser Klausur hängt — die Zahlen für den Warnsatz.
+ *
+ * ── Warum das nicht `vorratZuKlausur()` sein kann ────────────────────────────
+ *
+ * Die Funktion in proposals.ts zählt Bausteine über die SEITEN des
+ * Klausurstoffs. Das ist dort richtig (der Agent fragt „wie viel ist aus diesem
+ * Stoff schon gebaut?"), hier wäre es falsch: Beim Löschen geht mit, was an der
+ * Klausur HÄNGT — und das entscheidet `exam_id`, nicht die Seite. Ein Baustein
+ * von Hand aus derselben Seite bleibt stehen; einer aus einem Vorschlag, dessen
+ * Seite inzwischen gelöscht wurde, geht trotzdem mit.
+ *
+ * Zurückgezogene werden MITGEZÄHLT: Sie verschwinden genauso, und ein Satz, der
+ * sie verschweigt, nennt eine zu kleine Zahl vor einer Handlung ohne Rückweg.
+ *
+ * Die Versuche stehen bewusst NICHT in dieser Zahl. Sie bleiben (A11,
+ * `recall_attempts.item_id` auf `set null`), und wer sie hier nennte, sagte dem
+ * Menschen, sie gingen mit.
+ */
+export type KlausurAnhang = {
+  /** Bausteine mit dieser Klausur — zurückgezogene mitgezählt */
+  bausteine: number;
+  /** Ihre noch offenen Termine */
+  offeneTermine: number;
+};
+
+export async function anhangZuKlausur(
+  userId: string,
+  examId: string,
+): Promise<KlausurAnhang> {
+  if (!istId(examId)) return { bausteine: 0, offeneTermine: 0 };
+
+  const [zeile] = await db
+    .select({
+      bausteine: countDistinct(recallItems.id),
+      offeneTermine: count(recallSchedule.id),
+    })
+    .from(recallItems)
+    .leftJoin(
+      recallSchedule,
+      and(
+        eq(recallSchedule.itemId, recallItems.id),
+        isNull(recallSchedule.doneAt),
+      ),
+    )
+    .where(and(eq(recallItems.userId, userId), eq(recallItems.examId, examId)));
+
+  return {
+    bausteine: Number(zeile?.bausteine ?? 0),
+    offeneTermine: Number(zeile?.offeneTermine ?? 0),
+  };
 }
 
 /**

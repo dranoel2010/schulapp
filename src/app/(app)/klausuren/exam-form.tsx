@@ -564,6 +564,17 @@ export type ExamDangerZoneProps = {
   examLabel: string;
   /** Wie viele Lernblöcke mit gelöscht werden. */
   blockCount: number;
+  /**
+   * Wie viele Abruf-Bausteine mit gelöscht werden — und ihre offenen Termine.
+   *
+   * Seit dem 15.9.2026 hängen Bausteine aus einem KI-Vorschlag an ihrer Klausur
+   * und gehen mit ihr. Der Satz unten zählt auf, was verschwindet, und wer eine
+   * Zahl nennt, sagt damit: Ich weiß, was hier hängt. Fehlten die Bausteine
+   * darin, wäre die teuerste Arbeit die einzige unbenannte — Musterlösung,
+   * Verwechslungssatz und Zitat sind je Frage von Hand durchgesehen worden.
+   */
+  bausteinCount: number;
+  offeneTermine: number;
   deleteAction: () => Promise<void>;
 };
 
@@ -571,6 +582,8 @@ export type ExamDangerZoneProps = {
 export function ExamDangerZone({
   examLabel,
   blockCount,
+  bausteinCount,
+  offeneTermine,
   deleteAction,
 }: ExamDangerZoneProps) {
   const [confirming, setConfirming] = useState(false);
@@ -584,7 +597,20 @@ export function ExamDangerZone({
             {blockCount > 0
               ? ` der ganze Lernplan mit ${blockCount} ${blockCount === 1 ? "Lernblock" : "Lernblöcken"}`
               : " der Lernplan"}{" "}
-            auch. Rückgängig geht das nicht.
+            auch.
+            {bausteinCount > 0 ? (
+              <>
+                {" "}
+                Dazu {bausteinCount}{" "}
+                {bausteinCount === 1 ? "Baustein" : "Bausteine"} des Abrufs
+                {offeneTermine > 0
+                  ? ` mit ${offeneTermine} offenen ${offeneTermine === 1 ? "Termin" : "Terminen"}`
+                  : ""}
+                . Was du daran schon geübt hast, bleibt im Protokoll stehen —
+                die Fragen selbst sind weg.
+              </>
+            ) : null}{" "}
+            Rückgängig geht das nicht.
           </p>
           <div className="flex flex-wrap gap-2">
             <form action={deleteAction}>

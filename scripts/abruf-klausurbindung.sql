@@ -1,0 +1,57 @@
+-- Der Abruf folgt der Klausur: eine Spalte, ein Fremdschlüssel, ein CASCADE.
+--
+-- Rein additiv. Keine bestehende Zeile wird angefasst, keine Spalte entfernt.
+--
+-- Die Anweisungen unten sind aus `drizzle-kit generate --name abruf-klausurbindung`
+-- herausgeschnitten und nicht von Hand getippt; der Name des Fremdschlüssels ist
+-- damit Zeichen für Zeichen der, den drizzle-kit selbst vergäbe, und ein
+-- späteres `db:push` sieht keinen Unterschied.
+--
+-- ── Warum es das gibt ────────────────────────────────────────────────────────
+--
+-- Auftrag des Nutzers vom 15.9.2026: „wenn die prüfung gelöscht wird muss auch
+-- der abruf weg". Bis dahin überlebten Bausteine das Löschen ihrer Klausur — sie
+-- hängen an Fach und Seite, nicht an der Prüfung —, und zurück blieben Fragen
+-- mit Terminen für eine Klausur, die es nicht mehr gibt. `exam_topics`,
+-- `study_blocks` und `recall_proposals` gingen schon immer mit; die Bausteine
+-- waren die Ausnahme.
+--
+-- Was NICHT mitgeht, ist das Protokoll: `recall_attempts.item_id` steht auf
+-- `set null` (A11). Welche Frage wann saß, überlebt auch das Löschen der
+-- Klausur. Mit dem Baustein verschwinden nur die Frage selbst und ihre offenen
+-- Termine — `recall_schedule.item_id` kaskadiert vom Baustein.
+--
+-- ── Kein Index, und warum nicht ──────────────────────────────────────────────
+--
+-- Ein Fremdschlüssel ohne Index lässt Postgres beim Löschen der Elternzeile
+-- einmal über die Kindtabelle laufen. Diese Kindtabelle hat zwölf Zeilen, und
+-- eine Klausur wird nicht im Sekundentakt gelöscht. Ein Index wäre hier
+-- Nachahmung einer Regel, deren Grund fehlt; die anderen Indexe dieses Moduls
+-- stehen alle an Abfragen, die täglich laufen. Wächst der Bestand in die
+-- Tausende, gehört er nachgetragen — dann mit dem Namen, den drizzle-kit
+-- vergibt (`recall_items_exam_idx`).
+--
+-- ── ⚠ WIE SIE IN DIE LAUFENDE DATENBANK KOMMT ────────────────────────────────
+--
+-- Gegen die lokale Datei-Datenbank (Entwicklungsserver muss AUS sein, zwei
+-- PGlite-Instanzen auf denselben Dateien zerstören sie):
+--
+--   npx tsx scripts/sql-einspielen.ts scripts/abruf-klausurbindung.sql
+--
+-- Auf dem NAS, in einer Transaktion, mit Abbruch beim ersten Fehler:
+--
+--   sudo docker compose exec -T db \
+--     psql -v ON_ERROR_STOP=1 --single-transaction -U schulapp -d schulapp \
+--     < repo/scripts/abruf-klausurbindung.sql
+--
+-- DANACH gehört scripts/abruf-klausurbindung-nachfuellen.sql eingespielt, und
+-- zwar BEVOR jemand eine Prüfung löscht: Die Verbindung der BESTEHENDEN
+-- Bausteine zu ihrer Klausur steht heute nur in den Vorschlagszeilen, und genau
+-- die verschwinden beim Löschen. Ohne das Nachfüllen gilt die neue Regel nur
+-- für Bausteine, die ab jetzt entstehen.
+--
+-- Der Rückbau steht in scripts/abruf-rueckbau.sql und nimmt die Spalte mit der
+-- Tabelle mit; eine eigene Zeile braucht sie dort nicht.
+
+ALTER TABLE "recall_items" ADD COLUMN "exam_id" uuid;
+ALTER TABLE "recall_items" ADD CONSTRAINT "recall_items_exam_id_exams_id_fk" FOREIGN KEY ("exam_id") REFERENCES "public"."exams"("id") ON DELETE cascade ON UPDATE no action;

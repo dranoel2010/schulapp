@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
@@ -32,24 +33,40 @@ import * as schema from "@/db/schema";
  * dort auch nichts verloren.
  */
 
-const ERZEUGT = "drizzle/0000_abruf-tabellen.sql";
+// ALLE Wanderungen, in ihrer Reihenfolge — nicht die erste.
+//
+// Hier stand bis zum 15.9.2026 ein fester Dateiname, und das ging gut, solange
+// es genau eine Wanderung gab. Mit der zweiten (`exam_id` an recall_items) baute
+// die Probe still eine Datenbank von vorgestern: Alles lief, bis ein INSERT auf
+// eine Spalte traf, die es in dieser Fassung nicht gab. Eine Probe, die gegen
+// ein veraltetes Schema prüft, beweist das Falsche.
+const WANDERUNGEN = "drizzle";
 
-let roh: string;
+let dateien: string[];
 try {
-  roh = readFileSync(ERZEUGT, "utf8");
+  dateien = readdirSync(WANDERUNGEN)
+    .filter((name) => name.endsWith(".sql"))
+    .sort();
 } catch {
+  dateien = [];
+}
+
+if (dateien.length === 0) {
   console.error(
-    `Es fehlt ${ERZEUGT}. Erst erzeugen:\n\n  npx drizzle-kit generate --name abruf-tabellen\n`,
+    `In ${WANDERUNGEN}/ liegt keine Wanderung. Erst erzeugen:\n\n  npx drizzle-kit generate --name abruf-tabellen\n`,
   );
   process.exit(1);
 }
 
 const pg = new PGlite();
-for (const anweisung of roh
-  .split("--> statement-breakpoint")
-  .map((t) => t.trim())
-  .filter(Boolean)) {
-  await pg.exec(anweisung);
+for (const datei of dateien) {
+  const roh = readFileSync(path.join(WANDERUNGEN, datei), "utf8");
+  for (const anweisung of roh
+    .split("--> statement-breakpoint")
+    .map((t) => t.trim())
+    .filter(Boolean)) {
+    await pg.exec(anweisung);
+  }
 }
 
 // Vor dem ersten Import von @/recall — danach wäre die Verbindung schon die
@@ -59,6 +76,7 @@ for (const anweisung of roh
   { schema },
 );
 
+const { addDays, daysBetween } = await import("@/lib/dates");
 const { createItem } = await import("@/recall/items");
 const { stoffZuKlausur } = await import("@/recall/source");
 const {
@@ -209,6 +227,27 @@ const angelegt = await createItem(
 );
 pruefe(angelegt.ok, "ein wörtliches Zitat geht durch");
 if (!angelegt.ok) process.exit(1);
+
+// ── Der Baustein bekommt seinen Anlegetag ausdrücklich ──────────────────────
+//
+// `abstandSeitZuletzt()` in sessions.ts fällt beim ERSTEN Abruf auf
+// `recall_items.created_at` zurück — es gibt ja noch keinen früheren Versuch.
+// Diese Spalte trägt `defaultNow()`, also den ECHTEN Tag; die Probe rechnet
+// dagegen mit festem HEUTE. Solange beide nah beieinander lagen, fiel das nicht
+// auf: Am 11. und 12.9.2026 lief die Probe grün, am 15.9. stand der Abstand auf
+// 0 und die Zusage unten war rot — nicht weil der Code kaputt war, sondern weil
+// der Kalender weitergelaufen ist.
+//
+// Eine Probe mit festen Daten darf nicht an der Systemuhr hängen. Der Baustein
+// wird deshalb auf DREI TAGE vor HEUTE datiert — die Geschichte dahinter ist
+// die normale: morgens ins Heft geschrieben, drei Tage später zum ersten Mal
+// abgerufen. Damit ist der Abstand unten eine feste Zahl statt einer
+// Ungleichung.
+const ANGELEGT_AM = addDays(HEUTE, -3);
+await pg.query("update recall_items set created_at = $1 where id = $2", [
+  `${ANGELEGT_AM} 07:00:00+02`,
+  angelegt.id,
+]);
 
 // ── Zusage 2: mindestens vier Begegnungen bis zur Klausur (A6) ──────────────
 
@@ -381,9 +420,14 @@ pruefe(
   protokoll.n === 2 && protokoll.source_page_id === seite.id,
   "jede Antwort trägt ihre Herkunft mit — die Heftseite steht in der Zeile",
 );
+// Die erwartete Zahl wird HERGELEITET und nicht hingeschrieben: Der Baustein
+// ist auf ANGELEGT_AM datiert, der erste Abruf läuft an ERSTER_TERMIN, und
+// dazwischen liegt genau dieser Abstand. Eine feste 6 wäre beim nächsten
+// Eingriff in den Takt still falsch; „> 0" nickte auch bei 1 oder 97.
+const ERWARTETER_ABSTAND = daysBetween(ANGELEGT_AM, ERSTER_TERMIN);
 pruefe(
-  protokoll.gap_days > 0,
-  `der Abstand zur letzten Begegnung ist mitgeschrieben (${protokoll.gap_days} Tage)`,
+  protokoll.gap_days === ERWARTETER_ABSTAND,
+  `der Abstand zur letzten Begegnung ist mitgeschrieben (${protokoll.gap_days} Tage, ${ERWARTETER_ABSTAND} erwartet)`,
 );
 
 // ── Zusage 7: von der Klausur zu ihrem Stoff (der Weg, den der Nutzer will) ──

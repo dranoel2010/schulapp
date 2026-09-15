@@ -321,7 +321,11 @@ export function SubjectDangerZone({
       {confirming ? (
         <div className="space-y-3 rounded-control border border-danger/40 bg-danger-soft p-3.5">
           {/* Die Aufzählung gibt sich als vollständig — dann muss sie es auch
-              sein. `materials.subjectId` hängt mit „cascade“ am Fach, über
+              sein. Seit dem 15.9.2026 gehören die Abruf-Bausteine dazu: Sie
+              hängen an ihrer Klausur, die Klausur hängt am Fach, und damit
+              nimmt ein gelöschtes Fach sie über zwei Ecken mit. Eine Zahl steht
+              hier nicht — die Aufzählung nennt sonst auch keine, und bei einem
+              ganzen Fach wäre sie eine von sieben. `materials.subjectId` hängt mit „cascade“ am Fach, über
               `material_pages` fallen also auch die Aufnahmen weg. Sie stehen
               zuletzt und mit eigenem Satz, weil sie das Einzige sind, was sich
               nicht wiederbeschaffen lässt: eine Note tippt man neu ein, eine
@@ -330,6 +334,8 @@ export function SubjectDangerZone({
             {subjectName} wirklich löschen? Damit ist das Fach weg — und mit ihm
             sofort alle Klausuren samt Lernplan, alle Stundenplan-Einträge, alle
             Hausaufgaben, alle Noten und alle Blätter, die daran hängen. Mit den
+            Klausuren gehen auch die Bausteine des Abrufs, die zu ihnen gebaut
+            wurden, samt ihren Terminen. Mit den
             Blättern gehen auch ihre Aufnahmen, und ein zweites Mal abfotografieren
             lässt sich eine Tafel von letzter Woche nicht. Rückgängig geht das
             nicht. Wer nur ein abgewähltes Fach loswerden will, archiviert es:

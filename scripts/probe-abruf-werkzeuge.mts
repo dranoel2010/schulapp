@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
@@ -38,24 +39,40 @@ import * as schema from "@/db/schema";
  * unter .data/pglite wird nicht angefasst.
  */
 
-const ERZEUGT = "drizzle/0000_abruf-tabellen.sql";
+// ALLE Wanderungen, in ihrer Reihenfolge — nicht die erste.
+//
+// Hier stand bis zum 15.9.2026 ein fester Dateiname, und das ging gut, solange
+// es genau eine Wanderung gab. Mit der zweiten (`exam_id` an recall_items) baute
+// die Probe still eine Datenbank von vorgestern: Alles lief, bis ein INSERT auf
+// eine Spalte traf, die es in dieser Fassung nicht gab. Eine Probe, die gegen
+// ein veraltetes Schema prüft, beweist das Falsche.
+const WANDERUNGEN = "drizzle";
 
-let roh: string;
+let dateien: string[];
 try {
-  roh = readFileSync(ERZEUGT, "utf8");
+  dateien = readdirSync(WANDERUNGEN)
+    .filter((name) => name.endsWith(".sql"))
+    .sort();
 } catch {
+  dateien = [];
+}
+
+if (dateien.length === 0) {
   console.error(
-    `Es fehlt ${ERZEUGT}. Erst erzeugen:\n\n  npx drizzle-kit generate --name abruf-tabellen\n`,
+    `In ${WANDERUNGEN}/ liegt keine Wanderung. Erst erzeugen:\n\n  npx drizzle-kit generate --name abruf-tabellen\n`,
   );
   process.exit(1);
 }
 
 const pg = new PGlite();
-for (const anweisung of roh
-  .split("--> statement-breakpoint")
-  .map((t) => t.trim())
-  .filter(Boolean)) {
-  await pg.exec(anweisung);
+for (const datei of dateien) {
+  const roh = readFileSync(path.join(WANDERUNGEN, datei), "utf8");
+  for (const anweisung of roh
+    .split("--> statement-breakpoint")
+    .map((t) => t.trim())
+    .filter(Boolean)) {
+    await pg.exec(anweisung);
+  }
 }
 
 (globalThis as unknown as { __schulappDb?: unknown }).__schulappDb = drizzle(pg, {
@@ -587,6 +604,105 @@ pruefe(
 pruefe(
   bericht !== null && bericht.fragen.some((f) => !f.uebernommen && !f.abgewaehlt),
   "und er unterscheidet die abgewiesene Frage von einer abgewählten, ohne im Text zu suchen",
+);
+
+// ── Die Klausur löschen: was mitgeht und was bleibt ────────────────────────
+//
+// Der Auftrag des Nutzers vom 15.9.2026: „wenn die prüfung gelöscht wird muss
+// auch der abruf weg". Hier steht die Gegenprobe dazu — und zwar in beide
+// Richtungen, denn die zweite ist die teurere: Das PROTOKOLL darf nicht
+// mitgehen (A11), sonst wäre jede Auswertung über gelöschte Klausuren hinweg
+// dahin.
+
+console.log("\nWenn die Klausur gelöscht wird:");
+
+const { anhangZuKlausur, createItem } = await import("@/recall/items");
+const { urteilFesthalten, versuchFesthalten } = await import("@/recall/sessions");
+
+const anhang = await anhangZuKlausur(nutzer.id, pruefung.id);
+pruefe(
+  anhang.bausteine === 2 && anhang.offeneTermine > 0,
+  `am Löschen hängen ${anhang.bausteine} Bausteine mit ${anhang.offeneTermine} offenen Terminen — die Zahlen für den Warnsatz`,
+);
+
+// Ein Baustein VON HAND, ohne Klausur: Er muss das Löschen überleben, denn er
+// wurde nicht für diese Prüfung gemacht.
+const vonHand = await createItem(
+  nutzer.id,
+  {
+    pageId: seiteKette,
+    subjectId: mathe.id,
+    promptFree: "Von Hand angelegt, gehört keiner Klausur",
+    solution: "Bleibt stehen.",
+    misconception: "Wird mit einem Vorschlag verwechselt.",
+    sourceQuote: "Man leitet also die äußere Funktion ab",
+  },
+);
+pruefe(vonHand.ok, "ein Baustein von Hand lässt sich anlegen");
+
+// Einmal wirklich üben, bevor gelöscht wird — sonst prüft die Zusage zum
+// Protokoll weiter unten gegen null Versuche und wäre immer grün. Der erste
+// Termin liegt drei Tage voraus, also wird er hier direkt genommen statt über
+// `faelligHeute()`.
+const { rows: [einTermin] } = await pg.query<{ id: string; item_id: string }>(
+  `select s.id, s.item_id from recall_schedule s
+     join recall_items i on i.id = s.item_id
+    where i.exam_id is not null and s.done_at is null
+    order by s.due_on limit 1`,
+);
+
+const geuebt = await versuchFesthalten(nutzer.id, {
+  scheduleId: einTermin.id,
+  itemId: einTermin.item_id,
+  answerText: "Eine Antwort, die im Protokoll bleiben muss.",
+});
+pruefe(geuebt.ok, "an einem Baustein der Klausur wird einmal geübt");
+if (geuebt.ok) await urteilFesthalten(nutzer.id, geuebt.attemptId, true);
+
+const { rows: [vorher] } = await pg.query<{
+  bausteine: number; termine: number; versuche: number;
+}>(
+  `select (select count(*)::int from recall_items) as bausteine,
+          (select count(*)::int from recall_schedule) as termine,
+          (select count(*)::int from recall_attempts) as versuche`,
+);
+
+await pg.query("delete from exams where id = $1", [pruefung.id]);
+
+const { rows: [nachher] } = await pg.query<{
+  bausteine: number; termine: number; versuche: number;
+  mit_klausur: number; ohne_klausur: number;
+}>(
+  `select (select count(*)::int from recall_items) as bausteine,
+          (select count(*)::int from recall_schedule) as termine,
+          (select count(*)::int from recall_attempts) as versuche,
+          (select count(*)::int from recall_items where exam_id is not null) as mit_klausur,
+          (select count(*)::int from recall_items where exam_id is null) as ohne_klausur`,
+);
+
+pruefe(
+  nachher.bausteine === vorher.bausteine - 2,
+  `die zwei Bausteine der Klausur sind weg (${vorher.bausteine} → ${nachher.bausteine})`,
+);
+pruefe(
+  nachher.ohne_klausur === 1 && nachher.mit_klausur === 0,
+  "der von Hand angelegte steht noch — er gehörte keiner Klausur",
+);
+pruefe(
+  nachher.termine < vorher.termine,
+  `ihre Termine sind mitgegangen (${vorher.termine} → ${nachher.termine})`,
+);
+pruefe(
+  nachher.versuche === vorher.versuche && vorher.versuche > 0,
+  `das Protokoll steht unangetastet da: ${nachher.versuche} ${nachher.versuche === 1 ? "Versuch" : "Versuche"} (A11)`,
+);
+
+const { rows: [verwaist] } = await pg.query<{ n: number }>(
+  "select count(*)::int as n from recall_attempts where item_id is null",
+);
+pruefe(
+  verwaist.n > 0,
+  `${verwaist.n} ${verwaist.n === 1 ? "Versuch hat seinen Baustein" : "Versuche haben ihren Baustein"} verloren und steht trotzdem da — item_id auf SET NULL`,
 );
 
 console.log("\nAlles durch.");

@@ -8,6 +8,7 @@ import { formatGerman, todayInBerlin } from "@/lib/dates";
 import { getExam } from "@/lib/exams";
 import { listSubjects } from "@/lib/subjects";
 import { suggestTopicsForExam } from "@/lib/subject-topics";
+import { anhangZuKlausur } from "@/recall/items";
 
 import { deleteExamAction, updateExamAction } from "../actions";
 import { ExamDangerZone, ExamForm } from "../exam-form";
@@ -45,6 +46,12 @@ export default async function ExamPage({
   const { exam, subject, topics, blocks } = detail;
 
   const active = await listSubjects(user.id);
+
+  // Was am Löschen hängt — für den Warnsatz weiter unten. Die vierte Stelle,
+  // an der die Schulapp den Abrufkern kennt (neben Navigation, Startseiten-
+  // Kachel und der Zahl auf /abruf), und sie ist unvermeidlich: Ein Knopf, der
+  // aufzählt, was verschwindet, muss die Bausteine kennen.
+  const anhang = await anhangZuKlausur(user.id, id);
   // Hängt die Prüfung an einem archivierten Fach, fehlte es sonst in der
   // Auswahl — und beim Speichern stünde plötzlich ein anderes Fach dort.
   const subjects = active.some((item) => item.id === subject.id)
@@ -156,6 +163,8 @@ export default async function ExamPage({
       <ExamDangerZone
         examLabel={label}
         blockCount={blocks.length}
+        bausteinCount={anhang.bausteine}
+        offeneTermine={anhang.offeneTermine}
         deleteAction={deleteExamAction.bind(null, exam.id)}
       />
     </div>
