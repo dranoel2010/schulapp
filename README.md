@@ -928,6 +928,47 @@ die Adresse gilt, unter der zugestimmt wurde, braucht er nach dem Umzug eine
 **neue** Zustimmung gegen die NAS-Adresse — die alte zeigt auf Vercel und wird
 nirgends automatisch nachgezogen.
 
+### Vier Wörter vom Handy aus
+
+Die vier Zeilen oben stimmen, aber sie haben zwei Lücken, die erst auffallen,
+wenn kein Rechner da ist: Auf einer Glastastatur sind sie zu lang, und einen
+Rückweg haben sie nicht. Im ganzen Repo stand bis zum 15.9.2026 nirgends, wie
+man einen Stand wieder loswird, den man gerade live geschoben hat.
+
+`scripts/nas.sh` fasst beides zusammen. Es läuft **auf dem NAS** und braucht
+root. Eine Kopie liegt dort als `~/nas.sh`, und das ist kein Luxus: Der Klon
+unter `/volume1/docker/schulapp` gehört root und ist ohne sudo nicht einmal
+lesbar — man käme sonst an das Skript nicht heran, mit dem man ihn aktualisiert.
+
+| Wort | Was es tut |
+|---|---|
+| `stand` | Welcher Commit ist live, laufen die Container, antwortet die App, wann hat der Postbote zuletzt gearbeitet. Ändert nichts. |
+| `hoch` | Pull, Bau, Start — und danach warten, bis die App wirklich antwortet. |
+| `zurueck` | Auf den Stand vor dem letzten `hoch`. |
+| `postbote` | Postbote anschalten, und vorher die liegengebliebene `lauf.lock` wegräumen. |
+
+Drei Dinge darin sind keine Abkürzung, sondern eine Richtigstellung:
+
+**Der Rückweg wird vor dem Pull gemerkt, nicht danach.** `HEAD@{1}` taugt dafür
+nicht — nach einem Pull, der nichts geholt hat, gibt es den Eintrag gar nicht.
+
+**`zurueck` koppelt HEAD ab, mit Absicht.** Ein `reset --hard` auf `main` würde
+beim nächsten Pull kommentarlos wieder auf den kaputten Stand vorspulen. Der
+nächste `hoch` holt HEAD von selbst auf `main` zurück.
+
+**`hoch` taggt das laufende Bild als `<name>:rueckfall`, bevor es baut.** Ein
+Bau, der *scheitert*, ist harmlos: der alte Container läuft weiter. Gefährlich
+ist der Bau, der *gelingt* und eine kaputte App hochbringt — dann hat
+`up -d --build` den Tag längst überschrieben, und das Vorgängerbild liegt nur
+noch namenlos da. Mit dem Tag ist der Rückweg ein Zurücktaggen und ein `up -d`
+ohne `--build`: Sekunden statt eines zweiten Baus.
+
+> **Ungelaufen.** Geschrieben am 15.9.2026 für eine Klassenfahrt, auf der nur
+> ein Telefon dabei ist. Die Syntax ist geprüft, auf dem Mac und auf dem NAS.
+> Ausgeführt wurde keiner der vier Befehle: `sudo` verlangt dort ein Passwort,
+> und der Docker-Socket gehört root. Der erste echte Lauf sollte `stand` sein,
+> weil der nichts ändert.
+
 ### Der Ausfall vom 11.9.2026 — die Freigabe entzieht der Datenbank die Rechte
 
 Am 11.9.2026 antwortete die App ab 17:38 auf **jeder** Seite mit 500. Der
