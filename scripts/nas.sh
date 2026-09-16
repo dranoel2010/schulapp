@@ -30,64 +30,63 @@ ADRESSE=https://treskownas.tail3a40b0.ts.net
 # docker compose (v2) oder docker-compose (v1)? Erst dann nachsehen, wenn es
 # gebraucht wird — sonst kann das Skript nicht einmal seine eigene Hilfe
 # anzeigen, wenn man es versehentlich woanders als auf dem NAS aufruft.
+DOCKER=""
 DC=""
 finde_dc() {
   [ -n "$DC" ] && return 0
-  if docker compose version >/dev/null 2>&1; then
-    DC="docker compose"
+
+  # `sudo` setzt den Suchpfad auf secure_path zurück, und darin fehlt
+  # /usr/local/bin — genau dort liegt docker auf dem NAS. Ohne diese Suche
+  # scheitert jeder Aufruf mit "command not found", obwohl docker da ist.
+  for d in /usr/local/bin/docker /usr/bin/docker /bin/docker; do
+    [ -x "$d" ] && { DOCKER="$d"; break; }
+  done
+  [ -z "$DOCKER" ] && DOCKER=$(command -v docker 2>/dev/null)
+  if [ -z "$DOCKER" ]; then
+    echo "FEHLER: docker nicht gefunden. Läuft das hier wirklich auf dem NAS?" >&2
+    exit 1
+  fi
+
+  if "$DOCKER" compose version >/dev/null 2>&1; then
+    DC="$DOCKER compose"
   elif command -v docker-compose >/dev/null 2>&1; then
     DC="docker-compose"
   else
     echo "FEHLER: weder \"docker compose\" noch \"docker-compose\" gefunden." >&2
-    echo "Läuft dieses Skript wirklich auf dem NAS, und mit sudo?" >&2
     exit 1
   fi
 }
 
-# Antwortet die App von außen? Gibt den HTTP-Code aus.
+# Antwortet die App? Zwei Fragen, die oft verwechselt werden:
+#
+#   innen  — läuft die App auf dem NAS überhaupt? Direkt an ihren Port, ohne
+#            Umweg. Das ist die Frage nach dem Container.
+#   außen  — ist sie über den Funnel erreichbar? Dieser Weg führt vom NAS ins
+#            Internet und durch den Tunnel zurück; er kann scheitern, während
+#            die App tadellos läuft.
+#
 # 200 und 307 sind beide gut — die Startseite leitet weiter.
-erreichbar() {
-  curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$ADRESSE/" 2>/dev/null || echo "000"
+erreichbar_innen() {
+  curl -s -o /dev/null -w "%{http_code}" --max-time 10 http://127.0.0.1:3000/ 2>/dev/null || true
+}
+
+erreichbar_aussen() {
+  curl -4 -s -o /dev/null -w "%{http_code}" --max-time 15 "$ADRESSE/" 2>/dev/null || true
+}
+
+gut() {
+  case "$1" in 200|301|302|307|308) return 0 ;; *) return 1 ;; esac
 }
 
 warte_bis_wach() {
   local i code
   for i in 1 2 3 4 5 6 7 8 9 10; do
-    code=$(erreichbar)
-    case "$code" in
-      200|301|302|307|308) echo "$code"; return 0 ;;
-    esac
+    code=$(erreichbar_innen)
+    if gut "$code"; then echo "$code"; return 0; fi
     sleep 6
   done
-  echo "$code"
+  echo "${code:-000}"
   return 1
-}
-
-# Das laufende Bild festnageln, BEVOR gebaut wird.
-#
-# Ein SCHEITERNDER Bau ist harmlos — der alte Container läuft einfach weiter.
-# Gefährlich ist der Bau, der GELINGT und eine kaputte App hochbringt: dann
-# hat `up -d --build` den Tag schon überschrieben, und das Vorgängerbild liegt
-# nur noch namenlos (<none>) herum. `zurueck` baut es neu, und das kostet im
-# Bus dieselben Minuten ein zweites Mal.
-#
-# Ein Tag kostet nichts und macht den Rückweg zu einer Sache von Sekunden.
-# Klappt es nicht, läuft der Deploy trotzdem weiter: das hier ist die Zugabe,
-# nicht die Absicherung. Die Absicherung ist `zurueck`.
-sichere_bild() {
-  local repo id gesichert
-  gesichert=0
-  while read -r repo id; do
-    [ -z "$repo" ] && continue
-    [ "$repo" = "<none>" ] && continue
-    [ -z "$id" ] && continue
-    if docker tag "$id" "$repo:rueckfall" 2>/dev/null; then
-      echo "  Rückfallbild gesetzt: $repo:rueckfall"
-      gesichert=1
-    fi
-  done <<< "$( cd "$APP" && $DC images 2>/dev/null | awk 'NR>1 {print $2, $4}' )"
-  [ "$gesichert" = "0" ] && echo "  (kein Rückfallbild gesetzt — der Weg über \"zurueck\" bleibt davon unberührt)"
-  return 0
 }
 
 # ---------------------------------------------------------------- stand
@@ -122,18 +121,33 @@ stand() {
 
   echo
   echo "=== Postbote ==="
+  local pcid plaeuft
+  pcid=$( cd "$POST" && $DC ps -q postbote 2>/dev/null | head -1 )
+  plaeuft="nein"
+  [ -n "$pcid" ] && [ "$("$DOCKER" inspect -f '{{.State.Running}}' "$pcid" 2>/dev/null)" = "true" ] && plaeuft="ja"
+
+  # Eine Sperre ist nur dann ein Fund, wenn NIEMAND läuft. Läuft der Dienst,
+  # hält er sie die ganze Zeit — das ist der Normalfall und kein Fehler.
   if [ -f "$POST/harness/lauf.lock" ]; then
-    echo "Sperre:  liegt da (Nummer $(cat "$POST/harness/lauf.lock" 2>/dev/null))"
+    if [ "$plaeuft" = "ja" ]; then
+      echo "Sperre:  gehört dem laufenden Dienst (Nummer $(cat "$POST/harness/lauf.lock" 2>/dev/null)) — in Ordnung"
+    else
+      echo "Sperre:  LIEGENGEBLIEBEN (Nummer $(cat "$POST/harness/lauf.lock" 2>/dev/null)) — \"postbote\" räumt sie weg"
+    fi
   else
     echo "Sperre:  keine"
   fi
+  echo "Läuft:   $plaeuft"
   if [ -f "$POST/harness/gesehen.json" ]; then
     echo "Zuletzt gearbeitet: $(date -r "$POST/harness/gesehen.json" '+%d.%m.%Y %H:%M' 2>/dev/null)"
   fi
 
   echo
-  echo "=== Von außen ==="
-  echo "$ADRESSE  ->  HTTP $(erreichbar)"
+  echo "=== Erreichbar ==="
+  local ci ca
+  ci=$(erreichbar_innen); ca=$(erreichbar_aussen)
+  echo "innen  (127.0.0.1:3000) -> HTTP ${ci:-000}$(gut "$ci" && echo "  ok" || echo "  ACHTUNG")"
+  echo "außen  (Funnel)         -> HTTP ${ca:-000}$(gut "$ca" && echo "  ok" || echo "  ACHTUNG")"
 }
 
 # ----------------------------------------------------------------- hoch
@@ -232,16 +246,46 @@ zurueck() {
 }
 
 # ------------------------------------------------------------- postbote
+#
+# WICHTIG, und am 16.9.2026 teuer gelernt: `lauf.lock` ist NICHT immer Müll.
+# Läuft der Postbote als Dienst, dann hält er sie die ganze Zeit — genau so
+# steht es in harness/README.md. Sie zu entfernen, während er läuft, erlaubt
+# einen zweiten Postboten, und dann liegen zwei Vorschläge am selben Blatt.
+#
+# Container-Prozesse tauchen im `ps` des Synology-Hosts nicht auf. Ein Blick
+# dorthin sagt also NICHT, ob er läuft — gefragt wird Docker, sonst niemand.
 postbote() {
   finde_dc
-  # Dieselbe Falle wie in /volume1/docker/postbote/start.sh: die Sperre
-  # muss WEG, bevor gestartet wird.
+
+  local cid laeuft
+  cid=$( cd "$POST" && $DC ps -q postbote 2>/dev/null | head -1 )
+  laeuft="nein"
+  if [ -n "$cid" ] && [ "$("$DOCKER" inspect -f '{{.State.Running}}' "$cid" 2>/dev/null)" = "true" ]; then
+    laeuft="ja"
+  fi
+
+  if [ "$laeuft" = "ja" ]; then
+    echo "Der Postbote läuft bereits — seit $("$DOCKER" inspect -f '{{.State.StartedAt}}' "$cid" 2>/dev/null | cut -c1-16)."
+    echo "Die Sperre gehört ihm; ich fasse sie nicht an."
+    echo
+    ( cd "$POST" && $DC ps )
+    echo
+    echo "--- letzte Zeilen ---"
+    ( cd "$POST" && $DC logs --tail=15 postbote 2>&1 ) || true
+    echo
+    echo "Leere Runden schreiben nichts. Kein Eintrag heißt: nichts zu tun."
+    return 0
+  fi
+
+  # Er läuft NICHT. Erst jetzt ist eine liegengebliebene Sperre wirklich Müll:
+  # `docker stop` schickt SIGTERM, Node führt keine exit-Handler mehr aus.
   if [ -f "$POST/harness/lauf.lock" ]; then
-    echo "Sperre lag noch da (Nummer $(cat "$POST/harness/lauf.lock" 2>/dev/null)) — entfernt."
+    echo "Er läuft nicht, aber eine Sperre liegt da (Nummer $(cat "$POST/harness/lauf.lock" 2>/dev/null)) — entfernt."
     rm -f "$POST/harness/lauf.lock"
   else
-    echo "Keine liegengebliebene Sperre."
+    echo "Er läuft nicht, und es liegt keine Sperre herum."
   fi
+
   ( cd "$POST" && $DC up -d ) || exit 1
   sleep 8
   echo
