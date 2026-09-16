@@ -70,8 +70,35 @@ erreichbar_innen() {
   curl -s -o /dev/null -w "%{http_code}" --max-time 10 http://127.0.0.1:3000/ 2>/dev/null || true
 }
 
+# Der Funnel von außen — mit einer Eigenheit dieses Heimnetzes.
+#
+# Am 16.9.2026 beantwortete der Router den Funnel-Namen mit NXDOMAIN
+# (DNS-Rebind-Schutz gegen ts.net). Eine Prüfung, die vom NAS aus denselben
+# Router fragt, meldet dann "nicht erreichbar" — und sagt damit nichts über
+# den Funnel, sondern nur über den Router. Genau dieser Fehlalarm stand hier.
+#
+# Deshalb: erst normal fragen, und wenn das scheitert, denselben Namen über
+# einen öffentlichen Resolver nachschlagen und es noch einmal versuchen.
+# Gibt der zweite Versuch eine Antwort, ist der Funnel in Ordnung und nur der
+# Router im Weg. Das Ergebnis kommt als "CODE|Hinweis" zurück.
 erreichbar_aussen() {
-  curl -4 -s -o /dev/null -w "%{http_code}" --max-time 15 "$ADRESSE/" 2>/dev/null || true
+  local name code ip
+  name=${ADRESSE#https://}
+  name=${name%%/*}
+
+  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 12 "$ADRESSE/" 2>/dev/null || true)
+  if gut "$code"; then echo "$code|"; return 0; fi
+
+  ip=$(nslookup "$name" 9.9.9.9 2>/dev/null | awk '/^Address: /{print $2}' | grep -E '^[0-9.]+$' | head -1)
+  if [ -n "$ip" ]; then
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 --resolve "$name:443:$ip" "$ADRESSE/" 2>/dev/null || true)
+    if gut "$code"; then
+      echo "$code|Funnel in Ordnung — nur der Router löst den Namen nicht auf (Rebind-Schutz)"
+      return 0
+    fi
+  fi
+  echo "${code:-000}|wirklich nicht erreichbar"
+  return 1
 }
 
 gut() {
@@ -144,10 +171,12 @@ stand() {
 
   echo
   echo "=== Erreichbar ==="
-  local ci ca
-  ci=$(erreichbar_innen); ca=$(erreichbar_aussen)
+  local ci roh ca hinweis
+  ci=$(erreichbar_innen)
+  roh=$(erreichbar_aussen); ca=${roh%%|*}; hinweis=${roh#*|}
   echo "innen  (127.0.0.1:3000) -> HTTP ${ci:-000}$(gut "$ci" && echo "  ok" || echo "  ACHTUNG")"
   echo "außen  (Funnel)         -> HTTP ${ca:-000}$(gut "$ca" && echo "  ok" || echo "  ACHTUNG")"
+  [ -n "$hinweis" ] && echo "                           $hinweis"
 }
 
 # ----------------------------------------------------------------- hoch
