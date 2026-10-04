@@ -329,7 +329,8 @@ Grund verlangt, steht damit offen: fünf Blätter durchschicken und hinsehen.
 ohne Handgriff. Gebaut wurde dafür weder der Knopf am Korb noch der Aufruf aus
 der App, sondern ein Dritter: **der Postbote** (`harness/`), ein kleines
 Programm auf dem eigenen Rechner. Es sieht alle paar Minuten in den Korb und
-setzt Claude auf jedes Blatt an, das noch keinen Vorschlag hat.
+setzt Claude auf jedes Blatt an, das noch keinen Vorschlag hat. (Seit dem
+4.10.2026 alle 15 Sekunden — mehr dazu am Ende dieses Abschnitts.)
 
 Das hält alles, was oben steht. Die App bekommt keinen Schlüssel und ruft nie
 ein Modell — der Postbote tut es, von außen, durch dieselbe Tür wie die
@@ -345,6 +346,20 @@ braucht beides nicht, denn **der Eingangskorb IST die Warteschlange**: ein Blatt
 ohne Vorschlag ist die offene Aufgabe, und wer eine Runde verpasst, holt sie in
 der nächsten nach. Angestupst wird dabei nichts — die App weiß von ihm nichts,
 und sie soll nichts von ihm wissen.
+
+**Nachtrag vom 4.10.2026: das Foto ist der einzige Handgriff.** Auf Wunsch
+ordnet seitdem die App selbst ein: nach dem Vorschlag des Postboten
+entscheidet **Jev** (TypeSafe, ein Entscheidungsmodell) über Fach und Themen,
+und die App übernimmt — durch dieselbe Tür wie der Knopf im Korb. Und
+**Docling** liest dem Postboten das Gedruckte vor. Damit ruft die App selbst
+zwei Dienste, und der Satz oben („Die App bekommt keinen Schlüssel und ruft
+nie ein Modell") gilt nicht mehr; der Agent darf aber weiterhin nur
+vorschlagen. Der Postbote sieht alle 15 Sekunden nach, wartet bei einem
+leeren Kontingent bis zu 30 Minuten, und Seiten, die an ein schon
+eingeordnetes Blatt angehängt werden, liest er von selbst nach — die fünfzehn
+Altblätter vom August ausdrücklich nicht. Was das Aufrufen nach jeder
+Aufnahme angeht, bleibt es beim Nein: angestupst wird weiter nichts, der Korb
+bleibt die Warteschlange.
 
 Zwei Regeln stehen darüber:
 

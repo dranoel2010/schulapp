@@ -942,6 +942,11 @@ export async function updateProposal(
  * („cascade") — einen Zustand „verworfen" gibt es nicht, und warum, steht an
  * `materialProposals`.
  *
+ * Seit dem 4.10.2026 auch der Weg, auf dem eine übernommene reine Abschrift
+ * aus dem Korb geht (`applyProposal()` mit `nurVorschlag` in
+ * @/lib/inbox-apply): dort fällt genau der übernommene weg, und jeder andere
+ * Vorschlag am Blatt bleibt stehen.
+ *
  * Gesucht wird über den Verbund, gelöscht über die geprüfte id. Ein DELETE
  * kennt keinen Verbund; die Frage nach dem Besitzer steht deshalb eine
  * Anweisung früher. Dass die id zwischen beiden Anweisungen den Besitzer

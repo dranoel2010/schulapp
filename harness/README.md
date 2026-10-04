@@ -1,9 +1,10 @@
 # Der Postbote
 
-Sieht alle paar Minuten in den Eingangskorb der Schulapp und setzt Claude auf
-jedes Blatt an, das noch keinen Vorschlag hat: er liest die Seiten, schlägt
-Fach, Titel und Themen vor — und schreibt ab, was daraufsteht. Vom Foto bis zum
-Vorschlag ohne einen Handgriff.
+Sieht alle 15 Sekunden in den Eingangskorb der Schulapp und setzt Claude auf
+jedes Blatt an, das noch keinen Vorschlag hat: er schreibt ab, was auf den
+Seiten steht, und legt einen Vorschlag mit Titel, Tag und höchstens einem Thema
+an. Fach und Themen entscheidet danach Jev in der App (seit dem 4.10.2026). Vom
+Foto bis zum eingeordneten Blatt ohne einen Handgriff.
 
 **Er gehört nicht zur App.** Die App weiß nichts von ihm, hat keinen Schlüssel
 und ruft nie ein Modell. Der Postbote ist ein Programm auf deinem Rechner, das
@@ -60,19 +61,39 @@ npx tsx harness/postbote.mts               # läuft, bis du Strg-C drückst
 npx tsx harness/postbote.mts --einmal      # eine Runde, dann Schluss
 npx tsx harness/postbote.mts --blatt <id>  # genau dieses Blatt, auch wenn es schon dran war
 npx tsx harness/postbote.mts --intervall 300
+npx tsx harness/postbote.mts --ruhe 60     # ein Blatt erst 60 s nach seiner letzten Seite
 npx tsx harness/postbote.mts --modell sonnet
 ```
 
-So sieht eine Runde aus:
+Ein Blatt ist erst dran, wenn seine letzte Seite 20 Sekunden alt ist
+(`--ruhe`) — sonst liefe der Lauf los, bevor die Rückseite da ist. Gemessen
+wird an `lastPageAt`, das die App mitliefert; `--blatt` wartet nicht, und
+`--einmal` ohne `--ruhe` auch nicht (seit dem 4.10.2026): eine einzelne Runde,
+die ein frisches Blatt nur ansieht und still endet, sähe aus wie „nichts zu
+tun". Wartet ein Blatt doch, steht `1 Blatt/Blätter warten noch auf Ruhe.` da —
+einmal, nicht in jeder Runde.
+
+`--ruhe` und `--intervall` nehmen Sekunden, 0 oder mehr. Alles andere („20s",
+eine fehlende Zahl) bricht den Start ab, bevor die Sperre genommen wird. Bis
+zum 4.10.2026 wurde daraus still NaN, und der Dienst sah in den Korb, ohne je
+etwas zu tun.
+
+So sieht eine Runde aus (die Zahlen sind ein Beispiel):
 
 ```
 16:14:52  Postbote wach. https://treskownas.tail3a40b0.ts.net/api/mcp
 16:14:54  1 Blatt/Blätter zu bearbeiten.
-16:14:54  → e8545329 „Blatt vom 25.8." (Geografie)
-16:16:39     Vorschlag liegt im Korb: Vulkanismus (105 s, entspricht 0.41 $)
+16:14:54  → e8545329 „Blatt vom 25.8." (Mathematik)
+16:16:39     eingeordnet: Geografie — Vulkanismus (105 s, entspricht 0.41 $)
 16:16:39     Abschrift: 2 von 3 Seiten — 1 nicht zu lesen, bleibt offen
-16:16:39     dazu: Seite 3 ist verwackelt; Thema „Vulkanismus" ist im Geografie-Vokabular neu
+16:16:39     dazu: Seite 3 ist verwackelt
+16:16:39     Züge 5, Ausgabe 3.120 Tok (davon Denken 410), Cache gelesen 88.000, API 61 s, Wand 105 s
 ```
+
+„eingeordnet" heißt: Jev hat übernommen, Fach und Themen sind die des Blattes.
+Steht dort „liegt im Korb", wartet der Vorschlag auf dich. Die letzte Zeile ist
+die Messung je Lauf — API-Zeit gegen Wanduhr zeigt, wie viel davon Werkzeuge
+(Docling) und Start waren.
 
 ## Der Käfig
 
@@ -98,46 +119,41 @@ Regel über Erlaubnis, und die Einstellungen des Rechners können sie weiten.
 Wegnehmen schlägt Verbieten.
 
 Dazu: Der Lauf arbeitet in einem leeren, frisch angelegten Verzeichnis, das
-danach gelöscht wird. Und er darf von allen Werkzeugen nur fünf — vier zum
-Lesen (`read_sheet`, `read_page`, `read_subjects`, `read_topics`) und
-`propose_sheet`. Sonst nichts.
+danach gelöscht wird. Und er darf von allen Werkzeugen nur sechs: `read_sheet`,
+`read_page`, `read_docling`, `read_subjects`, `read_topics` und
+`propose_sheet`. Sonst nichts. Der Auftrag braucht davon nur `read_docling`,
+`read_page` und `propose_sheet`; die übrigen bleiben erlaubt, weil ein
+verweigerter Aufruf den ganzen Lauf zu „nichts" machte.
 
-## Das Fach ist seine Aufgabe
+`claude` bekommt `MCP_TOOL_TIMEOUT=200000` mit: Docling darf je Seite bis zu
+180 s rechnen, und wie lange `claude` von sich aus wartet, ist nicht belegt.
 
-Wer fotografiert, soll sich nicht um das Fach kümmern müssen. Die App belegt es
-vor — mit der Stunde, die gerade läuft, sonst mit dem Fach des zuletzt
-fotografierten Blattes —, und das ist eine Vermutung und keine Entscheidung.
-Entschieden wird sie hier: der Lauf liest das Blatt, liest mit `read_subjects`
-die vorhandenen Fächer und schlägt vor, wohin es gehört.
+## Claude schreibt ab, Jev ordnet ein
 
-Gemessen am 25.8.2026, mit drei Blättern, die absichtlich im falschen Fach
-lagen:
+Bis zum 4.10.2026 entschied der Lauf das Fach selbst, mit `read_subjects`. Seit
+dem entscheidet Jev in der App über Fach und Themen, gleich nachdem der
+Vorschlag angelegt ist — warum, steht im Kopf von `src/lib/auto-file.ts`. Der
+Auftrag sagt deshalb ausdrücklich „Lass subject weg" und erlaubt höchstens ein
+Thema, so wie es auf dem Blatt steht. Der Satz trägt Last: ein Fach, dessen
+Schreibweise keines trifft, ließe `propose_sheet` scheitern — und mit ihm die
+Abschrift.
 
-| Blatt | eingetragen | vorgeschlagen |
-|---|---|---|
-| englische Buchzusammenfassung | Mathematik | **Englisch** |
-| französische Vokabelliste | Mathematik | **Französisch** |
-
-`read_subjects` ist dabei nicht optional. Ohne dieses Werkzeug war die ganze
-Fachzuordnung eine Fassade: der Lauf konnte ein Fach vorschlagen, kannte aber
-die Fächer nicht, die es gibt — und `propose_sheet` trifft eine Schreibweise
-nur, wenn sie auf Name oder Kürzel eines vorhandenen Fachs passt. „Erdkunde"
-für ein Fach namens „Geografie" wäre still nichts geworden.
-
-Erkennt er das Fach nicht — eine Seite Handschrift ohne Überschrift, eine
-Tabelle ohne ein einziges Fachwort —, lässt er es stehen und schreibt in die
-Notiz, dass er es nicht bestimmen konnte. Ein geratenes Fach ist schlimmer als
-ein offen gelassenes: das Blatt liegt danach dort, wo es niemand sucht.
+Die Seiten-ids und den eingetragenen Tag gibt der Postbote mit. Er liest das
+Blatt vor jedem Lauf selbst (`read_sheet`) und überspringt es, wenn es
+inzwischen eingeordnet ist — auch bei `--blatt`.
 
 ## Die Abschrift
 
 Seit dem 5.9.2026 schreibt der Lauf zusätzlich ab, was auf den Seiten steht —
 wörtlich, Seite für Seite. Sie reist als `transcripts` im Vorschlag mit und
-wird, wie alles andere daran, erst dann geschrieben, wenn **du** den Vorschlag
-übernimmst.
+wird, wie alles andere daran, erst dann geschrieben, wenn der Vorschlag
+übernommen wird — von Jev oder von dir.
 
-Sie hängt an der **Seite** und nicht am Blatt, weil je Seite gelesen wird
-(`read_page`) und an ein Blatt bis zu zwölf Seiten passen.
+Sie hängt an der **Seite** und nicht am Blatt, weil je Seite gelesen wird und an
+ein Blatt bis zu zwölf Seiten passen. Je Seite ruft der Lauf `read_docling` und
+`read_page` im selben Zug: Docling liefert das Gedruckte (Text, Tabellen,
+Formeln), das Foto die Handschrift — und das Foto ist maßgeblich. Die
+Handschrift einer Seite schreibt er auf, bevor die nächste drankommt.
 
 Was der Auftrag dafür verlangt:
 
@@ -179,17 +195,18 @@ kein Vorschlag.
 
 ### Was sie am Lauf ändert
 
-| | vorher | jetzt |
-|---|---|---|
-| Züge (`--max-turns`) | 20 | **40** |
-| Frist | 3 Minuten | **15 Minuten** |
+| | bis 5.9.2026 | bis 4.10.2026 | jetzt |
+|---|---|---|---|
+| Züge (`--max-turns`) | 20 | 40 | **52** |
+| Frist | 3 Minuten | 15 Minuten | **5 Minuten + 4 je Seite, höchstens 45** |
 
-Die Rechnung steht in `kaefig.mts`: sechzehn Werkzeugaufrufe im dichtesten Fall
-und bis zu zwölf Züge, in denen nur geschrieben wird — dazu 96 000 Zeichen
-Ausgabe, die überschlagen acht Minuten dauern. Beide Zahlen sind gerechnet und
-nicht gemessen; was ein Lauf wirklich braucht, steht in jeder Zeile „Vorschlag
-liegt im Korb (… s)". Mit den alten zwanzig Zügen liefe ein zwölfseitiges Blatt
-mitten in der Abschrift aus — also bevor `propose_sheet` an die Reihe käme.
+Die Rechnung steht in `kaefig.mts` (`MAX_ZUEGE`, `fristFuer()`). Die Züge sind
+für den ungünstigsten Fall gezählt — jeder Aufruf einzeln, read_docling
+mitgerechnet —, denn wer mitten in der Abschrift aus den Zügen läuft, liefert
+nichts ab. Die vier Minuten je Seite sind die 180 s, nach denen die App auf
+Docling nicht mehr wartet, plus rund eine Minute für Claude — geschätzt; was
+ein Lauf wirklich braucht, zeigt die Messzeile darunter. Nachlese von Hand und
+Fragenlauf behalten die festen 15 Minuten.
 
 ## Ein zähes Blatt hält die Runde nicht auf
 
@@ -198,17 +215,29 @@ Postbote die beiden:
 
 | Was passiert | Was er tut |
 |---|---|
-| Kontingent leer (429), API weg, `claude` startet nicht | **Runde abbrechen** — das nächste Blatt liefe in dieselbe Wand |
+| Kontingent leer (429), API weg, `claude` startet nicht | **Runde abbrechen und pausieren** — das nächste Blatt liefe in dieselbe Wand |
 | Die Frist ist abgelaufen | **dieses Blatt überspringen**, weiter mit dem nächsten |
 
 Das Kontingent gehört dem Abo, die Frist gehört dem Blatt: dass dieses eine
 zwölf volle Seiten hat, sagt über das nächste nichts. Mit fünfzehn Minuten
 Frist hätte ein einziges zähes Blatt sonst jede Runde aufgehalten.
 
+Die Pause beginnt bei 5 Minuten und verdoppelt sich bei jeder weiteren Absage
+bis höchstens 30; ein Lauf, der wieder durchkommt, und jeder Neustart setzen
+sie zurück. Sie lebt nur im laufenden Prozess und ist keine zweite
+Warteschlange. Das ersetzt den Schutz, den bis zum 4.10.2026 die drei Blätter
+je Runde boten: bei 15 Sekunden Takt ist der nächste Dreierpack sofort dran.
+
 Gemerkt wird in beiden Fällen nichts — das Blatt ist beim nächsten Durchgang
 wieder dran. Ein Blatt, das jedes Mal in die Frist läuft, kommt allerdings auch
 jedes Mal wieder; es von Hand in `gesehen.json` einzutragen ist der Weg, es
-loszuwerden.
+loszuwerden (die bloße id genügt, der Postbote zieht sie selbst um).
+
+Die nachgereichten Seiten hält es seit dem 4.10.2026 nicht mehr auf. Kam in
+einer Runde kein Lauf aus dem Korb zu einem Ergebnis und gab es keine Pause,
+liest der Postbote den Korb noch einmal und geht danach zur Nachlese — außer
+ein frisches Blatt wartet noch auf seine Ruhe oder ist während der Läufe
+hereingekommen: das geht vor.
 
 ## Nur einer auf einmal
 
@@ -234,10 +263,10 @@ gehört danach von Hand weg, sonst sperrt sie den nächsten Lauf grundlos aus.
 
 ## Was er nicht tut
 
-**Er schreibt nichts in den Bestand.** Er legt Vorschläge an; übernehmen kannst
-nur du, im Formular, wie immer. Das ist dieselbe Regel wie für jeden Agenten an
-dieser App, und der Postbote ist keine Ausnahme davon, sondern ihr erster
-Anwendungsfall.
+**Er schreibt nichts in den Bestand.** Er legt Vorschläge an; übernommen werden
+sie in der App — von Jev nach dessen Regel, sonst von dir im Formular. Das ist
+dieselbe Regel wie für jeden Agenten an dieser App, und der Postbote ist keine
+Ausnahme davon, sondern ihr erster Anwendungsfall.
 
 **Er stupst nichts an und wird nicht angestupst.** Die App ruft ihn nicht — sie
 kennt ihn gar nicht, und eine ausgehende Verbindung zu irgendeinem Dienst hat
@@ -247,8 +276,47 @@ Raspberry. Der Korb ist die Warteschlange: ein Blatt ohne Vorschlag ist die
 offene Aufgabe.
 
 **Er wiederholt sich nicht.** Welche Blätter schon einen Lauf hatten, steht in
-`gesehen.json`. Ohne diese Liste käme ein verworfener Vorschlag beim nächsten
-Durchgang wieder.
+`gesehen.json`, als `korb:<Blatt>:<letzte Seite>` — hängst du ein besseres
+Foto an, ist das Blatt mit dieser Seite ein neuer Fall und kommt wieder dran.
+Dazu, als `nachlese:<Blatt>:<letzte Seite>`, welche nachgereichten Seiten.
+Alte Einträge (nur die id) zieht der Postbote beim nächsten Blick in den Korb
+von selbst um. Ohne diese Liste käme ein verworfener Vorschlag beim
+nächsten Durchgang wieder.
+
+## Nachgereichte Seiten
+
+Seit Jev einordnet, liegt ein Blatt nur Sekunden im Korb. Kommt die Rückseite
+danach („Seite hinzufügen" an einem eingeordneten Blatt), sähe der Korb sie nie.
+Die App nennt solche Seiten deshalb an jedem Blatt beim Namen
+(`unreadAttachedPageIds`, dazu die Zahl `unreadAttachedPages`): ohne Abschrift
+an einem eingeordneten Blatt, und entweder nach dem Einordnen dazugekommen oder
+jünger als eine schon abgeschriebene Seite desselben Blattes. Das Zweite fängt
+die Seite, die WÄHREND eines Laufs dazukam — sie ist älter als das Einordnen,
+aber jünger als die Seiten, die der Lauf abgeschrieben hat.
+
+Ist im Korb nichts zu tun, schreibt der Postbote genau diese Seiten mit dem
+Auftrag der Nachlese ab, höchstens drei Blätter je Runde. Der Auftrag nennt
+die Seiten-ids und sagt ausdrücklich, dass jede andere ungelesene Seite liegen
+bleibt (`nachleseAuftragFuer(id, nurSeiten)`). Einen Vorschlag, der nur
+Abschriften noch ungelesener Seiten nennt, übernimmt die App sofort; alles
+andere bleibt im Korb. Gezählt wird danach an genau diesen Seiten:
+
+```
+16:20:05  1 Blatt/Blätter mit nachgereichten Seiten.
+16:20:05  → 3f0a91c2 „Kettenregel" (Mathematik) — 1 Seite nachgereicht und ungelesen
+16:21:32     abgeschrieben und übernommen: 1 von 1 Seite (87 s, entspricht 0.22 $)
+```
+
+Gesucht wird mit `read_material {nachgereicht: true}` — die App filtert selbst,
+vor ihrer Grenze von zweihundert Zeilen — und höchstens einmal je Minute
+(`NACHLESE_SEKUNDEN`), nicht in jeder Runde. Eine App, die `nachgereicht` oder
+`unreadAttachedPageIds` noch nicht kennt, bekommt keine Nachlese: ohne die
+Liste schriebe der Auftrag jede ungelesene Seite ab.
+
+Die fünfzehn Altblätter vom August bleiben liegen — keine ihrer Seiten hat eine
+Abschrift, und alle sind älter als ihr Einordnen. Ob sie abgeschrieben werden,
+entscheidest du mit `nachlese.mts`. Bekommt ein Altblatt eine neue Seite, wird
+nur diese abgeschrieben.
 
 ## Die Nachlese
 
@@ -292,6 +360,11 @@ Abschrift durch eine ungeprüfte zu ersetzen wäre kein Fortschritt.
 Nach jedem Lauf liest sie den eigenen Vorschlag zurück und sagt, ob er das
 Schweigen gehalten hat. Die Prosa im Auftrag ist eine Bitte; erst diese Zeile
 ist eine Messung.
+
+Seit dem 4.10.2026 übernimmt die App einen Vorschlag, der nichts als
+Abschriften ungelesener Seiten nennt, sofort — bei `--alle` landen die
+Abschriften also ohne Gegenüberstellung am Blatt. Die Nachlese meldet dann
+„von der App übernommen" und zählt die Seiten nach.
 
 ## Der Fragenlauf
 
@@ -423,11 +496,16 @@ fällt niemandem auf, solange man sie nicht liest.
 |---|---|
 | `Kein Zugang unter …` | `npx tsx harness/zugang.mts` läuft noch nicht |
 | `Die Verbindung gilt nicht mehr` | getrennt, abgelaufen oder ein Token doppelt benutzt — neu zustimmen |
-| `Kontingent erschöpft (429)` | das Abo ist für den Moment leer; die Runde hört auf, der nächste Durchgang versucht es wieder |
-| `Frist von 15 Minuten überschritten` | dieses Blatt war zu zäh — es wird übersprungen und ist nächste Runde wieder dran |
-| `Runde abgebrochen: …` | nicht das Blatt ist schuld, sondern der Dienst: Kontingent, API oder `claude` selbst |
+| `Pause bis 14:35: Kontingent erschöpft (429)` | das Abo ist für den Moment leer; die Runde hört auf, gefragt wird erst wieder zur genannten Uhrzeit (5 Minuten, verdoppelt bis 30). Ein Neustart setzt die Pause zurück |
+| `Pause bis …: …` mit anderem Grund | nicht das Blatt ist schuld, sondern der Dienst: API oder `claude` selbst |
+| `Frist von N Minuten überschritten` | dieses Blatt war zu zäh — es wird übersprungen und ist nächste Runde wieder dran |
+| `Diese Runde ging schief: …` | steht nur einmal da, solange derselbe Fehler bleibt; `Die Runde ging wieder durch.` sagt, wann er vorbei ist |
 | `claude antwortete nicht in JSON` | meistens: nicht angemeldet oder eine andere Fassung von `claude` |
 | `Abschrift: 2 von 3 Seiten` | eine Seite war nicht zu lesen; sie gilt weiter als ungelesen — neu abfotografieren |
+| `--ruhe erwartet eine Zahl von Sekunden …` | Tippfehler beim Start (`20s`, Zahl vergessen); der Postbote ist gar nicht erst angelaufen |
+| `2 Blatt/Blätter warten noch auf Ruhe.` | ihre letzte Seite ist jünger als `--ruhe`; sie sind dran, sobald nichts mehr nachkommt. Steht einmal da, nicht jede Runde |
+| `Nachgereichte Seiten bleiben liegen — read_material sagt: …` | die App kennt `nachgereicht` noch nicht — sie ist älter als der Postbote. App aktualisieren |
+| `⚠ dazu ist 1 Seite gelesen, die nicht im Auftrag stand` | der Lauf hat eine Seite mit abgeschrieben, die er nicht anfassen sollte — und die App hat sie übernommen. Sieh nach, ob es ein Altblatt war |
 | `Port 41751 ist belegt` | dort lauscht etwas anderes; die Rückadresse ist angemeldet und lässt sich nicht ausweichen |
 | `Es läuft schon ein Postbote` | genau das — die Nummer steht daneben, `kill` sie oder lass den anderen laufen |
 | `Der Lauf wollte etwas, das er nicht darf` | der Käfig hat zugeschlagen — steht auf dem Blatt eine Anweisung? |

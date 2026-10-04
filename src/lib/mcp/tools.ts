@@ -220,7 +220,7 @@ export const TOOLS = {
   read_material: {
     title: "Ablage durchsuchen",
     description:
-      "Abfotografierte Blätter, das neueste zuerst: id, Titel, Schultag, Fach, Themen, wie viele Seiten und `firstPageId` für read_page. Ohne Filter die ganze Ablage; mit `topic` beantwortet dieses Werkzeug „was habe ich zur Kettenregel?“.",
+      "Abfotografierte Blätter, das neueste zuerst: id, Titel, Schultag, Fach, Themen, wie viele Seiten und `firstPageId` für read_page. Ohne Filter die ganze Ablage; mit `topic` beantwortet dieses Werkzeug „was habe ich zur Kettenregel?“. Mit `nachgereicht: true` nur eingeordnete Blätter, an denen nachgereichte Seiten noch ohne Abschrift sind — deren ids stehen je Zeile in `unreadAttachedPageIds`.",
     readOnly: true,
     args: z
       .object({
@@ -241,6 +241,15 @@ export const TOOLS = {
           .max(LIST_LIMIT)
           .optional()
           .describe(`Wie viele Blätter höchstens. Vorgabe und Grenze: ${LIST_LIMIT}.`),
+        // Nur `true` und nicht `boolean`: `false` hieße dasselbe wie das
+        // Weglassen, und zwei Schreibweisen für dieselbe Frage laden ein
+        // Modell nur zum Raten ein.
+        nachgereicht: z
+          .literal(true)
+          .optional()
+          .describe(
+            "Nur eingeordnete Blätter mit nachgereichten, noch ungelesenen Seiten — gefiltert vor der Grenze, also auch ältere Blätter.",
+          ),
       })
       .strict(),
   },

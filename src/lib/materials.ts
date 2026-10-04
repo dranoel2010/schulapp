@@ -4,11 +4,17 @@ import {
   desc,
   eq,
   exists,
+  gt,
   gte,
   inArray,
   isNotNull,
+  isNull,
+  lt,
   lte,
+  or,
   sql,
+  type AnyColumn,
+  type SQL,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
@@ -443,6 +449,17 @@ type ListOptions = {
   topicId?: string;
   limit?: number;
   order?: "schultag" | "aufnahme";
+  /**
+   * Nur eingeordnete Blätter mit mindestens einer nachgereichten, ungelesenen
+   * Seite (`nachgereichtUngelesen()`).
+   *
+   * Für den Postboten, seit dem 4.10.2026 (`read_material` mit
+   * `nachgereicht: true`). Gefiltert wird in der Abfrage und VOR dem `limit`:
+   * hinterher aus den zweihundert neuesten Blättern auszusieben hieße, dass
+   * ein älteres Blatt mit nachgereichter Rückseite hinter der Grenze läge und
+   * nie an die Reihe käme. Sortierung und übrige Filter bleiben dieselben.
+   */
+  nachgereicht?: boolean;
 };
 
 /**
@@ -1051,11 +1068,23 @@ export type NewPageTranscript = {
  * weggeworfen. Null heißt dasselbe für ein Blatt, das es nicht gibt; die Stelle,
  * die diese Funktion ruft, weiß das schon, weil `updateMaterial()` davor `true`
  * gesagt hat.
+ *
+ * **`nurUngelesene` schreibt nur auf Seiten, die noch keine Abschrift haben**
+ * (seit dem 4.10.2026). Die Bedingung `transcript is null` steht dann im
+ * `update` selbst und nicht in einer Frage davor: das Übernehmen ohne Mensch
+ * (@/lib/auto-file) prüft zwar vorher, dass der Vorschlag nur ungelesene Seiten
+ * nennt, aber zwischen Prüfen und Schreiben kann ein Mensch oder ein zweiter
+ * Lauf dieselbe Seite schon abgeschrieben haben — und die ungeprüfte Abschrift
+ * ersetzte dann still eine bestätigte. So bleibt die stehen, und gezählt wird
+ * nur, was wirklich geschrieben wurde. Ohne die Option schreibt die Funktion
+ * wie bisher jede genannte Seite; das Formular und die Knöpfe im Korb ersetzen
+ * mit Absicht.
  */
 export async function setMaterialTranscripts(
   userId: string,
   materialId: string,
   transcripts: NewPageTranscript[],
+  options?: { nurUngelesene?: boolean },
 ): Promise<number> {
   if (!isId(materialId)) return 0;
   if (transcripts.length === 0) return 0;
@@ -1132,6 +1161,9 @@ export async function setMaterialTranscripts(
           and(
             eq(materialPages.id, page.id),
             eq(materialPages.materialId, materialId),
+            options?.nurUngelesene
+              ? isNull(materialPages.transcript)
+              : undefined,
           ),
         )
         .returning({ id: materialPages.id });
@@ -1204,6 +1236,227 @@ export async function listMaterialTranscripts(
     )
     .where(eq(materialPages.materialId, materialId))
     .orderBy(asc(materialPages.sortOrder), asc(materialPages.createdAt));
+}
+
+/**
+ * Ist diese Seite eine nachgereichte, die noch niemand gelesen hat?
+ *
+ * Die eine Fassung der Regel, als SQL-Bedingung über eine Zeile aus
+ * `material_pages` (`seite`, gern unter einem Aliasnamen) und die Zeile aus
+ * `materials`, die in der umgebenden Abfrage steht. Zwei Stellen fragen
+ * danach — `listPageActivity()` je Seite und der Filter `nachgereicht` in
+ * `listRows()` je Blatt —, und zwei getippte Fassungen wären genau die Stelle,
+ * an der die Liste ein Blatt nennt und die Zeile darin 0 Seiten zählt.
+ *
+ * Nachgereicht und ungelesen heißt, seit dem 4.10.2026:
+ *
+ * - die Seite hat keine Abschrift (`transcript is null` — `""` heißt
+ *   gelesen),
+ * - das Blatt ist eingeordnet (`filed_at` gesetzt; im Korb liest der Postbote
+ *   ohnehin das ganze Blatt),
+ * - UND entweder kam die Seite nach dem Einordnen dazu (`created_at >
+ *   filed_at`), ODER an demselben Blatt gibt es eine gelesene Seite, die vor
+ *   ihr aufgenommen wurde.
+ *
+ * Der zweite Zweig ist der Grund, warum die Regel nicht mehr in einer Zeile
+ * steht. Hängt jemand die Rückseite an, WÄHREND der Postbote die Vorderseite
+ * abschreibt, entsteht sie vor dem Einordnen: `created_at < filed_at`, und nach
+ * der ersten Fassung (nur `created_at > filed_at`) käme sie nie an die Reihe.
+ * Erkennbar ist sie trotzdem — sie ist jünger als eine Seite, die schon
+ * gelesen ist. Eine Seite, die beim Abschreiben ungelesen blieb, obwohl eine
+ * ältere gelesen wurde, fällt in denselben Zweig und bekommt damit einen
+ * zweiten Versuch.
+ *
+ * Die Altblätter bleiben dabei draußen, und das ist die Absicht dahinter: die
+ * fünfzehn Blätter von vor der Abschrift wurden im August eingeordnet, ohne
+ * dass eine einzige Seite gelesen wurde. Der zweite Zweig greift an ihnen nie,
+ * und der erste nur für eine Seite, die nach dem Einordnen dazukam. Ihre alten
+ * Seiten schreibt nach dem Willen des Nutzers niemand von selbst ab — wer sie
+ * will, ruft harness/nachlese.mts von Hand. Auch eine gelesene NACHGEREICHTE
+ * Seite ändert daran nichts: sie ist jünger als die alten, nicht älter.
+ *
+ * „Vor ihr" heißt nach `created_at` und nicht nach `sort_order`. Gefragt ist,
+ * was beim Abschreiben schon da war, und nicht, wo die Seite im Blatt steht.
+ */
+function nachgereichtUngelesen(seite: {
+  materialId: AnyColumn;
+  transcript: AnyColumn;
+  createdAt: AnyColumn;
+}): SQL {
+  const frueher = alias(materialPages, "frueher_gelesen");
+
+  return and(
+    isNull(seite.transcript),
+    isNotNull(materials.filedAt),
+    or(
+      gt(seite.createdAt, materials.filedAt),
+      exists(
+        db
+          .select({ vorhanden: sql`1` })
+          .from(frueher)
+          .where(
+            and(
+              eq(frueher.materialId, seite.materialId),
+              isNotNull(frueher.transcript),
+              lt(frueher.createdAt, seite.createdAt),
+            ),
+          ),
+      ),
+    ),
+  ) as SQL;
+}
+
+/**
+ * Wann die jüngste nachgereichte, ungelesene Seite des Blattes aus der
+ * umgebenden Abfrage hochgeladen wurde — der Sortierschlüssel im Filter
+ * `nachgereicht` (4.10.2026).
+ *
+ * Nach Schultag sortiert, wie die Ablage sonst, hielten Blätter, deren
+ * nachgereichte Seite unlesbar bleibt, ihren Platz für immer — und eine
+ * frisch angehängte Rückseite an einem älteren Blatt rutschte irgendwann
+ * hinter das `limit`. So steht die zuletzt angehängte Seite immer vorn.
+ * Dieselbe Regel wie im Filter, damit Ordnung und Auswahl nicht
+ * auseinanderlaufen; NULL kann es hier nicht geben, das `exists()` daneben
+ * verlangt mindestens eine solche Seite.
+ */
+function juengsteNachgereichte(): SQL {
+  const seite = alias(materialPages, "nachgereicht_juengste");
+
+  return sql`(${db
+    .select({ juengste: sql`max(${seite.createdAt})` })
+    .from(seite)
+    .where(
+      and(eq(seite.materialId, materials.id), nachgereichtUngelesen(seite)),
+    )})`;
+}
+
+/**
+ * Die nachgereichten, ungelesenen Seiten des Blattes aus der umgebenden
+ * Abfrage — als Unterabfrage für `exists()` im Filter `nachgereicht`.
+ *
+ * Unter eigenem Namen, weil `materials` dort die äußere Tabelle ist und
+ * `nachgereichtUngelesen()` darin noch einmal `material_pages` aufruft.
+ */
+function nachgereichteSeiten() {
+  const seite = alias(materialPages, "nachgereicht");
+
+  return db
+    .select({ vorhanden: sql`1` })
+    .from(seite)
+    .where(
+      and(eq(seite.materialId, materials.id), nachgereichtUngelesen(seite)),
+    );
+}
+
+/**
+ * Wann an einem Blatt zuletzt eine Seite dazukam, und welche der
+ * nachgereichten Seiten noch niemand gelesen hat.
+ *
+ * Für den Postboten, seit dem 4.10.2026. `read_inbox` und `read_material`
+ * tragen alles drei je Zeile:
+ *
+ * - `lastPageAt` ist die jüngste Seite des Blattes. Daran sieht der Postbote,
+ *   ob ein Blatt noch wächst — die Rückseite kommt über „Seite hinzufügen“
+ *   erst nach der Vorderseite —, und wartet, bis es zur Ruhe gekommen ist.
+ * - `unreadAttachedPageIds` sind die nachgereichten Seiten ohne Abschrift, in
+ *   der Reihenfolge des Blattes; was das genau heißt und warum die Altblätter
+ *   dabei leer ausgehen, steht an `nachgereichtUngelesen()`. Ein eingeordnetes
+ *   Blatt liegt nicht mehr im Korb, und eine nachgereichte Rückseite käme sonst
+ *   nie an die Reihe. Die ids und nicht nur die Zahl: der Postbote schreibt
+ *   GENAU diese Seiten ab und keine andere ungelesene daneben — sonst nähme die
+ *   Nachlese einer Rückseite die alten Seiten eines Altblattes gleich mit.
+ * - `unreadAttachedPages` ist die Länge dieser Liste. Sie bleibt für Leser,
+ *   die nur zählen; gerechnet wird sie aus der Liste und nicht ein zweites Mal
+ *   in SQL, damit die beiden nie verschieden sein können.
+ *
+ * Eine eigene Abfrage und nicht ein Feld an `MaterialListItem`: die Ablage,
+ * die Startseite und die Kamera-Seite zeigen nichts davon, und eine Spalte,
+ * die zweihundertmal geholt und keinmal gelesen wird, ist der falsche Preis —
+ * dieselbe Rechnung wie bei `filedAt` an `MaterialDetail`. Gezahlt wird nur an
+ * den beiden Werkzeugen: eine gruppierte Abfrage über die ids der fertigen
+ * Liste, so viele Parameter wie dort, also höchstens `LIST_LIMIT`. Die Frage
+ * nach einer älteren gelesenen Seite steht als Unterabfrage im Filter des
+ * Aggregats; sie läuft je ungelesener Seite über den Index auf `material_id`
+ * und nicht je Blatt als eigene Anweisung.
+ *
+ * Beides kommt als TEXT, damit beide Treiber dasselbe herausgeben (PGlite
+ * lokal, postgres-js auf dem NAS):
+ *
+ * - Der Zeitpunkt in UTC über `to_char()`, wie der Cursor des Exports
+ *   (`TranscriptCursor.createdAt`). Ein `max()` hat keinen Spaltentyp mehr,
+ *   den drizzle umrechnen könnte, und die Treiber gäben ihn sonst verschieden
+ *   heraus — einmal als `Date`, einmal als Zeichenkette in der Form von
+ *   Postgres. Millisekunden reichen hier: es geht um Sekunden Ruhe, nicht um
+ *   einen Cursor.
+ * - Die ids als eine Zeichenkette mit Komma dazwischen (`string_agg`) und
+ *   nicht als Array. Ein `uuid[]` aus `array_agg` reicht jeder Treiber anders
+ *   weiter — als Array, als Zeichenkette in Postgres' Klammerform, je nachdem,
+ *   ob er den Typ kennt —, und eine uuid enthält kein Komma, das man beim
+ *   Teilen verwechseln könnte (`seitenIds()`).
+ */
+export type PageActivity = {
+  /** ISO 8601 in UTC, „2026-10-04T09:41:07.123Z". */
+  lastPageAt: string;
+  /** Die nachgereichten Seiten ohne Abschrift, in der Reihenfolge des Blattes. */
+  unreadAttachedPageIds: string[];
+  /** Wie viele das sind — immer `unreadAttachedPageIds.length`. */
+  unreadAttachedPages: number;
+};
+
+export async function listPageActivity(
+  userId: string,
+  materialIds: string[],
+): Promise<Map<string, PageActivity>> {
+  const result = new Map<string, PageActivity>();
+  // Eine kaputte id quittierte Postgres mit einem Typfehler; sie hat ohnehin
+  // keine Seiten und fehlt damit in der Antwort wie jedes unbekannte Blatt.
+  const ids = materialIds.filter(isId);
+  if (ids.length === 0) return result;
+
+  const rows = await db
+    .select({
+      materialId: materialPages.materialId,
+      lastPageAt: sql<string>`to_char(max(${materialPages.createdAt}) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
+      // Die Reihenfolge ist die von `getMaterial()` und `read_sheet`, mit der
+      // id als letztem Schlüssel, damit sie auch bei Gleichstand feststeht.
+      // Ohne eine einzige passende Seite gibt `string_agg` NULL — daraus wird
+      // hier gleich die leere Zeichenkette und in `seitenIds()` die leere
+      // Liste.
+      unreadAttachedPageIds: sql<string>`coalesce(string_agg(${materialPages.id}::text, ',' order by ${materialPages.sortOrder}, ${materialPages.createdAt}, ${materialPages.id}) filter (where ${nachgereichtUngelesen(materialPages)}), '')`,
+    })
+    .from(materialPages)
+    .innerJoin(
+      materials,
+      and(
+        eq(materials.id, materialPages.materialId),
+        eq(materials.userId, userId),
+      ),
+    )
+    .where(inArray(materialPages.materialId, ids))
+    .groupBy(materialPages.materialId);
+
+  for (const row of rows) {
+    const ids = seitenIds(row.unreadAttachedPageIds);
+
+    result.set(row.materialId, {
+      lastPageAt: row.lastPageAt,
+      unreadAttachedPageIds: ids,
+      unreadAttachedPages: ids.length,
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Die ids aus `string_agg(…, ',')` wieder als Liste.
+ *
+ * Leer, wenn nichts dasteht — `"".split(",")` gäbe `[""]`, also eine Seite
+ * ohne id, und der Postbote suchte nach ihr. Exportiert für den Test.
+ */
+export function seitenIds(text: string | null | undefined): string[] {
+  if (!text) return [];
+  return text.split(",").filter((id) => id !== "");
 }
 
 /**
@@ -1617,6 +1870,62 @@ export async function readPageImage(
 }
 
 /**
+ * Die nächste ungelesene Seite desselben Blattes — für das Vorauslesen in
+ * `read_docling`.
+ *
+ * „Nächste" in der Reihenfolge von `getMaterial()`: nach `sortOrder`, dann nach
+ * dem Zeitpunkt der Aufnahme, und bei völligem Gleichstand nach der id, damit
+ * die Antwort feststeht. „Ungelesen" heißt `transcript is null` — eine Seite mit
+ * Abschrift schreibt niemand noch einmal ab, und Docling für sie zu bemühen
+ * kostete den Prozessor des NAS Rechenzeit für nichts.
+ *
+ * Die aktuelle Seite kommt über einen zweiten Namen derselben Tabelle in die
+ * Abfrage; ihr Blatt muss dem Nutzer gehören, sonst gibt es keine nächste.
+ * `null` heißt: es gibt keine — die Seite war die letzte ungelesene, oder es
+ * gibt sie gar nicht.
+ */
+export async function nextUnreadPage(
+  userId: string,
+  pageId: string,
+): Promise<string | null> {
+  if (!isId(pageId)) return null;
+
+  const current = alias(materialPages, "current_page");
+
+  const [row] = await db
+    .select({ id: materialPages.id })
+    .from(materialPages)
+    .innerJoin(
+      materials,
+      and(
+        eq(materials.id, materialPages.materialId),
+        eq(materials.userId, userId),
+      ),
+    )
+    .innerJoin(
+      current,
+      and(
+        eq(current.id, pageId),
+        eq(current.materialId, materialPages.materialId),
+      ),
+    )
+    .where(
+      and(
+        isNull(materialPages.transcript),
+        sql`(${materialPages.sortOrder}, ${materialPages.createdAt}, ${materialPages.id}) > (${current.sortOrder}, ${current.createdAt}, ${current.id})`,
+      ),
+    )
+    .orderBy(
+      asc(materialPages.sortOrder),
+      asc(materialPages.createdAt),
+      asc(materialPages.id),
+    )
+    .limit(1);
+
+  return row?.id ?? null;
+}
+
+/**
  * Welche der drei bytea-Spalten eine Fassung meint.
  *
  * Eine eigene Funktion und kein Ausdruck mitten in der Abfrage: mit drei
@@ -1730,12 +2039,18 @@ async function listRows(
         topic
           ? inArray(materials.id, materialIdsForTopic(userId, topic))
           : undefined,
+        // Als Unterabfrage und nicht als Verbund, aus demselben Grund wie beim
+        // Themen-Filter: ein Blatt mit zwei nachgereichten Seiten stünde sonst
+        // zweimal da, und das `limit` zählte Seiten statt Blätter.
+        options?.nachgereicht ? exists(nachgereichteSeiten()) : undefined,
       ),
     )
     .orderBy(
-      ...(options?.order === "aufnahme"
-        ? [desc(materials.createdAt)]
-        : [desc(materials.capturedOn), desc(materials.createdAt)]),
+      ...(options?.nachgereicht
+        ? [sql`${juengsteNachgereichte()} desc`, desc(materials.createdAt)]
+        : options?.order === "aufnahme"
+          ? [desc(materials.createdAt)]
+          : [desc(materials.capturedOn), desc(materials.createdAt)]),
     )
     .limit(clampLimit(options?.limit));
 

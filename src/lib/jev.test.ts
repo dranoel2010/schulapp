@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { readableChars, topicCandidates } from "@/lib/auto-file";
+import {
+  onlyTranscribesAttachedPages,
+  onlyTranscribesUnreadPages,
+  readableChars,
+  topicCandidates,
+} from "@/lib/auto-file";
 import {
   MAX_STATE_CHARS,
   MAX_TOPICS,
@@ -108,5 +113,97 @@ describe("topicCandidates", () => {
       topicCandidates(["Megastadt", "Lieferketten"], ["lieferketten", "Beijing"]),
       ["lieferketten", "Beijing", "Megastadt"],
     );
+  });
+});
+
+describe("onlyTranscribesUnreadPages", () => {
+  /** Ein eingeordnetes Blatt: Seite 1 gelesen, Seite 2 nachgereicht und ungelesen. */
+  const SEITEN = [
+    { pageId: "s1", transcript: "Aufgabe 1" },
+    { pageId: "s2", transcript: null },
+    { pageId: "s3", transcript: "" },
+  ];
+
+  /** Ein Vorschlag, der nur die Abschrift der nachgereichten Seite bringt. */
+  function vorschlag(overrides: Partial<Parameters<typeof onlyTranscribesUnreadPages>[0]> = {}) {
+    return {
+      subjectId: null,
+      title: null,
+      capturedOn: null,
+      note: null,
+      topics: [],
+      transcripts: [{ pageId: "s2" }],
+      ...overrides,
+    };
+  }
+
+  it("lässt die Abschrift einer ungelesenen Seite durch", () => {
+    assert.equal(onlyTranscribesUnreadPages(vorschlag(), SEITEN), true);
+  });
+
+  it("hält jeden Vorschlag auf, der außer der Abschrift noch etwas sagt", () => {
+    for (const anders of [
+      { subjectId: "ma" },
+      { title: "Rückseite" },
+      { capturedOn: "2026-10-01" },
+      { note: "nachgereicht" },
+      { topics: ["Kettenregel"] },
+    ]) {
+      assert.equal(
+        onlyTranscribesUnreadPages(vorschlag(anders), SEITEN),
+        false,
+        JSON.stringify(anders),
+      );
+    }
+  });
+
+  it("ersetzt keine Seite, die schon gelesen ist — auch keine leere", () => {
+    assert.equal(
+      onlyTranscribesUnreadPages(vorschlag({ transcripts: [{ pageId: "s2" }, { pageId: "s1" }] }), SEITEN),
+      false,
+    );
+    assert.equal(
+      onlyTranscribesUnreadPages(vorschlag({ transcripts: [{ pageId: "s3" }] }), SEITEN),
+      false,
+      "„“ heißt gelesen, es stand nichts darauf",
+    );
+  });
+
+  it("hält eine Abschrift zu einer fremden Seite auf", () => {
+    assert.equal(
+      onlyTranscribesUnreadPages(vorschlag({ transcripts: [{ pageId: "anderswo" }] }), SEITEN),
+      false,
+    );
+  });
+
+  it("übernimmt keinen Vorschlag ohne jede Abschrift", () => {
+    assert.equal(onlyTranscribesUnreadPages(vorschlag({ transcripts: [] }), SEITEN), false);
+  });
+});
+
+describe("onlyTranscribesAttachedPages", () => {
+  const nachgereicht = new Set(["p3"]);
+
+  it("lässt eine Abschrift der nachgereichten Seite durch", () => {
+    assert.equal(
+      onlyTranscribesAttachedPages({ transcripts: [{ pageId: "p3" }] }, nachgereicht),
+      true,
+    );
+  });
+
+  it("hält ein Altblatt fest, dessen alte Seiten mit abgeschrieben wurden", () => {
+    // Die Rückseite p3 ist nachgereicht, p1 und p2 sind seit August ungelesen.
+    // Schreibt ein Lauf alle drei ab, entscheidet ein Mensch.
+    assert.equal(
+      onlyTranscribesAttachedPages(
+        { transcripts: [{ pageId: "p1" }, { pageId: "p2" }, { pageId: "p3" }] },
+        nachgereicht,
+      ),
+      false,
+    );
+  });
+
+  it("lässt eine leere Abschrift nicht als Zustimmung durch", () => {
+    assert.equal(onlyTranscribesAttachedPages({ transcripts: [] }, nachgereicht), false);
   });
 });

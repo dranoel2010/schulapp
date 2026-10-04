@@ -36,6 +36,15 @@ import { sperren } from "./sperre.mts";
  * Tür wie für jeden anderen. Was dabei herauskommt, ist ein Vorschlag im Korb
  * — ein Mensch übernimmt ihn, oder er wirft ihn weg.
  *
+ * Seit dem 4.10.2026 mit einer Ausnahme, und sie trifft diese Nachlese fast
+ * nie: nennt der Vorschlag nichts als Abschriften, und ist JEDE genannte
+ * Seite eine nachgereichte (`unreadAttachedPageIds`, die Regel
+ * `nachgereichtUngelesen()` in @/lib/materials), übernimmt die App ihn an
+ * einem eingeordneten Blatt sofort (@/lib/auto-file). Die alten Seiten der
+ * Altblätter erfüllen diese Regel nie — ihre Vorschläge aus `--alle` bleiben
+ * also wie bisher für einen Menschen im Korb. Den automatischen Weg gehen nur
+ * die nachgereichten Seiten, die der Postbote von selbst abschreibt.
+ *
  * **Ohne Angabe tut sie nichts.** Fünfzehn Blätter sind fünfzehn Käfigläufe,
  * und die gehen auf dasselbe Tageskontingent wie der Postbote. Ein Aufruf ohne
  * Argumente zeigt deshalb nur, was anläge; gelaufen wird erst auf `--blatt`
@@ -185,18 +194,23 @@ async function offeneBlaetter(verbindung: Verbindung): Promise<Offen[]> {
  * nicht, und das ist die Grenze dieser Prüfung: sie kann sagen, dass NICHTS
  * ANDERES vorgeschlagen wurde, aber nicht, wie gut abgeschrieben wurde. Das
  * bleibt am Menschen, und dafür ist es sein Vorschlag.
+ *
+ * `null` heißt: im Korb liegt kein Vorschlag zu diesem Blatt. Bis zum
+ * 4.10.2026 war das immer ein Verstoß; seitdem kann es auch heißen, dass die
+ * App einen schweigsamen Vorschlag gleich übernommen hat — das tut sie aber
+ * nur, wenn er ausschließlich nachgereichte Seiten betrifft, bei einem
+ * Altblatt also praktisch nie. Was davon, zählt `nachlesen()` an den Seiten
+ * nach.
  */
 async function schweigenGeprueft(
   verbindung: Verbindung,
   blattId: string,
-): Promise<string[]> {
+): Promise<string[] | null> {
   const antwort = await verbindung.werkzeug("read_inbox", { limit: 200 });
   const zeilen = (antwort.daten ?? []) as KorbZeile[];
   const zeile = zeilen.find((eintrag) => eintrag.id === blattId);
 
-  if (!zeile || zeile.proposals.length === 0) {
-    return ["im Korb liegt kein Vorschlag zu diesem Blatt"];
-  }
+  if (!zeile || zeile.proposals.length === 0) return null;
 
   // Der jüngste ist der aus diesem Lauf. Ältere kann es geben, wenn schon
   // einmal einer angelegt und nicht übernommen wurde; die gehören nicht hierher.
@@ -210,6 +224,23 @@ async function schweigenGeprueft(
   if (vorschlag.topics.length > 0) verstoesse.push("Themen");
 
   return verstoesse;
+}
+
+/** Wie viele Seiten eines Blattes noch ungelesen sind; `null`, wenn unbekannt. */
+async function nochUngelesen(
+  verbindung: Verbindung,
+  blattId: string,
+): Promise<number | null> {
+  try {
+    const antwort = await verbindung.werkzeug("read_sheet", { sheet: blattId });
+    const detail = antwort.daten as BlattDetail | undefined;
+    return detail
+      ? detail.pages.filter((seite) => seite.transcriptChars === null).length
+      : null;
+  } catch (grund) {
+    if (grund instanceof ZugangVerloren) throw grund;
+    return null;
+  }
 }
 
 /**
@@ -272,7 +303,7 @@ async function nachlesen(
   }
 
   sagen(
-    `   Vorschlag liegt im Korb: ${antwort.abschriften} Abschrift(en) ` +
+    `   Vorschlag angelegt: ${antwort.abschriften} Abschrift(en) ` +
       `(${dauer}, entspricht ${kostenUsd.toFixed(2)} $)`,
   );
 
@@ -285,18 +316,35 @@ async function nachlesen(
   // den sie kontrollieren sollte, und das ausgerechnet NACH dem Vorschlag: der
   // lag längst im Korb, die Arbeit war getan und bezahlt. Geht sie schief,
   // bleibt der Vorschlag eben ungeprüft, und das steht als Zeile da.
+  let geprueft = false;
   let verstoesse: string[] | null = null;
   try {
     verstoesse = await schweigenGeprueft(verbindung, offen.blatt.id);
+    geprueft = true;
   } catch (grund) {
     sagen(`   ⚠ nicht geprüft: ${fehlertext(grund)}`);
     sagen(
-      "     Der Vorschlag liegt trotzdem im Korb — ob er nur Abschriften " +
-        "nennt, zeigt dann erst die Gegenüberstellung.",
+      "     Der Vorschlag liegt im Korb oder ist schon übernommen — ob er nur " +
+        "Abschriften nennt, zeigt dann erst ein Blick ins Blatt.",
     );
   }
 
-  if (verstoesse !== null && verstoesse.length > 0) {
+  if (geprueft && verstoesse === null) {
+    // Kein Vorschlag im Korb. Übernommen hat die App ihn nur, wenn er nichts
+    // als Abschriften nannte — dann sind jetzt weniger Seiten ungelesen. Sonst
+    // ist er nie angekommen, und das gehört gesagt.
+    const uebrig = await nochUngelesen(verbindung, offen.blatt.id);
+    if (uebrig !== null && uebrig < offen.ungelesen) {
+      sagen(
+        `   von der App übernommen: ${offen.ungelesen - uebrig} Seite(n) ` +
+          "abgeschrieben — sie übernimmt nur, was nichts als Abschriften nennt.",
+      );
+    } else if (uebrig !== null) {
+      sagen("   ⚠ im Korb liegt kein Vorschlag, und am Blatt ist keine Seite gelesen worden.");
+    } else {
+      sagen("   im Korb liegt kein Vorschlag — ob die App ihn übernommen hat, ließ sich nicht nachsehen.");
+    }
+  } else if (verstoesse !== null && verstoesse.length > 0) {
     sagen(`   ⚠ ACHTUNG: der Vorschlag nennt auch ${verstoesse.join(", ")}.`);
     sagen(
       "     Beim Übernehmen ersetzt das, was am Blatt steht — sieh dir die " +
@@ -448,9 +496,9 @@ async function main(): Promise<void> {
 
   sagen(
     offengeblieben.length === 0
-      ? `Nachlese fertig, alle ${dran.length} Blätter liegen als Vorschlag im Korb.`
-      : `Nachlese fertig: ${dran.length - gescheitert - leer} von ` +
-          `${dran.length} Blättern liegen im Korb, ${offengeblieben.join(", ")}. ` +
+      ? `Nachlese fertig, zu allen ${dran.length} Blättern gibt es einen Vorschlag — übernommen oder im Korb.`
+      : `Nachlese fertig: zu ${dran.length - gescheitert - leer} von ` +
+          `${dran.length} Blättern gibt es einen Vorschlag, ${offengeblieben.join(", ")}. ` +
           "Die übrigen bleiben offen und sind beim nächsten Lauf wieder dran.",
   );
 }

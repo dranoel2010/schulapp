@@ -1,9 +1,23 @@
 import { z } from "zod";
 
 import type { User } from "@/db/schema";
-import { daysBetween, formatGerman, todayInBerlin } from "@/lib/dates";
+import {
+  daysBetween,
+  formatGerman,
+  timeInBerlin,
+  todayInBerlin,
+} from "@/lib/dates";
 import { autoFile, type AutoFileResult } from "@/lib/auto-file";
-import { convertPage, doclingConfigured } from "@/lib/docling";
+import {
+  convertPage,
+  doclingConfigured,
+  doclingFehlschlag,
+  doclingFertig,
+  doclingFor,
+  doclingPausiertBis,
+  trifftDocling,
+  type DoclingResult,
+} from "@/lib/docling";
 import { getExam, listExams } from "@/lib/exams";
 import { formatAverage, gradeLabel } from "@/lib/grade-scale";
 import { gradeSummary, gradesBySubject } from "@/lib/grades";
@@ -19,11 +33,14 @@ import {
   getMaterial,
   listMaterialTranscripts,
   listMaterials,
+  listPageActivity,
+  nextUnreadPage,
   readPageImage,
   resolveMaterialTopic,
   LIST_LIMIT,
   type MaterialListItem,
   type MaterialPageTranscript,
+  type PageActivity,
 } from "@/lib/materials";
 import { listSubjects } from "@/lib/subjects";
 import {
@@ -371,11 +388,23 @@ const HANDLERS: Handlers = {
       ueberschrift = `„${gefunden.treffer.title}“ (${gefunden.fach})`;
     }
 
+    // Nur Blätter mit nachgereichten, ungelesenen Seiten — die Frage des
+    // Postboten (seit dem 4.10.2026). Gefiltert wird in der Abfrage, vor der
+    // Grenze von zweihundert, und Fach und Thema wirken daneben weiter.
+    if (args.nachgereicht) {
+      ueberschrift = `${ueberschrift}, nur eingeordnete Blätter mit nachgereichten ungelesenen Seiten`;
+    }
+
     const sheets = await listMaterials(user.id, {
       subjectId,
       topicId,
       limit: args.limit,
+      nachgereicht: args.nachgereicht === true,
     });
+    const seitenstand = await listPageActivity(
+      user.id,
+      sheets.map((sheet) => sheet.id),
+    );
 
     return daten(
       `${ueberschrift}: ${zahl(sheets.length, "Blatt", "Blätter")}.${grenzeErreicht(
@@ -384,11 +413,20 @@ const HANDLERS: Handlers = {
         LIST_LIMIT,
         "filtere nach Fach oder Thema.",
       )} ${heuteSatz(todayInBerlin())}`,
-      sheets.map(sheetRow),
+      sheets.map((sheet) => listRow(sheet, seitenstand)),
     );
   },
 
   async read_sheet(user, args) {
+    // `lastPageAt` VOR dem Blatt gelesen, nicht danach (4.10.2026). Der
+    // Postbote merkt sich ein Blatt unter diesem Stand und baut seinen Auftrag
+    // aus den Seiten unten. Käme der Stand später, könnte er eine Seite
+    // mitzählen, die unten noch fehlt — und die verschwände hinter dem
+    // Schlüssel, ohne je gelesen zu werden. Früher gelesen ist er höchstens
+    // älter als die Seiten, und dann kommt das Blatt einmal zu viel dran.
+    const aktivitaet = (await listPageActivity(user.id, [args.sheet])).get(
+      args.sheet,
+    );
     const sheet = await getMaterial(user.id, args.sheet);
     if (!sheet) return fehler("Dieses Blatt gibt es nicht.");
 
@@ -410,6 +448,8 @@ const HANDLERS: Handlers = {
       {
         ...sheetRow(sheet),
         filedAt: sheet.filedAt,
+        /** Dieselbe Angabe wie in read_inbox, in derselben Schreibweise. */
+        lastPageAt: aktivitaet?.lastPageAt ?? null,
         pages: sheet.pages.map((page) => ({
           id: page.id,
           sortOrder: page.sortOrder,
@@ -484,41 +524,96 @@ const HANDLERS: Handlers = {
       );
     }
 
-    // Das Vollbild und nicht die Lesefassung: Docling bekommt die Bytes direkt
-    // und nicht durch ein Tool-Ergebnis, die Grenze von rund 100 KB gilt hier
-    // also nicht — und für kleine Schrift zählt jedes Pixel.
-    const page = await readPageImage(user.id, args.page, "voll");
+    // Zuerst die Pause (@/lib/docling, `PAUSE_MS`): ist Docling vorhin
+    // ausgefallen, kostete jede weitere Seite bis zu drei Minuten Warten auf
+    // dasselbe Nichts. Der Satz sagt ausdrücklich „pausiert" und nennt die
+    // Uhrzeit — er landet im Protokoll des Laufs, und dort soll später zu
+    // lesen sein, dass Docling nicht kaputt war, sondern absichtlich ruhte.
+    //
+    // Was schon FERTIG im Vorrat liegt, geht trotzdem hinaus (seit dem
+    // 4.10.2026; vorher stand die Pause vor dem Vorrat und wies auch das ab).
+    // Gelesen ist gelesen, und Docling kostet es nichts mehr. Auf eine
+    // laufende Umrechnung wird in der Pause nicht gewartet, und eine neue
+    // beginnt nicht — `doclingFertig()` stößt nichts an.
+    const start = Date.now();
+    const pausiert = doclingPausiertBis(start);
 
-    if (!page) {
-      return fehler(
-        "Diese Seite gibt es nicht. Die id einer Seite steht in read_sheet unter „pages“ — die id des Blattes ist eine andere.",
-      );
-    }
+    let ergebnis: DoclingResult;
+    let treffer: boolean;
 
-    if (!isAllowedMime(page.mimeType)) {
-      return fehler("Diese Seite trägt ein Format, das die App nicht ausliefert.");
-    }
+    if (pausiert !== null) {
+      const fertig = doclingFertig(user.id, args.page, start);
 
-    try {
-      const ergebnis = await convertPage(page.bytes, page.mimeType);
-
-      if (ergebnis.markdown === "") {
-        return daten(
-          "Docling hat auf dieser Seite nichts Gedrucktes gefunden — vermutlich ist alles Handschrift. Lies sie mit read_page.",
-          { page: args.page, markdown: "" },
+      if (fertig === null) {
+        return fehler(
+          `Docling ist bis ${timeInBerlin(new Date(pausiert))} pausiert (vorhin zu langsam oder nicht erreichbar). Lies die Seite mit read_page.`,
         );
       }
 
-      return daten(
-        `Was Docling auf der Seite liest (${ergebnis.markdown.length} Zeichen, ${ergebnis.seconds.toFixed(1)} s). Gedrucktes, Tabellen und Formeln von hier übernehmen, Handschrift aus read_page ergänzen.`,
-        { page: args.page, markdown: ergebnis.markdown },
+      ergebnis = fertig;
+      treffer = true;
+    } else {
+      // Aus dem Vorrat, wenn die Seite schon umgerechnet wird oder ist — sonst
+      // neu. Seit dem 4.10.2026: Während Claude eine Seite abschreibt, rechnet
+      // Docling schon die nächste (`vorauslesen()`), und die Anfrage danach
+      // findet sie hier fertig vor oder wartet auf die laufende Umrechnung,
+      // statt eine zweite zu beginnen. Wie der Vorrat das sicherstellt, steht
+      // an `neuerVorrat()` in @/lib/docling.
+      const geholt = doclingFor(user.id, args.page, () =>
+        seiteDurchDocling(user.id, args.page, false),
       );
-    } catch (error) {
-      console.error("Docling fehlgeschlagen", error);
-      return fehler(
-        "Docling hat nicht geantwortet. Lies die Seite mit read_page — das geht auch ohne.",
+      treffer = geholt.treffer;
+
+      try {
+        ergebnis = await geholt.promise;
+      } catch (error) {
+        if (error instanceof SeiteNichtLesbar) return fehler(error.message);
+
+        console.error(
+          `Docling fehlgeschlagen nach ${sekunden(Date.now() - start)} s`,
+          error,
+        );
+
+        // Eine einzelne gescheiterte Seite sagt über die nächste nichts — die
+        // darf trotzdem schon anlaufen. Nach einem Ausfall steht der Schalter
+        // offen, und `vorauslesen()` lässt es von selbst.
+        vorauslesen(user.id, args.page);
+
+        const bis = trifftDocling(error) ? doclingPausiertBis() : null;
+
+        return fehler(
+          bis !== null
+            ? `Docling ist ausgefallen und pausiert bis ${timeInBerlin(new Date(bis))}. Lies die Seite mit read_page — das geht auch ohne.`
+            : "Docling hat diese Seite nicht lesen können. Lies sie mit read_page — das geht auch ohne.",
+        );
+      }
+    }
+
+    // Die Zeile für die Umrechnung selbst schreibt `seiteDurchDocling()`, auch
+    // beim Vorauslesen. Hier steht nur noch, wenn die Anfrage aus dem Vorrat
+    // kam — und wie lange sie dort noch warten musste.
+    if (treffer) {
+      console.info(
+        `Docling ${kurz(args.page)}: aus dem Vorrat${pausiert !== null ? " (Docling pausiert)" : ""}, gewartet ${sekunden(Date.now() - start)} s, gerechnet ${ergebnis.seconds.toFixed(1)} s, ${ergebnis.markdown.length} Zeichen`,
       );
     }
+
+    vorauslesen(user.id, args.page);
+
+    // Leer UND „success": Docling hat die Seite fertig gelesen und nichts
+    // Gedrucktes gefunden. Leer mit einem anderen Status kommt hier nicht an —
+    // das wirft `convertPage()` als Fehler, siehe dort.
+    if (ergebnis.markdown === "") {
+      return daten(
+        "Docling hat auf dieser Seite nichts Gedrucktes gefunden — vermutlich ist alles Handschrift. Lies sie mit read_page.",
+        { page: args.page, markdown: "" },
+      );
+    }
+
+    return daten(
+      `Was Docling auf der Seite liest (${ergebnis.markdown.length} Zeichen, ${ergebnis.seconds.toFixed(1)} s). Gedrucktes, Tabellen und Formeln von hier übernehmen, Handschrift aus read_page ergänzen.`,
+      { page: args.page, markdown: ergebnis.markdown },
+    );
   },
 
   async read_transcript(user, args) {
@@ -578,6 +673,10 @@ const HANDLERS: Handlers = {
   async read_inbox(user, args) {
     const entries = await listInbox(user.id, { limit: args.limit });
     const offen = entries.filter((entry) => entry.filedAt === null).length;
+    const seitenstand = await listPageActivity(
+      user.id,
+      entries.map((entry) => entry.id),
+    );
 
     return daten(
       `${
@@ -591,7 +690,7 @@ const HANDLERS: Handlers = {
         "der Korb ist damit nicht leer, sondern abgeschnitten.",
       )} ${heuteSatz(todayInBerlin())}`,
       entries.map((entry) => ({
-        ...sheetRow(entry),
+        ...listRow(entry, seitenstand),
         filedAt: entry.filedAt,
         proposals: entry.proposals.map((proposal) => ({
           id: proposal.id,
@@ -710,6 +809,11 @@ const HANDLERS: Handlers = {
     // Schlüssel, Jev nicht erreichbar, nichts lesbar —, bleibt der Vorschlag
     // im Korb, und genau das steht dann in der Antwort. Ein Fehler beim
     // Einordnen darf den angelegten Vorschlag nicht mitreißen.
+    //
+    // Ist das Blatt schon eingeordnet, fragt die App Jev nicht. Bringt der
+    // Vorschlag dann nur die Abschrift ungelesener Seiten — die nachgereichte
+    // Rückseite —, übernimmt sie ihn trotzdem gleich (seit dem 4.10.2026);
+    // alles andere bleibt dort wie bisher für einen Menschen liegen.
     const eingeordnet = await autoFile(user.id, id).catch(
       (error): AutoFileResult => {
         console.error("Einordnen durch Jev fehlgeschlagen", error);
@@ -733,24 +837,34 @@ const HANDLERS: Handlers = {
           ? `, mit der Abschrift von ${gespeichert.length} Seite${gespeichert.length === 1 ? "" : "n"}`
           : ""
       }. ${
-        eingeordnet.ok
-          ? `Jev hat ihn übernommen: ${eingeordnet.subjectName}${
-              eingeordnet.topics.length > 0
-                ? `, ${eingeordnet.topics.join(", ")}`
-                : ""
-            }.`
-          : `Er bleibt im Korb, bis ein Mensch ihn übernimmt (${eingeordnet.grund}).`
+        !eingeordnet.ok
+          ? `Er bleibt im Korb, bis ein Mensch ihn übernimmt (${eingeordnet.grund}).`
+          : eingeordnet.art === "jev"
+            ? `Jev hat ihn übernommen: ${eingeordnet.subjectName}${mitThemen(eingeordnet.topics)}.`
+            : `Das Blatt war schon eingeordnet, also hat die App nur die Abschrift übernommen (${zahl(eingeordnet.seiten, "Seite", "Seiten", "f")}); Fach und Themen bleiben: ${eingeordnet.subjectName}${mitThemen(eingeordnet.topics)}.`
       }`,
       {
         id,
         sheet: args.sheet,
-        eingeordnet: eingeordnet.ok
-          ? {
-              subject: eingeordnet.subjectName,
-              confidence: eingeordnet.confidence,
-              topics: eingeordnet.topics,
-            }
-          : null,
+        // `via` sagt, welcher der beiden Wege übernommen hat. Beim Weg ohne
+        // Jev gibt es keine Sicherheit, die man nennen könnte — dort steht
+        // `null` und keine erfundene Eins.
+        eingeordnet: !eingeordnet.ok
+          ? null
+          : eingeordnet.art === "jev"
+            ? {
+                via: "jev",
+                subject: eingeordnet.subjectName,
+                confidence: eingeordnet.confidence,
+                topics: eingeordnet.topics,
+              }
+            : {
+                via: "abschrift",
+                subject: eingeordnet.subjectName,
+                confidence: null,
+                topics: eingeordnet.topics,
+                pages: eingeordnet.seiten,
+              },
         subjectId: parsed.data.subjectId,
         title: parsed.data.title,
         capturedOn: parsed.data.capturedOn,
@@ -1072,6 +1186,161 @@ function sheetRow(sheet: MaterialListItem) {
     firstPageId: sheet.coverPageId,
     topics: sheet.topics.map((topic) => topic.title),
   };
+}
+
+/**
+ * Ein Blatt in `read_inbox` und `read_material`: die Zeile von `sheetRow()`,
+ * dazu wann zuletzt eine Seite kam und welche nachgereichten noch niemand
+ * gelesen hat — als Zahl (`unreadAttachedPages`) und als ids
+ * (`unreadAttachedPageIds`, in der Reihenfolge des Blattes).
+ *
+ * Seit dem 4.10.2026, für den Postboten, und nur an diesen beiden Türen —
+ * `read_sheet` nennt jede Seite einzeln mit der Länge ihrer Abschrift und
+ * braucht die Zusammenfassung nicht. Was „nachgereicht" heißt und warum die
+ * Altblätter dabei leer ausgehen, steht an `nachgereichtUngelesen()` in
+ * @/lib/materials. Die ids stehen da, damit der Postbote genau diese Seiten
+ * abschreibt und keine andere ungelesene daneben.
+ *
+ * Fehlt ein Blatt in `seitenstand`, hat es keine Seite. Über die App kommt das
+ * nicht vor (`deletePage()` lässt die letzte stehen); dann steht `null` da und
+ * kein erfundener Zeitpunkt.
+ */
+function listRow(
+  sheet: MaterialListItem,
+  seitenstand: Map<string, PageActivity>,
+) {
+  const stand = seitenstand.get(sheet.id);
+
+  return {
+    ...sheetRow(sheet),
+    lastPageAt: stand?.lastPageAt ?? null,
+    unreadAttachedPages: stand?.unreadAttachedPages ?? 0,
+    unreadAttachedPageIds: stand?.unreadAttachedPageIds ?? [],
+  };
+}
+
+/**
+ * Eine Seite durch Docling — das, was im Vorrat als Umrechnung steht.
+ *
+ * Das Lesen des Bildes gehört mit hinein und steht nicht davor: der Vorrat
+ * soll beides auf einmal abdecken, damit zwei Anfragen zur selben Seite auch
+ * das Vollbild nur einmal aus der Datenbank holen. Dass die Seite diesem
+ * Nutzer gehört, prüft `readPageImage()`; ein späterer Treffer im Vorrat darf
+ * das überspringen, weil der Nutzer im Schlüssel steht (`doclingFor()`).
+ *
+ * Eine Seite, die es nicht gibt oder die ein falsches Format trägt, geht gar
+ * nicht erst zu Docling. Sie wirft `SeiteNichtLesbar` mit dem Satz für das
+ * Modell — und bleibt als Fehlschlag nicht im Vorrat liegen.
+ *
+ * Je Umrechnung eine Zeile im Protokoll, auch bei einer leeren Seite und
+ * beim Vorauslesen: wie lange Docling von außen gesehen gebraucht hat (Wand),
+ * wie lange es nach eigener Angabe gerechnet hat, und wie viel herauskam. Die
+ * Differenz ist die Zeit in der Warteschlange von docling-serve. Auf dem NAS
+ * ist keine dieser Zahlen gemessen; diese Zeile misst sie.
+ */
+async function seiteDurchDocling(
+  userId: string,
+  pageId: string,
+  voraus: boolean,
+): Promise<DoclingResult> {
+  // Das Vollbild und nicht die Lesefassung: Docling bekommt die Bytes direkt
+  // und nicht durch ein Tool-Ergebnis, die Grenze von rund 100 KB gilt hier
+  // also nicht — und für kleine Schrift zählt jedes Pixel.
+  const page = await readPageImage(userId, pageId, "voll");
+
+  if (!page) {
+    throw new SeiteNichtLesbar(
+      "Diese Seite gibt es nicht. Die id einer Seite steht in read_sheet unter „pages“ — die id des Blattes ist eine andere.",
+    );
+  }
+
+  if (!isAllowedMime(page.mimeType)) {
+    throw new SeiteNichtLesbar(
+      "Diese Seite trägt ein Format, das die App nicht ausliefert.",
+    );
+  }
+
+  const start = Date.now();
+
+  try {
+    const ergebnis = await convertPage(page.bytes, page.mimeType);
+
+    console.info(
+      `Docling ${kurz(pageId)}: Wand ${sekunden(Date.now() - start)} s, gerechnet ${ergebnis.seconds.toFixed(1)} s, ${ergebnis.markdown.length} Zeichen${voraus ? " (vorausgelesen)" : ""}`,
+    );
+
+    return ergebnis;
+  } catch (error) {
+    // Hier und nicht in read_docling: so öffnet auch ein Ausfall beim
+    // Vorauslesen den Schalter, und der nächste Aufruf wartet nicht noch
+    // einmal drei Minuten auf dasselbe.
+    doclingFehlschlag(error);
+    throw error;
+  }
+}
+
+/** Eine Seite, die gar nicht erst zu Docling geht. Die Meldung ist der Satz für das Modell. */
+class SeiteNichtLesbar extends Error {
+  constructor(satz: string) {
+    super(satz);
+    this.name = "SeiteNichtLesbar";
+  }
+}
+
+/**
+ * Stößt die Umrechnung der nächsten ungelesenen Seite desselben Blattes an —
+ * und wartet nicht darauf.
+ *
+ * Eine Seite voraus und nicht das ganze Blatt: so rechnet Docling, während
+ * Claude die eben gelieferte Seite abschreibt, und nie zwei Seiten zugleich
+ * für denselben Lauf. Das ganze Blatt auf einmal hieße mehrere schwere
+ * Umrechnungen nebeneinander auf einem NAS, dessen Speicher niemand kennt, und
+ * Rechenzeit für Seiten, die womöglich niemand mehr abfragt — ein Lauf, der an
+ * seiner Frist scheitert, ließe sie weiterlaufen.
+ *
+ * Gerufen wird es erst, wenn die angefragte Seite fertig ist; nur ungelesene
+ * Seiten kommen in Frage (`nextUnreadPage()`), und nur, solange der Schalter
+ * zu ist. Liegt die nächste Seite schon im Vorrat, passiert nichts.
+ *
+ * Ein Fehler hier geht niemanden etwas an, der gerade wartet: eine Zeile im
+ * Protokoll, sonst nichts. Die Seite fehlt danach im Vorrat und wird bei ihrer
+ * eigenen Anfrage neu gerechnet.
+ */
+function vorauslesen(userId: string, pageId: string): void {
+  if (doclingPausiertBis() !== null) return;
+
+  void nextUnreadPage(userId, pageId)
+    .then((naechste) => {
+      if (naechste === null || doclingPausiertBis() !== null) return;
+
+      const { promise, treffer } = doclingFor(userId, naechste, () =>
+        seiteDurchDocling(userId, naechste, true),
+      );
+
+      // Ein Treffer gehört einer anderen Anfrage; deren Fehler meldet sie
+      // selbst.
+      return treffer ? undefined : promise;
+    })
+    .catch((error: unknown) => {
+      console.error(
+        `Docling: Vorauslesen fehlgeschlagen — ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
+}
+
+/** Die ersten acht Zeichen einer id — genug, um eine Seite im Protokoll wiederzufinden. */
+function kurz(id: string): string {
+  return id.slice(0, 8);
+}
+
+/** Millisekunden als Sekunden mit einer Nachkommastelle, für das Protokoll. */
+function sekunden(ms: number): string {
+  return (ms / 1000).toFixed(1);
+}
+
+/** „, Kettenregel, Ableitung" hinter dem Fach — oder nichts. */
+function mitThemen(topics: string[]): string {
+  return topics.length > 0 ? `, ${topics.join(", ")}` : "";
 }
 
 /**

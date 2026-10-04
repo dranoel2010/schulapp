@@ -314,7 +314,7 @@ src/
 
 harness/          der Postbote — gehört NICHT zur App, sondern benutzt sie
   zugang.mts        einmal zustimmen, danach ein eigener Zugang
-  postbote.mts      alle paar Minuten nachsehen und Claude ansetzen
+  postbote.mts      alle 15 Sekunden nachsehen und Claude ansetzen
   nachlese.mts      schreibt Blätter nach, die längst eingeordnet sind —
                     kein zweiter Dienst, sondern ein Lauf auf Zuruf
   kaefig.mts        der Lauf ohne Bash, ohne Dateien, ohne fremde Server
@@ -511,7 +511,7 @@ sich aus der Cloud, `localhost` erreicht es nie.
 ## Der Postbote — vom Foto bis zum Vorschlag ohne Handgriff
 
 Wer nicht jedes Mal selbst in der Claude-App fragen will, lässt `harness/`
-laufen: ein kleines Programm auf dem eigenen Rechner, das alle paar Minuten in
+laufen: ein kleines Programm auf dem eigenen Rechner, das alle 15 Sekunden in
 den Eingangskorb sieht und Claude auf jedes Blatt ansetzt, das noch keinen
 Vorschlag hat.
 
@@ -545,6 +545,23 @@ Im Korb bleibt ein Blatt nur noch, wenn das nicht geht: `TYPESAFE_API_KEY`
 fehlt, Jev antwortet nicht, oder auf dem Blatt ist fast nichts lesbar (eine
 reine Skizze). Und ein Blatt, das schon abgelegt ist, fasst Jev nie an — die
 Nachlese schickt Abschriften durch dieselbe Tür.
+
+**Nachgereichte Seiten.** Hängt jemand an ein schon eingeordnetes Blatt eine
+Seite an — oder kommt eine Seite dazu, während der Postbote das Blatt gerade
+liest —, liest der Postbote sie von selbst nach, und die App übernimmt die
+reine Abschrift ohne Jev und ohne Rückfrage. Welche Seite als nachgereicht
+gilt, bestimmt die App (`nachgereichtUngelesen()` in `src/lib/materials.ts`):
+ungelesen, und entweder nach dem Einordnen hochgeladen oder nach einer schon
+abgeschriebenen Seite desselben Blattes. Die fünfzehn Altblätter vom August
+haben keine abgeschriebene Seite und bleiben damit außen vor — und schreibt
+ein Lauf ihre alten Seiten trotzdem mit ab, bleibt der Vorschlag für einen
+Menschen im Korb (`onlyTranscribesAttachedPages()` in `src/lib/auto-file.ts`).
+Dasselbe gilt für eine von Hand gestartete Nachlese.
+
+**Reihenfolge auf dem NAS.** Der neue Auftrag des Postboten lässt das Fach
+weg, weil Jev es bestimmt. Deshalb kommt `harness/` erst aufs NAS, wenn dort
+`TYPESAFE_API_KEY` in der App gesetzt ist und Jev ein Blatt abgelegt hat —
+sonst bekäme ein Blatt gar keinen Fachvorschlag.
 
 Gemessen vor dem Einbau an 20 abgelegten Blättern: 19 Mal dasselbe Fach wie
 der Mensch, und das zwanzigste war falsch abgelegt. Den Ausschlag gaben die
@@ -586,6 +603,15 @@ erreichbar, und die App bekommt seine Adresse:
     environment:
       DOCLING_URL: http://docling:5001
 ```
+
+Hängt Docling oder antwortet es nicht, pausiert die App es für zehn Minuten
+(ein Fehler an einer einzelnen Seite reicht dafür nicht); der Postbote liest
+dann nur das Foto. Fertige Ergebnisse hält die App eine Stunde vor, und
+während Claude eine Seite liest, rechnet Docling schon die nächste
+ungelesene Seite desselben Blattes. Jede Seite steht mit ihrer Zeit im Log
+(`Docling <id>: Wand … s, gerechnet … s`), und der Postbote schreibt je Blatt
+Züge, Tokens und Zeiten dazu — daran ist auf dem NAS abzulesen, ob die
+Frist reicht (5 Minuten plus 4 je Seite, höchstens 45).
 
 Ohne `DOCLING_URL` sagt `read_docling`, dass Docling fehlt, und der Postbote
 liest wie vorher nur das Foto. Der Postbote selbst braucht die neue
@@ -1208,7 +1234,7 @@ getrennt unter *Einstellungen*. Wie das im Einzelnen läuft, steht oben unter
 *Der Web MCP*.
 
 **Der Postbote** — dasselbe ohne Handgriff. Ein Programm auf dem eigenen
-Rechner sieht alle zwei Minuten in den Korb und setzt Claude auf jedes Blatt an,
+Rechner sieht alle 15 Sekunden in den Korb und setzt Claude auf jedes Blatt an,
 das noch keinen Vorschlag hat; es gehört nicht zur App, sondern benutzt sie von
 außen durch dieselbe Tür. Es steht in [`harness/`](harness/README.md) und läuft
 nur, wenn man es startet.

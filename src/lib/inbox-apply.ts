@@ -1,8 +1,10 @@
 import {
   clearProposals,
+  deleteProposal,
   markFiled,
 } from "@/lib/inbox";
 import {
+  getMaterial,
   listMaterialTranscripts,
   setMaterialTopics,
   setMaterialTranscripts,
@@ -22,7 +24,10 @@ import {
 
 /** Was beim Übernehmen geschrieben wurde — die Zahlen für die Bestätigung. */
 export type AppliedProposal = {
-  /** Alle weggeräumten Vorschläge, der übernommene eingeschlossen. */
+  /**
+   * Alle weggeräumten Vorschläge, der übernommene eingeschlossen. Mit
+   * `nurVorschlag` höchstens 1.
+   */
   entfernt: number;
   /** Seiten, deren Abschrift sich wirklich geändert hat. */
   abschrift: number;
@@ -44,6 +49,26 @@ export type AppliedProposal = {
  * muss dasselbe sein. Stünde es zweimal da, ginge eines Tages der eine Weg
  * abhaken und der andere nicht, oder der eine räumte die übrigen Vorschläge
  * weg und der andere ließe sie liegen.
+ *
+ * Seit dem 4.10.2026 gibt es zwei Optionen, und gesetzt werden sie nur vom
+ * Übernehmen ohne Jev an einem schon eingeordneten Blatt
+ * (`abschriftNachreichen()` in @/lib/auto-file). Formular und Knöpfe lassen
+ * sie weg und verhalten sich wie bisher.
+ *
+ * - `nurUngelesene`: die Abschrift landet nur auf Seiten, die noch keine haben
+ *   — geprüft im Schreiben selbst (`setMaterialTranscripts()`), nicht in einer
+ *   Frage davor. Dort hat kein Mensch die Abschrift gesehen, und sie darf keine
+ *   ersetzen, die inzwischen jemand bestätigt hat.
+ * - `nurVorschlag`: weggeräumt wird nur dieser eine Vorschlag und nicht alle
+ *   des Blattes. Der Grund, alle wegzuräumen (`clearProposals()`), ist eine
+ *   Entscheidung über Fach, Titel und Themen; die trifft eine reine Abschrift
+ *   nicht. Ein anderer Vorschlag, der dort auf einen Menschen wartet — auch
+ *   einer, der erst zwischen Prüfen und Übernehmen angelegt wurde —, bleibt
+ *   deshalb stehen.
+ * - `nurAbschrift`: Fach, Titel, Tag, Notiz und Themen bleiben unberührt; es
+ *   wird nur die Abschrift geschrieben. Kein Mensch sieht diesen Weg, und ein
+ *   Zurückschreiben aus dem eben gelesenen Stand stellte eine Änderung, die
+ *   jemand dazwischen gespeichert hat, still wieder her.
  */
 export async function applyProposal(
   userId: string,
@@ -66,23 +91,38 @@ export async function applyProposal(
      */
     transcripts: NewPageTranscript[];
   },
+  options?: {
+    nurUngelesene?: boolean;
+    nurVorschlag?: string;
+    nurAbschrift?: boolean;
+  },
 ): Promise<AppliedProposal | null> {
-  if (
-    !(await updateMaterial(userId, materialId, {
-      subjectId: werte.subjectId,
-      title: werte.title,
-      capturedOn: werte.capturedOn,
-      note: werte.note,
-    }))
-  ) {
-    return null;
-  }
+  // Ohne Themen-Schreiben gibt es nichts zu melden; die Zahlen bleiben 0.
+  let verworfen = 0;
+  let zusammengefallen = 0;
+  let umbenannt = 0;
 
-  const { verworfen, zusammengefallen, umbenannt } = await setMaterialTopics(
-    userId,
-    materialId,
-    werte.topics,
-  );
+  if (options?.nurAbschrift) {
+    // Nichts am Blatt selbst schreiben — nur nachsehen, dass es noch da ist,
+    // weil `updateMaterial()` hier sonst diese Frage beantwortet hätte.
+    if (!(await getMaterial(userId, materialId))) return null;
+  } else {
+    if (
+      !(await updateMaterial(userId, materialId, {
+        subjectId: werte.subjectId,
+        title: werte.title,
+        capturedOn: werte.capturedOn,
+        note: werte.note,
+      }))
+    ) {
+      return null;
+    }
+
+    const themen = await setMaterialTopics(userId, materialId, werte.topics);
+    verworfen = themen.verworfen.length;
+    zusammengefallen = themen.zusammengefallen.length;
+    umbenannt = themen.umbenannt.length;
+  }
 
   /*
    * Die Abschriften, und zwar mit einer Zählung davor.
@@ -118,15 +158,22 @@ export async function applyProposal(
       userId,
       materialId,
       werte.transcripts,
+      { nurUngelesene: options?.nurUngelesene },
     );
 
     // Wird zwischen dem Lesen und dem Schreiben eine Seite gelöscht, kommt sie
-    // in `geschrieben` nicht mehr vor. Der Deckel sorgt dafür, dass der Korb
-    // hinterher keine Seite mehr nennt, als wirklich beschrieben wurde.
+    // in `geschrieben` nicht mehr vor — ebenso eine, die mit `nurUngelesene`
+    // inzwischen schon eine Abschrift hatte. Der Deckel sorgt dafür, dass der
+    // Korb hinterher keine Seite mehr nennt, als wirklich beschrieben wurde.
     abschrift = Math.min(geaendert, geschrieben);
   }
 
-  const entfernt = await clearProposals(userId, materialId);
+  const entfernt =
+    options?.nurVorschlag !== undefined
+      ? (await deleteProposal(userId, options.nurVorschlag))
+        ? 1
+        : 0
+      : await clearProposals(userId, materialId);
 
   // Erst ganz zum Schluss abhaken. Ein schon gesetzter Zeitpunkt bleibt dabei
   // stehen — `markFiled()` fasst ihn nicht noch einmal an, damit „wann hat ein
@@ -136,8 +183,8 @@ export async function applyProposal(
   return {
     entfernt,
     abschrift,
-    verworfen: verworfen.length,
-    zusammengefallen: zusammengefallen.length,
-    umbenannt: umbenannt.length,
+    verworfen,
+    zusammengefallen,
+    umbenannt,
   };
 }

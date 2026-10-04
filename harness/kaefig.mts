@@ -102,29 +102,149 @@ export type Aufgabe<A> = {
  * die alle in die Frist laufen, halten eine Runde eine Dreiviertelstunde auf.
  * Genau deshalb bricht ein Zeitablauf seit dem 5.9.2026 nur noch dieses eine
  * Blatt ab und nicht mehr die ganze Runde — siehe `LaufErgebnis`.
+ *
+ * Seit dem 4.10.2026 gilt diese Zahl nur noch, wo niemand eine andere nennt:
+ * für die Nachlese von Hand und den Fragenlauf. Ein Blatt des Postboten
+ * bekommt seine Frist nach Seitenzahl, siehe `fristFuer()`.
  */
 export const FRIST_MS = 900_000;
 
 /**
+ * Die längste Frist, die `fristFuer()` vergibt.
+ *
+ * Sie ist zugleich die Zahl, nach der `zugriffstoken()` in mcp.mts das Token
+ * bemisst: Jedes Token, das in einen Käfig geht, muss die längste mögliche
+ * Frist überstehen. Mehr als 57 Minuten gehen nicht: mit der Minute Luft in
+ * mcp.mts sind das 58, und ein Zugriffs-Token lebt eine Stunde
+ * (ACCESS_TTL_SECONDS in @/lib/oauth). mcp.mts prüft das beim Laden.
+ */
+export const FRIST_MAX_MS = 45 * 60_000;
+
+/** Was jeder Lauf braucht, gleich wie viele Seiten: starten, vorschlagen, antworten. */
+const GRUNDLAST_MS = 5 * 60_000;
+
+/**
+ * Was eine Seite höchstens braucht: die 180 s, nach denen die App auf Docling
+ * nicht mehr wartet (TIMEOUT_MS in @/lib/docling), und rund eine Minute für
+ * Claude, der die Seite liest und abschreibt. Von Hand abgeschrieben, weil
+ * dieser Ordner nichts aus src/ importieren darf (siehe RASPBERRY.md) — steigt
+ * die Zahl dort, gehört sie hier nachgezogen.
+ */
+const PRO_SEITE_MS = 4 * 60_000;
+
+/** MAX_PAGES in @/lib/images, aus demselben Grund von Hand. */
+const MAX_SEITEN = 12;
+
+/**
+ * Die Frist für ein Blatt mit so vielen Seiten.
+ *
+ * Eingeführt am 4.10.2026 mit Docling. Eine feste Viertelstunde passte, solange
+ * eine Seite in Sekunden gelesen war. Auf dem Prozessor des NAS kann Docling
+ * für eine einzige Seite bis zu drei Minuten brauchen, und ein Blatt mit fünf
+ * solchen Seiten liefe in die Viertelstunde, käme als „spaeter" zurück, liefe
+ * in der nächsten Runde wieder hinein — und kostete jedes Mal einen ganzen
+ * Lauf, ohne je fertig zu werden. Je Seite zu rechnen gibt dem großen Blatt die
+ * Zeit, die es braucht, und dem kleinen nicht mehr als bisher.
+ *
+ * Der Preis steht auf der anderen Seite: ein Blatt, das trotzdem hängt, kostet
+ * jetzt bis zu einer Dreiviertelstunde Kontingent je Runde statt einer
+ * Viertelstunde, und drei solche halten eine Runde über zwei Stunden auf.
+ *
+ * Eine Seitenzahl, die keine ist, zählt als zwölf: lieber die volle Frist als
+ * eine, die ein großes Blatt mitten in der Abschrift abschneidet.
+ *
+ * Geschätzt, nicht gemessen. Nachmessen lässt es sich an der Zeile „Züge …,
+ * Wand … s", die der Postbote nach jedem Lauf schreibt.
+ */
+export function fristFuer(seiten: number): number {
+  const anzahl = Number.isInteger(seiten) && seiten > 0 ? seiten : MAX_SEITEN;
+  return Math.min(FRIST_MAX_MS, GRUNDLAST_MS + anzahl * PRO_SEITE_MS);
+}
+
+/**
  * Wie viele Züge ein Lauf hat.
  *
- * Die Rechnung: read_sheet, read_subjects, read_topics und propose_sheet sind
- * vier Aufrufe, dazu bis zu zwölf read_page (MAX_PAGES in @/lib/images) —
- * sechzehn. Neu ist, dass der Auftrag verlangt, die Abschrift DIREKT NACH JEDEM
- * BILD aufzuschreiben statt am Ende alles auf einmal aus dem Gedächtnis; das
- * sind bis zu zwölf weitere Züge, in denen gar kein Werkzeug läuft. Macht
- * achtundzwanzig im dichtesten Fall.
+ * Gezählt ist der ungünstigste Fall, und der ist seit Docling (4.10.2026)
+ * größer: ein Modell, das jeden Aufruf einzeln macht, statt read_docling und
+ * read_page in einen Zug zu legen, und das nach jedem Bild noch einen eigenen
+ * Zug zum Aufschreiben braucht. Das sind je Seite drei Züge, bei zwölf Seiten
+ * (MAX_PAGES in @/lib/images) sechsunddreißig. Dazu read_sheet, read_subjects,
+ * read_topics und propose_sheet — die mittleren beiden verlangt der Auftrag
+ * seit dem 4.10.2026 nicht mehr, erlaubt sind sie aber weiter, und ein Aufruf
+ * kostet einen Zug. Macht vierzig; dazu zwölf Luft für Fehlgriffe — ein
+ * Werkzeug, das nein sagt und noch einmal richtig gerufen wird — und für die
+ * Antwort am Ende. Zweiundfünfzig.
  *
- * Vierzig lässt Luft für einen Fehlgriff — ein Werkzeug, das nein sagt und noch
- * einmal richtig gerufen wird — und zieht trotzdem eine Grenze gegen ein
- * Modell, das sich verrennt.
+ * Folgt das Modell dem Auftrag, braucht dasselbe Blatt rund vierzehn: ein Zug
+ * je Seite mit beiden Aufrufen, dazu propose_sheet und die Antwort.
  *
- * Zwanzig waren es vorher, und zwanzig wären ab jetzt die schlechteste aller
- * Grenzen: ein zwölfseitiges Blatt liefe mitten in der Abschrift aus den Zügen,
- * also BEVOR propose_sheet an die Reihe kommt. Herauskäme ein Lauf, der die
- * ganze Arbeit gemacht und nichts abgeliefert hat.
+ * Warum trotzdem der ungünstigste Fall: wer mitten in der Abschrift aus den
+ * Zügen läuft, kommt nie zu propose_sheet. Herauskäme ein Lauf, der die ganze
+ * Arbeit gemacht und nichts abgeliefert hat — und als „nichts" landet das
+ * Blatt in gesehen.json und kommt nie wieder. Gegen ein Modell, das sich
+ * verrennt, steht die Frist (`fristFuer()`), nicht diese Zahl.
+ *
+ * Zwanzig waren es bis zum 5.9.2026, vierzig bis zum 4.10.2026 — die vierzig
+ * waren noch ohne read_docling gerechnet.
  */
-const MAX_ZUEGE = 40;
+const MAX_ZUEGE = 52;
+
+/**
+ * Was ein Lauf gekostet hat, in den Zahlen, die `claude` selbst mitschickt —
+ * dazu die Wanduhr dieses Prozesses.
+ *
+ * Eingebaut am 4.10.2026, bevor irgendetwas schneller gemacht wird: ob die
+ * Zeit im Modell steckt, in den Werkzeugen (Docling) oder davor, sagte bis
+ * dahin keine Zeile im Mitlesen. API-Zeit gegen Wanduhr trennt das grob;
+ * Ausgabe gegen Denken zeigt, ob die Abschrift zweimal geschrieben wird.
+ *
+ * Jede Zahl geht durch `zahlAus()`: die Feldnamen gehören der Fassung von
+ * `claude`, und benennt eine neue sie um, steht hier eine 0 statt eines
+ * Absturzes. Eine 0 heißt in dieser Zeile deshalb im Zweifel „nicht
+ * mitgeschickt" und nicht „nichts verbraucht".
+ */
+export type Messung = {
+  /** `num_turns`. */
+  zuege: number;
+  /** `duration_api_ms` — die Zeit, in der das Modell gerechnet hat. */
+  apiMs: number;
+  /** Hier gemessen, vom Start des Prozesses bis zu seinem Ende. */
+  wandMs: number;
+  /** `stop_reason`; leer, wenn keiner dastand. */
+  stopGrund: string;
+  eingabe: number;
+  ausgabe: number;
+  /** Davon Denken (`output_tokens_details.thinking_tokens`). */
+  denken: number;
+  cacheGelesen: number;
+  cacheGeschrieben: number;
+};
+
+/** Sekunden, gerundet — für das Mitlesen. */
+function sekunden(ms: number): number {
+  return Math.round(ms / 1000);
+}
+
+/**
+ * Die Messung als eine Zeile fürs Mitlesen.
+ *
+ * Der Grund, warum das Modell aufgehört hat, steht nur dabei, wenn er etwas
+ * sagt: „end_turn" ist der Normalfall, ein „max_tokens" dagegen der Hinweis,
+ * dass eine Antwort abgeschnitten wurde.
+ */
+export function messungZeile(messung: Messung): string {
+  const tok = (zahl: number) => zahl.toLocaleString("de-DE");
+
+  return (
+    `Züge ${messung.zuege}, Ausgabe ${tok(messung.ausgabe)} Tok ` +
+    `(davon Denken ${tok(messung.denken)}), ` +
+    `Cache gelesen ${tok(messung.cacheGelesen)}, ` +
+    `API ${sekunden(messung.apiMs)} s, Wand ${sekunden(messung.wandMs)} s` +
+    (messung.stopGrund && messung.stopGrund !== "end_turn"
+      ? `, Stopp: ${messung.stopGrund}`
+      : "")
+  );
+}
 
 /**
  * Was bei einem Lauf herauskommt — auch wenn er scheitert.
@@ -152,42 +272,60 @@ const MAX_ZUEGE = 40;
  * wäre aus dem Schönheitsfehler ein Dienst geworden, der nichts mehr schafft.
  */
 export type LaufErgebnis<A> =
-  | { art: "antwort"; antwort: A; kostenUsd: number; dauerMs: number }
+  | {
+      art: "antwort";
+      antwort: A;
+      kostenUsd: number;
+      dauerMs: number;
+      messung?: Messung;
+    }
   /**
    * Nicht dieser Lauf war das Problem, sondern das, worauf jeder Lauf sich
    * stützt: Kontingent leer, API weg, `claude` startet nicht. Die Runde hört
-   * auf; das Blatt bleibt ungemerkt.
+   * auf; das Blatt bleibt ungemerkt. Eine Messung gibt es nur, wenn `claude`
+   * noch JSON geschrieben hat.
    */
-  | { art: "pause"; grund: string }
+  | { art: "pause"; grund: string; messung?: Messung }
   /**
    * Dieser eine Lauf ist nicht fertig geworden (Frist). Das Blatt bleibt
    * ungemerkt und ist beim nächsten Durchgang wieder dran — die Runde macht
-   * mit dem nächsten Blatt weiter.
+   * mit dem nächsten Blatt weiter. Gemessen ist nur die Wanduhr: ein
+   * abgebrochener Lauf schreibt kein Ergebnis, aus dem sich mehr lesen ließe.
    */
-  | { art: "spaeter"; grund: string }
-  /** Der Lauf ist gelaufen und hat nichts zustande gebracht. Nicht wiederholen. */
-  | { art: "nichts"; grund: string };
+  | { art: "spaeter"; grund: string; wandMs?: number }
+  /**
+   * Der Lauf ist gelaufen und hat nichts zustande gebracht. Nicht wiederholen.
+   * Die Messung ist hier am meisten wert: ein Lauf, der an den Zügen
+   * scheitert, ist genau der, dessen Züge man sehen will.
+   */
+  | { art: "nichts"; grund: string; messung?: Messung };
 
 /**
  * Setzt Claude auf eine Aufgabe an.
  *
- * `token` ist ein Zugriffs-Token des Postboten, das die ganze Frist übersteht —
- * `zugriffstoken()` in mcp.mts verlangt dafür ausdrücklich `FRIST_MS` Vorlauf.
- * Nachgelegt wird während des Laufs nicht: Das Token geht als Datei in den
- * Käfig, und danach führt kein Weg mehr hinein.
+ * `token` ist ein Zugriffs-Token des Postboten, das jede Frist übersteht —
+ * `zugriffstoken()` in mcp.mts verlangt dafür ausdrücklich `FRIST_MAX_MS`
+ * Vorlauf. Nachgelegt wird während des Laufs nicht: Das Token geht als Datei
+ * in den Käfig, und danach führt kein Weg mehr hinein. Deshalb wird `fristMs`
+ * hier auf FRIST_MAX_MS gedeckelt — eine längere Frist liefe dem Token davon.
  *
  * **`aufgabe` ist der einzige Weg, denselben Käfig für etwas anderes zu
- * benutzen** — der Postbote ordnet Blätter ein, die Nachlese schreibt
+ * benutzen** — der Postbote schreibt Blätter ab, die Nachlese schreibt
  * Abschriften nach, der Fragenlauf baut Abruffragen. Alles übrige bleibt
- * gleich, und das ist der Punkt: dieselben Schalter, dieselbe Frist, dasselbe
- * Kontingent. Ein zweiter Käfig neben diesem wäre eine zweite Stelle, an der
- * man vergessen kann, `--tools ""` zu setzen.
+ * gleich, und das ist der Punkt: dieselben Schalter, dasselbe Kontingent. Ein
+ * zweiter Käfig neben diesem wäre eine zweite Stelle, an der man vergessen
+ * kann, `--tools ""` zu setzen.
+ *
+ * Nur die Frist ist seit dem 4.10.2026 ein Argument: ein Blatt mit zwölf
+ * Seiten darf länger als eines mit einer (`fristFuer()`). Wer nichts sagt,
+ * bekommt FRIST_MS wie bisher.
  */
 export async function laufFuerAufgabe<A>(
   aufgabe: Aufgabe<A>,
   adresse: string,
   token: string,
   modell?: string,
+  fristMs: number = FRIST_MS,
 ): Promise<LaufErgebnis<A>> {
   const arbeitsplatz = mkdtempSync(path.join(tmpdir(), "postbote-"));
 
@@ -208,7 +346,13 @@ export async function laufFuerAufgabe<A>(
   );
 
   try {
-    return await starten(aufgabe, arbeitsplatz, mcpDatei, modell);
+    return await starten(
+      aufgabe,
+      arbeitsplatz,
+      mcpDatei,
+      modell,
+      Math.min(fristMs, FRIST_MAX_MS),
+    );
   } finally {
     rmSync(arbeitsplatz, { recursive: true, force: true });
   }
@@ -219,6 +363,7 @@ function starten<A>(
   arbeitsplatz: string,
   mcpDatei: string,
   modell: string | undefined,
+  fristMs: number,
 ): Promise<LaufErgebnis<A>> {
   const argumente = [
     "-p",
@@ -248,7 +393,18 @@ function starten<A>(
   const umgebung = { ...process.env };
   delete umgebung.ANTHROPIC_API_KEY;
 
+  // Docling darf je Seite bis zu 180 s rechnen (TIMEOUT_MS in @/lib/docling),
+  // und so lange wartet read_docling. Wie lange `claude` von sich aus auf ein
+  // MCP-Werkzeug wartet, ist nicht belegt — also steht es hier ausdrücklich,
+  // mit zwanzig Sekunden Luft über der Grenze der App. Ohne das könnte der
+  // Käfig eine Seite aufgeben, an der Docling noch rechnet. (4.10.2026)
+  umgebung.MCP_TOOL_TIMEOUT = "200000";
+
   return new Promise((fertig) => {
+    // Die Wanduhr beginnt vor dem Start: was `claude` braucht, bis es
+    // überhaupt fragt (Anmeldung, MCP-Server verbinden), gehört mit in die
+    // Rechnung, und genau das fehlt in `duration_ms`.
+    const start = Date.now();
     const kind = spawn("claude", argumente, {
       cwd: arbeitsplatz,
       env: umgebung,
@@ -269,7 +425,7 @@ function starten<A>(
       abgebrochen = true;
       kind.kill("SIGINT");
       setTimeout(() => kind.kill("SIGTERM"), 10_000);
-    }, FRIST_MS);
+    }, fristMs);
 
     kind.on("error", (grund) => {
       clearTimeout(frist);
@@ -291,12 +447,13 @@ function starten<A>(
         // Dienst. Ausführlich an `LaufErgebnis`.
         fertig({
           art: "spaeter",
-          grund: `Frist von ${Math.round(FRIST_MS / 60_000)} Minuten überschritten`,
+          grund: `Frist von ${Math.round(fristMs / 60_000)} Minuten überschritten`,
+          wandMs: Date.now() - start,
         });
         return;
       }
 
-      fertig(auswerten(aufgabe, aus, fehlerAus, code));
+      fertig(auswerten(aufgabe, aus, fehlerAus, code, Date.now() - start));
     });
   });
 }
@@ -333,6 +490,7 @@ function auswerten<A>(
   aus: string,
   fehlerAus: string,
   code: number | null,
+  wandMs: number,
 ): LaufErgebnis<A> {
   let ergebnis: {
     is_error?: boolean;
@@ -343,6 +501,18 @@ function auswerten<A>(
     permission_denials?: { tool_name: string }[];
     total_cost_usd?: number;
     duration_ms?: number;
+    // Ab hier nur für die Messung, und deshalb alles `unknown`: was davon
+    // ankommt, entscheidet die Fassung von `claude`, nicht dieser Typ.
+    num_turns?: unknown;
+    duration_api_ms?: unknown;
+    stop_reason?: unknown;
+    usage?: {
+      input_tokens?: unknown;
+      output_tokens?: unknown;
+      cache_read_input_tokens?: unknown;
+      cache_creation_input_tokens?: unknown;
+      output_tokens_details?: { thinking_tokens?: unknown } | null;
+    } | null;
   };
 
   try {
@@ -359,18 +529,57 @@ function auswerten<A>(
     };
   }
 
+  const nutzung = ergebnis.usage ?? {};
+  const messung: Messung = {
+    zuege: zahlAus(ergebnis.num_turns),
+    apiMs: zahlAus(ergebnis.duration_api_ms),
+    wandMs,
+    stopGrund: typeof ergebnis.stop_reason === "string" ? ergebnis.stop_reason : "",
+    eingabe: zahlAus(nutzung.input_tokens),
+    ausgabe: zahlAus(nutzung.output_tokens),
+    denken: zahlAus(nutzung.output_tokens_details?.thinking_tokens),
+    cacheGelesen: zahlAus(nutzung.cache_read_input_tokens),
+    cacheGeschrieben: zahlAus(nutzung.cache_creation_input_tokens),
+  };
+
   if (ergebnis.api_error_status === 429) {
-    return { art: "pause", grund: "Kontingent erschöpft (429)" };
+    return { art: "pause", grund: "Kontingent erschöpft (429)", messung };
   }
 
   if (ergebnis.api_error_status && ergebnis.api_error_status >= 500) {
-    return { art: "pause", grund: `Die API war nicht erreichbar (${ergebnis.api_error_status})` };
+    return {
+      art: "pause",
+      grund: `Die API war nicht erreichbar (${ergebnis.api_error_status})`,
+      messung,
+    };
+  }
+
+  // Nicht angemeldet, abgelaufen, widerrufen: das liegt am Käfig und nicht
+  // am Blatt, und es trifft das nächste genauso. Kam es bisher als JSON mit
+  // `is_error`, landete es unten bei „nichts" — und der Postbote merkte sich
+  // jedes Blatt, das während des Ausfalls drankam, für immer als erledigt
+  // (4.10.2026; derselbe Ausfall stand schon einmal unbemerkt auf dem NAS,
+  // verdeckt durch einen leeren Korb). Gefragt wird nach ausdrücklichen
+  // Zeichen einer Anmeldung, nicht nach „kein einziger Zug": ein Fehler, der
+  // nur dieses Blatt betrifft, darf die Warteschlange nicht anhalten.
+  const meldung = typeof ergebnis.result === "string" ? ergebnis.result : "";
+  if (
+    ergebnis.api_error_status === 401 ||
+    ergebnis.api_error_status === 403 ||
+    /not logged in|please run \/login|invalid api key|oauth token|authenticat/i.test(meldung)
+  ) {
+    return {
+      art: "pause",
+      grund: `claude ist nicht angemeldet: ${meldung.slice(0, 200)}`,
+      messung,
+    };
   }
 
   if (ergebnis.is_error || code !== 0) {
     return {
       art: "nichts",
       grund: `Lauf gescheitert (${ergebnis.subtype ?? "?"}, exit ${code}): ${(ergebnis.result ?? "").slice(0, 200)}`,
+      messung,
     };
   }
 
@@ -379,6 +588,7 @@ function auswerten<A>(
     return {
       art: "nichts",
       grund: `Der Lauf wollte etwas, das er nicht darf: ${verweigert.map((v) => v.tool_name).join(", ")}`,
+      messung,
     };
   }
 
@@ -393,6 +603,7 @@ function auswerten<A>(
     return {
       art: "nichts",
       grund: `Keine verwertbare Antwort: ${(ergebnis.result ?? "").slice(0, 200)}`,
+      messung,
     };
   }
 
@@ -401,6 +612,7 @@ function auswerten<A>(
     antwort,
     kostenUsd: ergebnis.total_cost_usd ?? 0,
     dauerMs: ergebnis.duration_ms ?? 0,
+    messung,
   };
 }
 

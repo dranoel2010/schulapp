@@ -2,7 +2,7 @@ import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { FRIST_MS } from "./kaefig.mts";
+import { FRIST_MAX_MS } from "./kaefig.mts";
 
 /**
  * Der Draht zur Schulapp — ein MCP-Client aus fetch und sonst nichts.
@@ -34,6 +34,28 @@ const HIER = path.dirname(fileURLToPath(import.meta.url));
 
 /** Wo der Zugang liegt. Nicht in Git — siehe harness/.gitignore. */
 export const ZUGANG_DATEI = path.join(HIER, "zugang.json");
+
+/**
+ * Wie lange ein Token, das in einen Käfig geht, mindestens noch gelten muss:
+ * die längste Frist, die ein Lauf bekommen kann, und eine Minute Luft.
+ *
+ * Seit dem 4.10.2026 ist das nicht mehr eine Viertelstunde, sondern bis zu
+ * einer Dreiviertelstunde (`fristFuer()` in kaefig.mts). Die Obergrenze dafür
+ * ist hart: ein Zugriffs-Token lebt eine Stunde (ACCESS_TTL_SECONDS in
+ * @/lib/oauth). Verlangte dieser Vorlauf mehr, erneuerte `gueltigesToken()`
+ * bei jedem einzelnen Aufruf — und schlimmer, das herausgegebene Token liefe
+ * mitten im Lauf ab, also genau der Fehler vom 12.9.2026, nur später. 58
+ * Minuten lassen zwei Minuten für den Weg zwischen Ausstellen und Ankommen.
+ */
+const KAEFIG_VORLAUF_MS = FRIST_MAX_MS + 60_000;
+
+// Laut und beim Laden, nicht erst im Lauf: wer FRIST_MAX_MS hochsetzt, soll
+// es beim nächsten Start merken und nicht nach einer Stunde an einer 401.
+if (KAEFIG_VORLAUF_MS > 58 * 60_000) {
+  throw new Error(
+    `FRIST_MAX_MS (${FRIST_MAX_MS / 60_000} min) plus eine Minute Luft passt nicht unter ein Token, das eine Stunde lebt — höchstens 57 Minuten.`,
+  );
+}
 
 /**
  * Was der Dienst über seinen Zugang wissen muss, um nach einem Neustart
@@ -140,18 +162,23 @@ export class Verbindung {
    * ── Und deshalb genügt „gültig" hier nicht ──────────────────────────────
    *
    * Für eine eigene Anfrage reicht eine Minute Restlaufzeit; für einen Lauf
-   * nicht. Ein Lauf darf `FRIST_MS` dauern (fünfzehn Minuten), und bis zum
-   * 12.9.2026 gab diese Methode ein Token heraus, das in zwei Minuten ablief:
+   * nicht. Ein Lauf durfte damals `FRIST_MS` dauern (fünfzehn Minuten), und bis
+   * zum 12.9.2026 gab diese Methode ein Token heraus, das in zwei Minuten ablief:
    * Der Käfig bekam es als Datei, arbeitete zehn Minuten, und die Abschrift der
    * achten Seite lief in eine 401 — mitten in einem Lauf, in dem niemand mehr
    * nachlegen kann. Der Kommentar oben versprach dabei genau das Gegenteil.
    *
-   * Verlangt wird deshalb die volle Frist plus eine Minute Luft. Die Zahl kommt
-   * aus kaefig.mts und steht nicht hier: Eine zweite Fassung wäre die falsche,
+   * Verlangt wird deshalb die volle Frist plus eine Minute Luft — und seit dem
+   * 4.10.2026 die LÄNGSTE Frist (FRIST_MAX_MS), nicht die des einzelnen Blattes.
+   * Damit bleibt diese Methode ohne Argument, und kein Aufrufer muss die
+   * Seitenzahl ein zweites Mal hierher tragen: ein zweiter Ort für dieselbe
+   * Zahl wäre wieder die Fehlerklasse vom 12.9.2026. Der Preis ist, dass öfter
+   * erneuert wird; das kostet eine Anfrage und ist harmlos. Die Zahl kommt aus
+   * kaefig.mts und steht nicht hier: Eine zweite Fassung wäre die falsche,
    * sobald jemand die Frist ändert.
    */
   async zugriffstoken(): Promise<string> {
-    return this.gueltigesToken(false, FRIST_MS + 60_000);
+    return this.gueltigesToken(false, KAEFIG_VORLAUF_MS);
   }
 
   /**

@@ -46,8 +46,14 @@ export const dynamic = "force-dynamic";
  *
  * **Antwort ist immer JSON.** Die Spezifikation erlaubt daneben einen
  * SSE-Strom; der wäre für Werkzeuge gut, die lange rechnen und unterwegs
- * berichten. Hier rechnet nichts lange: die teuerste Antwort ist ein Bild aus
- * der Datenbank.
+ * berichten. Lange dauern kann eine Antwort seit dem 4.10.2026 durchaus:
+ * `read_docling` wartet auf Docling, auf dem Prozessor des NAS bis zu drei
+ * Minuten je Seite (`TIMEOUT_MS` in @/lib/docling), und `propose_sheet` fragt
+ * nach dem Anlegen noch Jev. Zu berichten gibt es unterwegs trotzdem nichts —
+ * Docling sagt nur „fertig" oder „noch nicht", keinen Fortschritt —, also
+ * bleibt es bei einer Antwort am Ende. Gibt ein Client vorher auf, rechnet
+ * Docling weiter, und das Ergebnis liegt für den nächsten Aufruf zur selben
+ * Seite im Vorrat (`doclingFor()`).
  */
 
 /** Wie sich diese Adresse einem Client vorstellt, der noch kein Token hat. */
