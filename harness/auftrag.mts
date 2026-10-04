@@ -106,7 +106,7 @@ DIE ABSCHRIFT IST DEINE ZWEITE AUFGABE. Was auf den Seiten steht, wird wörtlich
 
 So gehst du vor:
 1. read_sheet mit dieser id — daraus hast du das eingetragene Fach, Titel, Notiz, die schon gesetzten Themen und die ids aller Seiten.
-2. read_page für jede Seite. Lies, was dasteht, und schreib es DIREKT NACH DEM BILD ab, Seite für Seite — nicht am Ende alles auf einmal aus dem Gedächtnis. Wo du dir bei einem Wort nicht sicher bist, merk es dir als unsicher, statt die wahrscheinlichste Lesung zu nehmen.
+2. Für jede Seite zuerst read_docling, dann read_page. Docling liest das GEDRUCKTE zuverlässig — Text, Tabellen, Formeln als LaTeX —, Handschrift aber nicht. Übernimm Gedrucktes, Tabellen und Formeln von Docling, und schreib die Handschrift DIREKT NACH DEM BILD dazu, Seite für Seite — nicht am Ende alles auf einmal aus dem Gedächtnis. Das Bild ist maßgeblich: widerspricht Docling dem, was du siehst, gilt das Bild. Meldet read_docling einen Fehler, lies die Seite einfach nur mit read_page. Wo du dir bei einem Wort nicht sicher bist, merk es dir als unsicher, statt die wahrscheinlichste Lesung zu nehmen.
 3. read_subjects — welche Fächer es gibt und wie sie geschrieben werden. Entscheide erst jetzt, wohin das Blatt gehört.
 4. read_topics für das Fach, auf das du dich festgelegt hast (nicht für das eingetragene, falls die beiden auseinandergehen).
 5. propose_sheet, genau einmal — mit den Abschriften aus Schritt 2.
@@ -185,7 +185,7 @@ DIESES BLATT IST SCHON EINGEORDNET. Ein Mensch hat es durchgesehen und ihm Fach,
 
 So gehst du vor:
 1. read_sheet mit dieser id. Dort steht an jeder Seite transcriptChars: null heißt „diese Seite hat noch niemand gelesen", eine Zahl (auch 0) heißt „gelesen".
-2. read_page für JEDE Seite mit transcriptChars: null — und nur für die. Lies, was dasteht, und schreib es DIREKT NACH DEM BILD ab, Seite für Seite, nicht am Ende alles auf einmal aus dem Gedächtnis.
+2. Für JEDE Seite mit transcriptChars: null — und nur für die — zuerst read_docling, dann read_page. Gedrucktes, Tabellen und Formeln von Docling übernehmen, die Handschrift DIREKT NACH DEM BILD dazuschreiben, Seite für Seite, nicht am Ende alles auf einmal aus dem Gedächtnis. Das Bild ist maßgeblich; meldet read_docling einen Fehler, reicht read_page.
 3. propose_sheet, genau einmal, mit NUR dem Feld transcripts.
 
 WAS IN DEN VORSCHLAG GEHÖRT — und was nicht:
@@ -310,6 +310,7 @@ export const BLATT_AUFGABE = {
   erlaubt: [
     "mcp__schulapp__read_sheet",
     "mcp__schulapp__read_page",
+    "mcp__schulapp__read_docling",
     "mcp__schulapp__read_subjects",
     "mcp__schulapp__read_topics",
     "mcp__schulapp__propose_sheet",

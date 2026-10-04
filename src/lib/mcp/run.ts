@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { User } from "@/db/schema";
 import { daysBetween, formatGerman, todayInBerlin } from "@/lib/dates";
 import { autoFile, type AutoFileResult } from "@/lib/auto-file";
+import { convertPage, doclingConfigured } from "@/lib/docling";
 import { getExam, listExams } from "@/lib/exams";
 import { formatAverage, gradeLabel } from "@/lib/grade-scale";
 import { gradeSummary, gradesBySubject } from "@/lib/grades";
@@ -474,6 +475,50 @@ const HANDLERS: Handlers = {
       base64: Buffer.from(page.bytes).toString("base64"),
       mimeType: page.mimeType,
     };
+  },
+
+  async read_docling(user, args) {
+    if (!doclingConfigured()) {
+      return fehler(
+        "Docling ist hier nicht eingerichtet. Lies die Seite mit read_page.",
+      );
+    }
+
+    // Das Vollbild und nicht die Lesefassung: Docling bekommt die Bytes direkt
+    // und nicht durch ein Tool-Ergebnis, die Grenze von rund 100 KB gilt hier
+    // also nicht — und für kleine Schrift zählt jedes Pixel.
+    const page = await readPageImage(user.id, args.page, "voll");
+
+    if (!page) {
+      return fehler(
+        "Diese Seite gibt es nicht. Die id einer Seite steht in read_sheet unter „pages“ — die id des Blattes ist eine andere.",
+      );
+    }
+
+    if (!isAllowedMime(page.mimeType)) {
+      return fehler("Diese Seite trägt ein Format, das die App nicht ausliefert.");
+    }
+
+    try {
+      const ergebnis = await convertPage(page.bytes, page.mimeType);
+
+      if (ergebnis.markdown === "") {
+        return daten(
+          "Docling hat auf dieser Seite nichts Gedrucktes gefunden — vermutlich ist alles Handschrift. Lies sie mit read_page.",
+          { page: args.page, markdown: "" },
+        );
+      }
+
+      return daten(
+        `Was Docling auf der Seite liest (${ergebnis.markdown.length} Zeichen, ${ergebnis.seconds.toFixed(1)} s). Gedrucktes, Tabellen und Formeln von hier übernehmen, Handschrift aus read_page ergänzen.`,
+        { page: args.page, markdown: ergebnis.markdown },
+      );
+    } catch (error) {
+      console.error("Docling fehlgeschlagen", error);
+      return fehler(
+        "Docling hat nicht geantwortet. Lies die Seite mit read_page — das geht auch ohne.",
+      );
+    }
   },
 
   async read_transcript(user, args) {

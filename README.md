@@ -554,6 +554,44 @@ halbe Sekunde, Kosten weit unter einem Hundertstel Cent.
 Der Schlüssel gehört in die `.env` auf dem NAS und muss im Container ankommen.
 Lokal steht er in `.env.local`.
 
+### Docling liest das Gedruckte vor
+
+Seit dem 4.10.2026 ruft der Postbote für jede Seite zuerst `read_docling` und
+erst dann `read_page`. Docling (IBM, offen) läuft als eigener Container auf dem
+NAS und liest **gedruckten Text, Tabellen und abgesetzte Formeln** — Handschrift
+nicht, dafür ist es nicht gebaut. Claude übernimmt also das Gedruckte als
+Vorlage und schreibt die Handschrift aus dem Foto dazu; das Foto ist
+maßgeblich. In die Datenbank schreibt Docling nichts selbst.
+
+Gemessen an einem gerenderten Arbeitsblatt (Mac, warm): rund 6 Sekunden je
+Seite. Die Tabelle kam fehlerfrei an; im Fließtext fehlte zweimal der Strich in
+`f'(x)`, und `x³` wurde `x3` — deshalb Vorlage und nicht Abschrift. Auf dem
+NAS ohne Grafikkarte ist es langsamer; ein Postboten-Lauf hat 15 Minuten je
+Blatt (`FRIST_MS`), und `convertPage()` gibt nach drei Minuten je Seite auf.
+
+Gefragt wird über den **asynchronen** Weg (`/v1/convert/file/async`, dann
+nachfragen, dann abholen) und mit `code_formula_preset=codeformulav2` — warum,
+steht an `convertPage()` und `doclingForm()` in `src/lib/docling.ts`.
+
+Auf dem NAS gehört der Dienst in die Compose-Datei, nur im inneren Netz
+erreichbar, und die App bekommt seine Adresse:
+
+```yaml
+  docling:
+    image: quay.io/docling-project/docling-serve-cpu
+    restart: unless-stopped
+    # kein ports: — nur die App spricht mit ihm
+
+  app:
+    environment:
+      DOCLING_URL: http://docling:5001
+```
+
+Ohne `DOCLING_URL` sagt `read_docling`, dass Docling fehlt, und der Postbote
+liest wie vorher nur das Foto. Der Postbote selbst braucht die neue
+`harness/auftrag.mts` — auf dem NAS ist `harness/` eine Kopie und kein Klon,
+also per `scp -O` hinüber und den Container neu starten.
+
 ## Datenbank
 
 **Seit dem 30.8.2026 läuft die App auf einem Synology-NAS im Heimnetz** — in

@@ -261,6 +261,14 @@ export const TOOLS = {
     args: z.object({ page: PAGE_ARG }).strict(),
   },
 
+  read_docling: {
+    title: "Das Gedruckte einer Seite (Docling)",
+    description:
+      "Was Docling auf einer Seite liest, als Markdown: gedruckter Text Zeichen für Zeichen, Tabellen als Tabellen, Formeln als LaTeX. Handschrift liest Docling NICHT zuverlässig — sie fehlt oder ist verstümmelt. Nimm es als Vorlage für das Gedruckte und schreib die Handschrift aus read_page dazu. Das Foto bleibt maßgeblich: wo beide sich widersprechen, gilt, was du auf dem Bild siehst. Kann eine Weile dauern.",
+    readOnly: true,
+    args: z.object({ page: PAGE_ARG }).strict(),
+  },
+
   read_transcript: {
     title: "Die Abschrift eines Blattes",
     description:
