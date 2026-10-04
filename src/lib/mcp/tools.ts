@@ -291,7 +291,7 @@ export const TOOLS = {
     title: "Vorschlag zu einem Blatt",
     description: [
       "Legt einen Vorschlag zu einem Blatt in den Eingangskorb: Fach, Titel, Schultag, Notiz, Themen — und die Abschrift dessen, was auf den Seiten steht.",
-      "Er ändert nichts. Er liegt neben dem Blatt, bis ein Mensch ihn im Formular übernimmt — und dabei jedes Feld noch ändern kann.",
+      "Selbst ändert er nichts. Danach entscheidet die App mit ihrem Einordnungsmodell (Jev) über Fach und Themen — deine Themen kommen dabei in die engere Wahl — und übernimmt den Vorschlag samt Titel, Notiz und Abschrift. Geht das nicht, bleibt er im Korb, bis ein Mensch ihn übernimmt.",
       "Jedes Feld darf fehlen, und fehlen heißt überall dasselbe: „dazu sage ich nichts, es bleibt, wie es am Blatt steht“. Erfinde also keinen Titel, nur damit das Feld gefüllt ist. Nur ganz leer darf ein Vorschlag nicht sein.",
       "Themen sind freier Text und dürfen im Vokabular noch fehlen — schreib sie so, wie sie auf dem Blatt stehen.",
       "Eine Ausnahme von „leer heißt: es bleibt“: schlägst du ein anderes Fach vor und nennst keine Themen, fallen die Themen des Blattes weg. Sie gehören dem Vokabular des alten Fachs.",

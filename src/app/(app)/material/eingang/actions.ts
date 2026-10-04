@@ -5,8 +5,8 @@ import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
 import { formErrors } from "@/lib/form-errors";
+import { applyProposal } from "@/lib/inbox-apply";
 import {
-  clearProposals,
   createProposal,
   deleteProposal,
   getProposal,
@@ -21,12 +21,8 @@ import {
   listMaterialTranscripts,
   materialInputSchema,
   ownsSubject,
-  setMaterialTopics,
-  setMaterialTranscripts,
-  updateMaterial,
   type MaterialFieldErrors,
   type MaterialFormState,
-  type NewPageTranscript,
 } from "@/lib/materials";
 import { transcriptsFromForm } from "@/lib/transcripts";
 
@@ -340,103 +336,17 @@ export async function deleteProposalAction(id: string): Promise<void> {
  * einer, steht das nachher auf dem Bildschirm — still verschwinden darf keiner.
  */
 /**
- * Was beim Übernehmen wirklich geschieht — einmal geschrieben, von zwei Wegen
- * benutzt.
- *
- * Die beiden Wege sind das Formular (ansehen, vielleicht ändern, dann
- * übernehmen) und der Knopf am Korb (ein Druck, so wie vorgeschlagen). Sie
- * unterscheiden sich nur darin, WOHER die Werte kommen; was danach passiert,
- * muss dasselbe sein. Stünde es zweimal da, ginge eines Tages der eine Weg
- * abhaken und der andere nicht, oder der eine räumte die übrigen Vorschläge
- * weg und der andere ließe sie liegen.
+ * Übernehmen und danach auffrischen. Was dabei geschrieben wird, steht in
+ * `applyProposal()` (@/lib/inbox-apply) — dort, weil auch das automatische
+ * Einordnen durch Jev denselben Weg gehen muss.
  */
 async function anwenden(
   userId: string,
   materialId: string,
-  werte: {
-    subjectId: string;
-    title: string;
-    capturedOn: string;
-    note: string | null;
-    topics: string[];
-    /**
-     * Nur die Seiten, über die etwas gesagt wird — nicht alle Seiten des
-     * Blattes.
-     *
-     * Bei den Themen IST die Menge die Aussage, deshalb ersetzt
-     * `setMaterialTopics()` sie ganz. Bei der Abschrift ist jede Seite eine
-     * eigene Aussage, und „zu Seite 1 sage ich nichts" heißt nicht „Seite 1 ist
-     * leer": genannte Seiten werden gesetzt, ungenannte bleiben stehen. Die
-     * ausführliche Begründung steht an `setMaterialTranscripts()`.
-     */
-    transcripts: NewPageTranscript[];
-  },
+  werte: Parameters<typeof applyProposal>[2],
 ): Promise<string | null> {
-  if (
-    !(await updateMaterial(userId, materialId, {
-      subjectId: werte.subjectId,
-      title: werte.title,
-      capturedOn: werte.capturedOn,
-      note: werte.note,
-    }))
-  ) {
-    return null;
-  }
-
-  const { verworfen, zusammengefallen, umbenannt } = await setMaterialTopics(
-    userId,
-    materialId,
-    werte.topics,
-  );
-
-  /*
-   * Die Abschriften, und zwar mit einer Zählung davor.
-   *
-   * Gezählt werden die Seiten, an denen sich der Text WIRKLICH ändert, und
-   * nicht die, die geschrieben werden. Der Unterschied ist auf dem Bildschirm
-   * zu sehen: das Formular schickt jede Seite mit, auch die unberührten, weil
-   * geschrieben wird, was im Feld steht. Ohne diesen Vergleich stünde im Korb
-   * „die Abschrift von 4 Seiten ist mit übernommen“, wenn der Vorschlag nur
-   * eine einzige angefasst hat — eine Zahl, die stimmt und trotzdem die
-   * Unwahrheit sagt.
-   *
-   * Gelesen wird nur, wenn überhaupt eine Abschrift im Spiel ist. Ein
-   * gewöhnliches Übernehmen ohne Abschrift kostet damit keine Abfrage mehr als
-   * vorher.
-   */
-  let abschrift = 0;
-
-  if (werte.transcripts.length > 0) {
-    const vorher = new Map(
-      (await listMaterialTranscripts(userId, materialId)).map(
-        (page) => [page.pageId, page.transcript] as const,
-      ),
-    );
-
-    const geaendert = werte.transcripts.filter(
-      // `undefined` steht für eine Seite, die es nicht mehr gibt — der
-      // Vergleich gegen einen String ist dann „anders“.
-      (entry) => entry.text !== vorher.get(entry.pageId),
-    ).length;
-
-    const geschrieben = await setMaterialTranscripts(
-      userId,
-      materialId,
-      werte.transcripts,
-    );
-
-    // Wird zwischen dem Lesen und dem Schreiben eine Seite gelöscht, kommt sie
-    // in `geschrieben` nicht mehr vor. Der Deckel sorgt dafür, dass der Korb
-    // hinterher keine Seite mehr nennt, als wirklich beschrieben wurde.
-    abschrift = Math.min(geaendert, geschrieben);
-  }
-
-  const entfernt = await clearProposals(userId, materialId);
-
-  // Erst ganz zum Schluss abhaken. Ein schon gesetzter Zeitpunkt bleibt dabei
-  // stehen — `markFiled()` fasst ihn nicht noch einmal an, damit „wann hat ein
-  // Mensch hingesehen?“ eine Antwort behält.
-  await markFiled(userId, materialId, true);
+  const ergebnis = await applyProposal(userId, materialId, werte);
+  if (!ergebnis) return null;
 
   revalidateInbox(materialId);
 
@@ -444,18 +354,18 @@ async function anwenden(
     materialId,
     // `entfernt` zählt den übernommenen mit — er ist ja auch weggeräumt
     // worden. Interessant sind die anderen.
-    weitere: Math.max(0, entfernt - 1),
+    weitere: Math.max(0, ergebnis.entfernt - 1),
     // Die Abschrift ist das einzige Übernommene, das im Korb nie zu sehen war
     // — auf der Karte stand nur, dass es sie gibt. Ohne diese Zahl bliebe der
     // längste Teil dessen, was gerade geschrieben wurde, unerwähnt.
-    abschrift,
-    ohneFachwort: verworfen.length,
-    zusammengefallen: zusammengefallen.length,
+    abschrift: ergebnis.abschrift,
+    ohneFachwort: ergebnis.verworfen,
+    zusammengefallen: ergebnis.zusammengefallen,
     // Ein getippter Titel, den das Fach schon anders schreibt. Am Blatt steht
     // danach die Schreibweise des Fachs, und die Gegenüberstellung konnte das
     // nicht ankündigen — sie ist eine reine Rechnung und liest das Vokabular
     // nicht. Also wird es hinterher gesagt.
-    andereSchreibweise: umbenannt.length,
+    andereSchreibweise: ergebnis.umbenannt,
   });
 }
 

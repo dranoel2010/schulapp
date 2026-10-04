@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { User } from "@/db/schema";
 import { daysBetween, formatGerman, todayInBerlin } from "@/lib/dates";
+import { autoFile, type AutoFileResult } from "@/lib/auto-file";
 import { getExam, listExams } from "@/lib/exams";
 import { formatAverage, gradeLabel } from "@/lib/grade-scale";
 import { gradeSummary, gradesBySubject } from "@/lib/grades";
@@ -660,6 +661,17 @@ const HANDLERS: Handlers = {
       );
     }
 
+    // Gleich danach ordnet Jev ein (@/lib/auto-file). Scheitert das — kein
+    // Schlüssel, Jev nicht erreichbar, nichts lesbar —, bleibt der Vorschlag
+    // im Korb, und genau das steht dann in der Antwort. Ein Fehler beim
+    // Einordnen darf den angelegten Vorschlag nicht mitreißen.
+    const eingeordnet = await autoFile(user.id, id).catch(
+      (error): AutoFileResult => {
+        console.error("Einordnen durch Jev fehlgeschlagen", error);
+        return { ok: false, grund: "Jev war nicht erreichbar." };
+      },
+    );
+
     // Was wirklich angekommen ist, und nicht, was hereinkam: `parsed.data` ist
     // das, was das Schema durchgelassen hat. Nähme @/lib/inbox das Feld
     // `transcripts` eines Tages nicht mehr an, stünde hier eine leere Liste —
@@ -675,10 +687,25 @@ const HANDLERS: Handlers = {
         gespeichert.length > 0
           ? `, mit der Abschrift von ${gespeichert.length} Seite${gespeichert.length === 1 ? "" : "n"}`
           : ""
-      }. Er ändert nichts, bis ein Mensch ihn übernimmt.`,
+      }. ${
+        eingeordnet.ok
+          ? `Jev hat ihn übernommen: ${eingeordnet.subjectName}${
+              eingeordnet.topics.length > 0
+                ? `, ${eingeordnet.topics.join(", ")}`
+                : ""
+            }.`
+          : `Er bleibt im Korb, bis ein Mensch ihn übernimmt (${eingeordnet.grund}).`
+      }`,
       {
         id,
         sheet: args.sheet,
+        eingeordnet: eingeordnet.ok
+          ? {
+              subject: eingeordnet.subjectName,
+              confidence: eingeordnet.confidence,
+              topics: eingeordnet.topics,
+            }
+          : null,
         subjectId: parsed.data.subjectId,
         title: parsed.data.title,
         capturedOn: parsed.data.capturedOn,

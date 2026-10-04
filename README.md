@@ -520,8 +520,8 @@ npx tsx harness/zugang.mts     # einmal zustimmen
 npx tsx harness/postbote.mts   # laufen lassen
 ```
 
-Es gehört ausdrücklich **nicht zur App**: die App hat keinen Schlüssel und ruft
-nie ein Modell. Der Postbote benutzt sie von außen, durch dieselbe Tür wie die
+Es gehört ausdrücklich **nicht zur App**: abgeschrieben wird außerhalb, die App
+selbst ruft dafür kein Modell. Der Postbote benutzt sie von außen, durch dieselbe Tür wie die
 Claude-App, mit eigener Zustimmung und eigenem Trennen-Knopf in den
 Einstellungen. Er läuft über Claude Code und damit über das Abo — kein
 API-Schlüssel, keine Rechnung.
@@ -531,6 +531,28 @@ nimmt die eingebauten Werkzeuge weg, `--strict-mcp-config` alle anderen Server.
 Übrig bleiben die Werkzeuge dieser App, gemessen und nachgezählt. Warum das
 nötig ist und was sonst noch dahintersteht, steht in
 [harness/README.md](harness/README.md).
+
+### Jev ordnet ein — seit dem 4.10.2026 ohne Eingangskorb
+
+Ziel: ein Foto machen, sonst nichts. Legt der Postbote seinen Vorschlag an,
+entscheidet die App gleich danach mit **Jev** (TypeSafe, ein Entscheidungsmodell,
+das keinen Text schreibt) über Fach und Themen und übernimmt den Vorschlag
+samt Titel, Notiz und Abschrift — durch dieselbe Tür wie der Knopf
+„Übernehmen" (`applyProposal()` in `src/lib/inbox-apply.ts`). Der Agent darf
+weiterhin nur vorschlagen; übernommen wird von der App.
+
+Im Korb bleibt ein Blatt nur noch, wenn das nicht geht: `TYPESAFE_API_KEY`
+fehlt, Jev antwortet nicht, oder auf dem Blatt ist fast nichts lesbar (eine
+reine Skizze). Und ein Blatt, das schon abgelegt ist, fasst Jev nie an — die
+Nachlese schickt Abschriften durch dieselbe Tür.
+
+Gemessen vor dem Einbau an 20 abgelegten Blättern: 19 Mal dasselbe Fach wie
+der Mensch, und das zwanzigste war falsch abgelegt. Den Ausschlag gaben die
+bisherigen Themen als Hinweis an jedem Fach. Je Blatt zwei Anfragen, etwa eine
+halbe Sekunde, Kosten weit unter einem Hundertstel Cent.
+
+Der Schlüssel gehört in die `.env` auf dem NAS und muss im Container ankommen.
+Lokal steht er in `.env.local`.
 
 ## Datenbank
 
