@@ -97,7 +97,11 @@ export function weekdayOf(date: string): number {
   return weekdayIndex(date) + 1;
 }
 
-/** Schultag ist Montag bis Freitag — Ferien kennt die App (noch) nicht. */
+/**
+ * Schultag ist Montag bis Freitag — nach dem Wochentag allein. Ferien und
+ * Klassenfahrt stehen in @/lib/free-days und werden dort gefragt, wo ein
+ * Datum auf sie treffen kann; diese Rechnung braucht keine Datenbank.
+ */
 export function isSchoolDay(date: string): boolean {
   return weekdayOf(date) <= 5;
 }

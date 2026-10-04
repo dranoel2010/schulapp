@@ -10,14 +10,19 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth";
+import { formatGerman, todayInBerlin } from "@/lib/dates";
+import { freeLabel, listFreePeriods } from "@/lib/free-days";
 import { listConnections } from "@/lib/oauth";
 import { readThemePreference, THEME_OPTIONS } from "@/lib/theme";
 
 import {
+  createFreePeriodAction,
+  deleteFreePeriodAction,
   revokeConnectionAction,
   setReminderHourAction,
   setThemeAction,
 } from "./actions";
+import { FreeDaysForm } from "./free-days-form";
 import { PushSettings, ReminderTime } from "./push-settings";
 
 export const metadata: Metadata = {
@@ -40,7 +45,11 @@ function tag(value: Date): string {
 export default async function SettingsPage() {
   const user = await requireUser();
   const theme = await readThemePreference();
-  const connections = await listConnections(user.id);
+  const today = todayInBerlin();
+  const [connections, freePeriods] = await Promise.all([
+    listConnections(user.id),
+    listFreePeriods(user.id, today),
+  ]);
 
   const since = tag(user.createdAt);
 
@@ -69,6 +78,59 @@ export default async function SettingsPage() {
             action={setReminderHourAction}
             hour={user.reminderHour}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Ferien und Klassenfahrt</CardTitle>
+          <CardDescription>
+            An diesen Tagen ist ganz frei: kein Stundenplan, keine Lernblöcke,
+            kein Abruf, keine Erinnerung. Der Lernplan weicht auf die Tage
+            davor und danach aus.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {freePeriods.length === 0 ? (
+            <p className="text-sm text-muted">Nichts eingetragen.</p>
+          ) : (
+            <ul className="space-y-3">
+              {freePeriods.map((period) => (
+                <li
+                  key={period.id}
+                  className="flex flex-wrap items-baseline justify-between gap-3"
+                >
+                  <div>
+                    <p className="font-medium">
+                      {freeLabel(period)}
+                      {period.startsOn <= today ? (
+                        <span className="text-sm font-normal text-accent">
+                          {" "}
+                          · gerade
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="text-sm text-muted">
+                      {period.startsOn === period.endsOn
+                        ? formatGerman(period.startsOn, "kurz")
+                        : `${formatGerman(period.startsOn, "kurz")} bis ${formatGerman(period.endsOn, "kurz")}`}
+                    </p>
+                  </div>
+
+                  <form action={deleteFreePeriodAction}>
+                    <input type="hidden" name="id" value={period.id} />
+                    <Button type="submit" variant="secondary">
+                      Streichen
+                    </Button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="h-px bg-border" />
+
+          <FreeDaysForm action={createFreePeriodAction} />
         </CardContent>
       </Card>
 

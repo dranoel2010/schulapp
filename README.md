@@ -589,7 +589,9 @@ der Ablage kamen die drei Tabellen `materials`, `material_pages` und
 `material_topics` dazu, mit dem Eingangskorb die Spalte `materials.filed_at`
 und die beiden Tabellen `material_proposals` und `material_proposal_topics`,
 mit dem Web MCP die Spalte `material_pages.reading` und die drei Tabellen
-`oauth_clients`, `oauth_codes` und `oauth_grants`. **Ohne Push bleibt nicht nur
+`oauth_clients`, `oauth_codes` und `oauth_grants`, mit Ferien und
+Klassenfahrt die Tabelle `free_periods` (`scripts/freie-tage-tabelle.sql`).
+**Ohne Push bleibt nicht nur
 der Materialbereich stehen, sondern die ganze Startseite** — sie lädt die
 letzten Blätter mit.
 

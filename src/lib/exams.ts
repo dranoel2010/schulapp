@@ -13,6 +13,7 @@ import {
   type Subject,
 } from "@/db/schema";
 import { isCalendarDate, todayInBerlin } from "@/lib/dates";
+import { freeDatesFrom } from "@/lib/free-days";
 import { normalizeTopics, topicKey } from "@/lib/topics";
 import {
   buildPlan,
@@ -425,7 +426,10 @@ export async function generatePlan(
     title: topic.title,
   }));
 
-  const occupied = await occupiedAcrossExams(userId, examId, blocks);
+  const [occupied, excludedDates] = await Promise.all([
+    occupiedAcrossExams(userId, examId, blocks),
+    freeDatesFrom(userId, today),
+  ]);
 
   const plan = buildPlan({
     examDate: exam.date,
@@ -433,6 +437,7 @@ export async function generatePlan(
     topics: planTopics,
     leadDays: exam.leadDays,
     minutesPerDay: exam.minutesPerDay,
+    excludedDates,
     occupied,
   });
 
@@ -477,6 +482,7 @@ export async function generatePlan(
     topics: planTopics,
     leadDays: exam.leadDays,
     minutesPerDay: exam.minutesPerDay,
+    excludedDates,
     occupied,
     open: remaining.map((block, index) => ({
       id: String(index),
@@ -561,7 +567,10 @@ export async function catchUpMissed(
   const open = all.filter((block) => block.status === "open");
   if (open.length === 0) return;
 
-  const occupied = await occupiedAcrossExams(userId, examId, all);
+  const [occupied, excludedDates] = await Promise.all([
+    occupiedAcrossExams(userId, examId, all),
+    freeDatesFrom(userId, today),
+  ]);
 
   const scheduled = replanOpen({
     examDate: exam.date,
@@ -569,6 +578,7 @@ export async function catchUpMissed(
     topics: topics.map((topic) => ({ id: topic.id, title: topic.title })),
     leadDays: exam.leadDays,
     minutesPerDay: exam.minutesPerDay,
+    excludedDates,
     occupied,
     open: open.map((block) => ({
       id: block.id,
@@ -609,6 +619,96 @@ export async function catchUpMissed(
       }
     }
   });
+}
+
+/**
+ * Räumt die freien Tage frei, nachdem Ferien oder eine Klassenfahrt
+ * eingetragen wurden.
+ *
+ * Neu verteilt werden nur die offenen Blöcke ab heute, und nur bei Prüfungen,
+ * von denen mindestens einer auf einen freien Tag fällt. Verpasste Blöcke aus
+ * der Vergangenheit bleiben, wo sie sind — über die entscheidet die Nachfrage
+ * auf der Startseite, nicht das Eintragen von Ferien.
+ *
+ * Gibt die Zahl der Prüfungen zurück, deren Plan sich bewegt hat.
+ */
+export async function moveOffFreeDays(
+  userId: string,
+  today: string,
+): Promise<number> {
+  if (!isCalendarDate(today)) return 0;
+
+  const excludedDates = await freeDatesFrom(userId, today);
+  if (excludedDates.length === 0) return 0;
+  const free = new Set(excludedDates);
+
+  const upcoming = await db
+    .select()
+    .from(exams)
+    .where(and(eq(exams.userId, userId), gte(exams.date, today)));
+
+  let moved = 0;
+
+  for (const exam of upcoming) {
+    const [topics, all] = await Promise.all([
+      db
+        .select()
+        .from(examTopics)
+        .where(eq(examTopics.examId, exam.id))
+        .orderBy(asc(examTopics.sortOrder), asc(examTopics.title)),
+      db
+        .select()
+        .from(studyBlocks)
+        .where(eq(studyBlocks.examId, exam.id))
+        .orderBy(asc(studyBlocks.date), asc(studyBlocks.sortOrder)),
+    ]);
+
+    const open = all.filter(
+      (block) => block.status === "open" && block.date >= today,
+    );
+    if (!open.some((block) => free.has(block.date))) continue;
+
+    const occupied = await occupiedAcrossExams(userId, exam.id, all);
+
+    const scheduled = replanOpen({
+      examDate: exam.date,
+      today,
+      topics: topics.map((topic) => ({ id: topic.id, title: topic.title })),
+      leadDays: exam.leadDays,
+      minutesPerDay: exam.minutesPerDay,
+      excludedDates,
+      occupied,
+      open: open.map((block) => ({
+        id: block.id,
+        topicId: block.topicId,
+        kind: toPlanKind(block.kind),
+      })),
+    });
+
+    const placed = new Map(scheduled.map((entry) => [entry.id, entry]));
+
+    await db.transaction(async (tx) => {
+      for (const block of open) {
+        const slot = placed.get(block.id);
+        if (!slot) continue;
+
+        await tx
+          .update(studyBlocks)
+          .set({
+            date: slot.date,
+            minutes: slot.minutes,
+            sortOrder: slot.sortOrder,
+          })
+          .where(
+            and(eq(studyBlocks.id, block.id), eq(studyBlocks.examId, exam.id)),
+          );
+      }
+    });
+
+    moved += 1;
+  }
+
+  return moved;
 }
 
 /** Streichen: die verpassten Blöcke werden abgehakt, ohne neuen Termin. */

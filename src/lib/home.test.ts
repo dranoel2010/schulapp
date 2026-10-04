@@ -174,6 +174,24 @@ describe("findNextLesson", () => {
 
     assert.equal(next?.startsAt, "08:50");
   });
+
+  it("springt über die Ferien zur ersten Stunde danach", () => {
+    // Zwei Wochen frei ab heute: ohne das Überspringen bliebe die Suche nach
+    // sieben Tagen stehen und meldete keine nächste Stunde.
+    const ferien = {
+      kind: "ferien",
+      title: "Herbstferien",
+      startsOn: MONDAY,
+      endsOn: "2026-09-25",
+    };
+
+    const next = findNextLesson(week([lesson(1, 1)]), MONDAY, "07:00", [
+      ferien,
+    ]);
+
+    assert.equal(next?.date, "2026-09-28");
+    assert.equal(next?.isToday, false);
+  });
 });
 
 /** Ein Lernblock; für dayLine zählt allein, dass es ihn gibt. */
@@ -266,6 +284,7 @@ function homeData(overrides: Partial<HomeData> = {}): HomeData {
     // Der Abrufkern hat hier keine Rolle: geprüft wird die Startseite, nicht
     // das Modul. Null heißt „heute nichts fällig" und ist der ruhige Fall.
     recallDue: 0,
+    freeToday: null,
     ...overrides,
   };
 }
@@ -308,6 +327,29 @@ describe("dayLine", () => {
     // "keine Stunde" klänge, als wüsste die App, dass heute wirklich keine ist.
     assert.equal(dayLine(homeData({ todayBlocks: blocks(1) })), "1 Lernblock");
     assert.equal(dayLine(homeData()), "kein Lernblock");
+  });
+
+  it("nennt Ferien und Klassenfahrt statt der Stunden", () => {
+    const freeToday = {
+      id: "f",
+      userId: "u",
+      kind: "klassenfahrt",
+      title: null,
+      startsOn: MONDAY,
+      endsOn: MONDAY,
+      createdAt: new Date(0),
+    };
+
+    assert.equal(
+      dayLine(homeData({ hasTimetable: true, freeToday })),
+      "Klassenfahrt, kein Lernblock",
+    );
+    assert.equal(
+      dayLine(
+        homeData({ freeToday: { ...freeToday, kind: "ferien", title: "Herbstferien" } }),
+      ),
+      "Herbstferien, kein Lernblock",
+    );
   });
 
   it("nennt einen freien Schultag beim Namen, wenn ein Plan steht", () => {

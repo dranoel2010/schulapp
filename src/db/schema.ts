@@ -363,6 +363,36 @@ export const lessons = pgTable(
 );
 
 /**
+ * Ein freier Zeitraum: Ferien, Klassenfahrt oder ein anderer Tag ohne Schule.
+ *
+ * Frei heißt hier ganz frei — kein Unterricht, keine Lernblöcke, kein Abruf,
+ * keine Erinnerung. Der Lernplan und der Abruf weichen auf die Tage davor und
+ * danach aus. Entschieden am 4.10.2026: auch in den Ferien wird nicht gelernt.
+ *
+ * Beide Enden zählen mit: eine Klassenfahrt von Montag bis Freitag steht als
+ * startsOn = Montag, endsOn = Freitag hier, nicht bis Samstag.
+ */
+export const freePeriods = pgTable(
+  "free_periods",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** ferien | klassenfahrt | frei */
+    kind: text("kind").notNull().default("ferien"),
+    /** Leer heißt: die Art ist der Name ("Klassenfahrt") */
+    title: text("title"),
+    startsOn: date("starts_on", { mode: "string" }).notNull(),
+    endsOn: date("ends_on", { mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("free_periods_user_idx").on(t.userId)],
+);
+
+/**
  * Eine Hausaufgabe: was bis wann für welches Fach zu tun ist.
  *
  * Fällig ist sie an einem Kalendertag, nicht zu einer Uhrzeit — dieselbe
@@ -1386,6 +1416,7 @@ export type Period = typeof periods.$inferSelect;
 export type NewPeriod = typeof periods.$inferInsert;
 export type Lesson = typeof lessons.$inferSelect;
 export type NewLesson = typeof lessons.$inferInsert;
+export type FreePeriod = typeof freePeriods.$inferSelect;
 export type Homework = typeof homework.$inferSelect;
 export type NewHomework = typeof homework.$inferInsert;
 export type SubjectTopic = typeof subjectTopics.$inferSelect;

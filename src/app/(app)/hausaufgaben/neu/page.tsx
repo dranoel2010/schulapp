@@ -4,6 +4,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireUser } from "@/lib/auth";
 import { addDays, todayInBerlin } from "@/lib/dates";
+import { freeDatesFrom } from "@/lib/free-days";
 import { listSubjects } from "@/lib/subjects";
 import {
   listLessons,
@@ -34,10 +35,15 @@ export const metadata: Metadata = {
  * nextLessonDate lässt den heutigen Tag bewusst aus: aufgegeben wird in der
  * Stunde, fällig ist es beim nächsten Mal. Fächer ohne Stunde im Plan tauchen
  * gar nicht erst auf — für sie greift der Rückfall im Formular.
+ *
+ * Fällt die nächste Stunde in die Ferien oder auf die Klassenfahrt, ist es die
+ * erste danach: eine Aufgabe vom Freitag vor den Herbstferien ist nicht am
+ * Montag in den Ferien fällig.
  */
 function nextLessonPerSubject(
   lessons: LessonWithSubject[],
   today: string,
+  free: ReadonlySet<string>,
 ): Record<string, string> {
   const weekdays = new Map<string, number[]>();
 
@@ -50,7 +56,8 @@ function nextLessonPerSubject(
   const dates: Record<string, string> = {};
 
   for (const [subjectId, days] of weekdays) {
-    const date = nextLessonDate(today, days);
+    let date = nextLessonDate(today, days);
+    while (date && free.has(date)) date = nextLessonDate(date, days);
     if (date) dates[subjectId] = date;
   }
 
@@ -61,9 +68,10 @@ export default async function NewHomeworkPage() {
   const user = await requireUser();
   const today = todayInBerlin();
 
-  const [subjects, lessons] = await Promise.all([
+  const [subjects, lessons, freeDays] = await Promise.all([
     listSubjects(user.id),
     listLessons(user.id),
+    freeDatesFrom(user.id, today),
   ]);
 
   // Ohne Fach kein Formular — die Auswahl wäre leer und nichts ließe sich
@@ -99,7 +107,7 @@ export default async function NewHomeworkPage() {
       <HomeworkForm
         action={createHomeworkAction}
         subjects={subjects}
-        dueSuggestions={nextLessonPerSubject(lessons, today)}
+        dueSuggestions={nextLessonPerSubject(lessons, today, new Set(freeDays))}
         fallbackDueDate={addDays(today, 1)}
         submitLabel="Aufgabe eintragen"
         cancelHref="/hausaufgaben"

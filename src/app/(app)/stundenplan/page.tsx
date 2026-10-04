@@ -4,7 +4,8 @@ import Link from "next/link";
 import { ButtonLink } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireUser } from "@/lib/auth";
-import { addDays, todayInBerlin } from "@/lib/dates";
+import { addDays, formatGerman, todayInBerlin } from "@/lib/dates";
+import { freeLabel, listFreePeriods } from "@/lib/free-days";
 import { listSubjects } from "@/lib/subjects";
 import {
   isDefaultPeriods,
@@ -43,9 +44,10 @@ export default async function TimetablePage() {
   const user = await requireUser();
   const today = todayInBerlin();
 
-  const [week, subjects] = await Promise.all([
+  const [week, subjects, freePeriods] = await Promise.all([
     loadWeek(user.id),
     listSubjects(user.id),
+    listFreePeriods(user.id, today),
   ]);
 
   const weekday = weekdayOf(today);
@@ -53,6 +55,15 @@ export default async function TimetablePage() {
   // sondern der übernächste Tag.
   const todayWeekday = weekday <= 5 ? weekday : null;
   const monday = addDays(today, 1 - weekday);
+
+  // Der Plan selbst bleibt stehen — er gilt nach den Ferien wieder. Darüber
+  // steht nur, was in dieser Woche davon ausfällt. Am Wochenende ist es die
+  // kommende Woche, denn auf die schaut man dann.
+  const shownMonday = weekday <= 5 ? monday : addDays(monday, 7);
+  const shownFriday = addDays(shownMonday, 4);
+  const freeThisWeek = freePeriods.filter(
+    (period) => period.startsOn <= shownFriday && period.endsOn >= shownMonday,
+  );
 
   const lastUsed = Math.max(
     0,
@@ -109,6 +120,19 @@ export default async function TimetablePage() {
         />
       ) : (
         <>
+          {freeThisWeek.map((period) => (
+            <p
+              key={period.id}
+              className="rounded-control bg-accent-soft px-4 py-3 text-sm text-accent"
+            >
+              {freeLabel(period)}:{" "}
+              {period.startsOn === period.endsOn
+                ? formatGerman(period.startsOn, "kurz")
+                : `${formatGerman(period.startsOn, "kurz")} bis ${formatGerman(period.endsOn, "kurz")}`}
+              {" "}— an diesen Tagen fällt der Unterricht aus.
+            </p>
+          ))}
+
           {hasLessons ? null : (
             <p className="text-sm text-muted">
               Noch ist alles frei. Tipp ein Feld an, um dort ein Fach

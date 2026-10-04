@@ -1,7 +1,12 @@
 import { count, eq } from "drizzle-orm";
 
 import { db } from "@/db";
-import { subjects, type Period, type Subject } from "@/db/schema";
+import {
+  subjects,
+  type FreePeriod,
+  type Period,
+  type Subject,
+} from "@/db/schema";
 import { addDays, daysBetween, timeInBerlin } from "@/lib/dates";
 import {
   blocksForDay,
@@ -10,6 +15,12 @@ import {
   type ExamListItem,
   type TodayBlock,
 } from "@/lib/exams";
+import {
+  freeLabel,
+  freePeriodOn,
+  listFreePeriods,
+  type FreeRange,
+} from "@/lib/free-days";
 import { gradeSummary, type GradeSummary } from "@/lib/grades";
 import { countInbox } from "@/lib/inbox";
 import {
@@ -106,7 +117,12 @@ export type HomeData = {
   upcoming: ExamListItem[];
   /** Das Stundenraster: welche Stunde wann beginnt und wann sie endet */
   periods: Period[];
-  /** Die heutigen Schulstunden, nach Stunde sortiert. Am Wochenende leer. */
+  /**
+   * Ferien, Klassenfahrt oder ein anderer freier Zeitraum, in den heute fällt.
+   * Dann ist `todayLessons` leer und `recallDue` null — frei heißt ganz frei.
+   */
+  freeToday: FreePeriod | null;
+  /** Die heutigen Schulstunden, nach Stunde sortiert. Am Wochenende und an freien Tagen leer. */
   todayLessons: LessonWithSubject[];
   /** Steht überhaupt ein Stundenplan in der Datenbank? */
   hasTimetable: boolean;
@@ -202,6 +218,7 @@ export async function loadHomeData(
     materials,
     inboxCount,
     recallDue,
+    freePeriods,
   ] = await Promise.all([
     db
       .select({ value: count() })
@@ -240,7 +257,10 @@ export async function loadHomeData(
       console.error("Abruf-Zahl nicht ermittelbar", fehler);
       return 0;
     }),
+    listFreePeriods(userId, today),
   ]);
+
+  const freeToday = freePeriodOn(freePeriods, today);
 
   const upcoming = exams.filter((exam) => exam.date >= today);
   const nextExam = upcoming[0] ?? null;
@@ -262,17 +282,19 @@ export async function loadHomeData(
     daysToNextExam: nextExam ? daysBetween(today, nextExam.date) : null,
     upcoming,
     periods: week.periods,
-    todayLessons:
-      week.days.find((day) => day.weekday === todayWeekday)?.lessons ?? [],
+    freeToday,
+    todayLessons: freeToday
+      ? []
+      : (week.days.find((day) => day.weekday === todayWeekday)?.lessons ?? []),
     hasTimetable: week.days.some((day) => day.lessons.length > 0),
-    nextLesson: findNextLesson(week, today, now),
+    nextLesson: findNextLesson(week, today, now, freePeriods),
     todayHomework,
     openHomework,
     homeworkCounts,
     grades,
     materials,
     inboxCount,
-    recallDue,
+    recallDue: freeToday ? 0 : recallDue,
   };
 }
 
@@ -308,7 +330,9 @@ export function dayLine(data: HomeData): string {
   const parts: string[] = [];
   const lessons = data.todayLessons.length;
 
-  if (!isSchoolDay(data.today)) {
+  if (data.freeToday) {
+    parts.push(freeLabel(data.freeToday));
+  } else if (!isSchoolDay(data.today)) {
     parts.push("Wochenende");
   } else if (data.hasTimetable) {
     parts.push(
@@ -418,6 +442,10 @@ export function lessonRoom(lesson: LessonWithSubject): string | null {
  * Unterricht hat, bekäme sonst am Montagnachmittag zu hören, es gebe keine
  * nächste Stunde.
  *
+ * Freie Tage — Ferien, Klassenfahrt — werden übersprungen und zählen nicht
+ * zu den sieben: nach den Herbstferien ist die nächste Stunde die am ersten
+ * Schultag danach, nicht „keine".
+ *
  * Exportiert allein für den Test — die Startseite bekommt das Ergebnis fertig
  * in `HomeData.nextLesson` und ruft die Funktion nicht selbst auf.
  */
@@ -425,11 +453,19 @@ export function findNextLesson(
   week: WeekPlan,
   today: string,
   now: string,
+  freePeriods: readonly FreeRange[] = [],
 ): NextLesson | null {
   const times = periodTimes(week.periods);
+  let skipped = 0;
 
-  for (let ahead = 0; ahead <= 7; ahead += 1) {
+  for (let ahead = 0; ahead <= 7 + skipped; ahead += 1) {
     const date = addDays(today, ahead);
+
+    if (freePeriodOn(freePeriods, date)) {
+      skipped += 1;
+      continue;
+    }
+
     const day = week.days.find((entry) => entry.weekday === weekdayOf(date));
     if (!day) continue;
 

@@ -1,22 +1,25 @@
-import { and, asc, desc, eq, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, ne } from "drizzle-orm";
 import { istId } from "@/recall/ids";
 
 import { db } from "@/db";
 import {
   examTopics,
   exams,
+  freePeriods,
   materialPages,
   materialTopics,
   materials,
   subjects,
 } from "@/db/schema";
+import { addDays, daysBetween } from "@/lib/dates";
 
 /**
  * Die eine Andockstelle zur Schulapp.
  *
- * Der Abrufkern liest genau zwei Dinge aus dem Bestand: welche Heftseiten eine
- * Abschrift haben, und was darauf steht. Sonst nichts — kein Stundenplan, keine
- * Noten, keine Hausaufgaben. Diese Datei ist die Stelle, an der das steht, und
+ * Der Abrufkern liest wenig aus dem Bestand: welche Heftseiten eine Abschrift
+ * haben, was darauf steht, was zur Klausur gehört — und seit dem 4.10.2026,
+ * an welchen Tagen frei ist. Sonst nichts — kein Stundenplan, keine Noten,
+ * keine Hausaufgaben. Diese Datei ist die Stelle, an der das steht, und
  * sie ist bewusst die einzige: Wird der Kern eines Tages herausgelöst, ist sie
  * die Datei, die neu geschrieben werden muss, und alle anderen unter
  * `src/recall/` bleiben, wie sie sind.
@@ -296,4 +299,32 @@ export async function stoffZuKlausur(
     seitenGesamt,
     zeichenGesamt: seitenGesamt.reduce((s, p) => s + p.transcript.length, 0),
   };
+}
+
+/**
+ * Die Tage ab `ab`, an denen nicht abgerufen wird: Ferien, Klassenfahrt und
+ * andere freie Zeiträume der Schulapp. Die Form ist die, die `sperrtage` in
+ * `planeFaelligkeiten` verlangt — eine Liste "YYYY-MM-DD".
+ *
+ * Eine eigene Abfrage statt `freeDatesFrom()` aus @/lib/free-days, aus dem
+ * Grund, der oben steht.
+ */
+export async function sperrtageAb(
+  userId: string,
+  ab: string,
+): Promise<string[]> {
+  const zeitraeume = await db
+    .select({ von: freePeriods.startsOn, bis: freePeriods.endsOn })
+    .from(freePeriods)
+    .where(and(eq(freePeriods.userId, userId), gte(freePeriods.endsOn, ab)));
+
+  const tage = new Set<string>();
+  for (const { von, bis } of zeitraeume) {
+    const start = von < ab ? ab : von;
+    for (let i = 0; i <= daysBetween(start, bis); i += 1) {
+      tage.add(addDays(start, i));
+    }
+  }
+
+  return [...tage].sort();
 }

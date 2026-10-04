@@ -8,7 +8,17 @@ import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
+import { todayInBerlin } from "@/lib/dates";
+import { moveOffFreeDays } from "@/lib/exams";
+import { formErrors, type FieldErrors } from "@/lib/form-errors";
+import {
+  createFreePeriod,
+  deleteFreePeriod,
+  freeLabel,
+  freePeriodInputSchema,
+} from "@/lib/free-days";
 import { revokeConnection } from "@/lib/oauth";
+import { neuPlanen } from "@/recall/items";
 import { isThemePreference, THEME_COOKIE, THEME_MAX_AGE } from "@/lib/theme";
 
 /**
@@ -113,4 +123,97 @@ export async function setThemeAction(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/", "layout");
+}
+
+type FreePeriodField = "kind" | "title" | "startsOn" | "endsOn";
+
+export type FreePeriodState = {
+  message?: string;
+  errors?: FieldErrors<FreePeriodField>;
+  /**
+   * Was abgeschickt wurde, bei einem Fehler. Das Formular wird beim Abschicken
+   * neu aufgebaut; was es danach noch zeigt, muss von hier kommen.
+   */
+  values?: { startsOn: string; endsOn: string };
+  /** Steht nach dem Speichern drin und trägt die Bestätigung. */
+  saved?: { label: string; movedExams: number };
+};
+
+/**
+ * Ferien oder Klassenfahrt eintragen — und danach die Pläne von den freien
+ * Tagen räumen: die Lernblöcke der Klausuren und die Termine im Abruf.
+ */
+export async function createFreePeriodAction(
+  _state: FreePeriodState,
+  formData: FormData,
+): Promise<FreePeriodState> {
+  const user = await requireUser();
+
+  const parsed = freePeriodInputSchema.safeParse({
+    kind: formData.get("kind"),
+    title: formData.get("title") ?? "",
+    startsOn: formData.get("startsOn"),
+    endsOn: formData.get("endsOn"),
+  });
+
+  if (!parsed.success) {
+    return {
+      ...formErrors<FreePeriodField>(parsed.error.issues),
+      values: {
+        startsOn: String(formData.get("startsOn") ?? ""),
+        endsOn: String(formData.get("endsOn") ?? ""),
+      },
+    };
+  }
+
+  await createFreePeriod(user.id, parsed.data);
+  const movedExams = await replanAroundFreeDays(user.id);
+
+  revalidatePath("/", "layout");
+
+  return {
+    saved: {
+      label: freeLabel(parsed.data),
+      movedExams,
+    },
+  };
+}
+
+/**
+ * Einen Zeitraum wieder streichen. Die Lernblöcke wandern dabei nicht zurück —
+ * ein Plan, der sich ohne Anlass bewegt, wäre schlimmer als ein freier Tag.
+ * Der Abruf rechnet dagegen neu: seine Termine sind ohnehin nur ein Vorschlag
+ * für den Abend.
+ */
+export async function deleteFreePeriodAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
+
+  const id = formData.get("id");
+  if (typeof id !== "string") return;
+
+  if (await deleteFreePeriod(user.id, id)) {
+    await replanRecall(user.id);
+  }
+
+  revalidatePath("/", "layout");
+}
+
+async function replanAroundFreeDays(userId: string): Promise<number> {
+  const today = todayInBerlin();
+  const moved = await moveOffFreeDays(userId, today);
+  await replanRecall(userId);
+  return moved;
+}
+
+/**
+ * Der Abrufkern darf fehlen (scripts/abruf-rueckbau.sql) — dann bleibt es beim
+ * Lernplan, und das Eintragen der Ferien scheitert nicht an einem Modul, das es
+ * nicht mehr gibt.
+ */
+async function replanRecall(userId: string): Promise<void> {
+  try {
+    await neuPlanen(userId, todayInBerlin());
+  } catch (error) {
+    console.error("Abruf nicht neu geplant", error);
+  }
 }

@@ -11,6 +11,7 @@ import {
   todayInBerlin,
 } from "@/lib/dates";
 import { blocksForDay, upcomingExams } from "@/lib/exams";
+import { freePeriodToday } from "@/lib/free-days";
 import { isPushConfigured, sendToUser, type PushPayload } from "@/lib/push";
 
 /**
@@ -84,9 +85,18 @@ export async function GET(request: Request) {
   let sent = 0;
   let removed = 0;
   let failed = 0;
+  let free = 0;
 
   for (const user of due) {
     try {
+      // Ferien und Klassenfahrt sind ganz frei — auch von der Vorwarnung vor
+      // der Klausur danach. Die kommt am ersten Schultag trotzdem, solange
+      // die Klausur dann noch drei oder einen Tag entfernt ist.
+      if (await freePeriodToday(user.id, today)) {
+        free += 1;
+        continue;
+      }
+
       const messages: PushPayload[] = [];
 
       const blocks = (await blocksForDay(user.id, today)).filter(
@@ -128,6 +138,7 @@ export async function GET(request: Request) {
     sent,
     removed,
     failed,
+    free,
   });
 }
 

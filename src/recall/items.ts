@@ -21,6 +21,7 @@ import {
 import { planeFaelligkeiten, type PlanWarnung } from "@/recall/schedule";
 import { istId } from "@/recall/ids";
 import { recallItems, recallSchedule } from "@/recall/schema";
+import { sperrtageAb } from "@/recall/source";
 
 /**
  * Bausteine anlegen, auflisten, zurückziehen.
@@ -300,6 +301,7 @@ export async function createItem(
     heute,
     aufgenommenAm: heute,
     klausurtag,
+    sperrtage: await sperrtageAb(userId, heute),
   });
 
   if (plan.faelligkeiten.length > 0) {
@@ -387,6 +389,10 @@ export async function neuPlanen(
     klausurtage.set(faecherId, await naechsteKlausur(userId, faecherId, heute));
   }
 
+  // Ferien und Klassenfahrt: dort wird nicht abgerufen, die Termine rücken
+  // auf den ersten Tag danach (siehe `naechsterFreierTag`).
+  const sperrtage = await sperrtageAb(userId, heute);
+
   let termine = 0;
   let bausteine = 0;
 
@@ -404,6 +410,7 @@ export async function neuPlanen(
       heute,
       aufgenommenAm: berlinDay(baustein.createdAt),
       klausurtag: klausurtage.get(baustein.subjectId) ?? null,
+      sperrtage,
     });
 
     if (plan.faelligkeiten.length > 0) {

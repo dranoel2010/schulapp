@@ -16,6 +16,7 @@ import {
   type ExamListItem,
   type TodayBlock,
 } from "@/lib/exams";
+import { freeDatesFrom } from "@/lib/free-days";
 import { buildPlan } from "@/lib/study-plan";
 
 import {
@@ -163,10 +164,11 @@ export default async function LearnPage() {
 
   // listExams liefert ohne includePast nur die anstehenden Prüfungen, die
   // nächste zuerst — genau die Reihenfolge der Abschnitte weiter unten.
-  const [exams, todayBlocks, missed] = await Promise.all([
+  const [exams, todayBlocks, missed, freeDays] = await Promise.all([
     listExams(user.id),
     blocksForDay(user.id, today),
     missedBlocks(user.id, today),
+    freeDatesFrom(user.id, today),
   ]);
 
   // Themen und Blöcke jeder Prüfung — einmal geladen, danach nur noch gelesen.
@@ -294,6 +296,7 @@ export default async function LearnPage() {
                 })),
                 leadDays: exam.leadDays,
                 minutesPerDay: exam.minutesPerDay,
+                excludedDates: freeDays,
               });
 
               return (
