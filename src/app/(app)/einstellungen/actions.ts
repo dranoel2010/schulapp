@@ -3,11 +3,14 @@
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
+import { disconnectGoogle, recreateCalendar } from "@/lib/calendar/connect";
+import { requestCalendarSync, syncCalendar } from "@/lib/calendar/sync";
 import { todayInBerlin } from "@/lib/dates";
 import { moveOffFreeDays } from "@/lib/exams";
 import { formErrors, type FieldErrors } from "@/lib/form-errors";
@@ -24,9 +27,17 @@ import { isThemePreference, THEME_COOKIE, THEME_MAX_AGE } from "@/lib/theme";
 /**
  * Einstellungen, die der Nutzer selbst dreht.
  *
- * Bisher nur die Uhrzeit der täglichen Erinnerung. Sie ist eine volle Stunde
- * in Berliner Zeit — welche Stunde gerade dran ist, entscheidet der stündliche
- * Lauf in /api/cron/reminders.
+ * Die Uhrzeit der täglichen Erinnerung, Ferien und Klassenfahrt, die
+ * Darstellung, die verbundenen Programme — und der Google Kalender. Die
+ * Uhrzeit ist eine volle Stunde in Berliner Zeit; welche Stunde gerade dran
+ * ist, entscheidet der stündliche Lauf in /api/cron/reminders.
+ *
+ * Erinnerungsstunde und freie Tage stoßen nach dem Speichern den Google
+ * Kalender an (`requestCalendarSync`): Die Stunde bestimmt, wann Google an
+ * eine Hausaufgabe erinnert, und freie Tage stehen dort als Termine. Der
+ * Abgleich läuft nach der Antwort und kann das Speichern nicht scheitern
+ * lassen. Für den Kalender selbst stehen unten drei Actions; sie sind dünn,
+ * was sie tun, steht in @/lib/calendar/connect und @/lib/calendar/sync.
  *
  * Die Grenzen stehen absichtlich auch hier: eine "use server"-Datei darf nur
  * asynchrone Funktionen ausgeben, geteilte Konstanten gehen also nicht. Die
@@ -65,6 +76,7 @@ export async function setReminderHourAction(
     .update(users)
     .set({ reminderHour: hour })
     .where(eq(users.id, user.id));
+  requestCalendarSync(user.id);
 
   revalidatePath("/einstellungen");
 
@@ -168,6 +180,7 @@ export async function createFreePeriodAction(
 
   await createFreePeriod(user.id, parsed.data);
   const movedExams = await replanAroundFreeDays(user.id);
+  requestCalendarSync(user.id);
 
   revalidatePath("/", "layout");
 
@@ -193,9 +206,52 @@ export async function deleteFreePeriodAction(formData: FormData): Promise<void> 
 
   if (await deleteFreePeriod(user.id, id)) {
     await replanRecall(user.id);
+    requestCalendarSync(user.id);
   }
 
   revalidatePath("/", "layout");
+}
+
+/**
+ * „Jetzt abgleichen". Wartet auf den Lauf, aber nicht ewig: Der Lauf arbeitet
+ * höchstens 25 Sekunden — was dann nicht geschafft ist, steht als „noch offen"
+ * da, und der nächste Lauf macht weiter —, und hängt der Knopf hinter einem
+ * längeren Lauf, kommt er nach einer halben Minute zurück; die Karte sagt dann
+ * „läuft gerade". Wirft nie; das Ergebnis steht danach in der Karte.
+ */
+export async function syncCalendarNowAction(): Promise<void> {
+  const user = await requireUser();
+
+  await syncCalendar(user.id, { anlass: "hand", requestedAt: Date.now() });
+
+  revalidatePath("/einstellungen");
+}
+
+/**
+ * Trennen: Zugang zurückziehen. Der Kalender „Schule" bleibt in Google stehen.
+ * Hat Google den Widerruf nicht bestätigt, sagt die Karte das — mit dem Weg,
+ * den Zugang dort selbst zu entfernen —, statt grün „Getrennt." zu melden.
+ */
+export async function disconnectCalendarAction(): Promise<void> {
+  const user = await requireUser();
+
+  const widerruf = await disconnectGoogle(user.id);
+  const ohneWiderruf = widerruf !== "widerrufen" && widerruf !== "nichts";
+
+  revalidatePath("/einstellungen");
+  redirect(
+    `/einstellungen?kalender=${ohneWiderruf ? "getrennt-ohne-widerruf" : "getrennt"}#kalender`,
+  );
+}
+
+/** Einen frischen Kalender „Schule" anlegen und alles neu eintragen. */
+export async function recreateCalendarAction(): Promise<void> {
+  const user = await requireUser();
+
+  const ok = await recreateCalendar(user.id);
+
+  revalidatePath("/einstellungen");
+  redirect(`/einstellungen?kalender=${ok ? "neu-angelegt" : "neu-anlegen-gescheitert"}#kalender`);
 }
 
 async function replanAroundFreeDays(userId: string): Promise<number> {

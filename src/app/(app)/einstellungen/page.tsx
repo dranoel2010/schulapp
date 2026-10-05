@@ -10,8 +10,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth";
+import { loadCalendarStatus } from "@/lib/calendar/sync";
 import { formatGerman, todayInBerlin } from "@/lib/dates";
 import { freeLabel, listFreePeriods } from "@/lib/free-days";
+import { jevConfigured } from "@/lib/jev";
 import { listConnections } from "@/lib/oauth";
 import { readThemePreference, THEME_OPTIONS } from "@/lib/theme";
 
@@ -23,6 +25,7 @@ import {
   setThemeAction,
 } from "./actions";
 import { FreeDaysForm } from "./free-days-form";
+import { GoogleCalendarCard } from "./google-calendar-card";
 import { PushSettings, ReminderTime } from "./push-settings";
 
 export const metadata: Metadata = {
@@ -42,13 +45,17 @@ function tag(value: Date): string {
   });
 }
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: PageProps<"/einstellungen">) {
   const user = await requireUser();
   const theme = await readThemePreference();
   const today = todayInBerlin();
-  const [connections, freePeriods] = await Promise.all([
+  const { kalender } = await searchParams;
+  const [connections, freePeriods, calendar] = await Promise.all([
     listConnections(user.id),
     listFreePeriods(user.id, today),
+    loadCalendarStatus(user.id),
   ]);
 
   const since = tag(user.createdAt);
@@ -60,6 +67,21 @@ export default async function SettingsPage() {
   // Ohne Schlüssel kann der Browser sich gar nicht erst anmelden — die
   // Komponente sagt das dann geradeheraus, statt einen Knopf anzubieten.
   const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
+
+  // Was davon tatsächlich hinausgeht — nur das, was eingeschaltet ist. Steht
+  // nichts davon an, ist der alte Satz „Es geht an keinen anderen Dienst" wahr
+  // und bleibt stehen.
+  const hinaus = [
+    calendar.state.kind === "verbunden" || calendar.state.kind === "blockiert"
+      ? "Klausuren, offene Hausaufgaben und freie Tage gehen als Termine in deinen Google Kalender „Schule“"
+      : null,
+    jevConfigured()
+      ? "die Abschrift eines Blattes geht zum Einordnen an Jev (TypeSafe)"
+      : null,
+    connections.length > 0
+      ? "verbundene Programme lesen über den Web MCP mit, auch Fotos und Abschriften deiner Blätter"
+      : null,
+  ].filter((teil): teil is string => teil !== null);
 
   return (
     <div className="space-y-6 md:max-w-3xl">
@@ -133,6 +155,13 @@ export default async function SettingsPage() {
           <FreeDaysForm action={createFreePeriodAction} />
         </CardContent>
       </Card>
+
+      <section id="kalender" className="scroll-mt-6">
+        <GoogleCalendarCard
+          status={calendar}
+          notice={typeof kalender === "string" ? kalender : undefined}
+        />
+      </section>
 
       <Card>
         <CardHeader>
@@ -299,8 +328,9 @@ export default async function SettingsPage() {
             {onServer
               ? "Alles, was du einträgst, liegt in der Datenbank auf dem Server, auf dem diese App läuft."
               : "In der Entwicklung liegt alles, was du einträgst, als Datei unter .data/pglite in deinem Projektordner."}{" "}
-            Es geht an keinen anderen Dienst, und außer deinem gibt es kein
-            Konto.
+            {hinaus.length > 0
+              ? `Hinaus geht davon nur, was du eingeschaltet hast: ${hinaus.join("; ")}. Außer deinem gibt es kein Konto.`
+              : "Es geht an keinen anderen Dienst, und außer deinem gibt es kein Konto."}
           </p>
         </CardContent>
       </Card>

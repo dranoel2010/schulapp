@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
+import { requestCalendarSync } from "@/lib/calendar/sync";
 import {
   createSubject,
   deleteSubject,
@@ -15,6 +16,16 @@ import {
   type SubjectFieldErrors,
   type SubjectFormState,
 } from "@/lib/subjects";
+
+/**
+ * Die Server Actions der Fächerverwaltung.
+ *
+ * Zwei davon stoßen den Google Kalender an (`requestCalendarSync`): Ändern,
+ * weil der Fachname im Titel jedes Termins steht, und Löschen, weil mit dem
+ * Fach per Fremdschlüssel seine Klausuren und Hausaufgaben gehen — die müssen
+ * dann auch aus Google verschwinden. Archivieren ändert an den Terminen
+ * nichts.
+ */
 
 /** Höchstens so viele Fächer legt die Schnellauswahl auf einmal an. */
 const QUICK_ADD_LIMIT = 30;
@@ -99,6 +110,7 @@ export async function updateSubjectAction(
   }
 
   await updateSubject(user.id, id, parsed.data);
+  requestCalendarSync(user.id);
 
   revalidatePath("/faecher");
   revalidatePath(`/faecher/${id}`);
@@ -122,6 +134,7 @@ export async function deleteSubjectAction(id: string): Promise<void> {
   const user = await requireUser();
 
   await deleteSubject(user.id, id);
+  requestCalendarSync(user.id);
 
   revalidatePath("/faecher");
   redirect("/faecher");

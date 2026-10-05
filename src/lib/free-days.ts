@@ -130,6 +130,24 @@ export async function listFreePeriods(
     .orderBy(asc(freePeriods.startsOn));
 }
 
+/**
+ * ALLE Zeiträume, auch die vergangenen, der früheste zuerst — für den Google
+ * Kalender (@/lib/calendar/sources).
+ *
+ * Es gibt sie neben `listFreePeriods()`, weil die zweite Frage eine andere
+ * ist. Die Einstellungen und der Lernplan wollen wissen, was noch kommt; der
+ * Abgleich mit Google will wissen, was es gibt. Nähme er die gefilterte Liste,
+ * sähen die Herbstferien am Tag nach ihrem Ende aus wie gelöscht, und die App
+ * nähme sie aus dem Kalender — eine Abwesenheit, die keine ist.
+ */
+export async function listAllFreePeriods(userId: string): Promise<FreePeriod[]> {
+  return db
+    .select()
+    .from(freePeriods)
+    .where(eq(freePeriods.userId, userId))
+    .orderBy(asc(freePeriods.startsOn));
+}
+
 /** Der Zeitraum, in den heute fällt, oder nichts. */
 export async function freePeriodToday(
   userId: string,

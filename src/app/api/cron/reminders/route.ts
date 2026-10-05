@@ -1,5 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
-
 import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
@@ -10,6 +8,7 @@ import {
   formatGerman,
   todayInBerlin,
 } from "@/lib/dates";
+import { isCronAuthorized } from "@/lib/cron-auth";
 import { blocksForDay, upcomingExams } from "@/lib/exams";
 import { freePeriodToday } from "@/lib/free-days";
 import { isPushConfigured, sendToUser, type PushPayload } from "@/lib/push";
@@ -32,7 +31,8 @@ import { isPushConfigured, sendToUser, type PushPayload } from "@/lib/push";
  * zweiten Ruf in derselben Stunde ginge die Nachricht allerdings noch einmal
  * hinaus.
  *
- * Kein Cookie, sondern "Authorization: Bearer <CRON_SECRET>".
+ * Kein Cookie, sondern "Authorization: Bearer <CRON_SECRET>" — geprüft in
+ * @/lib/cron-auth, derselben Prüfung wie an den beiden anderen Cron-Türen.
  */
 
 export const dynamic = "force-dynamic";
@@ -62,7 +62,7 @@ export async function GET(request: Request) {
     );
   }
 
-  if (!isAuthorized(request, secret)) {
+  if (!isCronAuthorized(request, secret)) {
     return Response.json({ ok: false, error: "Nicht erlaubt." }, { status: 401 });
   }
 
@@ -140,21 +140,6 @@ export async function GET(request: Request) {
     failed,
     free,
   });
-}
-
-/**
- * Zeichenweise gleich lange Prüfung, damit sich das Geheimnis nicht über die
- * Antwortzeit erraten lässt.
- */
-function isAuthorized(request: Request, secret: string): boolean {
-  const header = request.headers.get("authorization");
-  if (!header) return false;
-
-  const given = Buffer.from(header);
-  const expected = Buffer.from(`Bearer ${secret}`);
-  if (given.length !== expected.length) return false;
-
-  return timingSafeEqual(given, expected);
 }
 
 /** Volle Stunde 0–23 in Berlin. h23 erzwungen, sonst steht nachts eine 24 da. */

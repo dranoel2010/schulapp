@@ -21,6 +21,7 @@ automatisch geplanten Lernblöcken davor.
 | Notensystem | Deutsche Noten 1–6 mit +/− |
 | Stundenplan | Fester Wochenplan, Mo–Fr, 1 bis 12 Stunden am Tag |
 | Erinnerungen | Push-Nachrichten aufs Handy |
+| Kalender | Einbahnstraße in einen eigenen Google-Kalender „Schule“; was der Nutzer dort löscht, bleibt weg |
 
 ## Technik
 
@@ -149,6 +150,16 @@ einer Note nicht mehr zu schaffen.
       Handformular~~ **fertig**
    4. ~~**Web MCP** — die App bietet ihre Fähigkeiten als Tools an, ein Agent in
       Claude benutzt sie~~ **fertig**
+6. **Termine im Google Kalender** — die App schreibt per Calendar API in einen
+   eigenen Kalender „Schule". In Stufen; jede neue Quelle ist eine Funktion in
+   `SOURCES` (`src/lib/calendar/sources.ts`), Plan und Ausführung bleiben dafür
+   unverändert:
+   1. ~~**Verbinden** — „Mit Google verbinden" in den Einstellungen, OAuth mit
+      genau einem Scope~~ **fertig**
+   2. ~~**Bestand** — Klausuren, offene Hausaufgaben, freie Tage~~ **fertig**
+   3. **Schulhomepage**
+   4. **Termine von Blättern**
+   5. **IServ**
 
 ## Die Ablage
 
@@ -462,6 +473,32 @@ schicken, das unterwegs abgeschnitten wird. Die Grenze liegt bei 105 000 Bytes,
 also genau 140 000 Zeichen; die zehntausend Rest tragen den Satz davor und den
 Umschlag.
 
+## Der Google Kalender
+
+**Die App ist die Quelle, Google das Ziel.** Ändert sich etwas in der App, wird
+der Termin in Google überschrieben; wird es gelöscht oder eine Hausaufgabe
+abgehakt, verschwindet er dort. Aus Google liest die App nur zweierlei: ob es
+den Kalender noch gibt, und — bei einem Termin, den sie gerade anfassen will —
+ob er dort gelöscht wurde. Eine Liste aller Termine holt sie nie; eine
+unvollständige sähe aus wie viele Löschungen.
+
+**„verworfen" ist endgültig.** Was der Nutzer in Google löscht, trägt die App
+nie wieder ein, auch nicht nach einer Änderung in der App. Bemerkt wird die
+Löschung beim nächsten Anfassen — beim Ändern oder Löschen des Termins. Einen
+Termin, den die App nicht anfasst, holt sie auch nicht zurück; mehr verlangt die
+Zusage nicht.
+
+**Die Generation steht in der ID.** Die Event-ID ist fest (Art, UUID,
+Generation), damit ein doppeltes Anlegen in Google als 409 endet statt als
+zweiter Termin. Eine gelöschte ID verwendet die App nie wieder: Wird eine
+abgehakte Hausaufgabe wieder geöffnet, kommt sie mit Generation + 1 unter
+neuer ID zurück.
+
+**Eine Quelle ist eine Funktion.** Sie liefert die gewünschten Termine ihrer
+Art vollständig oder wirft — dann bleibt ihre Art in diesem Lauf unberührt.
+Lernblöcke und Abruf-Termine sind keine Quelle und werden es nicht: Die App soll
+kein Tagesplaner werden.
+
 ## Offene Punkte
 
 - Fächerliste (kommt beim ersten Einrichten in der App)
@@ -499,8 +536,9 @@ Umschlag.
   entscheidet er allein. Wer die Blätter im Bus ohne Empfang durchsehen will,
   braucht dafür eine eigene Entscheidung — welche Blätter, wie lange, und wann
   sie wieder gehen
-- Erinnerung an fällige Hausaufgaben per Push — der Lernplan hat sie schon,
-  die Aufgaben noch nicht
+- Erinnerung an fällige Hausaufgaben — kommt mit verbundenem Google Kalender
+  als Erinnerung am Vortag zur Erinnerungsstunde; ohne Verbindung und per Push
+  weiterhin nicht
 - Vertretung und Ausfall einer einzelnen Stunde — der Wochenplan ist fest,
   eine Ausnahme für einen Tag kennt er nicht
 - Freie Tage vom Lernplan ausnehmen (Wochenende, Urlaub) — im Datenmodell

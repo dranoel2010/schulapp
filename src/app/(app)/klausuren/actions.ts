@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
+import { requestCalendarSync } from "@/lib/calendar/sync";
 import { todayInBerlin } from "@/lib/dates";
 import {
   createExam,
@@ -36,6 +37,11 @@ import type { ExamFieldErrors, ExamFormState } from "./exam-form";
  * gebauten Lernplan unter /lernen, nach dem Bearbeiten und Löschen zurück in
  * die Liste. Weil jede Änderung den Plan betrifft, wird /lernen mit
  * aufgefrischt.
+ *
+ * Nach jedem erfolgreichen Speichern und Löschen wird der Google Kalender
+ * angestoßen (`requestCalendarSync`) — er läuft, nachdem die Antwort draußen
+ * ist, und kann das Speichern weder bremsen noch scheitern lassen. Die Themen
+ * stehen in der Beschreibung des Termins, deshalb erst nach `setTopics`.
  */
 
 function readInput(formData: FormData) {
@@ -125,6 +131,7 @@ export async function createExamAction(
   await linkExamTopics(user.id, exam.id);
   // Der Plan entsteht sofort, damit unter "Lernen" gleich etwas steht.
   await generatePlan(user.id, exam.id, todayInBerlin());
+  requestCalendarSync(user.id);
 
   revalidatePath("/klausuren");
   revalidatePath("/lernen");
@@ -198,6 +205,8 @@ export async function updateExamAction(
     await generatePlan(user.id, examId, today);
   }
 
+  requestCalendarSync(user.id);
+
   revalidatePath("/klausuren");
   revalidatePath(`/klausuren/${examId}`);
   revalidatePath("/lernen");
@@ -210,6 +219,7 @@ export async function deleteExamAction(examId: string): Promise<void> {
 
   // Themen und Lernblöcke hängen per Fremdschlüssel dran und gehen mit.
   await deleteExam(user.id, examId);
+  requestCalendarSync(user.id);
 
   revalidatePath("/klausuren");
   revalidatePath("/lernen");

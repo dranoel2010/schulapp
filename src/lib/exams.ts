@@ -837,6 +837,36 @@ export async function upcomingExams(
   return rows.map((row) => ({ ...row.exam, subject: row.subject }));
 }
 
+/**
+ * Die Themen aller Prüfungen eines Nutzers, je Prüfung in ihrer Reihenfolge —
+ * für den Google Kalender (@/lib/calendar/sources), der sie in die
+ * Beschreibung eines Klausurtermins schreibt.
+ *
+ * Eine Abfrage für alle statt `getExam()` je Prüfung: Der Abgleich läuft nach
+ * jedem Speichern und stündlich, und ein Schuljahr hat zwanzig Prüfungen.
+ */
+export async function examTopicTitles(
+  userId: string,
+): Promise<Map<string, string[]>> {
+  const rows = await db
+    .select({ examId: examTopics.examId, title: examTopics.title })
+    .from(examTopics)
+    .innerJoin(exams, eq(exams.id, examTopics.examId))
+    .where(eq(exams.userId, userId))
+    // Dieselbe Reihenfolge wie auf der Prüfung selbst (`getExam()`).
+    .orderBy(asc(examTopics.examId), asc(examTopics.sortOrder), asc(examTopics.title));
+
+  const titles = new Map<string, string[]>();
+
+  for (const row of rows) {
+    const list = titles.get(row.examId);
+    if (list) list.push(row.title);
+    else titles.set(row.examId, [row.title]);
+  }
+
+  return titles;
+}
+
 /** Prüfung samt Besitzprüfung — jede schreibende Funktion geht hier durch. */
 async function findExam(userId: string, examId: string): Promise<Exam | null> {
   if (!isId(examId)) return null;

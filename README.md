@@ -146,7 +146,7 @@ npm run build && npm run start
 | `npm run db:push` | Schemaänderungen in die Datenbank übertragen |
 | `npm run db:studio` | Datenbank im Browser ansehen |
 | `npm run db:backup` | Kopie der lokalen Datenbank nach `.backups/` |
-| `npm test` | 659 Tests in 128 Suiten — die reine Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala, Themen-Titel, Bildmaße, die Zahlen der Startseite, das Formular der Ablage, die Vorbelegung aus einem Vorschlag, die Verteilung der Fehlermeldungen, die angehakten Felder des Epochenwechsels — für den Web MCP die Rückadressen, PKCE, der Rückweg nach dem Anmelden, der Umschlag des Protokolls, die Auflösung von Fach und Thema und der Werkzeugkasten — und seit der Abschrift die ⟨spitzen Klammern⟩, die Auslegung der Formularfelder, die Deckung der beiden Schriften, der Bildkopf, der Dateiname und die Markdown-Verpackung feindlichen Textes |
+| `npm test` | 1022 Tests in 206 Suiten (Stand 5.10.2026) — die reine Rechnung: Lernplan, Datumsrechnung, Stundenplan, Fälligkeiten, Notenskala, Themen-Titel, Bildmaße, die Zahlen der Startseite, das Formular der Ablage, die Vorbelegung aus einem Vorschlag, die Verteilung der Fehlermeldungen, die angehakten Felder des Epochenwechsels — für den Web MCP die Rückadressen, PKCE, der Rückweg nach dem Anmelden, der Umschlag des Protokolls, die Auflösung von Fach und Thema und der Werkzeugkasten — und seit der Abschrift die ⟨spitzen Klammern⟩, die Auslegung der Formularfelder, die Deckung der beiden Schriften, der Bildkopf, der Dateiname und die Markdown-Verpackung feindlichen Textes — und für den Google Kalender die Entscheidungstabelle des Abgleichs, die Event-IDs, das Ende ganztägiger Termine, die Verschlüsselung des Refresh Tokens, PKCE, die Einordnung jeder Fehlerantwort von Google, die Queue der Abgleiche, der Fehlersatz ohne die Parameter einer gescheiterten Abfrage und der ganze Abgleich gegen eine Attrappe von Google |
 | `npm run lint` | ESLint |
 
 ## Aufbau
@@ -178,7 +178,8 @@ src/
                       eingang/ ist der Eingangskorb — was noch keiner
                       durchgesehen hat, und die Vorschläge dazu
       faecher/        Fächer mit Farbe, Kürzel und Gewichtung
-      einstellungen/  Erinnerungen, Darstellung, Konto, verbundene Programme
+      einstellungen/  Erinnerungen, Ferien, Google Kalender, Darstellung, Konto,
+                      verbundene Programme
     .well-known/      wo ein Agent diese App findet: die Beschreibung des
                       geschützten Servers und die des Ausstellers
     api/
@@ -187,8 +188,11 @@ src/
                       gegen Token
       material/       liefert die Bilder aus: /api/material/<seite> das
                       Vollbild, .../vorschau die Vorschau
+      google/         „Mit Google verbinden": connect/ springt per POST zu
+                      Google, callback/ nimmt die Zustimmung entgegen
       push/, cron/    Anmeldung der Geräte, der stündliche Anstoß für die
-                      Erinnerungen und die tägliche Übergabe ans Wiki
+                      Erinnerungen und den Google Kalender (cron/kalender)
+                      und die tägliche Übergabe ans Wiki
     layout.tsx      Wurzel: Schriften, Metadaten, Service Worker,
                     hell/dunkel
     manifest.ts     PWA-Manifest
@@ -290,6 +294,32 @@ src/
                     `wiki_deliveries`
       example.ts    ein erfundener, absichtlich bösartiger Bestand — die
                     Probe ohne Datenbank
+    calendar/       der Google Kalender — eine Einbahnstraße von der App in
+                    einen eigenen Kalender „Schule"
+      config.ts     die Umgebung: Client, Schlüssel, Redirect URI (getestet)
+      token-crypto.ts  das Refresh Token, mit AES-256-GCM verschlossen
+                    (getestet)
+      events.ts     aus einer Zeile wird ein ganztägiger Termin, dazu die
+                    feste Event-ID mit Generation (getestet)
+      plan.ts       die Entscheidungstabelle: anlegen, ändern, löschen — oder
+                    nie wieder, weil der Nutzer gelöscht hat (getestet)
+      execute.ts    die Schritte gegen Google, ohne Datenbank-Import —
+                    durchgespielt gegen eine Attrappe von Google (getestet)
+      google-oauth.ts  Anmeldung bei Google: PKCE, Code-Tausch, Refresh,
+                    Revoke — per fetch, ohne SDK (getestet)
+      google-api.ts sechs Aufrufe der Calendar API, Wiederholen und die
+                    Einordnung jeder Fehlerantwort (getestet)
+      report.ts     was die Karte und der Cron sagen (getestet)
+      error-text.ts ein Fehler als Satz, ohne die Parameter einer
+                    gescheiterten Abfrage (getestet)
+      sources.ts    woher die Termine kommen — eine Quelle ist eine Funktion
+      store.ts      die zwei Tabellen
+      queue.ts      die Queue: ein Lauf zur Zeit, und wer wartet, wartet nicht
+                    ewig (getestet)
+      sync.ts       der Lauf und der Cron
+      connect.ts    Verbinden, Trennen, Kalender neu anlegen
+    cron-auth.ts    die eine Prüfung des CRON_SECRET für alle drei Cron-Türen
+                    (getestet)
     form-errors.ts  wo eine zod-Meldung landet — unter ihrem Feld oder über
                     dem ganzen Formular (getestet)
     theme.ts        hell, dunkel oder dem Gerät überlassen
@@ -609,6 +639,16 @@ Docling rechnet, und stellt den Postboten erst um, wenn Jev richtig
 geantwortet hat. Was es vorher nachsieht und wie es sich rückgängig machen
 lässt, steht im Kopf des Skripts.
 
+> **Die Override-Datei gehört seit dem Google Kalender zweien.**
+> `kalender-einrichten.sh` trägt dort die drei `GOOGLE_*`-Namen ein (siehe
+> *Google Kalender*). Wer die Datei löscht, schaltet den Kalender mit ab — und
+> das tut nicht nur der Rückweg oben im Skript (`rm docker-compose.override.yml`),
+> sondern auch `jev-und-docling.sh` selbst, wenn ein erneuter Lauf am Bild, am
+> Formelmodell oder an Compose scheitert. Danach `kalender-einrichten.sh` noch
+> einmal; es sieht dann die fehlende Datei samt Jev-Schlüssel in der `.env`, hält
+> an und sagt, dass zuerst `jev-und-docling.sh` laufen muss — legte es die Datei
+> selbst an, trüge sie seine Marke, und `jev-und-docling.sh` fasste sie nie wieder an.
+
 **Das Bild allein reicht nicht.** `docling-serve-cpu` bringt das Formelmodell
 nicht mit (seine Modellliste: layout, tableformer, picture_classifier,
 rapidocr, easyocr), setzt aber `DOCLING_SERVE_ARTIFACTS_PATH` — und dann lädt
@@ -692,7 +732,10 @@ der Ablage kamen die drei Tabellen `materials`, `material_pages` und
 und die beiden Tabellen `material_proposals` und `material_proposal_topics`,
 mit dem Web MCP die Spalte `material_pages.reading` und die drei Tabellen
 `oauth_clients`, `oauth_codes` und `oauth_grants`, mit Ferien und
-Klassenfahrt die Tabelle `free_periods` (`scripts/freie-tage-tabelle.sql`).
+Klassenfahrt die Tabelle `free_periods` (`scripts/freie-tage-tabelle.sql`), mit
+dem Google Kalender die beiden Tabellen `google_calendar_connections` und
+`google_calendar_events` (`scripts/google-kalender-tabellen.sql` — auf dem NAS
+per psql und VOR dem Neubau; warum, steht unter *Google Kalender*).
 **Ohne Push bleibt nicht nur
 der Materialbereich stehen, sondern die ganze Startseite** — sie lädt die
 letzten Blätter mit.
@@ -859,6 +902,10 @@ Lokal testest du sie so:
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/reminders
 ```
 
+An fällige **Hausaufgaben** erinnert die Push nicht. Das übernimmt Google, wenn
+der Kalender verbunden ist: am Vortag zur selben Erinnerungsstunde — siehe
+*Google Kalender*.
+
 ## Das Fach-PDF
 
 `/faecher/<id>` hat einen Knopf *PDF erzeugen*. Er führt auf
@@ -956,6 +1003,333 @@ samt dem Volume-Mount des Vaults in den Container und der Umgebungsvariablen
 mit „nichts zu tun": ein grüner Lauf, der jede Nacht nichts tut, fällt niemandem
 auf.
 
+## Google Kalender
+
+Seit dem 5.10.2026 (Stufe 1 und 2 von 5) trägt die App **Klausuren, offene
+Hausaufgaben und freie Tage** als ganztägige Termine in einen eigenen Kalender
+„Schule" im Google Kalender des Schülers ein. Verbunden wird in den
+*Einstellungen*, Karte *Google Kalender*. **Lernblöcke und Abruf-Termine kommen
+nie hinein** — sie sind ein Vorschlag der App für den eigenen Abend, keine
+Verabredung mit der Schule, und ein Kalender voller Lernblöcke machte aus der
+App den Tagesplaner, der sie nicht sein soll. Später docken dort auch die
+Schulhomepage, Termine von Blättern und IServ an (Stufen 3–5); jede ist eine
+weitere Quelle in `SOURCES` (`src/lib/calendar/sources.ts`), Plan und
+Ausführung bleiben dafür unverändert.
+
+**Eine Einbahnstraße.** Die App ist die Quelle, Google das Ziel:
+
+- Ändert sich etwas in der App, wird der Termin in Google überschrieben — auch
+  das, was jemand in Google daran geändert hat.
+- Wird etwas in der App gelöscht (auch über ein gelöschtes Fach, per
+  Fremdschlüssel), wird der Termin in Google gelöscht. Eine abgehakte
+  Hausaufgabe verschwindet; wird sie wieder geöffnet, kommt sie zurück.
+- **Löscht der Nutzer einen Termin in Google, trägt die App ihn nie wieder
+  ein** — auch nicht, wenn er sich in der App später ändert.
+
+Eine Liste aller Termine holt die App sich dafür nie (`events.list` gibt es
+nicht). Sie bemerkt eine Löschung in Google erst, wenn sie den Termin selbst
+anfassen will — ihn ändern (Google meldet ihn dann als `cancelled`) oder löschen
+(Google sagt „schon gelöscht"). Einen Termin, den die App nicht anfasst, kann
+sie auch nicht zurückholen; mehr braucht die Zusage nicht. Damit fällt die
+ganze Fehlerklasse „eine unvollständige Liste sieht aus wie viele Löschungen"
+weg.
+
+Was die App sich je Termin merkt, steht in `google_calendar_events`, mit vier
+Zuständen: **geliefert** (steht so in Google), **entfernen** (die App löscht
+gerade — die Absicht steht VOR dem Löschen in der Zeile), **entfernt** (die App
+hat gelöscht) und **verworfen** (der Nutzer hat in Google gelöscht — nie
+wieder). „verworfen" entsteht nur aus einem Nachweis: Google meldet
+`cancelled`, ein erster Löschversuch bekommt „schon gelöscht", oder Google kennt
+die ID nicht mehr, nachdem eine Probe bestätigt hat, dass der Kalender selbst
+noch da ist. Ohne die Probe sähe ein gelöschter Kalender aus wie hundert vom
+Nutzer gelöschte Termine.
+
+Vor dem ersten Löschversuch sieht die App deshalb nach (GET), wie vor jedem
+Ändern: Ist der Termin dort schon gelöscht, war es der Nutzer, bevor die App
+ihn loswerden wollte — verworfen, ohne DELETE. Nur wenn er noch steht, schreibt
+sie die Absicht und löscht. Sonst wäre eine Löschung des Nutzers, auf die ein
+gescheiterter DELETE folgt (503, Timeout), von der eigenen nicht zu
+unterscheiden, und der Termin käme beim Wieder-Öffnen zurück. Weist Google den
+DELETE sicher ab (Drosselung, kein Zugang), geht die Zeile zurück auf
+„geliefert".
+
+Die Event-ID ist fest: Präfix je Art (`sak` Prüfung, `sah` Hausaufgabe, `saf`
+frei), die UUID ohne Bindestriche und eine **Generation** dahinter. Ein
+doppeltes Anlegen endet bei Google deshalb in 409 und wird übernommen, statt
+einen zweiten Termin zu erzeugen. Eine gelöschte ID verwendet die App nie
+wieder — Google reserviert sie —, sondern zählt die Generation hoch.
+
+**Farben:** Tomate für Prüfungen, Heidelbeere für Hausaufgaben, Basilikum für
+freie Tage. **Erinnerungen:** Hausaufgaben am Vortag zur eingestellten
+Erinnerungsstunde (Standard 17 Uhr); Klausuren bekommen keine Google-Erinnerung,
+weil die App selbst drei Tage und einen Tag vorher eine Push-Nachricht schickt;
+freie Tage auch nicht. Alle Termine sind „frei" (`transparent`) und blockieren
+keine Zeit.
+
+### Google Cloud einrichten
+
+Einmal, im Google-Konto des Schülers:
+
+1. In der Google Cloud Console ein **eigenes Projekt** anlegen.
+2. Unter *APIs & Dienste* die **Google Calendar API** aktivieren.
+3. *Google Auth Platform* bzw. *OAuth-Zustimmungsbildschirm*: Zielgruppe
+   **Extern**, Status **„In production"** — NICHT „Testing", sonst laufen die
+   Zugänge nach sieben Tagen ab und die Karte meldet „Verbindung unterbrochen".
+   Als Scope genau `https://www.googleapis.com/auth/calendar.app.created`: Die
+   App darf damit eigene Kalender anlegen und nur darin Termine bearbeiten, an
+   die anderen Kalender kommt sie nicht heran. Eine Prüfung durch Google braucht
+   es für die Eigennutzung nicht; Google warnt dafür beim Verbinden („Google hat
+   diese App nicht überprüft"), über *Erweitert* geht es weiter.
+4. Unter *Clients* einen **OAuth-Client vom Typ „Webanwendung"** anlegen, mit
+   beiden Redirect URIs:
+   `https://treskownas.tail3a40b0.ts.net/api/google/callback` und
+   `http://localhost:3000/api/google/callback`.
+5. Steht beim Verbinden auf Googles eigener Seite `redirect_uri_mismatch`, passt
+   die Adresse nicht Zeichen für Zeichen zum Eintrag aus Schritt 4. Die App baut
+   sie nie aus der Anfrage, sondern nimmt die Funnel-Adresse oder
+   `GOOGLE_REDIRECT_URI`.
+
+### Umgebungsvariablen
+
+| Variable | Pflicht | Inhalt |
+|---|---|---|
+| `GOOGLE_CLIENT_ID` | ja | der OAuth-Client vom Typ „Webanwendung" aus dem Cloud-Projekt |
+| `GOOGLE_CLIENT_SECRET` | ja | dazu |
+| `GOOGLE_TOKEN_KEY` | ja | 32 zufällige Bytes in base64 (`openssl rand -base64 32`). Damit ist das Refresh Token in der Datenbank verschlüsselt (AES-256-GCM). Verlust oder Wechsel heißt neu verbinden. Im Passwortmanager sichern. |
+| `GOOGLE_REDIRECT_URI` | nein | Fehlt der Wert, gilt `https://treskownas.tail3a40b0.ts.net/api/google/callback`. Lokal: `http://localhost:3000/api/google/callback`. Muss Zeichen für Zeichen in der Cloud Console stehen. |
+| `CRON_SECRET` | schon da | dasselbe wie für Erinnerungen und Wiki |
+
+Lokal stehen sie in `.env.local`, auf dem NAS in der `.env` und unter
+`services.app.environment` der `docker-compose.override.yml`. Es gibt keinen
+`NEXT_PUBLIC_`-Wert, der Bau braucht also kein Argument. **Fehlt eine
+Pflichtvariable, ist die Funktion aus** — wie Jev ohne `TYPESAFE_API_KEY`: Die
+Auslöser tun nichts, die Karte sagt, was fehlt (ohne eine einzige Abfrage), und
+der Cron antwortet 200, solange nichts verbunden ist, und 500, sobald etwas
+verbunden ist. Das gilt mit eingespielten Tabellen: Der Cron fragt die Tabelle
+der Verbindungen auch ohne Variablen ab, und fehlt sie, antwortet er 500
+(„relation … does not exist").
+
+### Reihenfolge auf dem NAS
+
+**Vorher, am Rechner:** Der Stand mit der Kalender-Anbindung muss committet und
+nach `main` gepusht sein — `nas.sh hoch` holt nur, was auf GitHub steht
+(`git pull --ff-only`). Endet `hoch` mit „Nichts Neues — der Stand war schon
+aktuell", fehlt der Push, und das Skript unten gibt es auf dem NAS noch gar
+nicht („No such file or directory"). Erst wenn `hoch` mit **„Fertig."** endet,
+läuft der neue Code.
+
+**Dann, auf dem NAS, zwei Zeilen** — erst der neue Code, dann ein Skript, das
+alles Übrige erledigt und sich bei jedem Schritt selbst prüft:
+
+```bash
+sudo ~/nas.sh hoch
+sudo bash /volume1/docker/schulapp/repo/scripts/kalender-einrichten.sh
+```
+
+Am besten vom Rechner aus, mit stabiler Verbindung. Reißt sie ab, solange das
+Skript noch fragt, hält es an und sagt, was schon geändert ist; reißt sie
+danach ab, läuft es zu Ende, und das Ergebnis steht in
+`/volume1/docker/schulapp/kalender-einrichten.log`.
+
+`scripts/kalender-einrichten.sh` sieht zuerst nach, ohne etwas zu ändern (gibt
+es alle Werkzeuge, die es braucht, läuft die App mit dem neuen Code, antwortet
+die Datenbank), und tut dann der Reihe nach, was die Handschritte unten
+beschreiben: die Tabellen einspielen, nur wenn sie fehlen; Client-ID und Secret
+abfragen (beide unsichtbar — Google zeigt sie untereinander, und wer die falsche
+Zeile erwischt, hätte sonst das Secret auf dem Bildschirm) und
+`GOOGLE_TOKEN_KEY` selbst erzeugen; die drei Namen in die
+`docker-compose.override.yml` eintragen, neben Jev und Docling, ohne dort eine
+Zeile wegzunehmen; die App neu erzeugen, ohne Bau, und aus dem Container
+nachsehen, ob die Werte angekommen sind; `kalender.sh` anlegen, die Zeile in
+`/etc/crontab` ergänzen und crond neu laden; zum Schluss `kalender.sh` einmal
+als Probe. Danach bleibt nur Schritt 5 unten: im Browser verbinden.
+
+Ein zweiter Lauf ändert nichts. Was schon in der `.env` steht, bleibt stehen;
+ersetzt wird nur auf ausdrücklichen Wunsch:
+
+- `--neuer-schluessel` — ein neuer `GOOGLE_TOKEN_KEY`. Ist ein Kalender
+  verbunden, fragt das Skript nach: Der Zugang lässt sich danach nicht mehr
+  entschlüsseln, die Karte zeigt „blockiert", das Handy bekommt eine Push
+  „Google Kalender getrennt", und der Cron meldet 500, bis jemand *Neu
+  verbinden* drückt. Die Probe am Ende erwartet genau diesen 500.
+- `--neue-zugangsdaten` — Client-ID und Secret. Ein neues Secret desselben
+  Clients lässt die Verbindung gelten; dafür fragt das Skript nicht nach. Eine
+  **andere** Client-ID dagegen schon: Ein Zugang gilt nur für den Client, der
+  ihn ausgestellt hat, die Karte meldet dann stündlich „Google lehnt die
+  Zugangsdaten der App ab (invalid_client)", und es heißt *Trennen*, danach *Mit
+  Google verbinden*.
+
+Fehlt `GOOGLE_TOKEN_KEY` in der `.env`, obwohl ein Kalender verbunden ist, erzeugt
+das Skript keinen neuen, sondern hält an: Dann ist der Schlüssel verloren
+gegangen, und der richtige Weg ist der alte aus dem Passwortmanager.
+
+Vor jeder Änderung legt es eine Sicherung daneben (`.env.vor-kalender-…`,
+`docker-compose.override.yml.vor-kalender-…`, `/etc/crontab.vor-kalender-…`) und
+erneuert `/etc/crontab.sicherung-<datum>`; die Liste steht am Ende seiner
+Ausgabe und in `kalender-einrichten.log`. Secret und Schlüssel gibt es nie aus.
+
+Dass dabei erst gebaut und dann eingespielt wird, also andersherum als in
+Schritt 1 und 2 unten, ist gefahrlos: Ohne `GOOGLE_*`-Variablen fasst der neue
+Code die Tabellen nicht an, und die Variablen kommen erst nach den Tabellen.
+(Die Cron-Route fragt die Tabelle zwar auch ohne Variablen ab, aber sie ruft
+vor dem Skript niemand, denn die Crontab-Zeile setzt erst das Skript.)
+
+**crond und die Crontab.** Wie crond auf DSM 7 neu geladen wird, ist für die
+beiden älteren Zeilen nicht festgehalten. Das Skript versucht `synosystemctl
+restart crond`, dann `systemctl restart crond`, dann `synoservice --restart
+crond`, und sagt, welcher Weg gegriffen hat. Greift keiner, hält es nicht an;
+dann zeigt `sudo tail -n 3 /volume1/docker/schulapp/kalender.log` nach der
+nächsten Viertel nach, ob die Zeile trotzdem wirkt. Zweierlei ist dabei nicht
+belegt, und das Skript glaubt es deshalb nicht, sondern sieht nach:
+
+- Ein Neustart von crond beendet unter systemd auch Läufe, die crond gerade
+  gestartet hat. Arbeitet `erinnerungen.sh`, `wiki-uebergabe.sh` oder
+  `kalender.sh` (per `pgrep`), wartet das Skript bis zu drei Minuten; arbeitet
+  danach noch einer, lässt es crond in Ruhe und sagt es.
+- Ob DSM beim Neustart von crond `/etc/crontab` aus der Datenbank des
+  Aufgabenplaners neu schreibt — die Datei trägt dessen Zeilen
+  (`synoschedtask --run id=…`) —, weiß niemand. Täte es das, wären alle drei
+  Schulapp-Zeilen weg. Das Skript vergleicht die Datei deshalb nach dem
+  Neustart mit dem Stand davor. Fehlt danach eine Zeile, legt es den Stand von
+  davor zurück, hebt DSMs Fassung als `/etc/crontab.nach-crond-<zeit>` auf,
+  startet crond **nicht** noch einmal neu und hält an. Was auf dem echten NAS
+  geschah, gehört dann hierher.
+
+**Werkzeuge.** `diff` und `cmp` braucht das Skript nicht: Ob DSM sie hat, ist
+für dieses NAS nicht belegt (`nas.sh` nimmt `cmp` nur für einen Hinweis,
+`jev-und-docling.sh` vergleicht mit `md5sum`). Was es sonst braucht (`awk`,
+`sed`, `mktemp`, `curl`, `seq`, `tee` …), prüft es in Schritt 0, bevor es etwas
+ändert.
+
+**Die Störungsnotiz** von `kalender.sh` heißt `SCHULAPP-STOERUNG-KALENDER.md`
+und liegt neben der `SCHULAPP-STOERUNG.md` von Erinnerungen und Wiki-Übergabe,
+nicht darin. Wie die beiden anderen ihre Notiz schreiben und woran sie „heute
+schon eine" erkennen, steht nur auf dem NAS; mit einer eigenen Datei hängt
+keiner der drei Auslöser davon ab.
+
+> **Wie weit geprüft.** Gelaufen ist das Skript an einem nachgebauten NAS
+> (Docker, curl, psql, crond und pgrep als Attrappen, Compose-Dateien mit
+> echter YAML-Prüfung), in 55 Abläufen mit 389 Prüfungen — darunter ein crond,
+> der beim Neustart die Crontab neu schreibt, ein Auflegen mitten im
+> Neuerzeugen der App und ein System ohne `diff` und `cmp`. Die Attrappe läuft
+> am Mac (bash 3.2, BSD-Werkzeuge); DSM-Eigenheiten zeigt sie nicht. Auf dem
+> echten NAS ist das Skript noch nicht gelaufen.
+
+Die Handschritte erklären, was das Skript tut, und helfen weiter, wenn es
+irgendwo anhält. Befehle mit `docker` stehen in der Form, die auf diesem NAS
+geht: `sudo` kennt `/usr/local/bin` nicht, und den Ordner darf nur root
+betreten.
+
+1. **Die Tabellen einspielen**, per psql in einer Transaktion (die Zeilen
+   stehen im Kopf von `scripts/google-kalender-tabellen.sql`), und mit `\d`
+   nachsehen. Zuerst, weil `/einstellungen` mit gesetzten Variablen und ohne
+   Tabellen mit 500 antwortet; ohne Variablen fasst die Seite sie gar nicht an.
+   Die Zeile im Kopf der SQL-Datei stimmt so: Liest psql ohne `-c` und `-f`
+   aus einer Umleitung (`exec -T`, kein Terminal), behandelt es stdin wie
+   `-f -`, und `--single-transaction` gilt für die ganze Datei (nachgesehen in
+   `src/bin/psql/startup.c`, REL_13 bis REL_18). Nur in einem Terminal, ohne
+   Umleitung, bricht psql mit „-1 can only be used in non-interactive mode" ab —
+   dann ist nichts eingespielt. Das Skript schreibt `-f -` trotzdem dazu; es
+   sagt ausdrücklich, was gemeint ist.
+2. `sudo ~/nas.sh hoch`.
+3. **Die Werte in die `.env` eintragen** — mit einem Editor (`sudo vi
+   /volume1/docker/schulapp/.env`), nicht per `echo` (sonst stehen sie in der
+   Shell-History) — und drei Zeilen in die `docker-compose.override.yml` unter
+   `services.app.environment`, neben das, was Jev und Docling dort haben (die
+   Datei nicht neu schreiben):
+   ```yaml
+   GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+   GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+   GOOGLE_TOKEN_KEY: ${GOOGLE_TOKEN_KEY:-}
+   ```
+   Danach nur die App neu erzeugen, nicht alle Dienste:
+   ```bash
+   sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose up -d app'
+   ```
+4. **Probe aus dem Container**, ob Google erreichbar ist (erwartet: `400`, denn
+   die Anfrage ist absichtlich leer):
+   ```bash
+   sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose exec -T app node -e "fetch(\"https://oauth2.googleapis.com/token\",{method:\"POST\"}).then(r=>console.log(r.status))"'
+   ```
+5. In den Einstellungen **verbinden** — von einem Gerät, auf dem Tailscale an
+   ist, und **im Browser** (Safari oder Chrome), nicht aus der installierten
+   App vom Home-Bildschirm. Die App ist eine PWA (`display: standalone`); auf
+   dem iPhone öffnet sie Google in einem eigenen Fenster, das ihre Cookies
+   womöglich nicht teilt, und dann fehlen bei der Rückkehr das Cookie des
+   Verbindens und die Anmeldung — die Karte meldet „kam nicht in diesem Browser
+   zurück", oder es geht zu `/login`. (Am Handy noch nicht geprüft; vor der
+   Abnahme einmal ausprobieren.) Die Verbindung gilt danach für den Nutzer,
+   also auch in der installierten App.
+6. **Den Cron einrichten:** `kalender.sh` neben die Compose-Datei (`curl
+   --max-time 300` gegen `http://127.0.0.1:3000/api/cron/kalender`, Protokoll
+   in `kalender.log`, Störungsnotiz in `SCHULAPP-STOERUNG-KALENDER.md` bei
+   `exit != 0`), die Zeile
+   `15  *  *  *  *  root  /volume1/docker/schulapp/kalender.sh` in
+   `/etc/crontab` eintragen, crond neu laden, das Skript einmal von Hand laufen
+   lassen, `grep kalender /etc/crontab` und die Sicherung
+   `/etc/crontab.sicherung-<datum>` erneuern. Die Fassung von `kalender.sh`
+   steht in `kalender_sh_inhalt()` in `scripts/kalender-einrichten.sh` — sie
+   liest nur `CRON_SECRET` aus der `.env` und gibt es curl über stdin (`-K -`).
+   Der Kopf von `src/app/api/cron/kalender/route.ts` zeigt noch die ältere
+   Skizze mit `. .env` und `curl -H "Authorization: Bearer $CRON_SECRET"`;
+   damit stünde das Geheimnis in der Prozessliste.
+
+### Wo ein Fehler auftaucht
+
+Nichts scheitert still — die Erinnerungen waren zwölf Läufe tot, ohne dass es
+jemand merkte. Ein Fehler steht an vier Stellen:
+
+- in der **Karte** in den Einstellungen: Zustand, letzter Abgleich, letzter
+  Fehler, und eine Warnung, wenn der stündliche Cron seit mehr als zwei Stunden
+  nicht mehr lief;
+- als **eine Push-Nachricht**, wenn die Verbindung in „blockiert" übergeht —
+  genau eine, die Datenbank entscheidet, welcher Lauf sie schickt;
+- als **500 der Cron-Route**, daraus werden `kalender.log` und die
+  Störungsnotiz `topics/schule/SCHULAPP-STOERUNG-KALENDER.md` im Vault
+  (höchstens eine am Tag);
+- im **Container-Protokoll** mit dem Präfix `Google-Kalender:`
+  (`sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose logs app' | grep Google-Kalender`).
+
+**Blockiert** heißt: Ohne einen Handgriff geht nichts mehr, und bis dahin ruft
+kein Lauf Google an. Drei Gründe: Google nimmt den Zugang nicht mehr an
+(`invalid_grant` — entzogen, oder das Projekt steht noch auf „Testing"; *Neu
+verbinden*), der gespeicherte Zugang lässt sich nicht entschlüsseln
+(`GOOGLE_TOKEN_KEY` gewechselt; *Neu verbinden*), oder den Kalender „Schule"
+gibt es nicht mehr (*Neu anlegen* — die App tut es nicht von selbst, vielleicht
+war es Absicht). Jeder Lauf erneuert den Zugang, auch ohne Arbeit; der
+stündliche ist damit zugleich die Gesundheitsprüfung.
+
+**Zurückgesetzt wird nur über „Kalender neu anlegen"** in der Karte — ein
+frischer Kalender, und das Gedächtnis geht mit. **Nie** über
+`delete from google_calendar_events` allein: Was der Nutzer in Google gelöscht
+hat, käme dann zurück, und Termine, die es in der App nicht mehr gibt, blieben
+in Google für immer stehen, weil niemand mehr weiß, dass sie der App gehören.
+Anders als bei `wiki_deliveries` ist diese Tabelle kein Abdruck, den man
+wegwerfen kann.
+
+**Ein Neustart mitten im Lauf** (DSM-Update, `nas.sh hoch`) richtet keinen
+Schaden an: Jede Zeile wird direkt nach Googles Antwort geschrieben, und die
+Queue im Speicher (`@/lib/calendar/queue`), die zwei Läufe nacheinander statt
+nebeneinander laufen lässt, geht einfach verloren. Der nächste Auslöser —
+spätestens der Cron — macht weiter.
+
+**Wer auf einen Lauf wartet, wartet nicht ewig:** „Jetzt abgleichen" kommt nach
+spätestens einer halben Minute zurück (die Karte sagt dann „läuft gerade"), der
+Cron nach 285 Sekunden, vor dem `--max-time 300` von curl. Der Lauf arbeitet
+dann weiter. Für den Cron ist das ein 500 mit Satz — kommt er jede Stunde,
+hängt ein Lauf, und
+`sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose restart app'`
+löst ihn.
+
+**Trennen** zieht den Zugang bei Google zurück. Bestätigt Google das nicht
+(nicht erreichbar, Schlüssel gewechselt), vergisst die App den Zugang trotzdem,
+und die Karte sagt, dass er bei Google womöglich noch gilt und unter
+myaccount.google.com/permissions von Hand zu entfernen ist.
+
+**Lokal testen** schreibt in das echte Google-Konto und legt dort einen zweiten
+Kalender „Schule" an (die lokale Datenbank kennt den vom NAS nicht). Danach in
+der App trennen und den Kalender in Google löschen.
+
 ## Betrieb
 
 Die App läuft seit dem 30.8.2026 auf einem Synology-NAS im Heimnetz, in zwei
@@ -973,6 +1347,8 @@ bleibt dabei zu, es gibt keine Portfreigabe.
   wiki-uebergabe.log   <- eine Zeile je Lauf: Zeit, Rückgabewert, Antwort
   erinnerungen.sh      <- dasselbe, stündlich, für die Erinnerungen
   erinnerungen.log     <- ebenso; beide beschneidet ihr Skript auf 500 Zeilen
+  kalender.sh          <- dasselbe, stündlich um :15, für den Google Kalender
+  kalender.log         <- ebenso, auch auf 500 Zeilen beschnitten
 
 /volume1/@docker/volumes/schulapp_pgdata/_data   <- die Datenbank selbst,
                           bewusst AUSSERHALB der Freigabe; warum, steht unten
@@ -982,7 +1358,7 @@ bleibt dabei zu, es gibt keine Portfreigabe.
 Compose-Datei beschreibt sie, und die `.env` trägt die Geheimnisse — darunter
 die VAPID-Schlüssel und das `CRON_SECRET`, die beim Umzug **neu erzeugt wurden**.
 Die Werte in der lokalen `.env.local` sind seitdem nicht mehr die gültigen. Die
-beiden Skripte und ihre Protokolle hängen genauso an diesem NAS: Sie kennen
+Skripte und ihre Protokolle hängen genauso an diesem NAS: Sie kennen
 seine Pfade, seinen Vault und die Crontab-Zeilen, die sie rufen. Im Repo wären
 sie eine Anleitung, die für jede andere Maschine falsch ist — dieselbe
 Begründung wie bei der Compose-Datei, und ein Protokoll ist ohnehin ein
@@ -1276,6 +1652,13 @@ Rechner sieht alle 15 Sekunden in den Korb und setzt Claude auf jedes Blatt an,
 das noch keinen Vorschlag hat; es gehört nicht zur App, sondern benutzt sie von
 außen durch dieselbe Tür. Es steht in [`harness/`](harness/README.md) und läuft
 nur, wenn man es startet.
+
+**Google Kalender** — Klausuren, offene Hausaufgaben und freie Tage stehen
+als ganztägige Termine in einem eigenen Kalender „Schule" im Google Kalender,
+nach jedem Speichern und stündlich abgeglichen. Was der Nutzer dort löscht,
+bleibt draußen. Verbunden wird unter *Einstellungen*; wie es läuft, steht oben
+unter *Google Kalender*. Gebaut sind Stufe 1 (Verbinden) und 2 (der Bestand);
+Schulhomepage, Termine von Blättern und IServ folgen als weitere Quellen.
 
 Alles steht auch auf der Startseite: als Kachel, in der Tagesspur, auf der
 Kameraseite und im Dashboard. Damit sind die vier geplanten Ausbaustufen aus

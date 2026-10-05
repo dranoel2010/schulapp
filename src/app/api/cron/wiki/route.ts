@@ -1,5 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
-
+import { isCronAuthorized } from "@/lib/cron-auth";
 import {
   WIKI_EXPORT_DIR_ENV,
   runWikiHandover,
@@ -23,7 +22,8 @@ import {
  * Antwort. Fachlogik gehört nach @/lib und nicht in einen Route Handler.
  *
  * Kein Cookie, sondern "Authorization: Bearer <CRON_SECRET>" — dasselbe
- * Geheimnis und dieselbe Prüfung wie in /api/cron/reminders.
+ * Geheimnis wie in /api/cron/reminders und /api/cron/kalender. Die Prüfung
+ * steht seit der dritten Tür in @/lib/cron-auth: drei Türen, eine Prüfung.
  *
  * ── ⚠ WAS AUF DEM NAS EINGETRAGEN WERDEN MUSS ───────────────────────────────
  *
@@ -194,7 +194,7 @@ export async function GET(request: Request) {
     );
   }
 
-  if (!isAuthorized(request, secret)) {
+  if (!isCronAuthorized(request, secret)) {
     return Response.json({ ok: false, error: "Nicht erlaubt." }, { status: 401 });
   }
 
@@ -329,21 +329,4 @@ export function handoverFailure(summary: WikiRunSummary): string | null {
     "Heute ist nichts im Vault angekommen. Woran es lag, steht im Protokoll des " +
     'Containers — „sudo docker compose logs app | grep Wiki-Übergabe".'
   );
-}
-
-/**
- * Zeichenweise gleich lange Prüfung, damit sich das Geheimnis nicht über die
- * Antwortzeit erraten lässt. Wortgleich zu /api/cron/reminders — zwei Türen,
- * eine Prüfung, und sie darf an der einen nicht schwächer sein als an der
- * anderen.
- */
-function isAuthorized(request: Request, secret: string): boolean {
-  const header = request.headers.get("authorization");
-  if (!header) return false;
-
-  const given = Buffer.from(header);
-  const expected = Buffer.from(`Bearer ${secret}`);
-  if (given.length !== expected.length) return false;
-
-  return timingSafeEqual(given, expected);
 }

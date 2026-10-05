@@ -1205,6 +1205,177 @@ export const wikiDeliveries = pgTable(
   ],
 );
 
+/**
+ * Die Verbindung zum Google Kalender — eine Zeile je Nutzer.
+ *
+ * Die App trägt Klausuren, offene Hausaufgaben und freie Tage in einen eigenen
+ * Kalender „Schule" im Google Kalender des Schülers ein. Sie ist dort die
+ * Quelle und Google das Ziel; wie der Abgleich läuft, steht in
+ * @/lib/calendar/sync, und was er sich je Termin merkt, eine Tabelle weiter.
+ *
+ * ── `refresh_token_enc`: der eine Schlüssel, verschlossen ────────────────────
+ *
+ * Das Refresh Token ist der dauerhafte Zugang zum Kalender. Es steht hier
+ * verschlüsselt (AES-256-GCM, siehe @/lib/calendar/token-crypto), und der
+ * Schlüssel dazu steht NUR in der Umgebungsvariablen `GOOGLE_TOKEN_KEY` — nie
+ * in der Datenbank, nie im Repo. Wer einen Abzug der Datenbank in die Hände
+ * bekommt, hat damit keinen Zugang zum Kalender. Die Nutzer-ID ist als AAD in
+ * die Verschlüsselung eingebunden: Ein Token, das von einer Zeile in eine
+ * andere kopiert wird, lässt sich dort nicht öffnen.
+ *
+ * Leer heißt getrennt. `calendar_id` bleibt beim Trennen stehen, und das mit
+ * Absicht: Wer neu verbindet, bekommt denselben Kalender „Schule" weitergeführt,
+ * samt allem, was er dort gelöscht hat und was deshalb draußen bleibt.
+ *
+ * Ein Access Token wird nie gespeichert. Jeder Lauf holt sich einen frischen,
+ * und dieser Refresh ist zugleich die stündliche Gesundheitsprüfung: Hat der
+ * Nutzer den Zugang entzogen, merkt es der nächste Lauf, auch wenn er sonst
+ * nichts zu tun hätte.
+ *
+ * ── `blocked_*`: „Verbindung unterbrochen" ──────────────────────────────────
+ *
+ * Gesetzt, wenn ohne einen Handgriff des Menschen nichts mehr geht: Google
+ * nimmt den Zugang nicht mehr an (`zugang`, invalid_grant), der gespeicherte
+ * Zugang lässt sich nicht entschlüsseln (`schluessel`), oder den Kalender gibt
+ * es nicht mehr (`kalender`). Solange die Spalte gesetzt ist, ruft kein Lauf
+ * Google an.
+ *
+ * Gesetzt wird sie mit `where blocked_at is null` — die Datenbank entscheidet
+ * also, welcher von zwei gleichzeitigen Läufen die EINE Push-Nachricht
+ * schickt. Ein Lauf, der jede Stunde scheitert, darf nicht jede Stunde
+ * klingeln; einer, der still scheitert, ist aber genau der Fehler, den das
+ * Projekt schon einmal hatte (die Erinnerungen, zwölf Läufe tot).
+ *
+ * ── `last_*` ─────────────────────────────────────────────────────────────────
+ *
+ * Was die Einstellungen anzeigen: wann zuletzt abgeglichen wurde, mit welchem
+ * Ergebnis und welcher Fehler zuletzt auftrat. `last_cron_at` setzt nur der
+ * stündliche Lauf; bleibt es stehen, ist die Crontab-Zeile auf dem NAS
+ * verloren gegangen, und die Karte sagt das.
+ *
+ * Keine `relations()`, aus demselben Grund wie bei `wiki_deliveries`: keine
+ * Abfrage liest diese Tabelle über `db.query`.
+ */
+export const googleCalendarConnections = pgTable("google_calendar_connections", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** "v1.<iv>.<tag>.<daten>", base64url; leer = getrennt */
+  refreshTokenEnc: text("refresh_token_enc"),
+  /** Was Google erteilt hat, durch Leerzeichen getrennt */
+  scope: text("scope").notNull().default(""),
+  /** Der Kalender „Schule", z.B. "…@group.calendar.google.com" */
+  calendarId: text("calendar_id"),
+  /** creator.email des ersten angelegten Termins — nur zur Anzeige */
+  googleEmail: text("google_email"),
+  connectedAt: timestamp("connected_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  blockedAt: timestamp("blocked_at", { withTimezone: true }),
+  /** zugang | schluessel | kalender */
+  blockedReason: text("blocked_reason"),
+  lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  /** „2 neu, 1 geändert" — ohne Zeitstempel darin */
+  lastSummary: text("last_summary"),
+  lastError: text("last_error"),
+  lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+  lastCronAt: timestamp("last_cron_at", { withTimezone: true }),
+});
+
+/**
+ * Das Gedächtnis des Abgleichs mit Google — nach dem Muster von
+ * `wiki_deliveries`.
+ *
+ * Eine Zeile je Termin, den die App in Google angelegt hat oder anlegen
+ * wollte. Ohne sie wüsste die App nicht, welche Termine in Google ihr gehören,
+ * was sich geändert hat und — der eigentliche Grund — was der Nutzer dort
+ * gelöscht hat und deshalb NIE wieder eingetragen werden darf.
+ *
+ * ── Die Spalten ──────────────────────────────────────────────────────────────
+ *
+ * `key` ist „<art>-<uuid>", also „klausur-3f2a…", im Stil der `doc_id` der
+ * Wiki-Übergabe. `kind` steht als eigene Spalte daneben und nicht bloß als
+ * Vorsilbe im Schlüssel, aus demselben Grund wie dort: Ist die Quelle einer Art
+ * in einem Lauf gescheitert, bleiben genau die Zeilen dieser Art unberührt, und
+ * das an einem Bindestrich auszurechnen wäre die Stelle, an der man am
+ * wenigsten raten will.
+ *
+ * `calendar_id` hält fest, in welchem Kalender der Termin liegt. Wird der
+ * Kalender „Schule" neu angelegt, räumt der nächste Lauf die Zeilen des alten
+ * weg — ein Lauf, der beim Neuanlegen noch unterwegs war, kann sonst Zeilen
+ * hinterlassen, die zu keinem Kalender mehr passen.
+ *
+ * `event_id` wird gespeichert und nicht jedes Mal gerechnet. Ändert sich die
+ * Rechnung je einmal, bleiben die alten Termine trotzdem erreichbar. Sie
+ * entsteht aus der UUID und der `generation` (siehe @/lib/calendar/events):
+ * Eine gelöschte ID verwendet die App nie wieder, wer eine abgehakte
+ * Hausaufgabe wieder öffnet, bekommt Generation + 1 und damit eine neue ID.
+ *
+ * `hash` ist der SHA-256 über den zuletzt an Google gesendeten Termin. Dieselbe
+ * Regel wie beim Wiki: Im gesendeten Termin steht nichts, was sich ändert, ohne
+ * dass sich der Inhalt ändert — sonst schriebe jeder Lauf alles neu.
+ *
+ * `title` ist der zuletzt gesendete Titel, für die Anzeige „in Google gelöscht"
+ * in den Einstellungen; die Klausur dahinter kann es dann längst nicht mehr
+ * geben.
+ *
+ * ── Die vier Zustände ────────────────────────────────────────────────────────
+ *
+ *   geliefert  steht so in Google
+ *   entfernen  die App löscht gerade (Absicht geschrieben, Ergebnis offen)
+ *   entfernt   die App hat gelöscht
+ *   verworfen  der Nutzer hat in Google gelöscht — NIE wieder eintragen
+ *
+ * `entfernen` wird VOR dem Löschen geschrieben. Bricht der Lauf danach ab, weiß
+ * der nächste, dass ein „schon gelöscht" von Google sein eigener erster Versuch
+ * war und keine Löschung durch den Nutzer.
+ *
+ * ── ⚠ Diese Tabelle darf NIE allein geleert werden ───────────────────────────
+ *
+ * Anders als `wiki_deliveries`. Dort hieße leeren: alles wird noch einmal
+ * geliefert, und verloren geht nichts. Hier hieße es: Was der Nutzer in Google
+ * gelöscht hat, käme beim nächsten Lauf zurück, und Termine, die es in der App
+ * nicht mehr gibt, blieben in Google für immer stehen, weil niemand mehr weiß,
+ * dass sie der App gehören. Zurückgesetzt wird nur über „Kalender neu anlegen"
+ * in den Einstellungen: ein frischer Kalender, und die Zeilen gehen mit.
+ *
+ * Kein Index über den Primärschlüssel hinaus und keine `relations()`, aus
+ * demselben Grund wie bei `wiki_deliveries`: Gelesen wird ausschließlich
+ * „alle Zeilen eines Nutzers", und dafür steht `user_id` im Primärschlüssel
+ * vorn.
+ */
+export const googleCalendarEvents = pgTable(
+  "google_calendar_events",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** "klausur-<uuid>" | "hausaufgabe-<uuid>" | "frei-<uuid>" */
+    key: text("key").notNull(),
+    /** klausur | hausaufgabe | frei (später: blatt, schule, iserv) */
+    kind: text("kind").notNull(),
+    calendarId: text("calendar_id").notNull(),
+    eventId: text("event_id").notNull(),
+    generation: integer("generation").notNull().default(0),
+    /** SHA-256 hex über den zuletzt gesendeten Termin */
+    hash: text("hash").notNull(),
+    /** geliefert | entfernen | entfernt | verworfen */
+    state: text("state").notNull(),
+    /** Zuletzt gesendeter Titel — für die Anzeige „in Google gelöscht" */
+    title: text("title").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({
+      name: "google_calendar_events_pk",
+      columns: [t.userId, t.key],
+    }),
+  ],
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   oauthGrants: many(oauthGrants),
@@ -1444,6 +1615,9 @@ export type OauthGrant = typeof oauthGrants.$inferSelect;
 export type NewOauthGrant = typeof oauthGrants.$inferInsert;
 export type WikiDelivery = typeof wikiDeliveries.$inferSelect;
 export type NewWikiDelivery = typeof wikiDeliveries.$inferInsert;
+export type GoogleCalendarConnection =
+  typeof googleCalendarConnections.$inferSelect;
+export type GoogleCalendarEventRow = typeof googleCalendarEvents.$inferSelect;
 
 /** Art einer Prüfung */
 export type ExamKind = "klausur" | "test" | "referat" | "muendlich";
