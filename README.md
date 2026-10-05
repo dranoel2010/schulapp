@@ -1047,11 +1047,11 @@ lesbar — man käme sonst an das Skript nicht heran, mit dem man ihn aktualisie
 | Wort | Was es tut |
 |---|---|
 | `stand` | Welcher Commit ist live, laufen die Container, antwortet die App, wann hat der Postbote zuletzt gearbeitet. Ändert nichts. |
-| `hoch` | Pull, Bau, Start — und danach warten, bis die App wirklich antwortet. |
-| `zurueck` | Auf den Stand vor dem letzten `hoch`. |
+| `hoch` | Pull, Bau, Start — und danach warten, bis die App wirklich antwortet. Ging der Bau schief, baut das nächste `hoch` nach. |
+| `zurueck` | Auf den Stand vor dem letzten `hoch` — mit dem Rückfallbild in Sekunden, sonst per Neubau. |
 | `postbote` | Postbote anschalten, und vorher die liegengebliebene `lauf.lock` wegräumen. |
 
-Drei Dinge darin sind keine Abkürzung, sondern eine Richtigstellung:
+Fünf Dinge darin sind keine Abkürzung, sondern eine Richtigstellung:
 
 **Der Rückweg wird vor dem Pull gemerkt, nicht danach.** `HEAD@{1}` taugt dafür
 nicht — nach einem Pull, der nichts geholt hat, gibt es den Eintrag gar nicht.
@@ -1060,18 +1060,40 @@ nicht — nach einem Pull, der nichts geholt hat, gibt es den Eintrag gar nicht.
 beim nächsten Pull kommentarlos wieder auf den kaputten Stand vorspulen. Der
 nächste `hoch` holt HEAD von selbst auf `main` zurück.
 
-**`hoch` taggt das laufende Bild als `<name>:rueckfall`, bevor es baut.** Ein
-Bau, der *scheitert*, ist harmlos: der alte Container läuft weiter. Gefährlich
-ist der Bau, der *gelingt* und eine kaputte App hochbringt — dann hat
-`up -d --build` den Tag längst überschrieben, und das Vorgängerbild liegt nur
-noch namenlos da. Mit dem Tag ist der Rückweg ein Zurücktaggen und ein `up -d`
-ohne `--build`: Sekunden statt eines zweiten Baus.
+**Was läuft, sagt nicht der Klon.** Am 5.10.2026 scheiterte ein Bau an einem
+Netzaussetzer — *nachdem* der Pull schon durch war. Der Klon stand auf dem neuen
+Stand, die App lief auf dem alten, und ein zweites `hoch` sah „nichts Neues" und
+baute nicht. Seitdem merkt sich `nas.sh` in `.gebauter-stand`, welcher Commit
+gebaut ist, und zwar mit der ID des Bildes dazu: Baut jemand an `nas.sh` vorbei
+von Hand (die vier Zeilen oben), passt die ID nicht mehr, und der Zettel gilt
+als unbekannt statt als falsch. `stand` sagt, wenn Klon und App auseinanderliegen,
+und welches Wort es behebt.
 
-> **Ungelaufen.** Geschrieben am 15.9.2026 für eine Klassenfahrt, auf der nur
-> ein Telefon dabei ist. Die Syntax ist geprüft, auf dem Mac und auf dem NAS.
-> Ausgeführt wurde keiner der vier Befehle: `sudo` verlangt dort ein Passwort,
-> und der Docker-Socket gehört root. Der erste echte Lauf sollte `stand` sein,
-> weil der nichts ändert.
+**Das Rückfallbild.** Ein Bau, der *scheitert*, ist harmlos: der alte Container
+läuft weiter. Gefährlich ist der Bau, der *gelingt* und eine kaputte App
+hochbringt — dann trägt das Vorgängerbild keinen Namen mehr. `hoch` taggt
+deshalb vor dem Bau das Bild, das gerade läuft, als `<name>:rueckfall`; welcher
+Commit darin steckt, steht in `.rueckfall-stand`. `zurueck` nimmt dieses Bild,
+wenn es genau zum Ziel passt: zurücktaggen und `up -d` ohne `--build`, Sekunden
+statt eines zweiten Baus. Zwei Regeln halten
+den Rückweg sauber: Rückweg wird nur ein Stand, der vor dem Bau *geantwortet*
+hat — sonst bleibt der alte stehen. Und ein Rückfallbild bekommt nur ein Stand,
+den `nas.sh` selbst gebaut hat; ist er bloß angenommen (der erste Lauf, nach
+einem Handbau), baut `zurueck` lieber neu, als ein falsches Bild zu starten.
+
+(Vom 16.9. bis zum 5.10.2026 fehlte das Taggen ganz: Beim Umbau in `1700f06`
+verschwand die Funktion, der Aufruf blieb, und `hoch` meldete
+`sichere_bild: command not found`.)
+
+**Die Kopie veraltet still.** `~/nas.sh` ist eine Kopie, kein Link. `hoch`
+vergleicht sie am Ende mit `scripts/nas.sh` im Klon und druckt den
+`sudo cp`-Befehl, wenn die beiden auseinanderliegen.
+
+> **Wie weit gelaufen.** `stand`, `hoch` und `postbote` laufen auf dem NAS
+> seit dem 16.9.2026. Die Fassung vom 5.10.2026 — Nachbauen nach gescheitertem
+> Bau, Rückfallbild, `zurueck` ohne Neubau — ist am nachgebauten NAS geprüft
+> (Git echt, Docker und curl als Attrappe, 22 Abläufe mit 57 Prüfungen, dazu
+> zwei Runden Gegenlesen), auf dem echten noch nicht.
 
 ### Der Ausfall vom 11.9.2026 — die Freigabe entzieht der Datenbank die Rechte
 
