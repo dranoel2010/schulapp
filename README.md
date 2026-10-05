@@ -560,8 +560,11 @@ Dasselbe gilt für eine von Hand gestartete Nachlese.
 
 **Reihenfolge auf dem NAS.** Der neue Auftrag des Postboten lässt das Fach
 weg, weil Jev es bestimmt. Deshalb kommt `harness/` erst aufs NAS, wenn dort
-`TYPESAFE_API_KEY` in der App gesetzt ist und Jev ein Blatt abgelegt hat —
-sonst bekäme ein Blatt gar keinen Fachvorschlag.
+`TYPESAFE_API_KEY` in der App ankommt und Jev antwortet — sonst bekäme ein
+Blatt gar keinen Fachvorschlag. `scripts/jev-und-docling.sh` hält diese
+Reihenfolge ein: Es fragt Jev aus dem App-Container heraus
+(`scripts/nas-probe-jev.mjs`) und stellt den Postboten nur um, wenn die
+Antwort stimmt.
 
 Gemessen vor dem Einbau an 20 abgelegten Blättern: 19 Mal dasselbe Fach wie
 der Mensch, und das zwanzigste war falsch abgelegt. Den Ausschlag gaben die
@@ -583,26 +586,38 @@ maßgeblich. In die Datenbank schreibt Docling nichts selbst.
 Gemessen an einem gerenderten Arbeitsblatt (Mac, warm): rund 6 Sekunden je
 Seite. Die Tabelle kam fehlerfrei an; im Fließtext fehlte zweimal der Strich in
 `f'(x)`, und `x³` wurde `x3` — deshalb Vorlage und nicht Abschrift. Auf dem
-NAS ohne Grafikkarte ist es langsamer; ein Postboten-Lauf hat 15 Minuten je
-Blatt (`FRIST_MS`), und `convertPage()` gibt nach drei Minuten je Seite auf.
+NAS ohne Grafikkarte ist es langsamer; ein Postboten-Lauf hat 5 Minuten plus
+4 je Seite (`fristFuer()`, höchstens 45), und `convertPage()` gibt nach drei
+Minuten je Seite auf.
 
 Gefragt wird über den **asynchronen** Weg (`/v1/convert/file/async`, dann
 nachfragen, dann abholen) und mit `code_formula_preset=codeformulav2` — warum,
 steht an `convertPage()` und `doclingForm()` in `src/lib/docling.ts`.
 
-Auf dem NAS gehört der Dienst in die Compose-Datei, nur im inneren Netz
-erreichbar, und die App bekommt seine Adresse:
+Auf dem NAS richtet es **`scripts/jev-und-docling.sh`** ein, zusammen mit dem
+Jev-Schlüssel und der Umstellung des Postboten — nach einem `hoch`:
 
-```yaml
-  docling:
-    image: quay.io/docling-project/docling-serve-cpu
-    restart: unless-stopped
-    # kein ports: — nur die App spricht mit ihm
-
-  app:
-    environment:
-      DOCLING_URL: http://docling:5001
+```bash
+sudo ~/nas.sh hoch
+sudo bash /volume1/docker/schulapp/repo/scripts/jev-und-docling.sh
 ```
+
+Es legt eine `docker-compose.override.yml` neben die Compose-Datei (Docling
+nur im inneren Netz, kein `ports:`; die App bekommt `DOCLING_URL` und
+`TYPESAFE_API_KEY`), prüft aus dem App-Container heraus, ob Jev antwortet und
+Docling rechnet, und stellt den Postboten erst um, wenn Jev richtig
+geantwortet hat. Was es vorher nachsieht und wie es sich rückgängig machen
+lässt, steht im Kopf des Skripts.
+
+**Das Bild allein reicht nicht.** `docling-serve-cpu` bringt das Formelmodell
+nicht mit (seine Modellliste: layout, tableformer, picture_classifier,
+rapidocr, easyocr), setzt aber `DOCLING_SERVE_ARTIFACTS_PATH` — und dann lädt
+Docling nichts nach, sondern scheitert an **jeder** Seite mit „Model
+'docling-project/CodeFormulaV2' not found in artifacts_path". Am 5.10.2026 mit
+genau dieser Modellablage nachgestellt: ohne das Modell ein Fehler, mit ihm
+8,5 s für die erste und 2,1 s für die zweite Probeseite (Mac), bei 2,2 GB
+Speicher mit einem Arbeiter. Das Skript lädt es deshalb in ein Docker-Volume
+(`docling-tools models download code_formula`, 610 MB).
 
 Hängt Docling oder antwortet es nicht, pausiert die App es für zehn Minuten
 (ein Fehler an einer einzelnen Seite reicht dafür nicht); der Postbote liest
@@ -615,8 +630,9 @@ Frist reicht (5 Minuten plus 4 je Seite, höchstens 45).
 
 Ohne `DOCLING_URL` sagt `read_docling`, dass Docling fehlt, und der Postbote
 liest wie vorher nur das Foto. Der Postbote selbst braucht die neue
-`harness/auftrag.mts` — auf dem NAS ist `harness/` eine Kopie und kein Klon,
-also per `scp -O` hinüber und den Container neu starten.
+`harness/auftrag.mts` — auf dem NAS ist `harness/` eine Kopie und kein Klon.
+Das Skript kopiert sie aus dem Klon daneben, vergleicht die Prüfsummen und
+legt die alte Fassung unter `/volume1/docker/postbote/harness-alt-<Zeit>` ab.
 
 ## Datenbank
 
