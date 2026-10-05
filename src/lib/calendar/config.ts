@@ -46,9 +46,10 @@ export const CALENDAR_SUMMARY = "Schule";
 /** Ganztägige Termine brauchen eine Zone, damit der Tag in Berlin beginnt. */
 export const CALENDAR_TIME_ZONE = "Europe/Berlin";
 
-/** Steht in Google unter den Einstellungen des Kalenders. */
+/** Steht in Google unter den Einstellungen des Kalenders — wirkt nur auf einen neu angelegten Kalender. */
 export const CALENDAR_DESCRIPTION =
-  "Klausuren, Hausaufgaben und freie Tage aus der Schulapp. Die App hält diesen Kalender aktuell: " +
+  "Klausuren, Hausaufgaben und freie Tage aus der Schulapp, dazu Termine aus IServ, die deine Klasse betreffen. " +
+  "Die App hält diesen Kalender aktuell: " +
   "Was du hier änderst, überschreibt sie beim nächsten Ändern in der App; was du hier löschst, trägt sie nicht wieder ein.";
 
 /** Die Namen der Umgebungsvariablen — an einer Stelle, damit Meldung und Lesen nicht auseinanderlaufen. */

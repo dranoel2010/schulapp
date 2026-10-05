@@ -9,12 +9,19 @@ import { errorText } from "@/lib/calendar/error-text";
 import { examTopicTitles, listExams } from "@/lib/exams";
 import { listAllFreePeriods } from "@/lib/free-days";
 import { listHomework } from "@/lib/homework";
+import { iservAuswahl } from "@/lib/iserv/auswahl";
+import { iservConfig, iservConfigured } from "@/lib/iserv/config";
+import { klasseVeraltet } from "@/lib/iserv/parse";
+import { leseQuellen } from "@/lib/iserv/report";
+import { readSnapshots, readState } from "@/lib/iserv/store";
 
 /**
  * Woher die Termine kommen — eine Quelle ist eine Funktion, die die
  * gewünschten Termine einer Art liefert.
  *
- * Heute sind es drei: Prüfungen, offene Hausaufgaben, freie Tage. **Lernblöcke
+ * Heute sind es drei, und mit IServ vier: Prüfungen, offene Hausaufgaben, freie
+ * Tage — und, wenn ISERV_* gesetzt ist, die Termine aus IServ, die die Klasse
+ * des Schülers betreffen (`iservSource`). **Lernblöcke
  * und Abruf-Termine kommen NIE hierher.** Sie sind ein Vorschlag der App für
  * den eigenen Tag, keine Verabredung mit der Schule, und ein Kalender voller
  * Lernblöcke machte aus der App den Tagesplaner, der sie ausdrücklich nicht
@@ -35,19 +42,23 @@ import { listHomework } from "@/lib/homework";
  *
  * ── Die Stufen 3–5 andocken ──────────────────────────────────────────────────
  *
- * Schulhomepage, Termine von Blättern, IServ — jede ist eine weitere Quelle:
+ * Schulhomepage und Termine von Blättern — jede ist eine weitere Quelle:
  *
  *   1. eine neue `CalendarKind` in @/lib/calendar/events, mit einem Präfix
- *      NUR aus a–v (reserviert: „sab" Blatt, „sas" Schulhomepage, „sai" IServ)
- *      und einer Farbe,
+ *      NUR aus a–v (reserviert: „sab" Blatt, „sas" Schulhomepage) und einer
+ *      Farbe,
  *   2. ein Builder daneben, der einen `WantedEvent` baut,
- *   3. ein Eintrag in `SOURCES` hier.
+ *   3. ein Eintrag in `SOURCES` hier — oder, wenn die Quelle eine Umgebung
+ *      braucht, in `activeSources()` wie IServ.
  *
- * Plan und Ausführung bleiben unverändert. Eine Quelle ohne UUID (IServ)
- * baut ihre `idBase` als Präfix + `sha256(fremdeId).hex.slice(0, 32)` — Hex ist
- * eine Teilmenge von base32hex. Termine mit Uhrzeit erweitern
- * `CalendarEventBody` um `{ dateTime, timeZone }`; Plan und Ausführung hashen
- * den Termin nur und reichen ihn weiter.
+ * Plan und Ausführung bleiben unverändert. **IServ ist erledigt** (Art
+ * `iserv`, Präfix „sai", Pfau): Die Quelle liest NIE das Netz, sondern nur den
+ * letzten guten Snapshot, den der stündliche Cron abgeholt hat
+ * (@/lib/iserv/abruf). Ein blockiertes oder gescheitertes IServ liefert damit
+ * weiter den alten Stand, statt seine Termine aus Google zu nehmen. Eine
+ * Quelle ohne UUID baut ihre `idBase` als Präfix + `sha256(fremdId)` (siehe
+ * `iservIdentity()`), Termine mit Uhrzeit stehen als `{ dateTime, timeZone }`
+ * in `CalendarEventBody`.
  */
 
 export type SourceContext = {
@@ -115,11 +126,64 @@ export const freePeriodSource: CalendarSource = {
   },
 };
 
+/**
+ * Was IServ zuletzt geliefert hat und die Klasse betrifft (@/lib/iserv/auswahl).
+ *
+ * Liest nur die Snapshots — nie IServ selbst. Fehlt der des öffentlichen
+ * Kalenders, gab es noch keinen guten Abruf: Dann wirft die Quelle, und die
+ * Art `iserv` bleibt in diesem Lauf unberührt, statt leer zu gelten und alles
+ * zu löschen.
+ *
+ * Aus der zuletzt gelesenen Liste der Kalender kommt, ob ISERV_KLASSE
+ * womöglich vom letzten Schuljahr ist (`klasseVeraltet()`); dann nimmt der
+ * Filter keinen Termin, der die eingestellte Klasse nennt.
+ */
+export const iservSource: CalendarSource = {
+  kind: "iserv",
+  async wanted(ctx) {
+    const cfg = iservConfig();
+    if (!cfg.ok) throw new Error("IServ ist nicht eingerichtet.");
+
+    const [snaps, frei, zustand] = await Promise.all([
+      readSnapshots(ctx.userId),
+      listAllFreePeriods(ctx.userId),
+      readState(ctx.userId),
+    ]);
+
+    if (!snaps.has("oeffentlich")) {
+      throw new Error(
+        "Noch kein Stand aus IServ — der erste Abruf steht aus oder ist gescheitert (Einstellungen → IServ).",
+      );
+    }
+
+    const { klasse, auch, nie, klassenkalender } = cfg.config;
+    const quellen = leseQuellen(zustand?.sourcesJson ?? "[]");
+
+    return iservAuswahl({
+      items: [...snaps.values()].flatMap((snap) => snap.items),
+      filter: { klasse, auch, nie, klasseUnsicher: klasseVeraltet(quellen, klasse, klassenkalender) },
+      freieZeiten: frei,
+      iservOrigin: cfg.config.zugang.origin,
+      appOrigin: ctx.appOrigin,
+    }).wuensche;
+  },
+};
+
 export const SOURCES: readonly CalendarSource[] = [
   examSource,
   homeworkSource,
   freePeriodSource,
 ];
+
+/**
+ * Die Quellen dieses Laufs: immer die drei aus `SOURCES`, dazu IServ, wenn
+ * die Umgebung es einschaltet. Ohne ISERV_* fehlt die Art `iserv` damit in
+ * `complete` — ihre Zeilen bleiben unberührt, die Termine bleiben in Google
+ * stehen, und es gibt keinen Fehler.
+ */
+export function activeSources(): readonly CalendarSource[] {
+  return iservConfigured() ? [...SOURCES, iservSource] : SOURCES;
+}
 
 /**
  * Alle Quellen fragen, jede für sich. Was eine Quelle nicht vollständig
@@ -128,7 +192,7 @@ export const SOURCES: readonly CalendarSource[] = [
  */
 export async function collectWishes(
   ctx: SourceContext,
-  sources: readonly CalendarSource[] = SOURCES,
+  sources: readonly CalendarSource[] = activeSources(),
 ): Promise<{
   wanted: WantedEvent[];
   complete: Set<string>;

@@ -1430,7 +1430,7 @@ export const googleCalendarEvents = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     /** "klausur-<uuid>" | "hausaufgabe-<uuid>" | "frei-<uuid>" */
     key: text("key").notNull(),
-    /** klausur | hausaufgabe | frei (später: blatt, schule, iserv) */
+    /** klausur | hausaufgabe | frei | iserv (später: blatt, schule) */
     kind: text("kind").notNull(),
     calendarId: text("calendar_id").notNull(),
     eventId: text("event_id").notNull(),
@@ -1449,6 +1449,136 @@ export const googleCalendarEvents = pgTable(
     primaryKey({
       name: "google_calendar_events_pk",
       columns: [t.userId, t.key],
+    }),
+  ],
+);
+
+/**
+ * IServ — der Zustand der Anbindung, eine Zeile je Nutzer.
+ *
+ * Die App meldet sich mit dem Konto des Schülers bei IServ an und liest — nur
+ * lesen — den Gruppenkalender seiner Klasse, den öffentlichen Schulkalender
+ * und seine Aufgaben. Was davon seine Klasse betrifft, landet im Kalender
+ * „Schule" in Google (Art `iserv`, siehe @/lib/iserv/auswahl). Wie ein Abruf
+ * läuft, steht in @/lib/iserv/abruf.
+ *
+ * ── Was hier NICHT steht ─────────────────────────────────────────────────────
+ *
+ * Benutzer und Passwort stehen NUR in der Umgebung (ISERV_USER,
+ * ISERV_PASSWORD), die Session-Cookies nur im Speicher des Prozesses. Diese
+ * Zeile sagt, wie es um die Anbindung steht, nicht, wie man hineinkommt.
+ * `last_error` ist ein fester Satz, durch `schwaerze()` gezogen.
+ *
+ * ── `blocked_*`: „IServ lässt die App nicht mehr hinein" ─────────────────────
+ *
+ * Gesetzt bei einer abgelehnten Anmeldung (falsches Passwort, zweiter Faktor,
+ * Captcha, Sperre, abgelaufenes Passwort). Solange die Spalte gesetzt ist,
+ * fragt kein Lauf IServ — ein zweiter Versuch mit einem falschen Passwort
+ * brächte das Konto des Schülers der Sperre näher. Gesetzt wird mit `where
+ * blocked_at is null`, damit genau EIN Lauf die Push-Nachricht schickt — wie
+ * bei `google_calendar_connections`. Aufgehoben wird nur durch „Erneut
+ * versuchen" in den Einstellungen oder `iserv-einrichten.sh --neues-passwort`.
+ *
+ * ── `last_*`, `failures_in_row`, `stale_notified_at` ─────────────────────────
+ *
+ * Für den Takt (@/lib/iserv/takt: höchstens alle drei Stunden, nach genau
+ * einem Fehlschlag eine schnelle Wiederholung) und für die Karte. Kam seit 24
+ * Stunden kein Stand an, geht EINE Push-Nachricht hinaus;
+ * `stale_notified_at` hält fest, dass sie für diese Durststrecke schon
+ * verschickt ist.
+ *
+ * `sources_json` ist die Liste der erkannten Kalender aus `eventsources`, ohne
+ * die Query der Feed-Adressen; `exercise_fields` die Feldnamen der ersten nicht
+ * leeren Aufgaben-Antwort — nur die Namen, damit sich das angenommene Format
+ * bestätigen lässt.
+ *
+ * Keine `relations()`, wie bei `google_calendar_connections`.
+ */
+export const iservState = pgTable("iserv_state", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  blockedAt: timestamp("blocked_at", { withTimezone: true }),
+  /** abgelehnt | zweiter-faktor | gesperrt | captcha | passwort-abgelaufen */
+  blockedReason: text("blocked_reason"),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+  /** eventsources und öffentlicher Kalender gelesen */
+  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  failuresInRow: integer("failures_in_row").notNull().default(0),
+  /** Fester Satz, geschwärzt */
+  lastError: text("last_error"),
+  lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+  /** Satz des Schutzes oder der Klassenkalender-Erkennung */
+  lastWarning: text("last_warning"),
+  /** Push „seit 24 h nicht gelesen" schon verschickt */
+  staleNotifiedAt: timestamp("stale_notified_at", { withTimezone: true }),
+  /** ErkannteQuelle[] ohne Query der Feed-Adressen */
+  sourcesJson: text("sources_json").notNull().default("[]"),
+  /** Schlüsselnamen der ersten nicht leeren Aufgaben-Antwort, durch Komma getrennt */
+  exerciseFields: text("exercise_fields"),
+});
+
+/**
+ * Der letzte gute Stand aus IServ — eine Zeile je Nutzer und Quelle
+ * (`klasse`, `oeffentlich`, `aufgaben`).
+ *
+ * Der Abgleich mit Google liest NUR diese Tabelle, nie IServ selbst: „Jetzt
+ * abgleichen" und die Läufe nach einer Änderung kosten so keine Anfrage bei
+ * IServ, und ein IServ, das gerade nicht antwortet, friert die Termine auf dem
+ * letzten guten Stand ein, statt sie zu löschen.
+ *
+ * `items_json` hält die Termine normalisiert (`IservItem[]`, geprüft mit
+ * `iservItemSchema` beim Lesen): gesäuberte Titel, Berliner Tage, kein HTML,
+ * kein `creator`, `organizer` oder Teilnehmer. JSON in `text` und nicht in
+ * `jsonb`: Die App sucht nie darin, sie liest immer die ganze Zeile, und
+ * PGlite und postgres-js reichen `jsonb` verschieden herauf — Text liest sich
+ * überall gleich.
+ *
+ * `fetched_at` ist, wann dieser Stand übernommen wurde, `last_seen_at` die
+ * letzte Antwort dieser Quelle, auch eine zurückgehaltene. `pending_*` ist der
+ * Schutz gegen „alles gelöscht" (@/lib/iserv/schutz): Eine verdächtig leere
+ * Antwort wird hier gemerkt und erst übernommen, wenn sie dreimal gleich kommt.
+ *
+ * ── ⚠ Leeren ist KEIN Reset-Hebel ────────────────────────────────────────────
+ *
+ * Fehlt der Snapshot des öffentlichen Kalenders, wirft die Quelle `iserv`
+ * im Abgleich, und die ganze Art bleibt eingefroren — aber nur bis zum
+ * nächsten Abruf. Der holt einen frischen Stand, und der reicht nur 14 Tage
+ * zurück: Alles Ältere, das hier eingefroren stand, verschwindet dann aus
+ * Google. Löscht man nur die Zeile `klasse` oder `aufgaben`, gilt der Rest als
+ * vollständig, und deren Termine verschwinden sofort. Was IServ nicht mehr
+ * liefert, kommt danach nie zurück.
+ */
+export const iservSnapshots = pgTable(
+  "iserv_snapshots",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** klasse | oeffentlich | aufgaben */
+    source: text("source").notNull(),
+    /** Die id des Kalenders in IServ, z.B. "/+public/calendar" */
+    remoteId: text("remote_id").notNull(),
+    /** Sein Label, gesäubert */
+    label: text("label").notNull(),
+    /** IservItem[]; normalisiert, ohne creator/organizer/participants */
+    itemsJson: text("items_json").notNull(),
+    itemCount: integer("item_count").notNull(),
+    /** Wann dieser Stand übernommen wurde */
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+    /** Letzte Antwort dieser Quelle, auch eine zurückgehaltene */
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+    pendingFingerprint: text("pending_fingerprint"),
+    pendingCount: integer("pending_count").notNull().default(0),
+    pendingSince: timestamp("pending_since", { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({
+      name: "iserv_snapshots_pk",
+      columns: [t.userId, t.source],
     }),
   ],
 );
@@ -1695,6 +1825,8 @@ export type NewWikiDelivery = typeof wikiDeliveries.$inferInsert;
 export type GoogleCalendarConnection =
   typeof googleCalendarConnections.$inferSelect;
 export type GoogleCalendarEventRow = typeof googleCalendarEvents.$inferSelect;
+export type IservStateRow = typeof iservState.$inferSelect;
+export type IservSnapshotRow = typeof iservSnapshots.$inferSelect;
 
 /** Art einer Prüfung */
 export type ExamKind = "klausur" | "test" | "referat" | "muendlich";

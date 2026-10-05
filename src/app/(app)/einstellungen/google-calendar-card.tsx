@@ -178,10 +178,13 @@ export function GoogleCalendarCard({
         <CardTitle>Google Kalender</CardTitle>
         <CardDescription>
           Klausuren, offene Hausaufgaben und freie Tage erscheinen als
-          ganztägige Termine in einem eigenen Kalender „Schule“ in deinem
-          Google Kalender. Die App trägt dort ein, ändert und löscht — an deine
-          anderen Kalender kommt sie nicht heran. Was du in Google löschst,
-          trägt sie nicht wieder ein. Lernblöcke kommen nicht hinein.
+          Termine in einem eigenen Kalender „Schule“ in deinem Google
+          Kalender — ganztägig, denn die App kennt dafür keine Uhrzeit — und,
+          wenn IServ eingerichtet ist, Termine deiner Klasse aus IServ (mit
+          Uhrzeit, wenn IServ eine nennt). Die App trägt dort ein, ändert und
+          löscht — an deine anderen Kalender kommt sie nicht heran. Was du in
+          Google löschst, trägt sie nicht wieder ein. Lernblöcke kommen nicht
+          hinein.
         </CardDescription>
       </CardHeader>
 

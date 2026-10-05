@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 
 import type { Exam, FreePeriod, Homework } from "@/db/schema";
-import { addDays } from "@/lib/dates";
+import { addDays, timeInBerlin } from "@/lib/dates";
 import { freeLabel } from "@/lib/free-days";
+import type { IservItem } from "@/lib/iserv/types";
 
 /**
  * Aus einer Zeile der App wird ein Termin für Google.
@@ -11,7 +12,7 @@ import { freeLabel } from "@/lib/free-days";
  * Termin, den die App in Google haben WILL — ob er schon dort steht, sich
  * geändert hat oder gelöscht werden muss, entscheidet @/lib/calendar/plan.
  *
- * ── Alle Termine sind ganztägig ──────────────────────────────────────────────
+ * ── Ganztägig, außer IServ nennt eine Uhrzeit ────────────────────────────────
  *
  * Eine Klausur hat in der App einen Tag und keine Uhrzeit, und die App erfindet
  * keine. Hausaufgaben stehen am Fälligkeitstag, freie Zeiträume von ihrem
@@ -19,6 +20,11 @@ import { freeLabel } from "@/lib/free-days";
  * ganztägigen Termins EXKLUSIV — deshalb steht dort immer der Tag danach.
  * Gerechnet wird ausschließlich mit `addDays()` aus @/lib/dates, über
  * UTC-Mitternacht, damit keine Zeitumstellung einen Tag verschiebt.
+ *
+ * Die einzige Ausnahme sind Termine aus IServ (`iservEvent()`): Nennt IServ
+ * Beginn und Ende, steht der Termin mit Uhrzeit in Google. Nennt es nur einen
+ * Zeitpunkt („Unterrichtsende um 11:30 Uhr", 11:30–11:30), wird er ganztägig mit
+ * der Uhrzeit im Titel — ein Termin ohne Dauer ginge in Google unter.
  *
  * ── Im Termin steht nichts, was sich ohne Inhaltsänderung ändert ─────────────
  *
@@ -39,20 +45,20 @@ import { freeLabel } from "@/lib/free-days";
  * Generation hoch. Warum, steht an `eventIdFor()`.
  */
 
-export type CalendarKind = "klausur" | "hausaufgabe" | "frei";
+export type CalendarKind = "klausur" | "hausaufgabe" | "frei" | "iserv";
 
 /**
  * Präfix der Event-ID und Farbe in Google, je Art.
  *
  * Die Präfixe dürfen nur aus a–v bestehen. Reserviert für die späteren Stufen:
- * „sab" für Termine von Blättern, „sas" für die Schulhomepage, „sai" für IServ.
- * Die Farben sind Googles feste Event-Farben (1–11); frei sind noch 3
- * (Weintraube) und 7 (Pfau).
+ * „sab" für Termine von Blättern, „sas" für die Schulhomepage. Die Farben sind
+ * Googles feste Event-Farben (1–11); frei ist noch 3 (Weintraube).
  */
 export const CALENDAR_KINDS: Record<CalendarKind, { prefix: string; colorId: string }> = {
   klausur: { prefix: "sak", colorId: "11" }, // Tomate
   hausaufgabe: { prefix: "sah", colorId: "9" }, // Heidelbeere
   frei: { prefix: "saf", colorId: "10" }, // Basilikum
+  iserv: { prefix: "sai", colorId: "7" }, // Pfau
 };
 
 /** Wenn der Nutzer keine Erinnerungsstunde hat — dieselbe wie `users.reminderHour` voreingestellt. */
@@ -62,23 +68,43 @@ export const DEFAULT_REMINDER_HOUR = 17;
 export const EVENT_FOOTER =
   "Gepflegt von der Schulapp: Änderungen hier überschreibt sie beim nächsten Ändern in der App, und was du hier löschst, trägt sie nicht wieder ein.";
 
+/**
+ * Dasselbe für Termine aus IServ. Ein eigener Satz, weil hier IServ die Quelle
+ * ist und nicht die App — und EVENT_FOOTER bleibt, wie er ist: Ein geänderter
+ * Satz schriebe jeden Termin der drei anderen Arten neu.
+ */
+export const ISERV_FOOTER =
+  "Aus IServ, gepflegt von der Schulapp: Ändert sich der Termin in IServ, ändert sie ihn hier; was du hier löschst, trägt sie nicht wieder ein.";
+
 /** Die Grenzen der Erinnerungsstunde, wie in den Einstellungen (`hourSchema`). */
 const FIRST_HOUR = 6;
 const LAST_HOUR = 22;
 
 /**
+ * Ganztägig (`date`) oder mit Uhrzeit (`dateTime` in UTC, `timeZone` für die
+ * Anzeige). Die `never`-Felder machen `start.date` an jeder Stelle lesbar —
+ * bei einem Termin mit Uhrzeit ist es `undefined`.
+ */
+export type EventTime =
+  | { date: string; dateTime?: never; timeZone?: never }
+  | { dateTime: string; timeZone: string; date?: never };
+
+/**
  * Ein Termin, wie er an Google geht.
  *
- * Später (Stufe 3 und 5) kommen Termine mit Uhrzeit dazu; dann wird `start` und
- * `end` um `{ dateTime, timeZone }` erweitert. Plan und Ausführung bleiben
- * davon unberührt, weil sie den Termin nur hashen und weiterreichen.
+ * Plan und Ausführung hashen ihn nur und reichen ihn weiter; dass Termine aus
+ * IServ eine Uhrzeit und einen Ort tragen können, ändert dort nichts. Ein
+ * fehlender Ort ist `undefined` und fehlt damit auch im Hash
+ * (`stableStringify()` lässt ihn weg) — die Termine der drei älteren Arten
+ * behalten ihren Hash.
  */
 export type CalendarEventBody = {
   summary: string;
   description: string;
-  start: { date: string };
-  /** Exklusiv: der Tag NACH dem letzten Tag */
-  end: { date: string };
+  start: EventTime;
+  /** Ganztägig exklusiv: der Tag NACH dem letzten Tag */
+  end: EventTime;
+  location?: string;
   colorId: string;
   transparency: "transparent";
   reminders: {
@@ -303,6 +329,87 @@ export function freePeriodEvent(input: {
       lastDay: period.endsOn,
       reminderMinutes: null,
     }),
+  };
+}
+
+/** Längster Titel, den die App an Google gibt. */
+const SUMMARY_MAX = 250;
+
+/**
+ * Schlüssel und Event-ID eines Termins aus IServ. IServ hat keine UUID; die
+ * Grundlage ist die `fremdId` (uid und Vorkommen, siehe @/lib/iserv/parse),
+ * gehasht: Hex ist eine Teilmenge von base32hex, und 32 Zeichen halten die
+ * ID so lang wie die der anderen Arten.
+ */
+export function iservIdentity(fremdId: string): { key: string; idBase: string } {
+  const hash = createHash("sha256").update(`iserv|${fremdId}`, "utf8").digest("hex").slice(0, 32);
+  return { key: `iserv-${hash}`, idBase: `${CALENDAR_KINDS.iserv.prefix}${hash}` };
+}
+
+/**
+ * Ein Termin aus IServ — mit „IServ: " vor dem Titel und in Pfau.
+ *
+ *   ganztägig:            „IServ: Herbstferien…"            als Balken
+ *   mit Beginn und Ende:  „IServ: Kl. 10_Präsentation"      19:00–20:30
+ *   Punkt (11:30–11:30):  „IServ: 11:30 Unterrichtsende…"   ganztägig
+ *   Aufgabe:              „IServ: Aufgabe bis 23:59: …"      ganztägig
+ *
+ * Keine Erinnerung von Google, auch für Aufgaben nicht. Im Termin steht nichts,
+ * was sich ohne Inhaltsänderung ändert — kein `id`, `hash` oder `when` aus
+ * IServ, kein Zeitpunkt des Abrufs.
+ */
+export function iservEvent(input: {
+  item: IservItem;
+  iservOrigin: string;
+  appOrigin: string;
+}): WantedEvent {
+  const { item } = input;
+  const { key, idBase } = iservIdentity(item.fremdId);
+  const aufgabe = item.quelle === "aufgaben";
+  const zeit = !item.ganztaegig && item.beginn ? timeInBerlin(new Date(item.beginn)) : null;
+  const punkt = !item.ganztaegig && (item.ende === null || item.beginn === null || item.ende <= item.beginn);
+
+  let summary: string;
+  if (aufgabe) {
+    summary = zeit && punkt ? `IServ: Aufgabe bis ${zeit}: ${item.titel}` : `IServ: Aufgabe: ${item.titel}`;
+  } else {
+    summary = zeit && punkt ? `IServ: ${zeit} ${item.titel}` : `IServ: ${item.titel}`;
+  }
+  if (summary.length > SUMMARY_MAX) summary = `${summary.slice(0, SUMMARY_MAX - 1)}…`;
+
+  const mitUhrzeit = !item.ganztaegig && !punkt && item.beginn !== null && item.ende !== null;
+  const start: EventTime = mitUhrzeit
+    ? { dateTime: item.beginn as string, timeZone: "Europe/Berlin" }
+    : { date: item.ersterTag };
+  const end: EventTime = mitUhrzeit
+    ? { dateTime: item.ende as string, timeZone: "Europe/Berlin" }
+    : { date: addDays(item.letzterTag, 1) };
+
+  return {
+    kind: "iserv",
+    key,
+    idBase,
+    firstDay: item.ersterTag,
+    body: {
+      summary,
+      description: describe([
+        item.beschreibung,
+        aufgabe
+          ? item.link
+            ? `In IServ: ${input.iservOrigin}${item.link}`
+            : null
+          : `Aus IServ, Kalender „${item.kalender}“`,
+        `In der Schulapp: ${input.appOrigin}/einstellungen#iserv`,
+        ISERV_FOOTER,
+      ]),
+      start,
+      end,
+      location: item.ort ?? undefined,
+      colorId: CALENDAR_KINDS.iserv.colorId,
+      transparency: "transparent",
+      reminders: { useDefault: false, overrides: [] },
+      extendedProperties: { private: { schulapp: key } },
+    },
   };
 }
 

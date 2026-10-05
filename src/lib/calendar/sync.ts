@@ -35,6 +35,7 @@ import {
 } from "@/lib/calendar/store";
 import { openToken, sealToken } from "@/lib/calendar/token-crypto";
 import { todayInBerlin } from "@/lib/dates";
+import { runIservCron } from "@/lib/iserv/abruf";
 import { sendToUser, type PushPayload } from "@/lib/push";
 
 /**
@@ -85,6 +86,14 @@ import { sendToUser, type PushPayload } from "@/lib/push";
  * EINE Push-Nachricht beim Übergang nach „blockiert", als 500 der Cron-Route
  * (daraus werden `kalender.log` und die Störungsnotiz im Vault) und im
  * Container-Protokoll mit dem Präfix „Google-Kalender:".
+ *
+ * ── IServ ────────────────────────────────────────────────────────────────────
+ *
+ * Der stündliche Lauf holt, wenn es fällig ist, zuerst den Stand aus IServ
+ * (@/lib/iserv/abruf, höchstens alle drei Stunden) und gleicht danach ab —
+ * so sieht der Abgleich im selben Lauf schon den frischen Stand. Alle anderen
+ * Läufe (nach einer Änderung, „Jetzt abgleichen") lesen nur den gespeicherten
+ * Snapshot und fragen IServ nie.
  */
 
 export type Anlass = "cron" | "hand" | "aenderung" | "verbinden";
@@ -135,6 +144,7 @@ const QUELLEN: Record<string, string> = {
   klausur: "Prüfungen",
   hausaufgabe: "Hausaufgaben",
   frei: "Freie Tage",
+  iserv: "IServ",
 };
 
 type BlockReason = "zugang" | "schluessel" | "kalender";
@@ -458,6 +468,10 @@ async function runSync(userId: string, frist: number | null): Promise<SyncResult
  * die Crontab-Zeile lebt, auch wenn danach nichts zu tun ist. Fehlt die
  * Umgebung, läuft kein Abgleich; ob das ein Fehler ist, entscheidet
  * `cronFailure()` (ja, sobald etwas verbunden ist).
+ *
+ * Dann IServ, VOR den Abgleichen: Ist ein Abruf fällig, liest der Abgleich
+ * gleich danach schon den frischen Stand. Sein Budget (60 Sekunden) zählt in
+ * die 270 Sekunden dieses Laufs.
  */
 export async function runCalendarCron(): Promise<CalendarCronSummary> {
   const start = Date.now();
@@ -476,9 +490,13 @@ export async function runCalendarCron(): Promise<CalendarCronSummary> {
     unveraendert: 0,
     missing: cfg.ok ? [] : cfg.missing,
     saetze: [],
+    iserv: { status: "aus", satz: null },
   };
 
   if (!cfg.ok) return summary;
+
+  const iserv = await runIservCron(ids, start);
+  summary.iserv = { status: iserv.status, satz: iserv.satz };
 
   for (const id of ids) {
     const lauf = await syncCalendar(id, { anlass: "cron", requestedAt: start });

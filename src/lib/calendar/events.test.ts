@@ -12,6 +12,7 @@ import {
   homeworkEvent,
   homeworkReminderMinutes,
   idBaseFor,
+  iservIdentity,
   stableStringify,
 } from "@/lib/calendar/events";
 
@@ -324,5 +325,77 @@ describe("eventHash", () => {
       appOrigin: ORIGIN,
     });
     assert.notEqual(eventHash(anderesFach.body), ohneThema);
+  });
+});
+
+describe("Die Termine der drei Arten bleiben, wie sie waren", () => {
+  // Vor der Erweiterung um IServ (Uhrzeit, Ort) einmal ausgerechnet und hier
+  // festgehalten. Ändert sich einer dieser Hashes, schriebe der nächste Lauf
+  // JEDEN Termin in Google neu — und überschriebe dabei, was der Nutzer dort
+  // geändert hat.
+  const APP = "https://schulapp.example.test";
+
+  const klausur = () =>
+    examEvent({
+      exam: {
+        id: "11111111-2222-4333-8444-555555555555",
+        kind: "klausur",
+        title: "Analysis",
+        date: "2026-11-12",
+        notes: "Taschenrechner",
+      },
+      subjectName: "Mathematik",
+      topics: ["Kettenregel"],
+      appOrigin: APP,
+    });
+  const hausaufgabe = () =>
+    homeworkEvent({
+      homework: {
+        id: "22222222-2222-4333-8444-555555555555",
+        title: "S. 42 Nr. 3–7",
+        details: "Mit Rechenweg",
+        dueDate: "2026-10-08",
+      },
+      subjectName: "Mathematik",
+      reminderHour: 17,
+      appOrigin: APP,
+    });
+  const frei = () =>
+    freePeriodEvent({
+      period: {
+        id: "33333333-2222-4333-8444-555555555555",
+        kind: "ferien",
+        title: "Herbstferien",
+        startsOn: "2026-10-19",
+        endsOn: "2026-10-30",
+      },
+      appOrigin: APP,
+    });
+
+  it("haben denselben Hash wie vor der Änderung", () => {
+    assert.equal(eventHash(klausur().body), "4e19d49613ddacafa3f76deefb14beb639350e8a696d7d5bf0e020a44ac12229");
+    assert.equal(eventHash(hausaufgabe().body), "89e8e7c22d4c8505a6f10a26a50c305eaf9bda06c712001db6514a5bb5579c80");
+    assert.equal(eventHash(frei().body), "e1119af1330f1e2ecc1d02f2d8ede7374bae8bc2c18f953664f7ed5bd5b78943");
+  });
+
+  it("tragen keinen Ort und keine Uhrzeit", () => {
+    for (const event of [klausur(), hausaufgabe(), frei()]) {
+      assert.ok(!("location" in event.body));
+      assert.ok(!("dateTime" in event.body.start));
+      assert.ok("date" in event.body.start);
+    }
+  });
+});
+
+describe("iservIdentity", () => {
+  it("ist fest, gehasht und base32hex", () => {
+    const eins = iservIdentity("cal|uid-1@iserv.example.test|20261013T150000Z");
+
+    assert.deepEqual(eins, iservIdentity("cal|uid-1@iserv.example.test|20261013T150000Z"));
+    assert.match(eins.key, /^iserv-[0-9a-f]{32}$/);
+    assert.match(eins.idBase, /^sai[0-9a-f]{32}$/);
+    assert.equal(eins.key.slice(6), eins.idBase.slice(3));
+    assert.notEqual(eins.key, iservIdentity("cal|uid-1@iserv.example.test|20261110T160000Z").key);
+    assert.equal(CALENDAR_KINDS.iserv.colorId, "7");
   });
 });

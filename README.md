@@ -1280,10 +1280,11 @@ Hausaufgaben und freie Tage** als ganztägige Termine in einen eigenen Kalender
 *Einstellungen*, Karte *Google Kalender*. **Lernblöcke und Abruf-Termine kommen
 nie hinein** — sie sind ein Vorschlag der App für den eigenen Abend, keine
 Verabredung mit der Schule, und ein Kalender voller Lernblöcke machte aus der
-App den Tagesplaner, der sie nicht sein soll. Später docken dort auch die
-Schulhomepage, Termine von Blättern und IServ an (Stufen 3–5); jede ist eine
-weitere Quelle in `SOURCES` (`src/lib/calendar/sources.ts`), Plan und
-Ausführung bleiben dafür unverändert.
+App den Tagesplaner, der sie nicht sein soll. Seit Stufe 5 kommen, wenn
+eingerichtet, die Termine aus IServ dazu, die die Klasse betreffen (Abschnitt
+„IServ" unten); Schulhomepage und Termine von Blättern docken später an
+(Stufen 3–4). Jede ist eine weitere Quelle in `src/lib/calendar/sources.ts`,
+Plan und Ausführung bleiben dafür unverändert.
 
 **Eine Einbahnstraße.** Die App ist die Quelle, Google das Ziel:
 
@@ -1598,6 +1599,258 @@ myaccount.google.com/permissions von Hand zu entfernen ist.
 **Lokal testen** schreibt in das echte Google-Konto und legt dort einen zweiten
 Kalender „Schule" an (die lokale Datenbank kennt den vom NAS nicht). Danach in
 der App trennen und den Kalender in Google löschen.
+
+## IServ
+
+Seit dem 5.10.2026 (Stufe 5) liest die App, wenn sie eingerichtet ist, IServ
+der Schule mit — **nur lesen**, mit dem Konto des Schülers — und trägt in den
+Kalender „Schule" ein, **was seine Klasse betrifft**. Der Satz des Nutzers
+dazu, wörtlich: „aber nur die für meine Klasse kommen in den Kalender, das ist
+wichtig". Jede Regel unten folgt daraus: **Im Zweifel bleibt ein Termin
+draußen** und steht in den Einstellungen in einer eigenen Liste, statt fremd
+im Kalender.
+
+### Was gelesen wird und was in „Schule" landet
+
+Gelesen werden drei Quellen aus `/iserv/calendar/api/eventsources`:
+
+- **der Gruppenkalender der Klasse** (bei Klasse 10 `/arbeitsmaterial.10/calendar`,
+  erkannt an der Zahl am Ende von Name oder Label) — **ganz**;
+- **die Aufgaben** (Plugin `exercise`) — **ganz**. Das Format ist eine
+  Annahme: Am 5.10.2026 gab es keine offene Aufgabe. Die Feldnamen der ersten
+  nicht leeren Antwort zeigt die Karte („Aufgaben-Format erkannt: …");
+- **der öffentliche Schulkalender** (`/+public/calendar`) — **gefiltert**. Er
+  trägt alles: Elternabende jeder Klasse, Gremien, Kreise,
+  Oberstufen-Probeklausuren, Hort. Hinein kommt nur, was
+  1. ausdrücklich die eigene Klasse nennt („Kl. 10_…", „10. Klasse",
+     „Jg. 10", „Zehntklässler"),
+  2. einen Bereich nennt, der sie einschließt („…_7. - 12. Kl",
+     „Klassen 1-12", „ab Klasse 7"), oder
+  3. für alle gilt UND den Unterricht betrifft: unterrichtsfrei, Ferien (nur
+     ganztägig), Schulsamstag, Unterrichtsende, „Schule geschlossen".
+
+  Draußen bleiben jede andere einzelne Klasse (auch als Zahlwort:
+  „Achtklassspiel", „Elfte Klasse"), Elternabende — **auch „EA 10. Kl."**,
+  denn der ist für die Eltern —, Gremien und Kreise („…kreis", SGK,
+  Kollegium, Konferenz, Elternbeirat), Oberstufen-Kurse (LF/gf/LK/GK,
+  Abitur), Hort, Ferienbetreuung, Schließzeit, Info- und Einführungsabende,
+  und alles, wozu der Titel keinen Bezug zur Klasse erkennen lässt (ein
+  Arbeitssamstag, ein Konzert, ein MSA-Termin). Ein Elternabend oder
+  Hort-Termin, der ausdrücklich sagt, dass Unterricht ausfällt
+  („Elternsprechtag_… Unterricht endet …", „…_Schule und Hort
+  geschlossen"), kommt **knapp** hinein — die Karte listet diese eigens.
+
+  **Keine erkannte Klasse heißt nicht „für alle".** Punkt 3 nimmt nur Titel,
+  die auch nichts Klassenähnliches tragen. „Klassenfahrt, kein Unterricht",
+  „Unterrichtsende für die 12er", „9a_…", „Jahrgänge 11-13", „Q1",
+  „Abschlussklassen", „für die 9." sind Zweifel, nie Termine für alle. Eine
+  Klasse mit Datum direkt dahinter („Kl. 11_ 19.10.-30.10. …") wird gelesen,
+  „Kl. 9 - 10 Uhr" ist Klasse 9, nicht 9 bis 10.
+
+Nicht gelesen werden gesetzliche Feiertage (Plugin `holiday`), weitere
+Gruppenkalender (AGs, Kurse), Abos, der Klausurplan (Plugin `exam-plan` —
+an dieser Schule gibt es das Modul nicht; erkannt würde es, übernommen noch
+nicht, und nie als Prüfung in der App) und die Landesferien aus
+`dieschulapp/api/…/vacations`, die an dieser Waldorfschule falsch sind.
+
+Gemessen am echten öffentlichen Kalender vom 5.10.2026 (92 Termine, −14 bis
++180 Tage, nur gelesen, nicht im Repo): **19 hinein (2 davon knapp), 8
+Zweifel, 65 draußen** — vor und nach der Verschärfung vom 6.10.2026 gleich.
+Die Regeln stehen am Kopf von `src/lib/iserv/klasse.ts`, die Fälle in
+`src/lib/iserv/klasse.test.ts` — dort, wie in allen Fixtures, nur erfundene
+Titel nach denselben Mustern. **Rohantworten einer echten Probe gehören nie
+ins Repo:** Auch der „öffentliche" Kalender ist nur für Mitglieder der Schule
+sichtbar.
+
+**Nachsteuern ohne Code:** `ISERV_AUCH` holt Titel hinein, `ISERV_NIE` hält
+sie draußen (Titelteile, mit `;` getrennt, als ganzes Wort gesucht; NIE
+schlägt AUCH). `ISERV_AUCH` holt **nie eine fremde Klasse oder Stufe**:
+„konzert" holt „Konzert der Chor-AG", aber nicht „Konzert der 5. Klasse".
+Beispiele: `ISERV_AUCH="msa"`, `ISERV_AUCH="ea 10"`,
+`ISERV_NIE="nachschreibetermin"`. Die Liste „Unklar, deshalb nicht im
+Kalender" in den Einstellungen ist der Ort, an dem man sieht, was es braucht.
+
+### Wie es im Kalender aussieht
+
+Präfix **„IServ: "** vor dem Titel, Farbe **Pfau**, keine Erinnerung von
+Google, frei (`transparent`). **Uhrzeit nur, wenn IServ sie nennt**: mit
+Beginn und Ende steht der Termin mit Uhrzeit da; nennt IServ nur einen
+Zeitpunkt („Unterrichtsende um 11:30 Uhr", 11:30–11:30), steht er ganztägig
+mit der Uhrzeit im Titel („IServ: 11:30 Unterrichtsende um 11:30 Uhr"). Aufgaben
+stehen am Abgabetag, mit Uhrzeit als „IServ: Aufgabe bis 23:59: …". Die Event-ID
+ist „sai" + 32 Hex aus der uid des Termins (und seinem Vorkommen bei Serien);
+`id`, `hash` und `when` aus IServ ändern sich bei jedem Abruf und kommen
+deshalb nicht in den Termin — sonst schriebe jeder Lauf jeden Termin neu.
+
+**Freie Tage:** IServ schreibt **nie** in die freien Tage der App
+(`free_periods`) — was frei ist, trägt der Mensch von Hand ein. Damit Ferien
+nicht doppelt im Kalender stehen, entfällt eine ganztägige **Ferien- oder
+Frei-Meldung aus dem öffentlichen Kalender** (Ferien, unterrichtsfrei,
+schulfrei, „Schule geschlossen"), wenn die App jeden ihrer Werktage schon als
+frei kennt (Herbstferien Sa–Sa sind gedeckt, wenn die App Mo–Fr kennt). Kennt
+sie sie nicht, bleibt der IServ-Termin stehen — und ist der Hinweis, dass in
+den Einstellungen etwas fehlt. **Nie** entfallen: Termine des
+Klassenkalenders (eine Abgabe am letzten Ferientag bleibt), Aufgaben, Termine
+mit Uhrzeit, Schulsamstage und alles, was keine Ferien sind (eine Fahrt der
+eigenen Klasse während einer Klassenfahrt-Zeit der App).
+
+### Takt, Anmeldung, Sperre
+
+IServ wird **höchstens alle drei Stunden** gefragt, nur zwischen 6 und 21 Uhr
+— vom stündlichen Lauf des Kalenders um :15, eine eigene Crontab-Zeile gibt es
+nicht. Der allererste Abruf kommt zu jeder Stunde; nach genau einem
+Fehlschlag gibt es eine schnelle Wiederholung in der nächsten Stunde. „Jetzt
+abgleichen" und die Läufe nach einer Änderung fragen IServ **nie** — sie lesen
+den gespeicherten Stand (`iserv_snapshots`).
+
+Eine Anmeldung kostet etwa acht Anfragen und steht in den „Letzten
+Anmeldungen" des Schülers. Deshalb lebt die Session im Speicher und wird
+wiederverwendet, bis IServ sie verwirft oder sie 15 Stunden alt ist (IServ
+beendet sie nach 16); ein Abruf mit gültiger Session sind vier Anfragen. **Kein
+Logout im Betrieb** — er nähme der nächsten Stunde die Session. Höchstens eine
+Anmeldung je Lauf. Nach der Anmeldung geht nur GET hinaus; der Client wirft,
+bevor er etwas anderes als die Anmeldung senden würde.
+
+**Die erste Ablehnung sperrt** — falsches Passwort, zweiter Faktor, Captcha,
+gesperrtes Konto, abgelaufenes Passwort. Danach fragt kein Lauf IServ, bis ein
+Mensch handelt: sonst sperrte die App das Konto des Schülers mit
+Fehlversuchen. Es kommt **eine** Push-Nachricht, die Karte sagt, was zu tun
+ist, und der Cron meldet jede Stunde 500. Aufgehoben wird mit „Erneut
+versuchen" in der Karte oder `iserv-einrichten.sh --neues-passwort`.
+
+**Schutz gegen „alles gelöscht":** Eine leere Antwort einer Quelle, die
+vorher auch nur einen kommenden Termin hatte, oder eine halbierte (ab zehn
+Terminen), wird zurückgehalten und erst übernommen, wenn sie dreimal genau so
+kommt (also nach frühestens sechs Stunden). Der öffentliche Kalender leer
+gilt **nie** — ein Schuljahr ohne Schultermin gibt es nicht. Antwortet IServ
+nicht, bleibt der letzte gute Stand im Kalender. **Vergangenes bleibt:** Was
+vor dem Fenster (14 Tage zurück) liegt und IServ nicht mehr liefert, bleibt
+mit dem Urteil von damals eingefroren stehen.
+
+**Ein Kalender, der fehlt, ist kein leerer Kalender.** Findet die App den
+Klassenkalender oder das Aufgaben-Plugin nicht mehr, antwortet ein gerade
+genannter Feed mit 404, oder stimmt die Einstellung der Klasse nicht
+(mehrdeutig, `ISERV_KLASSENKALENDER` nicht vorhanden, `ISERV_KLASSE` vom
+letzten Schuljahr), bleibt der alte Stand, und der Lauf heißt „teilweise"
+(Cron 500, Karte). Für die Klasse kommt dazu **eine** Push-Nachricht „IServ:
+Klasse prüfen" beim Übergang. Findet die App keinen Kalender der Klasse aus
+`ISERV_KLASSE`, aber einen der nächsten, nimmt sie bis zur Korrektur
+**keinen** Termin mit der eingestellten Klasse aus dem Schulkalender — sonst
+landeten die Termine der neuen 10. Klasse beim Elftklässler. Gibt es den
+Klassenkalender wirklich nicht mehr, endet „teilweise" von selbst, sobald
+seine Termine vergangen sind; wer nicht warten will, löscht von Hand
+`delete from iserv_snapshots where source = 'klasse'` — dann verschwinden
+seine Termine aus Google.
+
+### Umgebungsvariablen
+
+| Variable | Pflicht | Inhalt |
+|---|---|---|
+| `ISERV_URL` | ja | nur der Server der Schule, z.B. `https://iserv.example.de` — ohne Pfad |
+| `ISERV_USER` | ja | der Account des Schülers |
+| `ISERV_PASSWORD` | ja | sein Passwort. In der `.env` in **einfachen Anführungszeichen**, ohne `'`, ohne Zeilenumbruch, ohne Leerzeichen am Rand — `erinnerungen.sh` liest die `.env` per `.` ein. Steht **nur** hier: nie in der Datenbank, im Protokoll, in der Karte, in der Cron-Antwort, und nie bei einem KI-Agenten (der Web MCP und der Postbote lesen nichts aus IServ). |
+| `ISERV_KLASSE` | ja | 1–13. **Zum Schuljahr anheben** (`iserv-einrichten.sh --neue-klasse`); es gibt bewusst keinen Standardwert. Findet die App keinen Kalender der Klasse, aber einen für die nächste, meldet sie es laut (Push, Cron 500, Karte) und nimmt bis zur Korrektur keinen Termin mit der alten Klasse. |
+| `ISERV_AUCH` | nein | Titelteile, die immer hineinkommen, mit `;` getrennt |
+| `ISERV_NIE` | nein | Titelteile, die nie hineinkommen — schlägt `ISERV_AUCH` |
+| `ISERV_KLASSENKALENDER` | nein | die id des Klassenkalenders (`/<gruppe>/calendar`), wenn die Erkennung nicht eindeutig ist |
+
+Lokal in `.env.local`; auf dem NAS in der `.env` **und** unter
+`services.app.environment` der `docker-compose.override.yml` als
+`NAME: ${NAME:-}`. **Fehlt eine Pflichtvariable, ist IServ aus:** kein Netz,
+keine Abfrage der IServ-Tabellen, die Karte nennt nur die fehlenden Namen.
+IServ braucht den Google Kalender — ohne Verbindung ruht es.
+
+### Reihenfolge auf dem NAS
+
+Voraussetzung: Der Google Kalender ist eingerichtet (`kalender-einrichten.sh`,
+`kalender.sh`, die Zeile in `/etc/crontab`). Dann:
+
+1. **Am Rechner:** den Stand mit der IServ-Anbindung committen und nach `main`
+   pushen — das macht der Mensch.
+2. **Auf dem NAS:**
+   ```bash
+   sudo ~/nas.sh hoch
+   sudo bash /volume1/docker/schulapp/repo/scripts/iserv-einrichten.sh
+   ```
+
+`scripts/iserv-einrichten.sh` sieht zuerst nach, ohne etwas zu ändern (ist
+der Kalender eingerichtet, läuft der neue Code, antwortet die Datenbank),
+spielt die Tabellen ein, nur wenn sie fehlen (`scripts/iserv-tabellen.sql`, in
+einer Transaktion — VOR den Variablen, sonst antwortet `/einstellungen` mit
+500), fragt Adresse, Account, Passwort (unsichtbar, zweimal) und Klasse ab,
+schreibt sie in die `.env`, trägt die sieben Namen in die Override-Datei ein
+(ohne dort etwas wegzunehmen), erzeugt die App neu (ohne Bau), prüft aus dem
+Container, ob das Passwort ankam (nur „stimmt"/„stimmt nicht" über eine
+Prüfsumme), und ruft zum Schluss `kalender.sh` einmal. Erwartet ist im Feld
+`iserv` der Antwort `"status":"gelesen"`. Bei `"blockiert"`: **nicht
+wiederholen**, erst Account und Passwort im Browser bei IServ prüfen, dann
+`--neues-passwort`. Schalter: `--neues-passwort` (ersetzt das Passwort, hebt
+die Sperre auf und macht den Abruf sofort fällig — die Probe am Ende prüft
+das neue Passwort gleich), `--neue-klasse`. Eine Adresse schlägt das Skript
+nicht vor; sie steht im Browser, wenn man bei IServ angemeldet ist. Das Passwort steht nie im Protokoll,
+auf dem Bildschirm oder in einer Prozessliste. Gelaufen ist das Skript noch
+nirgends — geprüft sind nur `bash -n` und seine Bausteine.
+
+### Probe am Mac
+
+Was würde die App sehen und eintragen? Nur lesen, ohne Datenbank, ohne
+Google, ohne Datei:
+
+```bash
+ISERV_URL=https://<server der schule> ISERV_KLASSE=10 npx tsx scripts/iserv-probe.mts [--alle]
+```
+
+Account und Passwort fragt sie ab, das Passwort **immer** unsichtbar über die
+Tastatur — nie aus der Umgebung und nie ohne Terminal: Auf der Befehlszeile
+stünde es in der Shell-History, und startete ein KI-Agent die Probe, in
+dessen Protokoll. Sie zeigt die
+erkannten Quellen, die nächsten zehn Termine genau so, wie sie in Google
+stünden, alle Zweifelsfälle mit Grund und die knapp genommenen; `--alle` jeden
+Titel des öffentlichen Kalenders mit Regel. Die freien Tage der App kennt sie
+nicht. Zum Schluss meldet sie sich ab. **Jede Probe ist eine Anmeldung** — nicht
+in Schleifen starten, nach „abgelehnt" nicht wiederholen.
+
+### Wo ein Fehler auftaucht
+
+- in der **Karte IServ** in den Einstellungen: Zustand, zuletzt gelesen,
+  Quellen mit Zahlen, Warnung, letzter Fehler, „seit einem Tag nichts";
+- als **eine Push-Nachricht** beim Übergang nach „blockiert", eine, wenn
+  seit 24 Stunden kein Stand ankam, und eine, wenn die Klasse nicht mehr
+  stimmt („IServ: Klasse prüfen");
+- als **500 des Kalender-Crons** (also in `kalender.log` und der
+  Störungsnotiz `SCHULAPP-STOERUNG-KALENDER.md`), wenn der Abruf scheiterte,
+  nur teilweise gelang, blockiert ist oder seit 24 Stunden nichts kam; im Feld
+  `iserv` stehen nur Zustand und ein fester Satz, nie ein Titel;
+- im **Container-Protokoll** mit dem Präfix `IServ:` — nur Zustand, Zahlen,
+  feste Sätze.
+
+**IServ wieder abschalten:** die `ISERV_*`-Zeilen aus `.env` und
+Override-Datei nehmen, App neu erzeugen. Die schon eingetragenen
+IServ-Termine **bleiben in Google stehen** (die Art `iserv` fehlt dann im
+Abgleich und wird nicht angefasst). Wer sie loswerden will, löscht sie in
+Google — dann sind sie verworfen und kommen auch nach einem Wiedereinschalten
+nicht zurück — oder legt den Kalender in der Karte neu an.
+
+### Offene Fragen an den Nutzer
+
+Alle lassen sich über `ISERV_AUCH` und `ISERV_NIE` umstellen, ohne Code:
+
+- **„EA 10. Kl."** (Elternabend der eigenen Klasse) bleibt draußen. Hinein mit
+  `ISERV_AUCH="ea 10"`.
+- Der **MSA-Termin** bleibt draußen (Zweifel). In Berlin ist der MSA am Ende
+  von Klasse 10; hinein mit `ISERV_AUCH="msa"`.
+- Der **Infotag mit Monatsfeier** (ein Schulsamstag?) und der **Fasching der
+  Unterstufe mit „danach kein Unterricht"** bleiben draußen (Zweifel).
+- Der **Elternsprechtag** (Unterricht endet früher) und ein **Feiertag mit
+  „Schule und Hort geschlossen"** sind knapp drin; der Elternsprechtag steht
+  mit seiner Uhrzeit im Kalender.
+- Die **Nachschreibetermine** (7.–12. Kl) sind drin; heraus mit
+  `ISERV_NIE="nachschreibetermin"`.
+- Weitere Gruppenkalender (außer dem der Klasse) und die gesetzlichen
+  Feiertage aus IServ werden nicht übernommen.
+- Ohne `ISERV_*`-Variablen bleiben schon eingetragene IServ-Termine in Google
+  stehen.
+- IServ-Termine bekommen keine Google-Erinnerung, auch Aufgaben nicht.
 
 ## Betrieb
 
@@ -1976,8 +2229,9 @@ statt des Nachladens einen leisen Hinweis — Eingaben gehen vor.
 als ganztägige Termine in einem eigenen Kalender „Schule" im Google Kalender,
 nach jedem Speichern und stündlich abgeglichen. Was der Nutzer dort löscht,
 bleibt draußen. Verbunden wird unter *Einstellungen*; wie es läuft, steht oben
-unter *Google Kalender*. Gebaut sind Stufe 1 (Verbinden) und 2 (der Bestand);
-Schulhomepage, Termine von Blättern und IServ folgen als weitere Quellen.
+unter *Google Kalender*. Gebaut sind Stufe 1 (Verbinden), 2 (der Bestand) und
+5 (IServ: was die Klasse betrifft, nur lesen — Abschnitt *IServ*);
+Schulhomepage und Termine von Blättern folgen als weitere Quellen.
 
 Alles steht auch auf der Startseite: als Kachel, in der Tagesspur, auf der
 Kameraseite und im Dashboard. Damit sind die vier geplanten Ausbaustufen aus

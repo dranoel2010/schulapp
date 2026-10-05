@@ -20,6 +20,9 @@ import {
   freeLabel,
   freePeriodInputSchema,
 } from "@/lib/free-days";
+import { runIservFetch } from "@/lib/iserv/abruf";
+import { LAUF_BUDGET_HAND_MS } from "@/lib/iserv/config";
+import { unblockIserv } from "@/lib/iserv/store";
 import { revokeConnection } from "@/lib/oauth";
 import { neuPlanen } from "@/recall/items";
 import { isThemePreference, THEME_COOKIE, THEME_MAX_AGE } from "@/lib/theme";
@@ -37,7 +40,8 @@ import { isThemePreference, THEME_COOKIE, THEME_MAX_AGE } from "@/lib/theme";
  * eine Hausaufgabe erinnert, und freie Tage stehen dort als Termine. Der
  * Abgleich läuft nach der Antwort und kann das Speichern nicht scheitern
  * lassen. Für den Kalender selbst stehen unten drei Actions; sie sind dünn,
- * was sie tun, steht in @/lib/calendar/connect und @/lib/calendar/sync.
+ * was sie tun, steht in @/lib/calendar/connect und @/lib/calendar/sync. Für
+ * IServ steht dort eine: „Erneut versuchen" (@/lib/iserv/abruf).
  *
  * Die Grenzen stehen absichtlich auch hier: eine "use server"-Datei darf nur
  * asynchrone Funktionen ausgeben, geteilte Konstanten gehen also nicht. Die
@@ -252,6 +256,36 @@ export async function recreateCalendarAction(): Promise<void> {
 
   revalidatePath("/einstellungen");
   redirect(`/einstellungen?kalender=${ok ? "neu-angelegt" : "neu-anlegen-gescheitert"}#kalender`);
+}
+
+/**
+ * IServ „Erneut versuchen": die Sperre aufheben, einmal abrufen, danach den
+ * Kalender abgleichen. Ein Mensch hat gehandelt — das Passwort neu
+ * eingetragen, das Captcha im Browser gelöst —, also darf die App es noch
+ * einmal versuchen. Scheitert die Anmeldung wieder, sperrt der Abruf erneut
+ * (und schickt dann wieder genau eine Push-Nachricht).
+ *
+ * Wartet höchstens 45 Sekunden auf IServ; der Abgleich mit Google läuft
+ * danach in `after()`. Wirft nie; das Ergebnis steht danach in der Karte.
+ */
+export async function retryIservAction(): Promise<void> {
+  const user = await requireUser();
+
+  try {
+    await unblockIserv(user.id);
+    await runIservFetch(user.id, {
+      anlass: "hand",
+      jetzt: new Date(),
+      deadline: Date.now() + LAUF_BUDGET_HAND_MS,
+    });
+    requestCalendarSync(user.id);
+  } catch (fehler) {
+    // runIservFetch wirft nie; scheitern kann hier nur das Aufheben der Sperre
+    // (Tabelle fehlt) — dann sagt es die Karte beim nächsten Laden.
+    console.error("IServ: Erneut versuchen gescheitert", fehler instanceof Error ? fehler.name : "unbekannt");
+  }
+
+  revalidatePath("/einstellungen");
 }
 
 async function replanAroundFreeDays(userId: string): Promise<number> {

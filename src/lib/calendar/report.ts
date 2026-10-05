@@ -1,5 +1,6 @@
 import type { GoogleCalendarConnection } from "@/db/schema";
 import type { ConfigResult } from "@/lib/calendar/config";
+import type { IservLaufStatus } from "@/lib/iserv/types";
 
 /**
  * Was die App über den Google Kalender sagt — in den Einstellungen und in der
@@ -132,7 +133,15 @@ export type CalendarCronSummary = Counts & {
   missing: string[];
   /** Je blockierter oder gescheiterter Verbindung der Satz dazu */
   saetze: string[];
+  /**
+   * Der Abruf bei IServ in diesem Lauf (@/lib/iserv/abruf). Nur Zustand und
+   * ein fester Satz — nie ein Titel aus IServ.
+   */
+  iserv: { status: IservLaufStatus; satz: string | null };
 };
+
+/** Bei diesen Ausgängen ist der Abruf bei IServ ein Fehlschlag des Crons. */
+const ISERV_FEHLSCHLAG: ReadonlySet<IservLaufStatus> = new Set(["fehler", "teilweise", "blockiert"]);
 
 /**
  * Muss dieser Lauf als Fehlschlag gemeldet werden — und mit welchem Satz?
@@ -144,6 +153,12 @@ export type CalendarCronSummary = Counts & {
  *
  * Ausstehende Termine allein sind KEIN Fehler: Das Zeitbudget hat den Lauf
  * gekappt, und der nächste macht weiter.
+ *
+ * IServ kommt nach den drei Prüfungen des Google Kalenders: Ein gescheiterter,
+ * teilweiser oder blockierter Abruf ist ein 500 — blockiert jede Stunde, bis
+ * ein Mensch handelt, wie beim Google Kalender. Ein zurückgehaltener Stand
+ * („behalten", @/lib/iserv/schutz) oder eine Warnung allein ist es nicht; die
+ * stehen in der Karte und im Protokoll.
  */
 export function cronFailure(summary: CalendarCronSummary): string | null {
   if (summary.missing.length > 0 && summary.verbunden > 0) {
@@ -162,6 +177,10 @@ export function cronFailure(summary: CalendarCronSummary): string | null {
       `Abgleich mit Google teilweise gescheitert: ${summary.saetze[0] ?? "ohne Grund"} ` +
       "Details in den Einstellungen und im Container-Protokoll (sudo docker compose logs app | grep Google-Kalender)."
     );
+  }
+
+  if (ISERV_FEHLSCHLAG.has(summary.iserv.status)) {
+    return `IServ: ${summary.iserv.satz ?? "ohne Grund"} Details in den Einstellungen (Karte IServ).`;
   }
 
   return null;

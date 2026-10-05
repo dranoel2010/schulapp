@@ -13,6 +13,8 @@ import { requireUser } from "@/lib/auth";
 import { loadCalendarStatus } from "@/lib/calendar/sync";
 import { formatGerman, todayInBerlin } from "@/lib/dates";
 import { freeLabel, listFreePeriods } from "@/lib/free-days";
+import { iservConfigured } from "@/lib/iserv/config";
+import { loadIservStatus } from "@/lib/iserv/status";
 import { jevConfigured } from "@/lib/jev";
 import { listConnections } from "@/lib/oauth";
 import { readThemePreference, THEME_OPTIONS } from "@/lib/theme";
@@ -26,6 +28,7 @@ import {
 } from "./actions";
 import { FreeDaysForm } from "./free-days-form";
 import { GoogleCalendarCard } from "./google-calendar-card";
+import { IservCard } from "./iserv-card";
 import { PushSettings, ReminderTime } from "./push-settings";
 
 export const metadata: Metadata = {
@@ -52,10 +55,11 @@ export default async function SettingsPage({
   const theme = await readThemePreference();
   const today = todayInBerlin();
   const { kalender } = await searchParams;
-  const [connections, freePeriods, calendar] = await Promise.all([
+  const [connections, freePeriods, calendar, iserv] = await Promise.all([
     listConnections(user.id),
     listFreePeriods(user.id, today),
     loadCalendarStatus(user.id),
+    loadIservStatus(user.id),
   ]);
 
   const since = tag(user.createdAt);
@@ -74,6 +78,9 @@ export default async function SettingsPage({
   const hinaus = [
     calendar.state.kind === "verbunden" || calendar.state.kind === "blockiert"
       ? "Klausuren, offene Hausaufgaben und freie Tage gehen als Termine in deinen Google Kalender „Schule“"
+      : null,
+    iservConfigured()
+      ? "die App meldet sich mit deinem IServ-Konto an, liest Kalender und Aufgaben und trägt Termine deiner Klasse in „Schule“ ein"
       : null,
     jevConfigured()
       ? "die Abschrift eines Blattes geht zum Einordnen an Jev (TypeSafe)"
@@ -161,6 +168,10 @@ export default async function SettingsPage({
           status={calendar}
           notice={typeof kalender === "string" ? kalender : undefined}
         />
+      </section>
+
+      <section id="iserv" className="scroll-mt-6">
+        <IservCard status={iserv} />
       </section>
 
       <Card>

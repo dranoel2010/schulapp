@@ -71,11 +71,24 @@ import { isCronAuthorized } from "@/lib/cron-auth";
  *   - eine Quelle gescheitert ist,
  *   - ein Termin gescheitert ist, oder Google gedrosselt hat oder nicht
  *     erreichbar war,
- *   - ein Lauf nach 285 Sekunden noch nicht fertig war.
+ *   - ein Lauf nach 285 Sekunden noch nicht fertig war,
+ *   - IServ eingerichtet ist und der Abruf in diesem Lauf scheiterte, nur
+ *     teilweise gelang oder blockiert ist (Anmeldung abgelehnt, zweiter
+ *     Faktor, Captcha, Sperre, Passwort abgelaufen) — blockiert jede Stunde,
+ *     bis ein Mensch in den Einstellungen „Erneut versuchen" drückt,
+ *   - IServ seit über 24 Stunden keinen Stand geliefert hat (dann auch in den
+ *     Stunden, in denen kein Abruf fällig ist).
  *
  * Grün ohne Arbeit gibt es genau zweimal: Es ist nichts eingerichtet und
  * nichts verbunden, oder es gibt nichts zu tun. Termine, die das Zeitbudget
  * liegen ließ („noch offen"), sind kein Fehler — der nächste Lauf macht weiter.
+ * Ebenso wenig ein Stand aus IServ, den der Schutz gegen „alles gelöscht"
+ * zurückhält (@/lib/iserv/schutz): Der steht als Warnung in der Karte.
+ *
+ * Im Feld `iserv` der Antwort stehen nur der Zustand des Abrufs und ein
+ * fester Satz — nie ein Titel aus IServ, nie Benutzer oder Passwort. Der
+ * Abruf selbst hängt an diesem Lauf; eine eigene Crontab-Zeile gibt es nicht
+ * (scripts/iserv-einrichten.sh).
  *
  * ── Warum hier kein `after()` und kein `maxDuration` steht ───────────────────
  *

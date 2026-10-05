@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { homeworkEvent, freePeriodEvent } from "@/lib/calendar/events";
-import { collectWishes, SOURCES, type CalendarSource } from "@/lib/calendar/sources";
+import {
+  activeSources,
+  collectWishes,
+  iservSource,
+  SOURCES,
+  type CalendarSource,
+} from "@/lib/calendar/sources";
 
 /**
  * Die echten Quellen lesen die Datenbank und werden hier deshalb NICHT
@@ -66,7 +72,51 @@ describe("SOURCES", () => {
   });
 });
 
+describe("activeSources", () => {
+  it("sind ohne ISERV_* genau SOURCES — und mit allen Pflichtvariablen dazu IServ", () => {
+    const namen = ["ISERV_URL", "ISERV_USER", "ISERV_PASSWORD", "ISERV_KLASSE"] as const;
+    const vorher = Object.fromEntries(namen.map((name) => [name, process.env[name]]));
+
+    try {
+      for (const name of namen) delete process.env[name];
+      assert.equal(activeSources(), SOURCES);
+
+      Object.assign(process.env, {
+        ISERV_URL: "https://iserv.example.test",
+        ISERV_USER: "test.schueler",
+        ISERV_PASSWORD: "synthetisch",
+        ISERV_KLASSE: "10",
+      });
+      assert.deepEqual(
+        activeSources().map((source) => source.kind),
+        ["klausur", "hausaufgabe", "frei", "iserv"],
+      );
+      assert.equal(activeSources()[3], iservSource);
+    } finally {
+      for (const name of namen) {
+        if (vorher[name] === undefined) delete process.env[name];
+        else process.env[name] = vorher[name];
+      }
+    }
+  });
+});
+
 describe("collectWishes", () => {
+  it("lässt „iserv“ aus `complete`, wenn IServ noch keinen Stand hat — die Termine bleiben unberührt", async () => {
+    const iserv: CalendarSource = {
+      kind: "iserv",
+      wanted: async () => {
+        throw new Error("Noch kein Stand aus IServ — der erste Abruf steht aus oder ist gescheitert (Einstellungen → IServ).");
+      },
+    };
+
+    const result = await quietly(() => collectWishes(CTX, [homework, free, iserv]));
+
+    assert.deepEqual([...result.complete].sort(), ["frei", "hausaufgabe"]);
+    assert.equal(result.errors[0].kind, "iserv");
+    assert.match(result.errors[0].sentence, /Noch kein Stand aus IServ/);
+  });
+
   it("sammelt die Wünsche aller Quellen und merkt sich, welche vollständig waren", async () => {
     const result = await collectWishes(CTX, [homework, free]);
 

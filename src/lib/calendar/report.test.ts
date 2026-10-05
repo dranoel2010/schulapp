@@ -135,6 +135,7 @@ describe("cronFailure", () => {
       unveraendert: 12,
       missing: [],
       saetze: [],
+      iserv: { status: "aus", satz: null },
       ...overrides,
     };
   }
@@ -171,5 +172,25 @@ describe("cronFailure", () => {
 
   it("lässt einen sauberen Lauf grün", () => {
     assert.equal(cronFailure(summary()), null);
+  });
+
+  it("meldet einen gescheiterten, teilweisen oder blockierten Abruf bei IServ", () => {
+    for (const status of ["fehler", "teilweise", "blockiert"] as const) {
+      const satz = cronFailure(summary({ iserv: { status, satz: "IServ war nicht erreichbar." } }));
+      assert.equal(satz, "IServ: IServ war nicht erreichbar. Details in den Einstellungen (Karte IServ).", status);
+    }
+  });
+
+  it("lässt IServ grün, wenn es gelesen hat, ruht, nicht dran war oder aus ist", () => {
+    for (const status of ["gelesen", "ruht", "nicht-faellig", "aus", "laeuft-schon"] as const) {
+      assert.equal(cronFailure(summary({ iserv: { status, satz: null } })), null, status);
+    }
+  });
+
+  it("nennt zuerst den Google Kalender, dann IServ", () => {
+    const satz = cronFailure(
+      summary({ blockiert: 1, saetze: ["weg"], iserv: { status: "fehler", satz: "IServ kaputt." } }),
+    );
+    assert.ok(satz?.startsWith("Der Google Kalender ist blockiert"), satz ?? "");
   });
 });
