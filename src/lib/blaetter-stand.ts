@@ -49,11 +49,30 @@ export const NEU_LADEN_GEDULD_MS = 15_000;
 export const ABFRAGE_FRIST_MS = 10_000;
 
 /**
- * Was jünger ist, zählt als „gerade in Arbeit“. Danach gilt ein Blatt, an dem
- * sich nichts tut, als liegengeblieben — und nicht mehr als eines, auf das man
- * im 5-s-Takt warten müsste.
+ * Was jünger ist, zählt als „gerade in Arbeit“: eine Seite, über die die App
+ * noch entscheidet, und eine Claude-Seite, auf deren Abschrift gewartet wird.
+ * Der Postbote braucht etwa eine Minute je Blatt; auch ein Stapel von zehn
+ * Blättern ist in einer halben Stunde durch. Was danach noch so dasteht, ist
+ * liegengeblieben — und keines, auf das man im 5-s-Takt warten müsste.
  */
-export const IN_ARBEIT_STUNDEN = 2;
+export const IN_ARBEIT_MINUTEN = 30;
+
+/**
+ * Ein Korbblatt ohne Vorschlag zählt kürzer. Gewartet wird dort nur noch auf
+ * den Vorschlag der App, rund zwanzig Sekunden nach der letzten Seite;
+ * Claude-Seiten zählen schon über `IN_ARBEIT_MINUTEN`. Länger hieße: nach
+ * „Verwerfen“ oder „Wieder in den Korb“ stünde „wird gerade gelesen“ da,
+ * obwohl niemand mehr liest.
+ */
+export const KORB_FRISCH_MINUTEN = 10;
+
+/**
+ * Wer eben gescrollt oder mit Maus oder Finger gezeigt hat, zielt vielleicht
+ * gerade auf einen Knopf. So lange danach wird nicht nachgeladen — sonst
+ * rutscht im Korb eine andere Zeile unter den Finger, und „Übernehmen“ trifft
+ * das falsche Blatt. Danach wird gleich noch einmal gefragt.
+ */
+export const BERUEHRT_RUHE_MS = 1_500;
 
 /**
  * Was die Datenbank zählt, eine Zeile über alle Blätter eines Nutzers. Welcher
@@ -70,7 +89,7 @@ export type StandZahlen = {
   zuletztEingeordnet: string | null;
   /** md5 über Fach, Titel, Tag und Notiz aller Blätter. */
   angaben: string;
-  /** Korbblätter ohne Vorschlag, jünger als `IN_ARBEIT_STUNDEN`. */
+  /** Korbblätter ohne Vorschlag, jünger als `KORB_FRISCH_MINUTEN`. */
   frischImKorb: number;
   seiten: number;
   offen: number;
@@ -178,21 +197,25 @@ export function antwortLesen(wert: unknown): BlaetterStand | null {
  * kostete jede Frage Akku. Nach einem Fehler wird ruhig weitergefragt, auch
  * wenn gerade gelesen wird — ein Server, der eben nicht antworten konnte,
  * bekommt keine fünf Sekunden später die nächste Frage. Wer abgemeldet ist,
- * bekommt gar keine mehr.
+ * bekommt gar keine mehr. `bald`: ein neuer Stand wartet nur darauf, dass
+ * niemand mehr scrollt oder zeigt (`BERUEHRT_RUHE_MS`).
  */
 export function naechsteAbfrageIn({
   sichtbar,
   inArbeit,
   fehler,
   abgemeldet,
+  bald = false,
 }: {
   sichtbar: boolean;
   inArbeit: boolean;
   fehler: boolean;
   abgemeldet: boolean;
+  bald?: boolean;
 }): number | null {
   if (abgemeldet || !sichtbar) return null;
   if (fehler) return TAKT_RUHIG_MS;
+  if (bald) return BERUEHRT_RUHE_MS;
 
   return inArbeit ? TAKT_IN_ARBEIT_MS : TAKT_RUHIG_MS;
 }
@@ -250,21 +273,25 @@ export function istEingabefeld({
  * - `ungespeichert`: in einem Formular steht etwas, das der Server nicht kennt.
  * - `fokus`: jemand steht in einem Eingabefeld, ohne schon etwas geändert zu
  *   haben.
+ * - `beruehrt`: eben wurde gescrollt oder gezeigt (`BERUEHRT_RUHE_MS`).
  */
-export type Sperre = "keine" | "aufnahme" | "ungespeichert" | "fokus";
+export type Sperre = "keine" | "aufnahme" | "ungespeichert" | "fokus" | "beruehrt";
 
 export function sperreAus({
   aufnahme,
   ungespeichert,
   fokus,
+  beruehrt = false,
 }: {
   aufnahme: boolean;
   ungespeichert: boolean;
   fokus: boolean;
+  beruehrt?: boolean;
 }): Sperre {
   if (aufnahme) return "aufnahme";
   if (ungespeichert) return "ungespeichert";
   if (fokus) return "fokus";
+  if (beruehrt) return "beruehrt";
 
   return "keine";
 }
@@ -272,7 +299,8 @@ export function sperreAus({
 /** Ein Nachladen, das schon unterwegs ist: für welchen Stand, seit wann. */
 export type Anstoss = { stand: string; seit: number };
 
-export type Entscheidung = "nichts" | "neu-laden" | "hinweis";
+/** `spaeter`: nachladen, sobald niemand mehr scrollt — gleich noch einmal fragen. */
+export type Entscheidung = "nichts" | "neu-laden" | "hinweis" | "spaeter";
 
 /**
  * Was mit einer Antwort zu tun ist.
@@ -310,6 +338,7 @@ export function entscheiden({
   }
 
   if (sperre === "ungespeichert" || sperre === "fokus") return "hinweis";
+  if (sperre === "beruehrt") return "spaeter";
 
   return "neu-laden";
 }
@@ -323,8 +352,8 @@ export function entscheiden({
  * (`savedMark` in material-form.tsx, der Schlüssel auf der Vorschlagsseite).
  * Deshalb wird beim Druck noch einmal nachgesehen: Ungespeichertes macht aus
  * dem Knopf den Hinweis ohne Knopf, eine laufende Aufnahme lässt ihn still
- * verschwinden (der Auslöser lädt selbst nach). Der Fokus zählt hier nicht —
- * wer den Knopf drückt, will nachladen.
+ * verschwinden (der Auslöser lädt selbst nach). Fokus und Berührung zählen
+ * hier nicht — wer den Knopf drückt, will nachladen.
  */
 export function beimKnopf(sperre: Sperre): Entscheidung {
   if (sperre === "aufnahme") return "nichts";

@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  BERUEHRT_RUHE_MS,
+  IN_ARBEIT_MINUTEN,
+  KORB_FRISCH_MINUTEN,
   LEERER_STAND,
   NEU_LADEN_GEDULD_MS,
   TAKT_IN_ARBEIT_MS,
@@ -143,6 +146,34 @@ describe("naechsteAbfrageIn", () => {
     assert.equal(naechsteAbfrageIn(ruhig), TAKT_RUHIG_MS);
     assert.ok(TAKT_IN_ARBEIT_MS < TAKT_RUHIG_MS);
   });
+
+  it("fragt bald wieder, wenn ein neuer Stand nur aufs Stillhalten wartet", () => {
+    assert.equal(naechsteAbfrageIn({ ...ruhig, bald: true }), BERUEHRT_RUHE_MS);
+    assert.equal(
+      naechsteAbfrageIn({ ...ruhig, bald: true, inArbeit: true }),
+      BERUEHRT_RUHE_MS,
+    );
+    assert.ok(BERUEHRT_RUHE_MS < TAKT_IN_ARBEIT_MS);
+  });
+
+  it("fragt auch bald nicht im versteckten Tab, abgemeldet oder nach einem Fehler", () => {
+    assert.equal(naechsteAbfrageIn({ ...ruhig, bald: true, sichtbar: false }), null);
+    assert.equal(naechsteAbfrageIn({ ...ruhig, bald: true, abgemeldet: true }), null);
+    assert.equal(
+      naechsteAbfrageIn({ ...ruhig, bald: true, fehler: true }),
+      TAKT_RUHIG_MS,
+    );
+  });
+});
+
+describe("die Fenster für „in Arbeit“", () => {
+  it("lässt das Korbblatt kürzer warten als eine Seite", () => {
+    assert.ok(KORB_FRISCH_MINUTEN < IN_ARBEIT_MINUTEN);
+  });
+
+  it("bleibt unter einer Stunde — sonst stünde „wird gelesen“ zu lange da", () => {
+    assert.ok(IN_ARBEIT_MINUTEN <= 60);
+  });
 });
 
 describe("sofortFragen", () => {
@@ -211,6 +242,14 @@ describe("sperreAus", () => {
       sperreAus({ aufnahme: false, ungespeichert: false, fokus: true }),
       "fokus",
     );
+    assert.equal(
+      sperreAus({ aufnahme: false, ungespeichert: false, fokus: true, beruehrt: true }),
+      "fokus",
+    );
+    assert.equal(
+      sperreAus({ aufnahme: false, ungespeichert: false, fokus: false, beruehrt: true }),
+      "beruehrt",
+    );
   });
 });
 
@@ -225,7 +264,7 @@ describe("entscheiden", () => {
   };
 
   it("tut nichts, solange der Stand gleich ist — bei jeder Sperre", () => {
-    for (const sperre of ["keine", "aufnahme", "ungespeichert", "fokus"] as const) {
+    for (const sperre of ["keine", "aufnahme", "ungespeichert", "fokus", "beruehrt"] as const) {
       assert.equal(entscheiden({ ...grund, neu: "alt", sperre }), "nichts", sperre);
     }
   });
@@ -236,6 +275,10 @@ describe("entscheiden", () => {
 
   it("lässt den Auslöser in Ruhe", () => {
     assert.equal(entscheiden({ ...grund, sperre: "aufnahme" }), "nichts");
+  });
+
+  it("wartet still, solange eben gescrollt oder gezeigt wurde", () => {
+    assert.equal(entscheiden({ ...grund, sperre: "beruehrt" }), "spaeter");
   });
 
   it("gibt bei Eingaben nur einen Hinweis", () => {
@@ -280,6 +323,8 @@ describe("beimKnopf", () => {
   it("lädt nach, wenn seit dem Hinweis nichts getippt wurde", () => {
     assert.equal(beimKnopf("keine"), "neu-laden");
     assert.equal(beimKnopf("fokus"), "neu-laden");
+    // Der Druck auf den Knopf ist selbst eine Berührung.
+    assert.equal(beimKnopf("beruehrt"), "neu-laden");
   });
 
   it("macht aus dem Knopf den Hinweis, wenn inzwischen getippt wurde", () => {

@@ -6,6 +6,7 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   ABFRAGE_FRIST_MS,
+  BERUEHRT_RUHE_MS,
   antwortLesen,
   beimKnopf,
   entscheiden,
@@ -41,7 +42,11 @@ import {
  *   wurde;
  * - solange der Auslöser hochlädt oder sein Sucher offen ist
  *   (`data-aufnahme-laeuft` in capture-button.tsx) — er lädt am Ende selbst
- *   nach.
+ *   nach;
+ * - solange eben gescrollt oder mit Maus oder Finger gezeigt wurde
+ *   (`BERUEHRT_RUHE_MS`) — wer auf „Übernehmen“ zielt, soll nicht die Zeile
+ *   darunter treffen. Hier gibt es keinen Hinweis; gefragt wird gleich noch
+ *   einmal.
  *
  * Wer auf diese Seiten ein weiteres Formular stellt, muss daran
  * `data-ungespeichert` setzen, solange darin etwas steht, das der Server nicht
@@ -52,6 +57,9 @@ import {
  */
 
 const STAND_ADRESSE = "/api/material/stand";
+
+/** Wie es nach einer Frage weitergeht: im Takt, nach einem Fehler, oder bald. */
+type Ausgang = "takt" | "fehler" | "bald";
 
 /** Was eine Frage an den Server ergeben hat. */
 type Antwort =
@@ -134,30 +142,32 @@ export function AutoRefresh({ stand, inArbeit, leseZeile }: AutoRefreshProps) {
   const zuletztGesehen = useRef<string | null>(null);
   const angestossen = useRef<Anstoss | null>(null);
   const zuletztInArbeit = useRef(inArbeit);
+  /** Wann zuletzt gescrollt oder gezeigt wurde. */
+  const zuletztBewegt = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** `planen()` aus dem Effekt unten, damit neue Props den Takt neu stellen. */
-  const neuPlanen = useRef<((fehler: boolean) => void) | null>(null);
+  const neuPlanen = useRef<((ausgang: Ausgang) => void) | null>(null);
 
   /**
-   * Was aus einer Antwort folgt; zurück kommt, ob sie ein Fehler war.
+   * Was aus einer Antwort folgt; zurück kommt, wie es weitergeht.
    *
    * Ein Effect Event und erst NACH dem Warten auf den Server aufgerufen: so
    * vergleicht es mit dem `stand`, mit dem die Seite JETZT gerendert ist, und
    * nicht mit dem von vor der Frage. Dazwischen kann gespeichert oder
    * nachgeladen worden sein.
    */
-  const auswerten = useEffectEvent((antwort: Antwort): boolean => {
+  const auswerten = useEffectEvent((antwort: Antwort): Ausgang => {
     // Abgemeldet, etwa in einem anderen Tab: hier gibt es nichts mehr zu
     // fragen, und die Seite selbst schickt beim nächsten Klick zur Anmeldung.
     if (antwort.art === "abgemeldet") {
       abgemeldet.current = true;
       setHinweis(null);
-      return false;
+      return "takt";
     }
     // Netz weg, Zeit abgelaufen, Server verschluckt: leise, im ruhigen Takt
     // weiter.
-    if (antwort.art === "fehler") return true;
-    if (!aktiv.current) return false;
+    if (antwort.art === "fehler") return "fehler";
+    if (!aktiv.current) return "takt";
 
     const gelesen = antwort.stand;
     zuletztInArbeit.current = gelesen.inArbeit;
@@ -167,6 +177,7 @@ export function AutoRefresh({ stand, inArbeit, leseZeile }: AutoRefreshProps) {
       aufnahme: aufnahmeLaeuft(),
       ungespeichert: ungespeichert(),
       fokus: eingabeHatFokus(),
+      beruehrt: Date.now() - zuletztBewegt.current < BERUEHRT_RUHE_MS,
     });
     const tun = entscheiden({
       bekannt: stand,
@@ -186,7 +197,7 @@ export function AutoRefresh({ stand, inArbeit, leseZeile }: AutoRefreshProps) {
         ? { art: sperre, bei: stand }
         : null,
     );
-    return false;
+    return tun === "spaeter" ? "bald" : "takt";
   });
 
   /*
@@ -198,7 +209,7 @@ export function AutoRefresh({ stand, inArbeit, leseZeile }: AutoRefreshProps) {
     aktiv.current = true;
 
     /** Die nächste Frage stellen — oder keine, wenn der Tab versteckt ist. */
-    function planen(fehler: boolean) {
+    function planen(ausgang: Ausgang) {
       if (timer.current !== null) clearTimeout(timer.current);
       timer.current = null;
       if (!aktiv.current) return;
@@ -206,8 +217,9 @@ export function AutoRefresh({ stand, inArbeit, leseZeile }: AutoRefreshProps) {
       const ms = naechsteAbfrageIn({
         sichtbar: document.visibilityState === "visible",
         inArbeit: zuletztInArbeit.current,
-        fehler,
+        fehler: ausgang === "fehler",
         abgemeldet: abgemeldet.current,
+        bald: ausgang === "bald",
       });
       if (ms !== null) timer.current = setTimeout(() => void runde(), ms);
     }
@@ -216,19 +228,19 @@ export function AutoRefresh({ stand, inArbeit, leseZeile }: AutoRefreshProps) {
       // Nie zwei zugleich: die zweite fiele nur mit der ersten zusammen.
       if (laeuft.current || abgemeldet.current || !aktiv.current) return;
       if (document.visibilityState !== "visible") {
-        planen(false);
+        planen("takt");
         return;
       }
 
       laeuft.current = true;
       letzteAbfrage.current = Date.now();
-      let fehler = true;
+      let ausgang: Ausgang = "fehler";
 
       try {
-        fehler = auswerten(await standHolen());
+        ausgang = auswerten(await standHolen());
       } finally {
         laeuft.current = false;
-        planen(fehler);
+        planen(ausgang);
       }
     }
 
@@ -236,22 +248,37 @@ export function AutoRefresh({ stand, inArbeit, leseZeile }: AutoRefreshProps) {
     // gefragt — `visibilitychange` und `focus` kommen beim Wechsel beide.
     function zurueck() {
       if (document.visibilityState !== "visible") {
-        planen(false);
+        planen("takt");
         return;
       }
       if (sofortFragen(Date.now(), letzteAbfrage.current)) void runde();
-      else planen(false);
+      else planen("takt");
     }
+
+    // Nur die Uhrzeit merken — das kostet bei jeder Mausbewegung nichts.
+    // `scroll` im Capture, damit auch eine scrollende Liste in der Seite zählt.
+    function bewegt() {
+      zuletztBewegt.current = Date.now();
+    }
+    const leise = { capture: true, passive: true } as const;
 
     neuPlanen.current = planen;
     document.addEventListener("visibilitychange", zurueck);
     window.addEventListener("focus", zurueck);
+    window.addEventListener("pointerdown", bewegt, leise);
+    window.addEventListener("pointermove", bewegt, leise);
+    window.addEventListener("wheel", bewegt, leise);
+    document.addEventListener("scroll", bewegt, leise);
 
     return () => {
       aktiv.current = false;
       neuPlanen.current = null;
       document.removeEventListener("visibilitychange", zurueck);
       window.removeEventListener("focus", zurueck);
+      window.removeEventListener("pointerdown", bewegt, leise);
+      window.removeEventListener("pointermove", bewegt, leise);
+      window.removeEventListener("wheel", bewegt, leise);
+      document.removeEventListener("scroll", bewegt, leise);
       if (timer.current !== null) clearTimeout(timer.current);
       timer.current = null;
     };
@@ -263,7 +290,7 @@ export function AutoRefresh({ stand, inArbeit, leseZeile }: AutoRefreshProps) {
   // Mal schon da ist.
   useEffect(() => {
     zuletztInArbeit.current = inArbeit;
-    neuPlanen.current?.(false);
+    neuPlanen.current?.("takt");
   }, [inArbeit, stand]);
 
   /**

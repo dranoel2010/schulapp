@@ -31,7 +31,8 @@ import {
   type LeserGrund,
 } from "@/db/schema";
 import {
-  IN_ARBEIT_STUNDEN,
+  IN_ARBEIT_MINUTEN,
+  KORB_FRISCH_MINUTEN,
   LEERER_STAND,
   fingerabdruck,
   inArbeitAus,
@@ -2267,7 +2268,7 @@ export async function korbblattStand(
  *   Titel, Fach, Tag, Notiz geändert          angaben
  *   Abschrift von Hand geändert               abschriftBytes, maschinell −1,
  *                                             wenn es Doclings war
- *   2-h-Fenster läuft ab                      seitenInArbeit bzw. frischImKorb
+ *   Fenster läuft ab (30 bzw. 10 min)         seitenInArbeit bzw. frischImKorb
  *
  * Kommt ein Vorschlag und geht innerhalb eines Takts wieder (Jev übernimmt
  * sofort), steht `vorschlaege` danach wie vorher — `eingeordnet` oder
@@ -2284,18 +2285,18 @@ export async function korbblattStand(
  * **In Arbeit** (`inArbeitAus()`) ist ein Blatt, auf dessen Lesen gewartet
  * wird:
  *
- * - eine Seite mit `leser = 'offen'` — die App entscheidet gerade, ohne
- *   Zeitgrenze. Hängt eine (Neustart mitten im Lesen), bleibt der schnelle
- *   Takt, bis die Zuteilung wieder angestoßen wird: vom nächsten Hochladen
- *   oder vom `read_inbox` des Postboten, der das alle 15 s tut, solange er
- *   läuft;
- * - eine Claude-Seite ohne Abschrift, jünger als `IN_ARBEIT_STUNDEN`, an deren
+ * - eine Seite mit `leser = 'offen'`, jünger als `IN_ARBEIT_MINUTEN` — die
+ *   App entscheidet gerade. Hängt eine (Neustart mitten im Lesen), löst sie
+ *   der nächste Anstoß der Zuteilung: das nächste Hochladen oder das
+ *   `read_inbox` des Postboten, der das alle 15 s tut, solange er läuft. Ist
+ *   er aus, endet der schnelle Takt mit dem Fenster;
+ * - eine Claude-Seite ohne Abschrift, jünger als `IN_ARBEIT_MINUTEN`, an deren
  *   Blatt noch kein Vorschlag liegt. Liegt einer, hat Claude geliefert (die
  *   Abschrift steckt im Vorschlag), und gewartet wird nur noch auf einen
  *   Menschen — dafür braucht es keinen 5-s-Takt und keine Zeile „wird
  *   gelesen“;
- * - ein Korbblatt ohne Vorschlag, jünger als `IN_ARBEIT_STUNDEN` — meist
- *   steht der Vorschlag der App oder des Postboten noch aus.
+ * - ein Korbblatt ohne Vorschlag, jünger als `KORB_FRISCH_MINUTEN` — meist
+ *   steht der Vorschlag der App noch aus.
  *
  * „Meist“, weil die Datenbank nicht weiß, ob noch jemand kommt. Ein
  * verworfener Vorschlag, ein Blatt, das „wieder in den Korb“ gelegt wurde, ein
@@ -2304,7 +2305,9 @@ export async function korbblattStand(
  * Postbote nimmt keines davon wieder auf (er merkt sich ein Blatt mit dem
  * Stand seiner jüngsten Seite). Dann stehen der schnelle Takt und die Zeile
  * „wird gelesen“ bis zum Ende des Fensters da. Das Fenster ist die Grenze
- * dafür; einen Zustand des Postboten in der Datenbank gibt es nicht.
+ * dafür, und deshalb ist es kurz: eine halbe Stunde für Seiten, zehn Minuten
+ * für das Korbblatt. Einen Zustand des Postboten in der Datenbank gibt es
+ * nicht.
  *
  * Der Altbestand (`leser` NULL) kommt in keiner Bedingung vor. Sonst fragten
  * die Seiten wegen der alten Blätter ohne Abschrift für immer alle fünf
@@ -2313,7 +2316,8 @@ export async function korbblattStand(
 export async function blaetterStand(userId: string): Promise<BlaetterStand> {
   // Was jünger ist als das, zählt als „gerade in Arbeit“. Die Uhr der
   // Datenbank, dieselbe, die created_at gesetzt hat (wie korbblattStand).
-  const frischSeit = sql`now() - make_interval(hours => ${IN_ARBEIT_STUNDEN}::int)`;
+  const seiteFrischSeit = sql`now() - make_interval(mins => ${IN_ARBEIT_MINUTEN}::int)`;
+  const korbFrischSeit = sql`now() - make_interval(mins => ${KORB_FRISCH_MINUTEN}::int)`;
   const vorschlagAm = (materialId: AnyColumn) =>
     exists(
       db
@@ -2333,7 +2337,7 @@ export async function blaetterStand(userId: string): Promise<BlaetterStand> {
       // ist wie „a“ + „bc“; geordnet nach id, damit dieselben Blätter immer
       // denselben Text ergeben.
       angaben: sql<string>`md5(coalesce(string_agg(concat_ws(chr(31), ${materials.id}, ${materials.subjectId}, ${materials.title}, ${materials.capturedOn}, ${materials.note}), chr(30) order by ${materials.id}), ''))`.as("stand_angaben"),
-      frischImKorb: sql<number>`(count(*) filter (where ${materials.filedAt} is null and ${materials.createdAt} > ${frischSeit} and not ${vorschlagAm(materials.id)}))::int`.as("stand_frisch_im_korb"),
+      frischImKorb: sql<number>`(count(*) filter (where ${materials.filedAt} is null and ${materials.createdAt} > ${korbFrischSeit} and not ${vorschlagAm(materials.id)}))::int`.as("stand_frisch_im_korb"),
     })
     .from(materials)
     .where(eq(materials.userId, userId))
@@ -2349,7 +2353,7 @@ export async function blaetterStand(userId: string): Promise<BlaetterStand> {
       maschinell: sql<number>`(count(*) filter (where ${materialPages.maschinell}))::int`.as("stand_maschinell"),
       abschriftBytes: sql<number>`coalesce(sum(octet_length(${materialPages.transcript})), 0)::int`.as("stand_abschrift_bytes"),
       neueste: sql<string | null>`to_char(max(${materialPages.createdAt}) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`.as("stand_neueste_seite"),
-      inArbeit: sql<number>`(count(*) filter (where ${materialPages.leser} = 'offen' or (${materialPages.leser} = 'claude' and ${materialPages.transcript} is null and ${materialPages.createdAt} > ${frischSeit} and not ${vorschlagAm(materialPages.materialId)})))::int`.as("stand_seiten_in_arbeit"),
+      inArbeit: sql<number>`(count(*) filter (where ${materialPages.createdAt} > ${seiteFrischSeit} and (${materialPages.leser} = 'offen' or (${materialPages.leser} = 'claude' and ${materialPages.transcript} is null and not ${vorschlagAm(materialPages.materialId)}))))::int`.as("stand_seiten_in_arbeit"),
     })
     .from(materialPages)
     .innerJoin(
