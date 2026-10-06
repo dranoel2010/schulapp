@@ -1,7 +1,8 @@
-import { iservEvent, type WantedEvent } from "@/lib/calendar/events";
+import { iservEvents, type WantedEvent } from "@/lib/calendar/events";
 import { addDays, daysBetween, timeInBerlin, weekdayIndex } from "@/lib/dates";
 import type { FreeRange } from "@/lib/free-days";
 import { istFreiTitel, urteil, type FilterConfig } from "@/lib/iserv/klasse";
+import { kartenTitel } from "@/lib/iserv/sprechtitel";
 import type { IservItem, IservQuelle } from "@/lib/iserv/types";
 
 /**
@@ -25,7 +26,7 @@ import type { IservItem, IservQuelle } from "@/lib/iserv/types";
  *
  * Die App trägt ihre freien Tage (free_periods) selbst in „Schule" ein, als
  * Basilikum-Balken. Stehen die Herbstferien dort schon, wäre ein zweiter
- * Balken „IServ: Herbstferien…" in Pfau nur Lärm. Umgekehrt schreibt IServ NIE
+ * Balken „Herbstferien" in Pfau nur Lärm. Umgekehrt schreibt IServ NIE
  * in free_periods: Was frei ist, entscheidet der Mensch von Hand — die
  * Landesferien aus IServ sind an dieser Schule sogar falsch. Deshalb gilt die
  * Richtung nur so herum: Kennt die App die Tage, entfällt der IServ-Termin;
@@ -61,7 +62,13 @@ export type Eintrag = {
   bisTag: string;
   /** "HH:MM" in Berlin, wenn IServ eine Uhrzeit nennt */
   uhrzeit: string | null;
+  /** Der Titel, wie IServ ihn schickt — an ihm entscheidet der Filter */
   titel: string;
+  /**
+   * Der Titel in Google (@/lib/iserv/sprechtitel), bei Tages-Terminen ohne
+   * „Tag 1 von 2“ — nur bei genommenen, sonst null
+   */
+  kalenderTitel: string | null;
   grund: string;
   regel: string;
 };
@@ -167,13 +174,14 @@ export function beurteileEinzeln(
   return ergebnis;
 }
 
-function eintrag(item: IservItem, u: EinzelUrteil): Eintrag {
+function eintrag(item: IservItem, u: EinzelUrteil, klasse: number): Eintrag {
   return {
     quelle: item.quelle,
     tag: item.ersterTag,
     bisTag: item.letzterTag,
     uhrzeit: !item.ganztaegig && item.beginn ? timeInBerlin(new Date(item.beginn)) : null,
     titel: item.titel,
+    kalenderTitel: u.genommen ? kartenTitel(item, klasse) : null,
     grund: u.grund,
     regel: u.regel,
   };
@@ -207,13 +215,18 @@ export function iservAuswahl(input: {
     gesehen.add(item.fremdId);
 
     const u = beurteileEinzeln(item, input.filter, input.freieZeiten);
-    const zeile = eintrag(item, u);
+    const zeile = eintrag(item, u, input.filter.klasse);
 
     if (u.genommen) {
       auswertung.genommen.push(zeile);
       if (u.knapp) auswertung.knapp.push(zeile);
       auswertung.wuensche.push(
-        iservEvent({ item, iservOrigin: input.iservOrigin, appOrigin: input.appOrigin }),
+        ...iservEvents({
+          item,
+          klasse: input.filter.klasse,
+          iservOrigin: input.iservOrigin,
+          appOrigin: input.appOrigin,
+        }),
       );
     } else if (u.frei) {
       auswertung.ausgelassenFrei.push(zeile);

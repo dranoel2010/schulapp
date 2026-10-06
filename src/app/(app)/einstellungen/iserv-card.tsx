@@ -73,7 +73,21 @@ function datum(eintrag: Eintrag): string {
     : `${formatGerman(eintrag.tag, "kurz")} – ${formatGerman(eintrag.bisTag, "kurz")}`;
 }
 
-function Liste({ eintraege, mitGrund }: { eintraege: Eintrag[]; mitGrund: boolean }) {
+/**
+ * Mit `wieInGoogle` steht der Titel da, wie er in „Schule“ steht (zum
+ * Vorlesen, siehe @/lib/iserv/sprechtitel); sonst der Titel aus IServ — in
+ * „Unklar“ und „Knapp“ geht es um die Entscheidung, und die fällt am
+ * Originaltitel.
+ */
+function Liste({
+  eintraege,
+  mitGrund,
+  wieInGoogle = false,
+}: {
+  eintraege: Eintrag[];
+  mitGrund: boolean;
+  wieInGoogle?: boolean;
+}) {
   return (
     <ul className="space-y-2">
       {eintraege.map((eintrag, index) => (
@@ -83,7 +97,9 @@ function Liste({ eintraege, mitGrund }: { eintraege: Eintrag[]; mitGrund: boolea
             {eintrag.uhrzeit ? `, ${eintrag.uhrzeit}` : ""}
           </span>
           {" · "}
-          <span className="break-words">{eintrag.titel}</span>
+          <span className="break-words">
+            {wieInGoogle ? (eintrag.kalenderTitel ?? eintrag.titel) : eintrag.titel}
+          </span>
           {mitGrund ? <span className="text-subtle"> · {eintrag.grund}</span> : null}
         </li>
       ))}
@@ -186,7 +202,7 @@ export function IservCard({ status }: { status: IservStatus }) {
         {state.kind === "aktiv" && status.naechste.length > 0 ? (
           <div className="space-y-2">
             <p className="text-sm font-medium">Als Nächstes</p>
-            <Liste eintraege={status.naechste} mitGrund={false} />
+            <Liste eintraege={status.naechste} mitGrund={false} wieInGoogle />
           </div>
         ) : null}
 

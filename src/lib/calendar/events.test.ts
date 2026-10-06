@@ -12,9 +12,11 @@ import {
   homeworkEvent,
   homeworkReminderMinutes,
   idBaseFor,
+  iservEvents,
   iservIdentity,
   stableStringify,
 } from "@/lib/calendar/events";
+import type { IservItem } from "@/lib/iserv/types";
 
 const ORIGIN = "https://treskownas.tail3a40b0.ts.net";
 const UUID = "6F1C2A8E-0B44-4C55-9D2A-1B7E3F9A0C11";
@@ -177,8 +179,9 @@ describe("Inhalt der Termine", () => {
     assert.equal(exam({ kind: "seltsam", title: null }).body.summary, "Prüfung Mathematik");
   });
 
-  it("schreibt Hausaufgaben als „HA Fach: Titel“", () => {
-    assert.equal(homework().body.summary, "HA Mathematik: S. 42 Nr. 3–7");
+  it("schreibt Hausaufgaben als „Hausaufgabe Fach: Titel“ — „HA“ buchstabierte ein Sprach-Bot", () => {
+    // Der Titel des Nutzers bleibt wörtlich, auch seine Kürzel.
+    assert.equal(homework().body.summary, "Hausaufgabe Mathematik: S. 42 Nr. 3–7");
   });
 
   it("nennt freie Tage wie die App", () => {
@@ -333,6 +336,10 @@ describe("Die Termine der drei Arten bleiben, wie sie waren", () => {
   // festgehalten. Ändert sich einer dieser Hashes, schriebe der nächste Lauf
   // JEDEN Termin in Google neu — und überschriebe dabei, was der Nutzer dort
   // geändert hat.
+  //
+  // Die Hausaufgabe am 6.10.2026 bewusst neu ausgerechnet: „HA …“ heißt seitdem
+  // „Hausaufgabe …“, weil ein Sprach-Bot die Titel vorliest. Jeder
+  // Hausaufgaben-Termin wird damit einmal geändert; Klausur und frei nicht.
   const APP = "https://schulapp.example.test";
 
   const klausur = () =>
@@ -374,7 +381,7 @@ describe("Die Termine der drei Arten bleiben, wie sie waren", () => {
 
   it("haben denselben Hash wie vor der Änderung", () => {
     assert.equal(eventHash(klausur().body), "4e19d49613ddacafa3f76deefb14beb639350e8a696d7d5bf0e020a44ac12229");
-    assert.equal(eventHash(hausaufgabe().body), "89e8e7c22d4c8505a6f10a26a50c305eaf9bda06c712001db6514a5bb5579c80");
+    assert.equal(eventHash(hausaufgabe().body), "5052f8bb4c71c7a4c0be572f4a8f0c89e2524b625b0e3192666ef82a715aab15");
     assert.equal(eventHash(frei().body), "e1119af1330f1e2ecc1d02f2d8ede7374bae8bc2c18f953664f7ed5bd5b78943");
   });
 
@@ -397,5 +404,140 @@ describe("iservIdentity", () => {
     assert.equal(eins.key.slice(6), eins.idBase.slice(3));
     assert.notEqual(eins.key, iservIdentity("cal|uid-1@iserv.example.test|20261110T160000Z").key);
     assert.equal(CALENDAR_KINDS.iserv.colorId, "7");
+  });
+
+  it("behält den Schlüssel für Tag 1 — sonst würde jeder Termin in Google gelöscht und neu angelegt", () => {
+    const fremdId = "cal|uid-1@iserv.example.test|20261013T150000Z";
+
+    assert.equal(iservIdentity(fremdId).key, "iserv-e9c3f950f0785845dd3374e5d077a0da");
+    assert.deepEqual(iservIdentity(fremdId, 1), iservIdentity(fremdId));
+  });
+
+  it("gibt ab Tag 2 jedem Tag eine eigene Kennung, die nicht mit Tag 1 zusammenstößt", () => {
+    const fremdId = "cal|uid-1@iserv.example.test|";
+    const tag1 = iservIdentity(fremdId);
+    const tag2 = iservIdentity(fremdId, 2);
+    const tag3 = iservIdentity(fremdId, 3);
+
+    assert.equal(new Set([tag1.key, tag2.key, tag3.key]).size, 3);
+    assert.deepEqual(tag2, iservIdentity(fremdId, 2));
+    assert.notEqual(tag2.key, iservIdentity("cal|uid-2@iserv.example.test|", 2).key);
+    assert.match(tag2.key, /^iserv-[0-9a-f]{32}$/);
+    assert.match(tag2.idBase, /^sai[0-9a-f]{32}$/);
+  });
+});
+
+describe("iservEvents", () => {
+  const APP = "https://schulapp.example.test";
+  const ISERV = "https://iserv.example.test";
+
+  const basis: IservItem = {
+    quelle: "oeffentlich",
+    fremdId: "cal|20260610-145225-0015aa@iserv.example.test|",
+    kalender: "Öffentlich",
+    titel: "1. + 2. Pädagogischer Tag_unterrichtsfrei  (3. Pädagogischer Tag: Mo, 30.11.26)",
+    ort: null,
+    beschreibung: null,
+    link: null,
+    ganztaegig: true,
+    ersterTag: "2026-10-22",
+    letzterTag: "2026-10-23",
+    beginn: null,
+    ende: null,
+  };
+  const bauen = (item: IservItem = basis) =>
+    iservEvents({ item, klasse: 10, iservOrigin: ISERV, appOrigin: APP });
+
+  it("macht aus einem mehrtägigen Termin einen je Tag, ganztägig an genau diesem Tag", () => {
+    const termine = bauen();
+
+    assert.deepEqual(
+      termine.map((t) => [t.firstDay, t.body.start, t.body.end, t.body.summary]),
+      [
+        ["2026-10-22", { date: "2026-10-22" }, { date: "2026-10-23" }, "Pädagogischer Tag, Tag 1 von 2, frei"],
+        ["2026-10-23", { date: "2026-10-23" }, { date: "2026-10-24" }, "Pädagogischer Tag, Tag 2 von 2, frei"],
+      ],
+    );
+    assert.deepEqual(
+      termine.map((t) => t.key),
+      [iservIdentity(basis.fremdId).key, iservIdentity(basis.fremdId, 2).key],
+    );
+    for (const t of termine) {
+      assert.equal(t.kind, "iserv");
+      assert.equal(t.idBase, `sai${t.key.slice(6)}`);
+      assert.equal(t.body.extendedProperties.private.schulapp, t.key);
+      assert.equal(t.body.colorId, "7");
+      assert.equal(t.body.description, termine[0].body.description);
+    }
+  });
+
+  it("behält die Schlüssel, wenn IServ den Termin verschiebt — was der Nutzer gelöscht hat, bleibt gelöscht", () => {
+    const verschoben = bauen({ ...basis, ersterTag: "2026-11-05", letzterTag: "2026-11-06" });
+
+    assert.deepEqual(verschoben.map((t) => t.key), bauen().map((t) => t.key));
+    assert.deepEqual(verschoben.map((t) => t.firstDay), ["2026-11-05", "2026-11-06"]);
+  });
+
+  it("gibt Tag 1 den Schlüssel des ungeteilten Termins", () => {
+    const eintaegig = bauen({ ...basis, letzterTag: basis.ersterTag });
+    const dreitaegig = bauen({ ...basis, letzterTag: "2026-10-24" });
+
+    assert.equal(eintaegig.length, 1);
+    assert.equal(eintaegig[0].key, bauen()[0].key);
+    assert.deepEqual(dreitaegig.slice(0, 2).map((t) => t.key), bauen().map((t) => t.key));
+    assert.equal(dreitaegig[2].key, iservIdentity(basis.fremdId, 3).key);
+  });
+
+  it("ist über zwei Aufrufe gleich — Schlüssel und Hash", () => {
+    const eins = bauen();
+    const zwei = bauen({ ...basis });
+
+    assert.deepEqual(zwei.map((t) => t.key), eins.map((t) => t.key));
+    assert.deepEqual(zwei.map((t) => eventHash(t.body)), eins.map((t) => eventHash(t.body)));
+  });
+
+  it("schreibt den Titel aus IServ als erste Zeile in die Beschreibung", () => {
+    const [termin] = bauen();
+
+    assert.ok(
+      termin.body.description.startsWith(`Titel in IServ: „${basis.titel}“\n\nAus IServ, Kalender „Öffentlich“`),
+      termin.body.description,
+    );
+  });
+
+  it("behält bei einem Termin, der nicht geteilt wird, Schlüssel, Uhrzeit und Ort", () => {
+    const item: IservItem = {
+      ...basis,
+      fremdId: "cal|20260610-145225-0009aa@iserv.example.test|",
+      titel: "Kl. 10_Vorstellung der Praktikumsberichte",
+      ort: "Aula",
+      ganztaegig: false,
+      ersterTag: "2026-10-08",
+      letzterTag: "2026-10-08",
+      beginn: "2026-10-08T16:00:00.000Z",
+      ende: "2026-10-08T17:30:00.000Z",
+    };
+    const termine = bauen(item);
+
+    assert.equal(termine.length, 1);
+    assert.equal(termine[0].key, iservIdentity(item.fremdId).key);
+    assert.equal(termine[0].firstDay, "2026-10-08");
+    assert.equal(termine[0].body.summary, "Vorstellung der Praktikumsberichte");
+    assert.deepEqual(termine[0].body.start, { dateTime: "2026-10-08T16:00:00.000Z", timeZone: "Europe/Berlin" });
+    assert.deepEqual(termine[0].body.end, { dateTime: "2026-10-08T17:30:00.000Z", timeZone: "Europe/Berlin" });
+    assert.equal(termine[0].body.location, "Aula");
+  });
+
+  it("kürzt den Titel auf 250 Zeichen", () => {
+    const item: IservItem = {
+      ...basis,
+      titel: `Projekt ${"sehr ".repeat(80)}lang`,
+      ersterTag: "2026-10-12",
+      letzterTag: "2026-10-12",
+    };
+    const [termin] = bauen(item);
+
+    assert.equal(termin.body.summary.length, 250);
+    assert.ok(termin.body.summary.endsWith("…"));
   });
 });

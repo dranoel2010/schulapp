@@ -153,14 +153,14 @@ describe("Abgleich über die echte API-Schicht gegen eine REST-Attrappe", () => 
     const id1 = eventIdFor(hw().idBase, 1);
 
     assert.equal((await sync([hw()])).neu, 1);
-    assert.equal(google.events.get(id0)?.body.summary, "HA Mathe: S. 42");
+    assert.equal(google.events.get(id0)?.body.summary, "Hausaufgabe Mathe: S. 42");
 
     google.requests.length = 0;
     await sync([hw()]);
     assert.deepEqual(google.requests, [], "ohne Änderung kein Aufruf");
 
     assert.equal((await sync([hw("S. 43")])).geaendert, 1);
-    assert.equal(google.events.get(id0)?.body.summary, "HA Mathe: S. 43");
+    assert.equal(google.events.get(id0)?.body.summary, "Hausaufgabe Mathe: S. 43");
 
     assert.equal((await sync([])).entfernt, 1);
     assert.equal(google.events.get(id0)?.status, "cancelled");
@@ -240,7 +240,7 @@ describe("Abgleich über die echte API-Schicht gegen eine REST-Attrappe", () => 
     assert.equal(google.events.size, 1);
     assert.equal(
       google.events.get(eventIdFor(hw().idBase, 0))?.body.summary,
-      "HA Mathe: neu",
+      "Hausaufgabe Mathe: neu",
     );
   });
 

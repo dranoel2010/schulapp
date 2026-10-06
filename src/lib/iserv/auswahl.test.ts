@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { eventHash, eventIdFor, ISERV_FOOTER } from "@/lib/calendar/events";
+import { eventHash, eventIdFor, ISERV_FOOTER, iservIdentity } from "@/lib/calendar/events";
+import { planSync, type EventRow } from "@/lib/calendar/plan";
 import { iservAuswahl, vonFreienTagenGedeckt } from "@/lib/iserv/auswahl";
 import { AUFGABEN_FEED, klassenFeed, oeffentlicherFeed, ORIGIN } from "@/lib/iserv/fixtures";
 import type { FilterConfig } from "@/lib/iserv/klasse";
@@ -72,7 +73,7 @@ describe("iservAuswahl — freie Tage", () => {
     assert.equal(wunsch(a, "Herbstferien"), undefined);
     assert.deepEqual(a.ausgelassenFrei.map((e) => e.titel.slice(0, 12)), ["Herbstferien"]);
     // Die Pädagogischen Tage davor liegen nicht in den freien Tagen.
-    assert.ok(wunsch(a, "Pädagogischer Tag_unterrichtsfrei (3."));
+    assert.ok(wunsch(a, "Pädagogischer Tag, Tag 1 von 2"));
   });
 
   it("lässt sie stehen, wenn ein Werktag offen ist", () => {
@@ -91,10 +92,10 @@ describe("iservAuswahl — freie Tage", () => {
     const frei = [{ startsOn: "2026-10-01", endsOn: "2026-12-31" }];
     const a = auswahl([...oeffentlich(), ...aufgaben()], frei);
 
-    assert.ok(wunsch(a, "Adventsbasar_Schulsamstag"), "mit Uhrzeit");
+    assert.ok(wunsch(a, "Adventsbasar, Schulsamstag"), "mit Uhrzeit");
     assert.ok(wunsch(a, "Unterrichtsende um 11:30 Uhr"), "Punkt-Termin");
-    assert.equal(a.wuensche.filter((w) => w.body.summary.startsWith("IServ: Aufgabe")).length, 3);
-    assert.equal(wunsch(a, "3.Pädagogischer Tag"), undefined, "ganztägig, frei und gedeckt");
+    assert.equal(a.wuensche.filter((w) => w.body.summary.startsWith("Abgabe ")).length, 3);
+    assert.equal(wunsch(a, "3. Pädagogischer Tag"), undefined, "ganztägig, frei und gedeckt");
   });
 
   it("lässt den Klassenkalender ganz — auch eine Abgabe am Ferientag", () => {
@@ -111,8 +112,15 @@ describe("iservAuswahl — freie Tage", () => {
     const [vermessung] = oeffentlich().filter((item) => item.titel.startsWith("10.Kl_Vermessung"));
     const a = auswahl([vermessung], [{ startsOn: "2026-09-14", endsOn: "2026-09-25" }]);
 
-    assert.equal(a.wuensche.length, 1, "eine Fahrt der Klasse ist kein Doppel der freien Tage");
+    assert.equal(a.genommen.length, 1, "eine Fahrt der Klasse ist kein Doppel der freien Tage");
     assert.equal(a.ausgelassenFrei.length, 0);
+    // Zwölf Tage, zwölf Termine — je Tag einer, mit eigenem Schlüssel; Tag 1
+    // behält den des ungeteilten Termins.
+    assert.equal(a.wuensche.length, 12);
+    const keys = a.wuensche.map((w) => w.key);
+    assert.equal(new Set(keys).size, 12);
+    assert.equal(keys[0], iservIdentity(vermessung.fremdId).key);
+    assert.equal(keys[11], iservIdentity(vermessung.fremdId, 12).key);
   });
 });
 
@@ -129,10 +137,11 @@ describe("iservAuswahl — die Termine für Google", () => {
     }
   });
 
-  it("färbt Pfau, setzt „IServ: “ davor, erinnert nicht", () => {
+  it("färbt Pfau, ohne Präfix und ohne „_“, erinnert nicht", () => {
     for (const w of a.wuensche) {
       assert.equal(w.body.colorId, "7");
-      assert.ok(w.body.summary.startsWith("IServ: "), w.body.summary);
+      assert.ok(!w.body.summary.startsWith("IServ"), w.body.summary);
+      assert.ok(!w.body.summary.includes("_"), w.body.summary);
       assert.deepEqual(w.body.reminders, { useDefault: false, overrides: [] });
       assert.equal(w.body.transparency, "transparent");
     }
@@ -142,27 +151,27 @@ describe("iservAuswahl — die Termine für Google", () => {
     const herbst = wunsch(a, "Herbstferien");
     assert.deepEqual(herbst?.body.start, { date: "2026-10-24" });
     assert.deepEqual(herbst?.body.end, { date: "2026-11-08" });
-    assert.equal(herbst?.body.summary, "IServ: Herbstferien_Sa. 24. 10. – Sa. 7. 11. 2026");
+    assert.equal(herbst?.body.summary, "Herbstferien");
   });
 
   it("schreibt Termine mit Beginn und Ende mit Uhrzeit", () => {
-    const termin = wunsch(a, "Kl. 10_Vorstellung");
+    const termin = wunsch(a, "Vorstellung der Praktikumsberichte");
     assert.deepEqual(termin?.body.start, { dateTime: "2026-10-08T16:00:00.000Z", timeZone: "Europe/Berlin" });
     assert.deepEqual(termin?.body.end, { dateTime: "2026-10-08T17:30:00.000Z", timeZone: "Europe/Berlin" });
-    assert.equal(termin?.body.summary, "IServ: Kl. 10_Vorstellung der Praktikumsberichte");
+    assert.equal(termin?.body.summary, "Vorstellung der Praktikumsberichte");
   });
 
   it("macht einen Punkt-Termin ganztägig, mit der Uhrzeit im Titel", () => {
     const punkt = wunsch(a, "Unterrichtsende um 11:30 Uhr");
-    assert.equal(punkt?.body.summary, "IServ: 11:30 Unterrichtsende um 11:30 Uhr");
+    assert.equal(punkt?.body.summary, "Unterrichtsende um 11:30 Uhr");
     assert.deepEqual(punkt?.body.start, { date: "2026-12-17" });
     assert.deepEqual(punkt?.body.end, { date: "2026-12-18" });
   });
 
   it("schreibt Aufgaben mit Abgabezeit in den Titel", () => {
-    assert.equal(wunsch(a, "Erörterung")?.body.summary, "IServ: Aufgabe bis 23:59: Deutsch: Erörterung");
+    assert.equal(wunsch(a, "Erörterung")?.body.summary, "Abgabe Deutsch: Erörterung bis 23:59 Uhr");
     assert.deepEqual(wunsch(a, "Erörterung")?.body.start, { date: "2026-10-20" });
-    assert.equal(wunsch(a, "Funktionen")?.body.summary, "IServ: Aufgabe: Mathe: Arbeitsblatt Funktionen");
+    assert.equal(wunsch(a, "Funktionen")?.body.summary, "Abgabe Mathe: Arbeitsblatt Funktionen");
     assert.match(wunsch(a, "Funktionen")?.body.description ?? "", /In IServ: https:\/\/iserv\.example\.test\/iserv\/exercise\/show\/4711/);
   });
 
@@ -172,11 +181,35 @@ describe("iservAuswahl — die Termine für Google", () => {
     assert.equal(wunsch(a, "Herbstferien")?.body.location, undefined);
 
     for (const w of a.wuensche) {
+      assert.ok(w.body.description.startsWith("Titel in IServ: „"), w.body.description);
       assert.ok(!/[<>]/.test(w.body.description), w.body.description);
       assert.ok(w.body.description.endsWith(ISERV_FOOTER));
       assert.ok(w.body.description.includes(`${APP}/einstellungen#iserv`));
     }
     assert.match(nach?.body.description ?? "", /Aus IServ, Kalender „Öffentlich“/);
+  });
+
+  it("teilt den Pädagogischen Tag in zwei Termine, frei", () => {
+    assert.deepEqual(
+      a.wuensche.filter((w) => w.body.summary.startsWith("Pädagogischer Tag")).map((w) => [w.firstDay, w.body.summary]),
+      [
+        ["2026-10-22", "Pädagogischer Tag, Tag 1 von 2, frei"],
+        ["2026-10-23", "Pädagogischer Tag, Tag 2 von 2, frei"],
+      ],
+    );
+    assert.ok(wunsch(a, "Adventsbasar, Schulsamstag"));
+    assert.equal(wunsch(a, "3. Pädagogischer Tag")?.body.summary, "3. Pädagogischer Tag, frei");
+  });
+
+  it("nennt den Titel in Google bei genommenen, bei den anderen nicht", () => {
+    const b = auswahl([...oeffentlich(), ...klasse(), ...aufgaben()]);
+
+    assert.ok(b.genommen.every((e) => typeof e.kalenderTitel === "string" && e.kalenderTitel.length > 0));
+    assert.ok(b.zweifel.length > 0 && b.zweifel.every((e) => e.kalenderTitel === null));
+    const paed = b.genommen.find((e) => e.titel.startsWith("1. + 2. Pädagogischer Tag"));
+    assert.equal(paed?.kalenderTitel, "Pädagogischer Tag, frei");
+    assert.equal(paed?.tag, "2026-10-22");
+    assert.equal(paed?.bisTag, "2026-10-23");
   });
 
   it("sortiert nach Tag, dann Schlüssel", () => {
@@ -190,6 +223,71 @@ describe("iservAuswahl — die Termine für Google", () => {
       zweiter.wuensche.map((w) => eventHash(w.body)),
       a.wuensche.map((w) => eventHash(w.body)),
     );
+  });
+});
+
+describe("iservAuswahl — der Übergang vom Balken zu Tages-Terminen", () => {
+  const [paed] = oeffentlich().filter((item) => item.titel.startsWith("1. + 2. Pädagogischer Tag"));
+  const neu = auswahl([paed]).wuensche;
+  const alt = iservIdentity(paed.fremdId);
+  const balken: EventRow = {
+    key: alt.key,
+    kind: "iserv",
+    eventId: eventIdFor(alt.idBase, 0),
+    generation: 0,
+    hash: "hash-des-alten-balkens",
+    state: "geliefert",
+    title: "IServ: Pädagogischer Tag (vor dem 6.10.2026)",
+  };
+  const ALLE = new Set(["iserv"]);
+
+  /** Die Zeilen, wie sie nach einem gelungenen Lauf in der Datenbank stehen. */
+  const zeilenNach = (steps: ReturnType<typeof planSync>["steps"]): EventRow[] =>
+    steps
+      .filter((s) => s.op !== "loeschen")
+      .map((s): EventRow => ({
+        key: s.key,
+        kind: s.kind,
+        eventId: s.eventId,
+        generation: s.generation,
+        hash: s.hash,
+        state: "geliefert",
+        title: s.title,
+      }));
+
+  it("macht aus dem alten Balken Tag 1 und legt Tag 2 an — ohne Doppel", () => {
+    const plan = planSync({ wanted: neu, complete: ALLE, rows: [balken], today: "2026-10-06" });
+
+    assert.deepEqual(
+      plan.steps.map((s) => [s.op, s.key]),
+      [
+        ["aendern", alt.key],
+        ["anlegen", iservIdentity(paed.fremdId, 2).key],
+      ],
+    );
+    const [tag1] = plan.steps;
+    assert.equal(tag1.eventId, balken.eventId, "derselbe Termin in Google");
+    assert.ok(tag1.op === "aendern");
+    assert.deepEqual([tag1.body.start, tag1.body.end], [{ date: "2026-10-22" }, { date: "2026-10-23" }]);
+  });
+
+  it("hat beim zweiten Lauf nichts mehr zu tun", () => {
+    const erster = planSync({ wanted: neu, complete: ALLE, rows: [balken], today: "2026-10-06" });
+    const zweiter = planSync({ wanted: neu, complete: ALLE, rows: zeilenNach(erster.steps), today: "2026-10-06" });
+
+    assert.equal(zweiter.steps.length, 0);
+    assert.equal(zweiter.unveraendert, 2);
+  });
+
+  it("holt einen Tag, den der Nutzer gelöscht hat, nicht zurück — auch nicht, wenn IServ die Tage verschiebt", () => {
+    const zeilen = zeilenNach(planSync({ wanted: neu, complete: ALLE, rows: [balken], today: "2026-10-06" }).steps);
+    const geloescht = zeilen.map((z): EventRow => ({ ...z, state: "verworfen" }));
+    const verschoben = auswahl([{ ...paed, ersterTag: "2026-11-05", letzterTag: "2026-11-06" }]).wuensche;
+
+    const plan = planSync({ wanted: verschoben, complete: ALLE, rows: geloescht, today: "2026-10-06" });
+
+    assert.equal(plan.steps.length, 0);
+    assert.equal(plan.verworfenBekannt, 2);
   });
 });
 

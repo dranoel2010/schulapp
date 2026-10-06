@@ -106,7 +106,7 @@ export type IservStatus = {
     ausgelassenFrei: number;
     ausgeschlossen: number;
   };
-  /** Bis zu fünf genommene ab heute */
+  /** Bis zu fünf genommene ab heute — `kalenderTitel` ist der Titel in Google */
   naechste: Eintrag[];
   /** Ab heute, höchstens zwanzig */
   zweifel: Eintrag[];

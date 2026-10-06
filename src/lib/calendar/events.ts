@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 
 import type { Exam, FreePeriod, Homework } from "@/db/schema";
-import { addDays, timeInBerlin } from "@/lib/dates";
+import { addDays } from "@/lib/dates";
 import { freeLabel } from "@/lib/free-days";
+import { sprechTermine } from "@/lib/iserv/sprechtitel";
 import type { IservItem } from "@/lib/iserv/types";
 
 /**
@@ -21,10 +22,13 @@ import type { IservItem } from "@/lib/iserv/types";
  * Gerechnet wird ausschließlich mit `addDays()` aus @/lib/dates, über
  * UTC-Mitternacht, damit keine Zeitumstellung einen Tag verschiebt.
  *
- * Die einzige Ausnahme sind Termine aus IServ (`iservEvent()`): Nennt IServ
+ * Die einzige Ausnahme sind Termine aus IServ (`iservEvents()`): Nennt IServ
  * Beginn und Ende, steht der Termin mit Uhrzeit in Google. Nennt es nur einen
- * Zeitpunkt („Unterrichtsende um 11:30 Uhr", 11:30–11:30), wird er ganztägig mit
- * der Uhrzeit im Titel — ein Termin ohne Dauer ginge in Google unter.
+ * Zeitpunkt („Abholung", 11:30–11:30), wird er ganztägig mit der Uhrzeit im
+ * Titel („Abholung um 11:30 Uhr") — ein Termin ohne Dauer ginge in Google
+ * unter. Und ein ganztägiger Termin über mehrere Tage, der keine Ferien sind,
+ * steht seit dem 6.10.2026 als ein Termin je Tag da („…, Tag 1 von 2"), weil
+ * ein Sprach-Bot die Titel vorliest (@/lib/iserv/sprechtitel).
  *
  * ── Im Termin steht nichts, was sich ohne Inhaltsänderung ändert ─────────────
  *
@@ -291,7 +295,7 @@ export function homeworkEvent(input: {
     body: body({
       kind: "hausaufgabe",
       key,
-      summary: `HA ${input.subjectName}: ${homework.title}`,
+      summary: `Hausaufgabe ${input.subjectName}: ${homework.title}`,
       description: describe([
         homework.details,
         `In der Schulapp: ${input.appOrigin}/hausaufgaben/${homework.id}`,
@@ -340,77 +344,116 @@ const SUMMARY_MAX = 250;
  * Grundlage ist die `fremdId` (uid und Vorkommen, siehe @/lib/iserv/parse),
  * gehasht: Hex ist eine Teilmenge von base32hex, und 32 Zeichen halten die
  * ID so lang wie die der anderen Arten.
+ *
+ * `nummer` zählt die Tage eines mehrtägigen Termins (1, 2, …). Tag 1 und
+ * jeder Termin, der nicht geteilt wird, haben die Grundlage BYTEGLEICH
+ * `iserv|<fremdId>` — sonst bekäme jeder Termin, der schon in Google steht,
+ * einen neuen Schlüssel und würde gelöscht und neu angelegt. Ab Tag 2 kommt
+ * die Nummer dazu (`|tag:2`).
+ *
+ * Die Nummer, nicht das Datum: So bleibt die Zusage „was der Nutzer in Google
+ * löscht, kommt nie wieder“ auch dann, wenn IServ den Termin verschiebt — die
+ * Schlüssel bleiben, der Abgleich will ändern, findet den Termin gelöscht und
+ * verwirft ihn. Aus dem alten Balken wird bei der Umstellung Tag 1 (derselbe
+ * Termin in Google), und wechselt ein Termin zwischen einem und mehreren
+ * Tagen, bleibt Tag 1 erhalten. Neu angelegt werden nur Tage, die es vorher
+ * nicht gab (IServ verlängert von 2 auf 3 Tage: Tag 3).
  */
-export function iservIdentity(fremdId: string): { key: string; idBase: string } {
-  const hash = createHash("sha256").update(`iserv|${fremdId}`, "utf8").digest("hex").slice(0, 32);
+export function iservIdentity(
+  fremdId: string,
+  nummer = 1,
+): { key: string; idBase: string } {
+  const grundlage = nummer === 1 ? `iserv|${fremdId}` : `iserv|${fremdId}|tag:${nummer}`;
+  const hash = createHash("sha256").update(grundlage, "utf8").digest("hex").slice(0, 32);
   return { key: `iserv-${hash}`, idBase: `${CALENDAR_KINDS.iserv.prefix}${hash}` };
 }
 
 /**
- * Ein Termin aus IServ — mit „IServ: " vor dem Titel und in Pfau.
+ * Die Termine aus einem IServ-Eintrag — in Pfau, mit einem Titel, den ein
+ * Sprach-Bot vorlesen kann (@/lib/iserv/sprechtitel), und meist genau einer:
  *
- *   ganztägig:            „IServ: Herbstferien…"            als Balken
- *   mit Beginn und Ende:  „IServ: Kl. 10_Präsentation"      19:00–20:30
- *   Punkt (11:30–11:30):  „IServ: 11:30 Unterrichtsende…"   ganztägig
- *   Aufgabe:              „IServ: Aufgabe bis 23:59: …"      ganztägig
+ *   mit Beginn und Ende:     „Vorstellung der Praktikumsberichte"   18:00–19:30
+ *   Punkt (11:30–11:30):     „Unterrichtsende um 11:30 Uhr"         ganztägig
+ *   Aufgabe:                 „Abgabe Deutsch: Erörterung bis 23:59 Uhr"
+ *                                                                   ganztägig
+ *   mehrtägig, ganztägig:    „Pädagogischer Tag, Tag 1 von 2, frei" je Tag
+ *                            „Pädagogischer Tag, Tag 2 von 2, frei" einer
+ *   Ferien:                  „Herbstferien"                         ein Balken
+ *
+ * Ein Tages-Termin hat seinen eigenen Schlüssel (`iservIdentity(fremdId,
+ * nummer)`), steht ganztägig an genau diesem Tag und trägt dieselbe
+ * Beschreibung wie seine Geschwister. Tag 1 und alles, was nicht geteilt
+ * wird, behalten den Schlüssel `iservIdentity(fremdId)` — und damit ihren
+ * Termin in Google.
+ *
+ * Der Titel aus IServ steht als erste Zeile in der Beschreibung („Titel in
+ * IServ: …"), damit nichts verloren geht. Bewusst nicht „In IServ: …": So
+ * beginnt bei Aufgaben schon die Zeile mit dem Link.
  *
  * Keine Erinnerung von Google, auch für Aufgaben nicht. Im Termin steht nichts,
  * was sich ohne Inhaltsänderung ändert — kein `id`, `hash` oder `when` aus
  * IServ, kein Zeitpunkt des Abrufs.
  */
-export function iservEvent(input: {
+export function iservEvents(input: {
   item: IservItem;
+  /** ISERV_KLASSE — die eigene Klasse fällt aus dem Titel */
+  klasse: number;
   iservOrigin: string;
   appOrigin: string;
-}): WantedEvent {
+}): WantedEvent[] {
   const { item } = input;
-  const { key, idBase } = iservIdentity(item.fremdId);
   const aufgabe = item.quelle === "aufgaben";
-  const zeit = !item.ganztaegig && item.beginn ? timeInBerlin(new Date(item.beginn)) : null;
   const punkt = !item.ganztaegig && (item.ende === null || item.beginn === null || item.ende <= item.beginn);
-
-  let summary: string;
-  if (aufgabe) {
-    summary = zeit && punkt ? `IServ: Aufgabe bis ${zeit}: ${item.titel}` : `IServ: Aufgabe: ${item.titel}`;
-  } else {
-    summary = zeit && punkt ? `IServ: ${zeit} ${item.titel}` : `IServ: ${item.titel}`;
-  }
-  if (summary.length > SUMMARY_MAX) summary = `${summary.slice(0, SUMMARY_MAX - 1)}…`;
-
   const mitUhrzeit = !item.ganztaegig && !punkt && item.beginn !== null && item.ende !== null;
-  const start: EventTime = mitUhrzeit
-    ? { dateTime: item.beginn as string, timeZone: "Europe/Berlin" }
-    : { date: item.ersterTag };
-  const end: EventTime = mitUhrzeit
-    ? { dateTime: item.ende as string, timeZone: "Europe/Berlin" }
-    : { date: addDays(item.letzterTag, 1) };
 
-  return {
-    kind: "iserv",
-    key,
-    idBase,
-    firstDay: item.ersterTag,
-    body: {
-      summary,
-      description: describe([
-        item.beschreibung,
-        aufgabe
-          ? item.link
-            ? `In IServ: ${input.iservOrigin}${item.link}`
-            : null
-          : `Aus IServ, Kalender „${item.kalender}“`,
-        `In der Schulapp: ${input.appOrigin}/einstellungen#iserv`,
-        ISERV_FOOTER,
-      ]),
-      start,
-      end,
-      location: item.ort ?? undefined,
-      colorId: CALENDAR_KINDS.iserv.colorId,
-      transparency: "transparent",
-      reminders: { useDefault: false, overrides: [] },
-      extendedProperties: { private: { schulapp: key } },
-    },
-  };
+  const description = describe([
+    `Titel in IServ: „${item.titel}“`,
+    item.beschreibung,
+    aufgabe
+      ? item.link
+        ? `In IServ: ${input.iservOrigin}${item.link}`
+        : null
+      : `Aus IServ, Kalender „${item.kalender}“`,
+    `In der Schulapp: ${input.appOrigin}/einstellungen#iserv`,
+    ISERV_FOOTER,
+  ]);
+
+  // sprechTermine liefert die Tage in ihrer Reihenfolge: Stelle 0 ist Tag 1.
+  return sprechTermine(item, input.klasse).map(({ tag, titel }, stelle) => {
+    const { key, idBase } = iservIdentity(item.fremdId, stelle + 1);
+    const summary = titel.length > SUMMARY_MAX ? `${titel.slice(0, SUMMARY_MAX - 1)}…` : titel;
+
+    let start: EventTime;
+    let end: EventTime;
+    if (tag !== null) {
+      start = { date: tag };
+      end = { date: addDays(tag, 1) };
+    } else if (mitUhrzeit) {
+      start = { dateTime: item.beginn as string, timeZone: "Europe/Berlin" };
+      end = { dateTime: item.ende as string, timeZone: "Europe/Berlin" };
+    } else {
+      start = { date: item.ersterTag };
+      end = { date: addDays(item.letzterTag, 1) };
+    }
+
+    return {
+      kind: "iserv",
+      key,
+      idBase,
+      firstDay: tag ?? item.ersterTag,
+      body: {
+        summary,
+        description,
+        start,
+        end,
+        location: item.ort ?? undefined,
+        colorId: CALENDAR_KINDS.iserv.colorId,
+        transparency: "transparent",
+        reminders: { useDefault: false, overrides: [] },
+        extendedProperties: { private: { schulapp: key } },
+      },
+    };
+  });
 }
 
 /**

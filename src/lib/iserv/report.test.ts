@@ -148,6 +148,8 @@ describe("baueIservStatus", () => {
 
     assert.equal(status.naechste.length, 5);
     assert.equal(status.naechste[0].titel, "Nachschreibklausur_7. - 12. Kl_Ab");
+    // Die Karte zeigt unter „Als Nächstes“, was in Google steht.
+    assert.equal(status.naechste[0].kalenderTitel, "Nachschreibklausur");
     assert.ok(status.naechste.every((e) => e.bisTag >= "2026-10-05"));
     assert.ok(!status.zweifel.some((e) => e.titel === "Gartensamstag"), "Gartensamstag war am 19.9.");
     assert.ok(status.zweifel.some((e) => e.titel === "EA 10.Kl"));

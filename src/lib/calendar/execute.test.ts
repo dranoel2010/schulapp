@@ -417,8 +417,8 @@ describe("executeSteps gegen eine Attrappe von Google", () => {
 
     assert.equal(lauf.geaendert, 1);
     assert.equal(lauf.errors.length, 0);
-    assert.equal(google.events.get(id(wish))?.body.summary, "HA Mathe: Neuer Titel");
-    assert.equal(store.row(wish.key)?.title, "HA Mathe: Neuer Titel");
+    assert.equal(google.events.get(id(wish))?.body.summary, "Hausaufgabe Mathe: Neuer Titel");
+    assert.equal(store.row(wish.key)?.title, "Hausaufgabe Mathe: Neuer Titel");
   });
 
   it("8b. lässt den Termin nach einem zweiten 412 für den nächsten Lauf liegen", async () => {
@@ -549,7 +549,7 @@ describe("executeSteps gegen eine Attrappe von Google", () => {
     assert.equal(lauf.stoppedBy, null);
     assert.equal(lauf.errors.length, 1);
     assert.equal(lauf.errors[0].kind, "anfrage");
-    assert.equal(lauf.errors[0].title, "HA Mathe: Aufgabe 1");
+    assert.equal(lauf.errors[0].title, "Hausaufgabe Mathe: Aufgabe 1");
     assert.equal(lauf.neu, 2);
   });
 
@@ -614,7 +614,7 @@ describe("executeSteps gegen eine Attrappe von Google", () => {
     const lauf = await sync([hw(1, "Aus der App")]);
 
     assert.equal(lauf.geaendert, 1);
-    assert.equal(google.events.get(id(wish))?.body.summary, "HA Mathe: Aus der App");
+    assert.equal(google.events.get(id(wish))?.body.summary, "Hausaufgabe Mathe: Aus der App");
   });
 
   it("16. ein ungewisser Fehler beim Löschen lässt die Absicht für den nächsten Lauf stehen", async () => {

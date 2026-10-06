@@ -1672,15 +1672,68 @@ Kalender" in den Einstellungen ist der Ort, an dem man sieht, was es braucht.
 
 ### Wie es im Kalender aussieht
 
-Präfix **„IServ: "** vor dem Titel, Farbe **Pfau**, keine Erinnerung von
-Google, frei (`transparent`). **Uhrzeit nur, wenn IServ sie nennt**: mit
-Beginn und Ende steht der Termin mit Uhrzeit da; nennt IServ nur einen
-Zeitpunkt („Unterrichtsende um 11:30 Uhr", 11:30–11:30), steht er ganztägig
-mit der Uhrzeit im Titel („IServ: 11:30 Unterrichtsende um 11:30 Uhr"). Aufgaben
-stehen am Abgabetag, mit Uhrzeit als „IServ: Aufgabe bis 23:59: …". Die Event-ID
-ist „sai" + 32 Hex aus der uid des Termins (und seinem Vorkommen bei Serien);
-`id`, `hash` und `when` aus IServ ändern sich bei jedem Abruf und kommen
-deshalb nicht in den Termin — sonst schriebe jeder Lauf jeden Termin neu.
+Kein Präfix: Das Kennzeichen für IServ ist die Farbe **Pfau**. Keine
+Erinnerung von Google, frei (`transparent`).
+
+**Titel zum Vorlesen.** Seit dem 6.10.2026 liest ein Sprach-Bot den Kalender
+„Schule" vor — und liest nur die Titel. Deshalb macht
+`src/lib/iserv/sprechtitel.ts` aus jedem IServ-Titel einen, der sich vorgelesen
+natürlich anhört: kein „_" (daraus wird ein Komma, also eine kurze Pause),
+kein Datum und keine Uhrzeit, die Google schon zeigt, keine Kürzel („Kl." →
+„Klasse", „EA" → „Elternabend"), keine Klammer mit einem anderen Termin, und
+die eigene Klasse fällt weg — hinein kommt ohnehin nur, was sie betrifft
+(mitten in einem Satz bleibt sie stehen, sonst blieben Satztrümmer). Ist
+ein Teil des Titels „unterrichtsfrei", „schulfrei", „kein Unterricht" o. ä.,
+endet er auf „, frei". Das sind feste Regeln mit Tests, keine KI: Titel aus
+IServ gehen an keinen Dienst. Der **Originaltitel** steht als erste Zeile in
+der Beschreibung („Titel in IServ: „…""), und **der Filter entscheidet weiter
+am Originaltitel** — an der Auswahl ändert sich nichts.
+
+| In IServ (erfundene Beispiele) | In Google |
+| --- | --- |
+| „Kl. 10_Vorstellung der Praktikumsberichte", 18:00–19:30 | „Vorstellung der Praktikumsberichte", mit Uhrzeit |
+| „Erntedankfest_Beginn 10 Uhr", 10–14 Uhr | „Erntedankfest", mit Uhrzeit |
+| „Unterrichtsende um 11:30 Uhr", nur 11:30 | „Unterrichtsende um 11:30 Uhr", ganztägig |
+| „Brückentag_Schule und Hort geschlossen" | „Brückentag, frei" |
+| „1. + 2. Pädagogischer Tag_unterrichtsfrei (3. Pädagogischer Tag: Mo, 30.11.26)", 22.–23.10. | am 22.10. „Pädagogischer Tag, Tag 1 von 2, frei", am 23.10. „Pädagogischer Tag, Tag 2 von 2, frei" |
+| „10.Kl_Vermessungspraktikum in Musterdorf_14.09.-25.09.26" | zwölf Termine, „Vermessungspraktikum in Musterdorf, Tag 1 von 12" bis „… Tag 12 von 12" |
+| „Herbstferien_Sa. 24. 10. – Sa. 7. 11. 2026" | ein Balken „Herbstferien" |
+| Aufgabe „Deutsch: Erörterung", bis 23:59 | „Abgabe Deutsch: Erörterung bis 23:59 Uhr", am Abgabetag |
+
+**Uhrzeit nur, wenn IServ sie nennt**: mit Beginn und Ende steht der Termin
+mit Uhrzeit da, und der Titel wiederholt sie nicht; nennt IServ nur einen
+Zeitpunkt (11:30–11:30), steht er ganztägig mit der Uhrzeit im Titel
+(„… um 11:30 Uhr", nicht doppelt, wenn der Titel sie schon nennt). Aufgaben
+stehen am Abgabetag, mit Uhrzeit als „Abgabe … bis 23:59 Uhr".
+
+**Mehrtägig heißt je Tag ein Termin.** Ein ganztägiger Termin über 2 bis 31
+Tage, der keine Ferien sind, steht als ein Termin je Tag da, Wochenenden
+eingeschlossen — der Bot sagt dann „Tag 1 von 2" statt eines Datums. Ferien
+bleiben ein Balken, ebenso Termine mit Uhrzeit und alles über 31 Tage (eine
+Epoche über Wochen, ohne Zähler).
+
+Die Event-ID ist „sai" + 32 Hex aus der uid des Termins (und seinem Vorkommen
+bei Serien), ab Tag 2 eines Tages-Termins zusätzlich aus der Nummer des Tages
+(nicht aus dem Datum); `id`, `hash` und `when` aus IServ ändern sich bei jedem
+Abruf und kommen deshalb nicht in den Termin — sonst schriebe jeder Lauf jeden
+Termin neu. Tag 1 hat dieselbe Event-ID wie der Termin vor der Teilung. Damit
+gilt die Zusage oben („Löscht der Nutzer einen Termin in Google, trägt die App
+ihn nie wieder ein") auch, wenn IServ einen mehrtägigen Termin verschiebt. Die
+eine Ausnahme: Verlängert IServ ihn (von 2 auf 3 Tage), kommt der neue Tag 3
+dazu, auch wenn der Nutzer Tag 1 und 2 gelöscht hat — davon weiß die Quelle
+nichts.
+
+Der erste Abgleich nach der Umstellung schreibt jeden IServ-Termin einmal um
+(dieselbe Event-ID, neuer Titel und neue Beschreibung); aus einem mehrtägigen
+Balken wird dabei Tag 1, und die weiteren Tage kommen dazu. Auch Hausaufgaben
+heißen seitdem „Hausaufgabe Fach: …" statt „HA Fach: …". Kein SQL, keine neue
+Variable — `sudo ~/nas.sh hoch` reicht.
+
+In der Karte **IServ** zeigt „Als Nächstes" den Titel, wie er in Google steht
+(bei Tages-Terminen ohne „Tag 1 von 2", mit der Datumsspanne); „Unklar" und
+„Knapp aufgenommen" zeigen den Originaltitel, denn dort geht es um die
+Entscheidung. „Im Kalender aus IServ" zählt IServ-Einträge, nicht
+Google-Termine.
 
 **Freie Tage:** IServ schreibt **nie** in die freien Tage der App
 (`free_periods`) — was frei ist, trägt der Mensch von Hand ein. Damit Ferien
