@@ -3,6 +3,7 @@
 import {
   Fragment,
   useActionState,
+  useEffect,
   useRef,
   useState,
   type ClipboardEvent,
@@ -163,7 +164,9 @@ export function MaterialPages({ pages, title }: MaterialPagesProps) {
                       lässt dafür Docling darüber laufen — ein paar Sekunden
                       je Seite. Ohne den Satz sähe eine frische Seite aus wie
                       eine, die niemand lesen will. Ein Stand vom Laden der
-                      Seite: wer neu lädt, sieht, wie es ausging. */}
+                      Seite — sobald die App entschieden hat, lädt die Seite
+                      sich von selbst nach (`AutoRefresh` auf der Blattseite),
+                      und der Satz geht. */}
                   {page.leser === "offen" ? " · wird gerade gelesen" : null}
                 </span>
 
@@ -1146,6 +1149,22 @@ export type MaterialFormProps = {
   submitLabel?: string;
 };
 
+/**
+ * Ein Text so, wie die Server Action ihn ablegt — zum Vergleichen dessen, was
+ * im Feld steht, mit dem, was vom Server kam.
+ *
+ * Ohne Rand, weil die Prüfung ihn abschneidet. Und mit LF als Zeilenende: das
+ * Formular kommt als multipart/form-data an, dabei wird jeder Umbruch einer
+ * Textarea zu CRLF, und so steht die Notiz danach in der Spalte (die Abschrift
+ * seit dem 6.10.2026 nicht mehr, siehe `transcriptSchema` in @/lib/materials;
+ * ältere womöglich schon). Das Feld selbst zeigt LF. Ohne das Vereinheitlichen gälte eine mehrzeilige Notiz
+ * nach dem Speichern für immer als ungespeichert, und `AutoRefresh` lüde die
+ * Seite nie wieder nach.
+ */
+function wieGespeichert(text: string): string {
+  return text.replace(/\r\n?/g, "\n").trim();
+}
+
 export function MaterialForm({
   action,
   subjects,
@@ -1164,15 +1183,76 @@ export function MaterialForm({
   const [topics, setTopics] = useState<string[]>(savedTopics);
 
   /**
+   * Unberührte Felder folgen dem Server — dieselbe Regel wie bei den
+   * Abschriften unten („was niemand angefasst hat, liest vom Server“), nur für
+   * Felder, die als Kopie im Zustand liegen.
+   *
+   * Seit die Seite sich von selbst nachlädt (`AutoRefresh`, seit dem
+   * 6.10.2026), kommt ein neues `item` auch ohne eigenes Speichern: Jev hat
+   * das Blatt eingeordnet, ein zweites Gerät hat den Titel geändert. Bliebe
+   * das Formular dabei auf der Kopie vom Aufbau stehen, zeigte es über sich
+   * den neuen Kopf und darin das alte Fach, behauptete „Das Fach ist
+   * gewechselt“, ohne dass jemand etwas gewechselt hat — und ein Druck auf
+   * „Speichern“ schriebe den alten Stand über die Einordnung zurück.
+   *
+   * Ein Feld folgt, solange darin steht, was zuletzt vom Server kam; was
+   * jemand getippt hat, bleibt. Titel und Notiz werden dabei so verglichen,
+   * wie sie gespeichert werden (`wieGespeichert`) — dieselbe Rechnung wie bei
+   * `ungespeichert` unten. Wich sie ab, gälte ein Feld mit einem Leerzeichen am
+   * Ende als sauber und folgte trotzdem nicht. Nach dem eigenen Speichern ist
+   * `item` das Getippte, und auf dem Bildschirm ändert sich nichts. Folgt das
+   * Fach, ziehen die Themen über `savedMark` nach, und die Chips bauen über
+   * ihren Schlüssel neu auf. Gesetzt wird beim Rendern, wie bei `savedMark`.
+   */
+  const vorlage = [
+    item.subjectId,
+    item.title,
+    item.capturedOn,
+    item.note ?? "",
+  ] as const;
+  const [letzteVorlage, setLetzteVorlage] = useState(vorlage);
+
+  if (vorlage.some((wert, index) => wert !== letzteVorlage[index])) {
+    setLetzteVorlage(vorlage);
+    if (subjectId === letzteVorlage[0]) setSubjectId(vorlage[0]);
+    if (wieGespeichert(title) === wieGespeichert(letzteVorlage[1])) {
+      setTitle(vorlage[1]);
+    }
+    if (capturedOn === letzteVorlage[2]) setCapturedOn(vorlage[2]);
+    if (wieGespeichert(note) === wieGespeichert(letzteVorlage[3])) {
+      setNote(vorlage[3]);
+    }
+  }
+
+  /*
+   * Die Fach-Auswahl kennt das gewählte Fach auch als Ausgangswert.
+   *
+   * Nach jeder Action setzt React das Formular zurück (`form.reset()`), und
+   * eine Auswahl springt dabei auf die Option mit `defaultSelected`. Bei einer
+   * kontrollierten Auswahl setzt React das nur beim ersten Rendern und zieht
+   * danach bloß `selected` nach: nach einem Fachwechsel und Speichern zeigte
+   * das Feld wieder das Fach vom Laden der Seite, der Zustand aber das neue —
+   * und das nächste Speichern schickte das alte mit. Seit das Fach dem Server
+   * folgt (`vorlage` oben), träfe das auch, wer es nie angefasst hat.
+   */
+  const subjectSelect = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    for (const option of subjectSelect.current?.options ?? []) {
+      option.defaultSelected = option.value === subjectId;
+    }
+    // `subjects` mit dabei: eine neue Liste vom Server sind neue Optionen.
+  }, [subjectId, subjects]);
+
+  /**
    * Die Abschriften liegen anders im Zustand als alles andere in diesem
    * Formular, und der Unterschied ist Absicht.
    *
    * Titel, Fach, Tag und Notiz werden beim Aufbauen aus `item` in den Zustand
-   * kopiert und folgen einer geänderten Prop danach nicht mehr — deshalb steht
-   * über dem Formular auf der Vorschlagsseite ein `key`. Hier steht KEINE
-   * Kopie: dieser Kasten hält ausschließlich das, was jemand getippt hat. Was
-   * nicht darin steht, kommt beim Rendern aus `page.prefill`, also direkt vom
-   * Server.
+   * kopiert und folgen einer geänderten Prop danach nur, solange niemand sie
+   * angefasst hat (`vorlage` oben) — deshalb steht über dem Formular auf der
+   * Vorschlagsseite ein `key`. Hier steht KEINE Kopie: dieser Kasten hält
+   * ausschließlich das, was jemand getippt hat. Was nicht darin steht, kommt
+   * beim Rendern aus `page.prefill`, also direkt vom Server.
    *
    * Das löst gleich drei Dinge, für die es sonst je eine eigene Regel bräuchte:
    *
@@ -1190,6 +1270,47 @@ export function MaterialForm({
 
   function changeTranscript(pageId: string, text: string) {
     setTranscripts((current) => ({ ...current, [pageId]: text }));
+  }
+
+  /*
+   * Ein Eintrag, in dem wieder steht, was vom Server kam, folgt dem Server wie
+   * ein Feld, das niemand angefasst hat — dieselbe Regel wie bei `vorlage`
+   * oben.
+   *
+   * Ein Zeichen getippt und wieder gelöscht: der Eintrag bleibt in diesem
+   * Kasten, für `ungespeichert` unten ist das Feld aber unverändert, und
+   * `AutoRefresh` lädt nach. Hat Docling inzwischen die Abschrift geschrieben,
+   * kommt mit dem Nachladen die neue Grundlage (`transcriptBaseline`), das Feld
+   * zeigte aber weiter den alten, leeren Eintrag — und ein Speichern ersetzte
+   * die frische Abschrift durch „gelesen, nichts darauf“, ohne dass der
+   * Vergleich an `transcriptBaselineFieldName()` (@/lib/transcripts) es
+   * bemerkt. Deshalb fällt ein solcher Eintrag weg, sobald sich die
+   * Vorbelegung seiner Seite ändert. Was von ihr abweicht, bleibt; das Formular
+   * gilt dann als ungespeichert und wird gar nicht erst nachgeladen.
+   *
+   * Steht VOR `savedMark`: kommen Speichern und neue Seiten im selben Rendern
+   * an, wirft der Block dort danach ohnehin alles Getippte weg.
+   */
+  const [letzteSeiten, setLetzteSeiten] = useState(pages);
+
+  if (letzteSeiten !== pages) {
+    setLetzteSeiten(pages);
+
+    const vorher = new Map(letzteSeiten.map((page) => [page.id, page.prefill]));
+    const jetzt = new Map(pages.map((page) => [page.id, page.prefill]));
+    const bleibt = Object.entries(transcripts).filter(([pageId, text]) => {
+      const alt = vorher.get(pageId);
+      const folgt =
+        alt !== undefined &&
+        jetzt.has(pageId) &&
+        jetzt.get(pageId) !== alt &&
+        wieGespeichert(text) === wieGespeichert(alt ?? "");
+      return !folgt;
+    });
+
+    if (bleibt.length < Object.keys(transcripts).length) {
+      setTranscripts(Object.fromEntries(bleibt));
+    }
   }
 
   const [state, formAction, pending] = useActionState(action, EMPTY_STATE);
@@ -1272,8 +1393,45 @@ export function MaterialForm({
     ? "Das Fach ist gewechselt — die Themen des alten Fachs bleiben dort stehen, an diesem Blatt fallen sie weg."
     : "Wonach du dieses Blatt später suchen würdest. Angetippt geht schneller als getippt.";
 
+  /**
+   * Steht im Formular etwas, das der Server nicht kennt? Dann lädt
+   * `AutoRefresh` die Seite nicht nach, sondern zeigt nur einen Hinweis — das
+   * Zeichen dafür ist `data-ungespeichert` am Formular.
+   *
+   * Verglichen wird mit dem Server und nicht mit „wurde getippt“: eine
+   * zurückgenommene Änderung sperrt nichts, ein angetippter Themen-Chip (ein
+   * Klick, keine Eingabe) sperrt doch. Titel, Notiz und Abschriften so, wie
+   * die Server Action sie speichert (`wieGespeichert`) — sonst hielte ein
+   * Leerzeichen am Ende oder ein Zeilenumbruch in der Notiz das Formular nach
+   * dem Speichern für ungespeichert, und nachgeladen würde nie wieder. Was hier
+   * als unverändert gilt, folgt beim Nachladen dem Server (`vorlage` und
+   * `letzteSeiten` oben); beide Seiten rechnen gleich, sonst ginge ein Feld
+   * durch, das stehen bleibt. Ein angefangener, noch nicht bestätigter
+   * Themen-Entwurf zählt nicht: er übersteht das Nachladen, und solange getippt
+   * wird, hat das Feld ohnehin den Fokus.
+   */
+  const ungespeichert =
+    subjectId !== item.subjectId ||
+    wieGespeichert(title) !== wieGespeichert(item.title) ||
+    capturedOn !== item.capturedOn ||
+    wieGespeichert(note) !== wieGespeichert(item.note ?? "") ||
+    topics.length !== savedTopics.length ||
+    topics.some((topic, index) => topic !== savedTopics[index]) ||
+    pages.some((page) => {
+      const getippt = transcripts[page.id];
+      return (
+        getippt !== undefined &&
+        wieGespeichert(getippt) !== wieGespeichert(page.prefill ?? "")
+      );
+    });
+
   return (
-    <form action={formAction} className="space-y-6" noValidate>
+    <form
+      action={formAction}
+      className="space-y-6"
+      noValidate
+      data-ungespeichert={ungespeichert || pending ? "" : undefined}
+    >
       {state.message ? (
         <p
           role="alert"
@@ -1317,6 +1475,7 @@ export function MaterialForm({
           {(control) => (
             <Select
               {...control}
+              ref={subjectSelect}
               name="subjectId"
               value={subjectId}
               onChange={(event) => chooseSubject(event.target.value)}

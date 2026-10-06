@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { AutoRefresh } from "@/components/material/auto-refresh";
 import { ButtonLink } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireUser } from "@/lib/auth";
 import { todayInBerlin } from "@/lib/dates";
 import { INBOX_LIMIT, listInbox, type InboxEntry } from "@/lib/inbox";
 import {
+  blaetterStand,
   getMaterial,
   listPageActivity,
   type PageActivity,
@@ -42,7 +44,9 @@ import {
  * wie ein Fehler aus, deshalb steht er da.
  *
  * Alles hier wird auf dem Server gerendert. Angefasst wird nur über Formulare
- * und Links; einen Zustand im Browser braucht diese Seite nirgends.
+ * und Links; einen Zustand im Browser braucht diese Seite nirgends — bis auf
+ * den einen Baustein `AutoRefresh`, der sie nachlädt, sobald die App ein Blatt
+ * gelesen, vorgeschlagen oder eingeordnet hat.
  */
 
 export const metadata: Metadata = {
@@ -116,6 +120,12 @@ export default async function InboxPage({
   searchParams,
 }: PageProps<"/material/eingang">) {
   const user = await requireUser();
+
+  // Der Stand für `AutoRefresh`, vor den Daten — warum zuerst, steht in
+  // ../page.tsx. `anfang` und nicht `stand`: so heißt hier schon die Prop von
+  // `InboxRow`.
+  const anfang = await blaetterStand(user.id);
+
   const query = await searchParams;
 
   const items = await listInbox(user.id, { limit: INBOX_LIMIT });
@@ -205,6 +215,13 @@ export default async function InboxPage({
           niemand entschieden hat. Ein Vorschlag ändert von sich aus nichts —
           am Blatt steht erst dann etwas anderes, wenn du ihn übernimmst.
         </p>
+
+        {/* Steht an einer Zeile schon „liest die App gerade“, reicht das. */}
+        <AutoRefresh
+          stand={anfang.stand}
+          inArbeit={anfang.inArbeit}
+          leseZeile={![...activity.values()].some((s) => s.offenPages > 0)}
+        />
       </header>
 
       {/* Die Bestätigung nach dem Übernehmen. Sie kommt aus der Adresse und

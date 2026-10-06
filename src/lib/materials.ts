@@ -30,6 +30,14 @@ import {
   type Leser,
   type LeserGrund,
 } from "@/db/schema";
+import {
+  IN_ARBEIT_STUNDEN,
+  LEERER_STAND,
+  fingerabdruck,
+  inArbeitAus,
+  type BlaetterStand,
+  type StandZahlen,
+} from "@/lib/blaetter-stand";
 import { germanShortParts, isCalendarDate, todayInBerlin } from "@/lib/dates";
 import {
   MAX_PAGES,
@@ -2216,6 +2224,187 @@ export async function korbblattStand(
     capturedOn: material.capturedOn,
     ersteSeite: ersteSeite ?? { leser: null, doclingText: null },
   };
+}
+
+/**
+ * Der Stand der Blätter eines Nutzers — für `AutoRefresh`
+ * (@/components/material/auto-refresh, seit dem 6.10.2026). Die vier
+ * Ansichten fragen ihn beim Rendern und danach im Takt über
+ * `/api/material/stand`; ändert er sich, laden sie nach.
+ *
+ * **Eine Anweisung, ein Rundweg.** Drei Aggregate — Blätter, Seiten,
+ * Vorschläge —, jedes ohne GROUP BY und damit immer genau eine Zeile, auch bei
+ * null Blättern, per Kreuzprodukt nebeneinander. Jede Tabelle wird einmal
+ * gelesen, über die Indizes auf `user_id` und `material_id`. Kein bytea, kein
+ * Volltext: von der Abschrift zählt nur `octet_length()`, und das liest die
+ * Größe aus dem Kopf des Wertes, ohne ihn zu entpacken. Zahlen mit `::int`,
+ * Zeitpunkte als Text über `to_char()`, das md5 als Text — aus demselben Grund
+ * wie in `listPageActivity()`: PGlite und postgres-js geben dann dasselbe
+ * heraus, und derselbe Stand ergibt auf beiden denselben Fingerabdruck. Täte er
+ * das nicht, lüde jeder offene Tab im Takt nach.
+ *
+ * Gezählt ist, was sich bei jedem sichtbaren Schritt ändert:
+ *
+ *   Schritt                                   bewegt
+ *   ----------------------------------------  ---------------------------------
+ *   neues Blatt (Auslöser, anderes Gerät)     blaetter, neuestesBlatt, angaben,
+ *                                             frischImKorb, seiten, offen,
+ *                                             neuesteSeite
+ *   Seite an ein Blatt (auch nachgereicht)    seiten, offen, neuesteSeite
+ *   Leser entschieden (`leserFestlegen()`)    offen −1, docling oder claude +1
+ *   Doclings Abschrift geschrieben            gelesen, maschinell,
+ *                                             abschriftBytes
+ *   Vorschlag angelegt (Postbote, App, Hand)  vorschlaege, neuesterVorschlag
+ *   Vorschlag übernommen (Knopf, Formular,    vorschlaege fällt, eingeordnet/
+ *     Jev über `applyProposal()`)             zuletztEingeordnet, gelesen/
+ *                                             abschriftBytes, angaben
+ *   nur die Abschrift nachgereicht            gelesen, abschriftBytes
+ *   Vorschlag verworfen                       vorschlaege −1
+ *   abgehakt / wieder in den Korb             eingeordnet ±1, zuletztEingeordnet
+ *   Blatt gelöscht                            blaetter −1, angaben (Seiten und
+ *                                             Vorschläge gehen mit)
+ *   Seite gelöscht                            seiten −1 samt Zähler je Leser
+ *   Titel, Fach, Tag, Notiz geändert          angaben
+ *   Abschrift von Hand geändert               abschriftBytes, maschinell −1,
+ *                                             wenn es Doclings war
+ *   2-h-Fenster läuft ab                      seitenInArbeit bzw. frischImKorb
+ *
+ * Kommt ein Vorschlag und geht innerhalb eines Takts wieder (Jev übernimmt
+ * sofort), steht `vorschlaege` danach wie vorher — `eingeordnet` oder
+ * `gelesen` aber sind bleibend gestiegen. `zuletztEingeordnet` steht dabei,
+ * damit Abhaken und Zurücklegen zweier Blätter im selben Takt nicht
+ * verschwinden. Und das ablaufende Fenster zählt mit, damit die Zeile „wird
+ * gelesen“ mit einem Nachladen verschwindet und nicht bis zum nächsten Schritt
+ * stehen bleibt.
+ *
+ * Bewusst NICHT erkannt, weil zu teuer für zu selten: eine reine
+ * Themenänderung, ein geänderter Vorschlag und eine Abschrift gleicher Länge
+ * von einem zweiten Gerät. Sie erscheinen mit dem nächsten erkannten Schritt.
+ *
+ * **In Arbeit** (`inArbeitAus()`) ist ein Blatt, auf dessen Lesen gewartet
+ * wird:
+ *
+ * - eine Seite mit `leser = 'offen'` — die App entscheidet gerade, ohne
+ *   Zeitgrenze. Hängt eine (Neustart mitten im Lesen), bleibt der schnelle
+ *   Takt, bis die Zuteilung wieder angestoßen wird: vom nächsten Hochladen
+ *   oder vom `read_inbox` des Postboten, der das alle 15 s tut, solange er
+ *   läuft;
+ * - eine Claude-Seite ohne Abschrift, jünger als `IN_ARBEIT_STUNDEN`, an deren
+ *   Blatt noch kein Vorschlag liegt. Liegt einer, hat Claude geliefert (die
+ *   Abschrift steckt im Vorschlag), und gewartet wird nur noch auf einen
+ *   Menschen — dafür braucht es keinen 5-s-Takt und keine Zeile „wird
+ *   gelesen“;
+ * - ein Korbblatt ohne Vorschlag, jünger als `IN_ARBEIT_STUNDEN` — meist
+ *   steht der Vorschlag der App oder des Postboten noch aus.
+ *
+ * „Meist“, weil die Datenbank nicht weiß, ob noch jemand kommt. Ein
+ * verworfener Vorschlag, ein Blatt, das „wieder in den Korb“ gelegt wurde, ein
+ * Lauf des Postboten ohne Vorschlag oder eine Claude-Seite, die er nicht lesen
+ * konnte, sehen genauso aus wie ein Blatt, das gerade gelesen wird — und der
+ * Postbote nimmt keines davon wieder auf (er merkt sich ein Blatt mit dem
+ * Stand seiner jüngsten Seite). Dann stehen der schnelle Takt und die Zeile
+ * „wird gelesen“ bis zum Ende des Fensters da. Das Fenster ist die Grenze
+ * dafür; einen Zustand des Postboten in der Datenbank gibt es nicht.
+ *
+ * Der Altbestand (`leser` NULL) kommt in keiner Bedingung vor. Sonst fragten
+ * die Seiten wegen der alten Blätter ohne Abschrift für immer alle fünf
+ * Sekunden.
+ */
+export async function blaetterStand(userId: string): Promise<BlaetterStand> {
+  // Was jünger ist als das, zählt als „gerade in Arbeit“. Die Uhr der
+  // Datenbank, dieselbe, die created_at gesetzt hat (wie korbblattStand).
+  const frischSeit = sql`now() - make_interval(hours => ${IN_ARBEIT_STUNDEN}::int)`;
+  const vorschlagAm = (materialId: AnyColumn) =>
+    exists(
+      db
+        .select({ vorhanden: sql`1` })
+        .from(materialProposals)
+        .where(eq(materialProposals.materialId, materialId)),
+    );
+
+  const blaetter = db
+    .select({
+      anzahl: sql<number>`count(*)::int`.as("stand_blaetter"),
+      eingeordnet: sql<number>`(count(*) filter (where ${materials.filedAt} is not null))::int`.as("stand_eingeordnet"),
+      neuestes: sql<string | null>`to_char(max(${materials.createdAt}) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`.as("stand_neuestes_blatt"),
+      zuletztEingeordnet: sql<string | null>`to_char(max(${materials.filedAt}) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`.as("stand_zuletzt_eingeordnet"),
+      // Fach, Titel, Tag und Notiz aller Blätter als ein Wert. chr(31) und
+      // chr(30) trennen Felder und Blätter, damit „ab“ + „c“ nicht dasselbe
+      // ist wie „a“ + „bc“; geordnet nach id, damit dieselben Blätter immer
+      // denselben Text ergeben.
+      angaben: sql<string>`md5(coalesce(string_agg(concat_ws(chr(31), ${materials.id}, ${materials.subjectId}, ${materials.title}, ${materials.capturedOn}, ${materials.note}), chr(30) order by ${materials.id}), ''))`.as("stand_angaben"),
+      frischImKorb: sql<number>`(count(*) filter (where ${materials.filedAt} is null and ${materials.createdAt} > ${frischSeit} and not ${vorschlagAm(materials.id)}))::int`.as("stand_frisch_im_korb"),
+    })
+    .from(materials)
+    .where(eq(materials.userId, userId))
+    .as("stand_blaetter_q");
+
+  const seiten = db
+    .select({
+      anzahl: sql<number>`count(*)::int`.as("stand_seiten"),
+      offen: sql<number>`(count(*) filter (where ${materialPages.leser} = 'offen'))::int`.as("stand_offen"),
+      docling: sql<number>`(count(*) filter (where ${materialPages.leser} = 'docling'))::int`.as("stand_docling"),
+      claude: sql<number>`(count(*) filter (where ${materialPages.leser} = 'claude'))::int`.as("stand_claude"),
+      gelesen: sql<number>`(count(*) filter (where ${materialPages.transcript} is not null))::int`.as("stand_gelesen"),
+      maschinell: sql<number>`(count(*) filter (where ${materialPages.maschinell}))::int`.as("stand_maschinell"),
+      abschriftBytes: sql<number>`coalesce(sum(octet_length(${materialPages.transcript})), 0)::int`.as("stand_abschrift_bytes"),
+      neueste: sql<string | null>`to_char(max(${materialPages.createdAt}) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`.as("stand_neueste_seite"),
+      inArbeit: sql<number>`(count(*) filter (where ${materialPages.leser} = 'offen' or (${materialPages.leser} = 'claude' and ${materialPages.transcript} is null and ${materialPages.createdAt} > ${frischSeit} and not ${vorschlagAm(materialPages.materialId)})))::int`.as("stand_seiten_in_arbeit"),
+    })
+    .from(materialPages)
+    .innerJoin(
+      materials,
+      and(
+        eq(materials.id, materialPages.materialId),
+        eq(materials.userId, userId),
+      ),
+    )
+    .as("stand_seiten_q");
+
+  const vorschlaege = db
+    .select({
+      anzahl: sql<number>`count(*)::int`.as("stand_vorschlaege"),
+      neuester: sql<string | null>`to_char(max(${materialProposals.createdAt}) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`.as("stand_neuester_vorschlag"),
+    })
+    .from(materialProposals)
+    .innerJoin(
+      materials,
+      and(
+        eq(materials.id, materialProposals.materialId),
+        eq(materials.userId, userId),
+      ),
+    )
+    .as("stand_vorschlaege_q");
+
+  const [zeile] = await db
+    .select({
+      blaetter: blaetter.anzahl,
+      eingeordnet: blaetter.eingeordnet,
+      neuestesBlatt: blaetter.neuestes,
+      zuletztEingeordnet: blaetter.zuletztEingeordnet,
+      angaben: blaetter.angaben,
+      frischImKorb: blaetter.frischImKorb,
+      seiten: seiten.anzahl,
+      offen: seiten.offen,
+      docling: seiten.docling,
+      claude: seiten.claude,
+      gelesen: seiten.gelesen,
+      maschinell: seiten.maschinell,
+      abschriftBytes: seiten.abschriftBytes,
+      neuesteSeite: seiten.neueste,
+      seitenInArbeit: seiten.inArbeit,
+      vorschlaege: vorschlaege.anzahl,
+      neuesterVorschlag: vorschlaege.neuester,
+    })
+    .from(blaetter)
+    .crossJoin(seiten)
+    .crossJoin(vorschlaege);
+
+  // Aggregate ohne GROUP BY liefern immer eine Zeile; der Rückfall ist nur für
+  // den Typ da.
+  const zahlen: StandZahlen = zeile ?? LEERER_STAND;
+
+  return { stand: fingerabdruck(zahlen), inArbeit: inArbeitAus(zahlen) };
 }
 
 /**

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { AutoRefresh } from "@/components/material/auto-refresh";
 import { CaptureButton } from "@/components/material/capture-button";
 import { ButtonLink } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -9,6 +10,7 @@ import { subjectColor } from "@/lib/colors";
 import { todayInBerlin } from "@/lib/dates";
 import {
   LIST_LIMIT,
+  blaetterStand,
   listMaterials,
   resolveMaterialTopic,
 } from "@/lib/materials";
@@ -203,6 +205,16 @@ export default async function MaterialPage({
   searchParams,
 }: PageProps<"/material">) {
   const user = await requireUser();
+
+  // Der Stand der Blätter, an dem `AutoRefresh` merkt, dass es nachladen muss
+  // — und zwar ZUERST, vor allen anderen Abfragen, und nicht im Promise.all
+  // weiter unten. Geschieht ein Schritt zwischen Stand und Daten, steht er in
+  // den Daten, der Stand kennt ihn nicht: die nächste Frage sieht einen anderen
+  // Stand, und es wird einmal zu viel nachgeladen — harmlos. Andersherum kennte
+  // der Stand den Schritt schon und die Daten nicht, und nachgeladen würde nie.
+  // Der Preis ist ein Rundweg mehr je Aufbau der Seite.
+  const anfang = await blaetterStand(user.id);
+
   const query = await searchParams;
 
   const all = await listSubjects(user.id, { includeArchived: true });
@@ -334,6 +346,10 @@ export default async function MaterialPage({
           Arbeitsblätter, Tafelbilder, Kopien. Fotografieren, Fach und Thema
           dazuschreiben — dann findest du sie vor der Klausur wieder.
         </p>
+
+        {/* Die Liste sagt selbst nichts darüber, ob gerade gelesen wird —
+            also sagt es die Zeile des Bausteins. */}
+        <AutoRefresh stand={anfang.stand} inArbeit={anfang.inArbeit} leseZeile />
       </header>
 
       {/* Ohne ein einziges Fach gibt es nichts, wohin eine Aufnahme könnte.

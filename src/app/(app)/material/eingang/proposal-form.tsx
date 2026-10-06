@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, type ReactNode } from "react";
+import { useActionState, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
 import { Button, type ButtonProps } from "@/components/ui/button";
@@ -171,13 +171,35 @@ export function ProposalForm({
     ...(proposal?.topics ?? []),
   ].join("\n");
 
+  /**
+   * Hat hier jemand etwas eingegeben, das noch nicht gespeichert ist? Dann
+   * lädt `AutoRefresh` nicht nach, sondern zeigt nur einen Hinweis — ein neuer
+   * Vorschlag vom Server baute den Kasten unten neu auf, und das Getippte wäre
+   * weg. Die Felder sind unkontrolliert, verglichen werden kann also nicht;
+   * gemerkt wird jede Eingabe, und vergessen wird sie, sobald `savedMark`
+   * wechselt, also nach geglücktem Speichern. Nach einer abgelehnten Eingabe
+   * bleibt sie stehen — das Getippte steht ja auch noch da.
+   */
+  const [geaendert, setGeaendert] = useState(false);
+  const [letzteMarke, setLetzteMarke] = useState(savedMark);
+  if (letzteMarke !== savedMark) {
+    setLetzteMarke(savedMark);
+    setGeaendert(false);
+  }
+
   const topicLines = (proposal?.topics ?? []).join("\n");
 
   const sheetTopics =
     sheet.topics.length > 0 ? sheet.topics.join("\n") : undefined;
 
   return (
-    <form action={formAction} className="space-y-6" noValidate>
+    <form
+      action={formAction}
+      className="space-y-6"
+      noValidate
+      onInput={() => setGeaendert(true)}
+      data-ungespeichert={geaendert || pending ? "" : undefined}
+    >
       {state.message ? (
         <p
           role="alert"

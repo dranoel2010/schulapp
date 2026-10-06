@@ -2,13 +2,18 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { AutoRefresh } from "@/components/material/auto-refresh";
 import { CaptureButton } from "@/components/material/capture-button";
 import { ButtonLink } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
 import { subjectColor } from "@/lib/colors";
 import { berlinDay, formatGerman, todayInBerlin } from "@/lib/dates";
 import { MAX_PAGES, formatBytes } from "@/lib/images";
-import { getMaterial, listMaterialTranscripts } from "@/lib/materials";
+import {
+  blaetterStand,
+  getMaterial,
+  listMaterialTranscripts,
+} from "@/lib/materials";
 import { listTopicsForSubjects } from "@/lib/subject-topics";
 import { listSubjects } from "@/lib/subjects";
 
@@ -53,6 +58,10 @@ export default async function MaterialDetailPage({
 }: PageProps<"/material/[id]">) {
   const user = await requireUser();
   const { id } = await params;
+
+  // Der Stand für `AutoRefresh`, vor den Daten — warum zuerst, steht in
+  // material/page.tsx.
+  const anfang = await blaetterStand(user.id);
 
   const item = await getMaterial(user.id, id);
   if (!item) {
@@ -201,6 +210,15 @@ export default async function MaterialDetailPage({
           {`${item.pages.length} ${item.pages.length === 1 ? "Seite" : "Seiten"} · ${formatBytes(totalBytes)}`}
         </p>
       </header>
+
+      {/* Steht an einer Seite schon „· wird gerade gelesen“, reicht das; die
+          Zeile kommt nur, wenn woanders gelesen wird — Claude an einer Seite
+          dieses Blattes oder ein anderes Blatt. */}
+      <AutoRefresh
+        stand={anfang.stand}
+        inArbeit={anfang.inArbeit}
+        leseZeile={!item.pages.some((page) => page.leser === "offen")}
+      />
 
       <MaterialPages
         title={item.title}

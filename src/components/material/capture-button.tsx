@@ -189,6 +189,12 @@ export function CaptureButton({
     () => false,
   );
 
+  // Daran erkennt `AutoRefresh` (@/components/material/auto-refresh), dass
+  // gerade hochgeladen wird oder der Sucher offen ist, und lädt dann nicht
+  // nach: der Auslöser ruft am Ende selbst `router.refresh()`, und über dem
+  // Sucher darf nichts aufgehen. Steht an beiden Wurzeln unten.
+  const laeuft = pending || viewfinderOpen;
+
   // Beim Anhängen weiterer Seiten spielt das Fach keine Rolle: das Blatt hat
   // schon eins, und die Seite erbt es.
   const needsSubject = !materialId;
@@ -321,8 +327,11 @@ export function CaptureButton({
   // hier deshalb kein Abbau: die Komponente bleibt samt State an ihrer Stelle
   // im Baum und zeigt nur nichts, solange sie nichts zu sagen hat.
   if (full) {
-    return errorNote || savedNote ? (
-      <div className={cn("space-y-3", className)}>
+    return errorNote || savedNote || laeuft ? (
+      <div
+        className={cn("space-y-3", className)}
+        data-aufnahme-laeuft={laeuft ? "" : undefined}
+      >
         {errorNote}
         {savedNote}
       </div>
@@ -487,7 +496,10 @@ export function CaptureButton({
     : (subjects.find((subject) => subject.id === chosen)?.name ?? "Aufnehmen");
 
   return (
-    <div className={cn("space-y-3", className)}>
+    <div
+      className={cn("space-y-3", className)}
+      data-aufnahme-laeuft={laeuft ? "" : undefined}
+    >
       {showPicker ? (
         <Field id={fieldId} label="Fach">
           {(control) => (

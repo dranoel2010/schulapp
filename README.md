@@ -198,7 +198,9 @@ src/
       oauth/          Anmeldung eines Programms und der Tausch von Code
                       gegen Token
       material/       liefert die Bilder aus: /api/material/<seite> das
-                      Vollbild, .../vorschau die Vorschau
+                      Vollbild, .../vorschau die Vorschau; stand/ der
+                      Fingerabdruck, an dem Ablage, Blatt, Korb und
+                      Vorschlag merken, dass sie nachladen müssen
       google/         „Mit Google verbinden": connect/ springt per POST zu
                       Google, callback/ nimmt die Zustimmung entgegen
       push/, cron/    Anmeldung der Geräte, der stündliche Anstoß für die
@@ -1962,6 +1964,13 @@ nur, wenn man es startet.
 nur noch Handschrift, Formeln und alles Unsichere. Ein Blatt, das ganz gedruckt
 ist, ordnet die App mit Jev ein, ohne dass Claude es je sieht. Wie sie
 entscheidet und was sie dabei festhält, steht oben unter *Ein Leser je Seite*.
+
+**Von selbst aktuell** — Ablage, Blattseite, Eingangskorb und Vorschlagsseite
+fragen `/api/material/stand`: alle 5 Sekunden, solange ein Blatt gelesen wird,
+sonst alle 30, und nur bei sichtbarem Tab. Der Stand ist ein Fingerabdruck aus
+einer einzigen Abfrage über die Blätter; neu geladen wird nur, wenn er sich
+geändert hat. Wer gerade tippt oder Ungespeichertes im Formular hat, bekommt
+statt des Nachladens einen leisen Hinweis — Eingaben gehen vor.
 
 **Google Kalender** — Klausuren, offene Hausaufgaben und freie Tage stehen
 als ganztägige Termine in einem eigenen Kalender „Schule" im Google Kalender,

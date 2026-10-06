@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { AutoRefresh } from "@/components/material/auto-refresh";
 import { ButtonLink } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
 import { subjectColor } from "@/lib/colors";
@@ -11,7 +12,7 @@ import {
   getProposal,
   prefillFromProposal,
 } from "@/lib/inbox";
-import { listMaterialTranscripts } from "@/lib/materials";
+import { blaetterStand, listMaterialTranscripts } from "@/lib/materials";
 import { listTopicsForSubjects } from "@/lib/subject-topics";
 import { listSubjects } from "@/lib/subjects";
 
@@ -78,6 +79,10 @@ export default async function ProposalPage({
 }: PageProps<"/material/eingang/[id]">) {
   const user = await requireUser();
   const { id } = await params;
+
+  // Der Stand für `AutoRefresh`, vor den Daten — warum zuerst, steht in
+  // material/page.tsx.
+  const anfang = await blaetterStand(user.id);
 
   const found = await getProposal(user.id, id);
   if (!found) {
@@ -199,6 +204,15 @@ export default async function ProposalPage({
         </svg>
         Eingangskorb
       </Link>
+
+      {/* Ohne Zeile: das Blatt dieses Vorschlags ist per Definition geliefert.
+          Hier gibt es nur das stille Nachladen — oder den Hinweis, solange in
+          einem der beiden Formulare etwas steht. */}
+      <AutoRefresh
+        stand={anfang.stand}
+        inArbeit={anfang.inArbeit}
+        leseZeile={false}
+      />
 
       {/* Das Blatt, wie es JETZT dasteht. Es steht ganz oben und nicht unter
           dem Vorschlag: worüber entschieden wird, muss man zuerst sehen. Die
