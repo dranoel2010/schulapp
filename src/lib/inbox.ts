@@ -164,13 +164,20 @@ function isId(value: string): boolean {
   return UUID_PATTERN.test(value);
 }
 
-const PROPOSAL_ORIGINS: readonly ProposalOrigin[] = ["manuell", "agent"];
+const PROPOSAL_ORIGINS: readonly ProposalOrigin[] = [
+  "manuell",
+  "agent",
+  "app",
+];
 
 /**
  * Die Spalte ist `text` und kann deshalb alles enthalten, was jemand von Hand
  * hineinschreibt. Auf dem Bildschirm steht daraus ein Hinweis „von einem
- * Agenten vorgeschlagen"; ein unbekannter Wert gilt als „manuell", weil das
- * die Zeile ist, die nichts behauptet.
+ * Agenten vorgeschlagen" oder „von der App" (seit dem 6.10.2026: die App legt
+ * selbst einen an, wenn Docling ein ganzes Blatt gelesen hat); ein
+ * unbekannter Wert gilt als „manuell", weil das die Zeile ist, die nichts
+ * behauptet. Eine Prüfung in der Datenbank gibt es dafür nicht
+ * (eingangskorb-tabellen.sql) — deshalb steht die Liste hier.
  */
 function toOrigin(value: string): ProposalOrigin {
   return PROPOSAL_ORIGINS.find((origin) => origin === value) ?? "manuell";
@@ -783,15 +790,26 @@ export async function getProposal(
  *
  * `origin` steht als Parameter und nicht im Schema. Woher ein Vorschlag kommt,
  * entscheidet die Tür, durch die er hereinkommt — die Server Action des
- * Formulars oder das MCP-Tool des Agenten —, und nicht das Formular selbst.
- * Stünde es im Schema, könnte sich jeder Absender als Agent ausgeben oder,
- * schlimmer, ein Agent als Mensch.
+ * Formulars, das MCP-Tool des Agenten oder die Zuteilung der App —, und nicht
+ * das Formular selbst. Stünde es im Schema, könnte sich jeder Absender als
+ * Agent ausgeben oder, schlimmer, ein Agent als Mensch.
+ *
+ * **`nurOhneVorschlag` legt nichts an, wenn am Blatt schon einer liegt**
+ * (seit dem 6.10.2026) und gibt dann `null` zurück. Das ist das EINMAL aus
+ * Entscheidung 8: die App macht aus einem reinen Docling-Blatt genau einen
+ * Vorschlag, und scheitert Jev daran, bleibt er für einen Menschen liegen,
+ * statt dass ein zweiter dazukommt. Gesichert in der Datenbank und nicht nur
+ * im Prozess: in derselben Transaktion wird zuerst die Zeile des Blattes mit
+ * `for update` gesperrt (dasselbe Muster wie `addPage()` in @/lib/materials),
+ * dann nachgesehen. Zwei Zuteilungen, die sich nach einem Neustart
+ * überschneiden, sehen so nie beide ein leeres Blatt.
  */
 export async function createProposal(
   userId: string,
   materialId: string,
   input: ProposalInput,
   origin: ProposalOrigin = "manuell",
+  options?: { nurOhneVorschlag?: boolean },
 ): Promise<string | null> {
   if (!isId(materialId)) return null;
   if (!(await ownsMaterial(userId, materialId))) return null;
@@ -804,6 +822,32 @@ export async function createProposal(
   }
 
   return db.transaction(async (tx): Promise<string | null> => {
+    if (options?.nurOhneVorschlag) {
+      const [gesperrt] = await tx
+        .select({ id: materials.id })
+        .from(materials)
+        .where(and(eq(materials.userId, userId), eq(materials.id, materialId)))
+        .limit(1)
+        .for("update");
+
+      if (!gesperrt) return null;
+
+      const [vorhanden] = await tx
+        .select({ id: materialProposals.id })
+        .from(materialProposals)
+        .innerJoin(
+          materials,
+          and(
+            eq(materials.id, materialProposals.materialId),
+            eq(materials.userId, userId),
+          ),
+        )
+        .where(eq(materialProposals.materialId, materialId))
+        .limit(1);
+
+      if (vorhanden) return null;
+    }
+
     const [created] = await tx
       .insert(materialProposals)
       .values({

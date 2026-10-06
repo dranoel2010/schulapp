@@ -179,6 +179,7 @@ export default async function EingangPage({
                   sourceQuote: f.sourceQuote,
                   blattTitel: f.blattTitel,
                   seitenNummer: f.seitenNummer,
+                  maschinell: f.maschinell,
                 })),
               }}
             />

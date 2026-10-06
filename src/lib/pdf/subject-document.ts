@@ -80,6 +80,17 @@ export type PdfPageEntry = {
    * die Spalte in der Datenbank überhaupt NULL zulässt.
    */
   transcript: string | null;
+  /**
+   * Hat die App diese Abschrift maschinell geschrieben (Docling, seit dem
+   * 6.10.2026)? Dann steht über ihr ein Satz, dass niemand sie gegengelesen
+   * hat — ihre Lesefehler markiert keine ⟨Klammer⟩, und ausgedruckt sähe sie
+   * sonst aus wie eine gelesene Seite.
+   *
+   * Freiwillig, und fehlend heißt `false`: Das Dokument kennt keine Herkunft,
+   * die ihm niemand sagt, und jede Seite, an der das Feld fehlt, kommt genau
+   * so heraus wie vorher.
+   */
+  maschinell?: boolean;
 };
 
 /** Ein Blatt mit seinen Seiten. */
@@ -725,6 +736,12 @@ function drawTranscript(state: DrawState, page: PdfPageEntry): void {
   if (page.transcript.length === 0) {
     drawAside(state, "Gelesen — auf dieser Seite stand nichts.");
     return;
+  }
+
+  // Erst hier und nicht vor den beiden Sätzen oben: Über einer ungelesenen
+  // oder leeren Seite gibt es nichts, dem man zu viel glauben könnte.
+  if (page.maschinell) {
+    drawAside(state, "Maschinell gelesen (Docling) – von niemandem gegengelesen.");
   }
 
   drawRich(state, page.transcript, {

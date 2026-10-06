@@ -50,30 +50,46 @@ import { sperren } from "./sperre.mts";
  * zweites Gedächtnis: sie lebt nur im laufenden Prozess, verfällt bei jedem
  * Neustart und sagt über kein Blatt etwas — nur, wann der Dienst das nächste
  * Mal fragt. Eine zweite Warteschlange neben dem Korb ist sie nicht. Dasselbe
- * gilt für die drei Kleinigkeiten, die seit dem 4.10.2026 daneben stehen: wann
- * frühestens wieder nach nachgereichten Seiten gesucht wird
- * (`NachleseTakt`), welche Absage der App dazu schon gesagt ist, und über
- * welche wartenden Blätter schon eine Zeile ging (`letzteWartende`). Alle
- * drei sagen nur, wann gefragt und was gesagt wird — welches Blatt dran ist,
+ * gilt für die Kleinigkeiten daneben: wann frühestens wieder nach
+ * nachgereichten Seiten gesucht wird (`NachleseTakt`), welche Absage der App
+ * dazu schon gesagt ist, und über welche wartenden Blätter schon eine Zeile
+ * ging (`letzteWartende`, seit dem 6.10.2026 auch `letzteBeiDerApp`). Sie
+ * sagen nur, wann gefragt und was gesagt wird — welches Blatt dran ist,
  * entscheidet weiter allein, was die App liefert.
+ *
+ * **Welche Seite Claude liest, entscheidet die App** (seit dem 6.10.2026).
+ * Jede neue Seite liest sie nach dem Hochladen einmal mit Docling; ist das
+ * sauberer Druck, wird es die Abschrift, und Claude sieht die Seite nie. An
+ * jeder Seite steht in read_sheet, wer sie liest (`leser`): „offen" — die App
+ * entscheidet noch; „docling" — sie hat die Seite selbst gelesen; „claude" —
+ * die Seite ist für Claude; `null` — eine Seite von vorher, wie bisher. Der
+ * Postbote gibt dem Lauf nur die Seiten ohne Abschrift, die nicht „docling"
+ * sind, und lässt ein Blatt mit einer „offen"-Seite in dieser Runde liegen,
+ * ohne es zu merken (`blattEinordnen()`). Fehlt das Feld (eine ältere App),
+ * liest Claude wie bisher jede Seite ohne Abschrift — der Postbote rät nicht,
+ * wer lesen soll, er liest es ab.
  *
  * **Nachgereichte Seiten** (seit dem 4.10.2026). Seit Jev einordnet, liegt ein
  * Blatt nur Sekunden im Korb. Kommt die Rückseite danach — „Seite hinzufügen"
  * an einem eingeordneten Blatt —, sähe der Korb sie nie, und sie bliebe für
  * immer ungelesen. Die App nennt solche Seiten deshalb an jedem Blatt beim
  * Namen (`unreadAttachedPageIds`): ohne Abschrift an einem eingeordneten
- * Blatt, und entweder nach dem Einordnen dazugekommen oder jünger als eine
- * schon abgeschriebene Seite desselben Blattes. Das Zweite fängt die Seite,
- * die WÄHREND eines Laufs dazukam — sie ist älter als das Einordnen, aber
- * jünger als die Seiten, die der Lauf abgeschrieben hat. Wenn im Korb nichts
- * zu tun ist, schreibt der Postbote GENAU DIESE Seiten mit dem Auftrag der
- * Nachlese ab (`nachleseAuftragFuer(id, nurSeiten)`), und keine andere.
+ * Blatt, und seit dem 6.10.2026 nach der Regel aus `leser` — eine Seite für
+ * Claude immer, eine Seite der App („offen", „docling") nie, und eine Seite
+ * von vorher (`null`) wie bis dahin: wenn sie nach dem Einordnen dazukam oder
+ * jünger ist als eine schon abgeschriebene Seite desselben Blattes. Wenn im
+ * Korb nichts zu tun ist, schreibt der Postbote GENAU DIESE Seiten mit dem
+ * Auftrag der Nachlese ab (`nachleseAuftragFuer(id, nurSeiten)`), und keine
+ * andere. Steht am Blatt noch eine „offen"-Seite, wartet auch die Nachlese,
+ * ohne das Blatt zu merken (`seitenNachlesen()`) — sonst fiele die Seite,
+ * sobald sie Claude zufällt, unter einen schon gemerkten Schlüssel.
  *
- * Die fünfzehn Altblätter vom August bleiben dabei mit Absicht liegen: keine
- * ihrer Seiten hat eine Abschrift, und alle sind älter als ihr Einordnen. Ob
- * sie abgeschrieben werden, entscheidet ein Mensch mit nachlese.mts. Bekommt
- * ein Altblatt eine neue Seite, wird nur diese abgeschrieben — dafür steht die
- * Liste im Auftrag und nicht bloß eine Zahl.
+ * Die fünfzehn Altblätter vom August bleiben dabei mit Absicht liegen: ihre
+ * Seiten stehen auf `null`, keine hat eine Abschrift, und alle sind älter als
+ * ihr Einordnen. Ob sie abgeschrieben werden, entscheidet ein Mensch mit
+ * nachlese.mts. Bekommt ein Altblatt eine neue Seite, wird nur diese
+ * abgeschrieben (oder von der App gelesen) — dafür steht die Liste im Auftrag
+ * und nicht bloß eine Zahl.
  */
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
@@ -195,7 +211,21 @@ type BlattDetail = {
   filedAt: string | null;
   /** Die jüngste Seite, gelesen VOR den Seiten unten. Fehlt bei einer App vor dem 4.10.2026. */
   lastPageAt?: string | null;
-  pages: { id: string; sortOrder: number; transcriptChars: number | null }[];
+  pages: {
+    id: string;
+    sortOrder: number;
+    transcriptChars: number | null;
+    /**
+     * Wer die Seite liest, nach der App (seit dem 6.10.2026): „offen" — sie
+     * entscheidet noch; „docling" — sie hat die Seite selbst gelesen;
+     * „claude" — die Seite ist für Claude. `null` ist eine Seite von vorher,
+     * und eine App vor dem 6.10.2026 nennt das Feld gar nicht — beides heißt
+     * „wie bisher": Claude liest, was keine Abschrift hat.
+     */
+    leser?: "offen" | "docling" | "claude" | null;
+    /** Die Abschrift hat die App maschinell geschrieben (Docling). */
+    maschinell?: boolean;
+  }[];
 };
 
 /**
@@ -215,6 +245,13 @@ type Rundenausgang = {
    * (ids). `main()` sagt das einmal je neuer Menge und nicht jede Runde.
    */
   wartend: string[];
+  /**
+   * Die Blätter, an denen die App noch eine Seite liest (leser „offen", seit
+   * dem 6.10.2026) — im Korb wie in der Nachlese in dieser Runde ohne Lauf
+   * und ungemerkt. `main()` sagt sie wie die Wartenden: einmal je neuer
+   * Menge.
+   */
+  beiDerApp: string[];
 };
 
 /**
@@ -469,12 +506,31 @@ async function blattLesen(
 /**
  * Ein Blatt aus dem Korb durch den Käfig.
  *
- * Vor dem Lauf liest der Postbote das Blatt selbst (seit dem 4.10.2026). Zwei
+ * Vor dem Lauf liest der Postbote das Blatt selbst (seit dem 4.10.2026). Drei
  * Gründe, eine Anfrage: ein Blatt, das inzwischen eingeordnet ist, wird
  * übersprungen, statt einen Lauf zu kosten — das gilt auch für `--blatt` —,
- * und die Seiten-ids gehen gleich in den Auftrag, statt dass der Lauf einen
- * Zug dafür braucht. Die Seitenzahl daraus ist zugleich die frischeste für die
- * Frist (`fristFuer()`): der Korb kann eine Runde alt sein.
+ * die Seiten-ids gehen gleich in den Auftrag, statt dass der Lauf einen Zug
+ * dafür braucht, und seit dem 6.10.2026 steht daran, welche Seiten die App
+ * Claude lässt (`leser`). Die Seitenzahl daraus ist zugleich die frischeste
+ * für die Frist (`fristFuer()`): der Korb kann eine Runde alt sein.
+ *
+ * Seiten für Claude sind die ohne Abschrift, die die App nicht selbst liest:
+ * leser „claude", `null` (von vor dem 6.10.2026) oder ein fehlendes Feld (eine
+ * ältere App). Zwei Fälle laufen deshalb gar nicht erst:
+ *
+ * - **Die App liest noch** (eine Seite mit leser „offen"). Dann weiß niemand,
+ *   ob die Seite an Claude geht, und ein Lauf jetzt läse sie womöglich
+ *   doppelt oder ließe sie aus. Das Blatt kommt NICHT in gesehen.json — es
+ *   ist nicht erledigt, nur noch nicht entschieden, und in fünfzehn Sekunden
+ *   wieder dran. Eine Zeile im Mitlesen gibt es dafür nur einmal je neuer
+ *   Menge (`main()`), sonst stünde sie alle fünfzehn Sekunden da.
+ * - **Für Claude bleibt nichts** — jede Seite hat eine Abschrift oder liest
+ *   die App selbst. Hat die App gelesen, legt sie nach der Ruhe selbst einen
+ *   Vorschlag an und lässt Jev einordnen (@/lib/leser/zuteilung); hat ein
+ *   Mensch alles abgetippt, ist er ohnehin am Blatt. Gemerkt wird es trotzdem,
+ *   unter dem Stand seiner jüngsten Seite: sonst fragte der Postbote alle
+ *   fünfzehn Sekunden read_sheet, bis die App so weit ist. Eine neue Seite
+ *   macht es wieder offen.
  */
 async function blattEinordnen(
   verbindung: Verbindung,
@@ -486,6 +542,13 @@ async function blattEinordnen(
   const blatt = await blattLesen(verbindung, blattId);
   if (!blatt) return;
 
+  // Vor der Kopfzeile und nur im Korb: ein eingeordnetes Blatt ist ohnehin
+  // kein Lauf, und das sagt die Prüfung darunter mit ihrem eigenen Satz.
+  if (blatt.filedAt === null && blatt.pages.some((seite) => seite.leser === "offen")) {
+    ausgang.beiDerApp.push(blattId);
+    return;
+  }
+
   sagen(`→ ${blattId.slice(0, 8)} „${blatt.title}" (${blatt.subject})`);
 
   if (blatt.filedAt !== null) {
@@ -493,9 +556,23 @@ async function blattEinordnen(
     return;
   }
 
-  const seiten = [...blatt.pages]
-    .sort((a, b) => a.sortOrder - b.sortOrder)
+  const sortiert = [...blatt.pages].sort((a, b) => a.sortOrder - b.sortOrder);
+  const fuerClaude = sortiert
+    .filter((seite) => seite.transcriptChars === null && seite.leser !== "docling")
     .map((seite) => seite.id);
+  // Der Stand, aus dem der Auftrag gebaut wird — `read_sheet` liest ihn vor
+  // den Seiten. Kam danach eine Seite dazu, ist das Blatt mit ihr ein neuer
+  // Fall (siehe `korbSchluessel()`). Der Stand aus dem Korb ist nur der
+  // Rückfall für eine App, die ihn in read_sheet noch nicht nennt: er ist vom
+  // Rundenbeginn, und eine Seite, die seither kam, liefe noch einmal.
+  const schluessel = korbSchluessel({ id: blattId, lastPageAt: blatt.lastPageAt ?? lastPageAt });
+
+  if (fuerClaude.length === 0) {
+    sagen("   alle Seiten gelesen — kein Lauf, einordnen tut die App.");
+    gesehen.add(schluessel);
+    schreibeGesehen(gesehen);
+    return;
+  }
 
   // Das Token wird vor dem Lauf geholt und nicht währenddessen: es gilt eine
   // Stunde, der Lauf dauert Minuten, und in den Käfig kommt es als Datei.
@@ -504,8 +581,13 @@ async function blattEinordnen(
     verbindung.adresse,
     await verbindung.zugriffstoken(),
     modell,
-    auftragFuer(blattId, { seiten, capturedOn: blatt.capturedOn }),
-    fristFuer(seiten.length),
+    auftragFuer(blattId, {
+      seiten: fuerClaude,
+      capturedOn: blatt.capturedOn,
+      vollstaendig: fuerClaude.length === sortiert.length,
+      ersteSeiteDabei: fuerClaude[0] === sortiert[0]?.id,
+    }),
+    fristFuer(fuerClaude.length),
   );
 
   // Zwei Arten von „später", und sie unterscheiden sich hier in genau einem
@@ -536,12 +618,7 @@ async function blattEinordnen(
   }
 
   ausgang.gearbeitet = true;
-  // Der Stand, aus dem der Auftrag gebaut wurde — `read_sheet` liest ihn vor
-  // den Seiten. Kam danach eine Seite dazu, ist das Blatt mit ihr ein neuer
-  // Fall (siehe `korbSchluessel()`). Der Stand aus dem Korb ist nur der
-  // Rückfall für eine App, die ihn in read_sheet noch nicht nennt: er ist vom
-  // Rundenbeginn, und eine Seite, die seither kam, liefe noch einmal.
-  gesehen.add(korbSchluessel({ id: blattId, lastPageAt: blatt.lastPageAt ?? lastPageAt }));
+  gesehen.add(schluessel);
   schreibeGesehen(gesehen);
 
   if (ergebnis.art === "nichts") {
@@ -711,10 +788,33 @@ async function seitenNachlesen(
   const detail = await blattLesen(verbindung, blatt.id);
   if (!detail) return;
 
+  // Liest die App an diesem Blatt noch eine Seite, wartet die Nachlese — wie
+  // im Korb, und hier aus einem Grund mehr: gemerkt wird unter `lastPageAt`,
+  // und das ist schon das Datum der offenen Seite. Liefe die Nachlese jetzt
+  // für die übrigen Seiten, stünde das Blatt danach in gesehen.json, und fiele
+  // die offene Seite später Claude zu (Formel, Docling-Ausfall), bliebe sie
+  // unter demselben Schlüssel für immer ungelesen. Kein Lauf, kein Eintrag;
+  // die Nachlese fragt in einer Minute wieder.
+  if (detail.pages.some((seite) => seite.leser === "offen")) {
+    ausgang.beiDerApp.push(blatt.id);
+    return;
+  }
+
   const genannt = new Set(nachgereicht);
+  // Die App nennt als nachgereicht ohnehin nur Seiten, die Claude lesen soll
+  // (seit dem 6.10.2026 nie eine mit leser „offen" oder „docling"). Hier wird
+  // es trotzdem noch einmal geprüft, am frischen Stand: die Liste kann eine
+  // Minute alt sein, und eine Seite, die die App liest, wäre ein Lauf, dessen
+  // Abschrift propose_sheet ohnehin verwirft.
   const ziel = [...detail.pages]
     .sort((a, b) => a.sortOrder - b.sortOrder)
-    .filter((seite) => genannt.has(seite.id) && seite.transcriptChars === null)
+    .filter(
+      (seite) =>
+        genannt.has(seite.id) &&
+        seite.transcriptChars === null &&
+        seite.leser !== "offen" &&
+        seite.leser !== "docling",
+    )
     .map((seite) => seite.id);
   const vorherUngelesen = detail.pages
     .filter((seite) => seite.transcriptChars === null)
@@ -1025,8 +1125,8 @@ async function main(): Promise<void> {
   if (!einmal) sagen(`Sieht alle ${Math.round(intervall / 1000)} s nach. Beenden mit Strg-C.`);
 
   // Aufhören heißt aufhören: ohne diese Zeile bliebe der Prozess nach Strg-C
-  // noch bis zum Ende der laufenden Runde stehen, und das kann seit der Frist
-  // nach Seitenzahl eine Dreiviertelstunde dauern.
+  // noch bis zum Ende der laufenden Runde stehen, und das können drei Läufe
+  // mit voller Frist sein — fast eine Stunde.
   process.on("SIGINT", () => {
     sagen("Postbote macht Feierabend.");
     process.exit(0);
@@ -1037,11 +1137,17 @@ async function main(): Promise<void> {
   let pauseMs = PAUSE_ANFANG_MS;
   let letzterFehler: string | null = null;
   let letzteWartende = "";
+  let letzteBeiDerApp = "";
   const takt: NachleseTakt = { ab: 0, absage: null };
 
   for (;;) {
     if (Date.now() >= ruheBis) {
-      const ausgang: Rundenausgang = { gearbeitet: false, pause: null, wartend: [] };
+      const ausgang: Rundenausgang = {
+        gearbeitet: false,
+        pause: null,
+        wartend: [],
+        beiDerApp: [],
+      };
 
       try {
         await runde(verbindung, gesehen, modell, nurDieses, ruheMs, ausgang, takt);
@@ -1073,6 +1179,19 @@ async function main(): Promise<void> {
         sagen(`${ausgang.wartend.length} Blatt/Blätter warten noch auf Ruhe.`);
       }
       letzteWartende = wartende;
+
+      // Dasselbe für Blätter, an denen die App noch liest (seit dem
+      // 6.10.2026). Die ids stehen dabei, gekürzt: hängt eine Seite länger als
+      // ein paar Sekunden auf „offen", ist das die Stelle, an der man es sieht
+      // — warum, steht in den Zeilen „Leser …" im Log der App.
+      const beiDerApp = [...ausgang.beiDerApp].sort().join(",");
+      if (beiDerApp !== letzteBeiDerApp && ausgang.beiDerApp.length > 0) {
+        sagen(
+          `${ausgang.beiDerApp.length} Blatt/Blätter liest die App gerade selbst — kein Lauf: ` +
+            ausgang.beiDerApp.map((id) => id.slice(0, 8)).join(", "),
+        );
+      }
+      letzteBeiDerApp = beiDerApp;
 
       if (ausgang.gearbeitet) pauseMs = PAUSE_ANFANG_MS;
 

@@ -156,8 +156,21 @@ export function MaterialPages({ pages, title }: MaterialPagesProps) {
             />
 
             <figcaption className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1">
-              <span className="text-sm text-muted">
-                {`Seite ${index + 1} von ${pages.length} · ${formatBytes(page.byteSize)}`}
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+                <span>
+                  {`Seite ${index + 1} von ${pages.length} · ${formatBytes(page.byteSize)}`}
+                  {/* Die App entscheidet gerade, wer diese Seite liest, und
+                      lässt dafür Docling darüber laufen — ein paar Sekunden
+                      je Seite. Ohne den Satz sähe eine frische Seite aus wie
+                      eine, die niemand lesen will. Ein Stand vom Laden der
+                      Seite: wer neu lädt, sieht, wie es ausging. */}
+                  {page.leser === "offen" ? " · wird gerade gelesen" : null}
+                </span>
+
+                {/* Leise und nicht in der Warnfarbe: falsch ist an der Seite
+                    nichts, sie ist nur von niemandem gegengelesen. Was das
+                    heißt, steht am Abschriftfeld weiter unten. */}
+                {page.maschinell ? <MaschinellBadge /> : null}
               </span>
 
               {/* Die letzte Seite bekommt keinen Knopf: ein Blatt ohne Seite
@@ -194,6 +207,33 @@ export function MaterialPages({ pages, title }: MaterialPagesProps) {
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * Das Schild an einer Seite, deren Abschrift die App selbst geschrieben hat
+ * (Docling, seit dem 6.10.2026; `material_pages.maschinell`).
+ *
+ * Ein Schild und kein Satz, weil es an zwei Stellen steht, an denen nur eine
+ * Zeile Platz hat: in der Bildunterschrift und an der zugeklappten Zeile des
+ * Abschriftfeldes. Dort sagt es zugleich, dass ein fehlendes „unsicher“
+ * nichts heißt — Docling setzt keine ⟨Klammern⟩, auch nicht, wo es sich
+ * verlesen hat.
+ */
+function MaschinellBadge({ kurz = false }: { kurz?: boolean }) {
+  return (
+    <span className="shrink-0 rounded-pill border border-border px-2 py-0.5 text-xs text-muted">
+      {kurz ? (
+        // An der zugeklappten Zeile ist neben Vorschaubild, Seitenzahl und
+        // „2 unsicher“ am Handy kein Platz für mehr als ein Wort. Vorgelesen
+        // wird trotzdem der ganze Name.
+        <>
+          maschinell<span className="sr-only"> gelesen (Docling)</span>
+        </>
+      ) : (
+        "maschinell gelesen (Docling)"
+      )}
+    </span>
   );
 }
 
@@ -406,8 +446,27 @@ export type MaterialFormPage = MaterialPageWithTranscript & {
 };
 
 /**
- * Der Satz unter einem Abschriftfeld: was dort gerade steht und was das
- * Absenden daraus macht.
+ * Der Satz unter einem Abschriftfeld: wer den gespeicherten Text geschrieben
+ * hat, was dort gerade steht und was das Absenden daraus macht.
+ *
+ * Hat die App die Abschrift aus Docling geschrieben (`maschinell`), steht das
+ * VOR jedem anderen Satz: es sagt, wie viel der Text im Feld taugt. Der zweite
+ * Halbsatz ist die Regel aus `setMaterialTranscripts()` in @/lib/materials —
+ * geänderter Text verliert die Kennzeichnung, unveränderter behält sie —, und
+ * wer das nicht weiß, wundert sich, warum das Schild nach dem Speichern weg
+ * ist.
+ */
+function transcriptHint(page: MaterialFormPage): string | undefined {
+  const hinweis = vorlageHint(page);
+  if (!page.maschinell) return hinweis;
+
+  const satz =
+    "Maschinell gelesen (Docling), von niemandem gegengelesen. Wer den Text ändert, macht daraus eine Abschrift von Hand.";
+  return hinweis ? `${satz} ${hinweis}` : satz;
+}
+
+/**
+ * Was Vorbelegung und gespeicherte Abschrift zueinander sagen.
  *
  * Vier Fälle, und drei davon gäbe es ohne die Unterscheidung zwischen NULL und
  * leerem String gar nicht. Der fünfte — der Vorschlag sagt zu dieser Seite
@@ -415,7 +474,7 @@ export type MaterialFormPage = MaterialPageWithTranscript & {
  * zwölfmal „stimmt so“ zu lesen, macht die eine Seite unsichtbar, an der etwas
  * steht.
  */
-function transcriptHint(page: MaterialFormPage): string | undefined {
+function vorlageHint(page: MaterialFormPage): string | undefined {
   // Der Vorschlag sagt „ich habe hingesehen, da steht nichts“ — und das sieht
   // im leeren Feld genauso aus wie „ich habe nicht hingesehen“. Ohne diesen
   // Satz wäre die Aussage des Agenten auf dem Bildschirm nicht vorhanden.
@@ -542,6 +601,10 @@ function TranscriptField({
               {uncertainBadge(marks.length)}
             </span>
           ) : null}
+
+          {/* Am GESPEICHERTEN Stand und nicht am Feldinhalt: die Kennzeichnung
+              fällt erst beim Speichern, und bis dahin ist sie wahr. */}
+          {page.maschinell ? <MaschinellBadge kurz /> : null}
         </summary>
 
         <div className="border-t border-border bg-surface p-3 sm:p-4">

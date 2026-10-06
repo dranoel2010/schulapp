@@ -1,28 +1,36 @@
 import { timeInBerlin } from "@/lib/dates";
 
 /**
- * Docling — der zweite Leser eines Fotos, für das Gedruckte.
+ * Docling — der Leser der App für sauberen Druck.
  *
  * Docling (IBM, offen) wandelt eine Seite in Text um und läuft als eigener
  * Container auf dem NAS (`docling-serve-cpu`), nur im Heimnetz erreichbar.
- * Was es gut kann, ist genau das, was beim Abschreiben am teuersten falsch
- * wird: gedruckter Text Zeichen für Zeichen, Tabellen als Tabellen, Formeln
- * als LaTeX. Was es nicht kann, ist Handschrift — dafür ist es nicht gebaut,
- * und dafür bleibt Claude.
+ * Was es gut kann, ist gedruckter Text Zeichen für Zeichen und Tabellen als
+ * Tabellen. Was es nicht kann, ist Handschrift — gemessen am 5.10.2026 an 37
+ * Seiten: gedruckt rund 94 %, Handschrift rund 32 %, und das als Kauderwelsch.
  *
- * Deshalb ist Docling hier eine VORLAGE und keine Abschrift. Der Postbote ruft
- * `read_docling`, übernimmt Gedrucktes, Tabellen und Formeln von dort und
- * ergänzt die Handschrift aus dem Foto. In die Datenbank kommt nichts davon
- * direkt; gespeichert wird weiter nur, was über `propose_sheet` hereinkommt.
+ * Seit dem 6.10.2026 liest jede Seite genau EIN Leser, und die App
+ * entscheidet, welcher (@/lib/leser/zuteilung). Die Zuteilung schickt jede
+ * neue Seite genau einmal hierher, gleich nach dem Hochladen; Doclings
+ * Rohtext steht danach in `material_pages.docling_text` und wird nie neu
+ * gerechnet. Ist er sauberer Druck (feste Regel plus Jev), wird er die
+ * Abschrift der Seite; sonst liest Claude die Seite vom Foto — ohne Doclings
+ * Text daneben. Ein Werkzeug für Agenten gibt es nicht mehr, und eine Vorlage
+ * für Claude auch nicht: bis zum 6.10.2026 rechnete Docling jede Seite für den
+ * Postboten vor (`read_docling`), und Claude schrieb sie danach trotzdem
+ * vollständig ab — zwei Leser für jede Seite, und wer was übernimmt, entschied
+ * ein Satz im Prompt.
  *
  * Eingebaut am 4.10.2026 auf ausdrücklichen Wunsch („wir binden das ein").
- * Ohne `DOCLING_URL` meldet das Werkzeug, dass Docling fehlt, und der
- * Postbote liest wie bisher nur das Foto.
+ * Ohne `DOCLING_URL` fragt die Zuteilung Docling nicht und gibt jede Seite
+ * Claude, wie vor Docling.
  */
 
 /**
  * Auf dem Prozessor des NAS braucht eine Seite mit Formeln spürbar. Länger
- * wartet niemand — dann liest der Postbote eben nur das Foto.
+ * wartet die Zuteilung nicht — dann liest Claude die Seite vom Foto. Die
+ * Zuteilung arbeitet nach dem Hochladen und nicht in einer Anfrage, also
+ * wartet in dieser Zeit niemand außer den Seiten dahinter.
  */
 const TIMEOUT_MS = 180_000;
 
@@ -30,7 +38,7 @@ export function doclingConfigured(): boolean {
   return Boolean(process.env.DOCLING_URL);
 }
 
-/** Die Form, die das Werkzeug zurückgibt. */
+/** Was Docling zu einer Seite zurückgibt. */
 export type DoclingResult = {
   markdown: string;
   /** Sekunden, die Docling selbst gerechnet hat. */
@@ -44,8 +52,11 @@ export type DoclingResult = {
  * - `force_ocr`: Ein Foto hat keine Textebene; ohne OCR käme nichts heraus.
  * - Sprachen Deutsch, Französisch, Englisch — die Fächer, in denen geschrieben
  *   wird.
- * - `do_formula_enrichment`: Formeln als LaTeX. Der Grund, warum es Docling
- *   hier überhaupt gibt.
+ * - `do_formula_enrichment`: Formeln als LaTeX. Seit dem 6.10.2026 liest
+ *   Docling eine Seite mit Formelverdacht nie allein (@/lib/leser/regel), die
+ *   Einstellung bleibt trotzdem: die Messung an 37 Seiten, auf der die Regel
+ *   steht, ist mit ihr gemacht. Ob sie entfallen kann, muss erst eine
+ *   Gegenmessung ohne sie zeigen.
  * - `image_export_mode=placeholder`: Bilder auf dem Blatt als Platzhalter und
  *   nicht als Base64 — sonst wöge die Antwort mehr als das Foto.
  *
@@ -91,11 +102,13 @@ const POLL_MS = 500;
  *
  * Die Unterscheidung ist der Grund, warum es diese Klasse gibt. Scheitert eine
  * einzelne Seite („failure" am Ende der Aufgabe), ist die nächste Seite davon
- * unberührt — dann soll der Postbote es dort ruhig wieder versuchen. Kennt
+ * unberührt — dann soll die Zuteilung Docling dort ruhig wieder fragen. Kennt
  * Docling die Aufgabe dagegen nicht mehr (404 nach einem Neustart), antwortet
  * es mit 5xx oder gar nicht, dann geht es der nächsten Seite genauso, und jede
  * kostete bis zu `TIMEOUT_MS`. Genau diese Fälle öffnen den Schalter weiter
- * unten; ein gewöhnliches `Error` öffnet ihn nicht.
+ * unten; ein gewöhnliches `Error` öffnet ihn nicht. Die Zuteilung schreibt
+ * beides verschieden in `leser_grund`: „docling-ausfall" und
+ * „docling-fehler" — in beiden Fällen liest Claude die Seite.
  *
  * Der Zeitablauf des Clients kommt nicht immer als diese Klasse an — reißt
  * `AbortSignal.timeout()` mitten in einer Anfrage ab, wirft fetch einen
@@ -128,9 +141,10 @@ export class DoclingAusfall extends Error {
  *   Antwort keinen Status und fragte bis zum Ende der Frist nach — drei Minuten
  *   für eine Aufgabe, die es nicht mehr gab.
  * - Leeres Ergebnis mit einem anderen Status als „success": ein Fehler und
- *   keine leere Seite. Sonst läse `read_docling` daraus „vermutlich alles
- *   Handschrift", und das wäre über eine Seite, die Docling gar nicht
- *   fertig gelesen hat, eine Behauptung ohne Grundlage.
+ *   keine leere Seite. Sonst hielte die Zuteilung eine Seite, die Docling gar
+ *   nicht fertig gelesen hat, für eine ohne Gedrucktes — mit demselben
+ *   Ergebnis (Claude liest), aber mit einem falschen Grund in `leser_grund`,
+ *   und an dem soll sich die Regel später nachmessen lassen.
  */
 export async function convertPage(
   bytes: Uint8Array<ArrayBuffer>,
@@ -264,16 +278,17 @@ export function trifftDocling(error: unknown): boolean {
  * Wie lange Docling nach einem Ausfall in Ruhe gelassen wird.
  *
  * Eingebaut am 4.10.2026. Ohne die Pause kostete ein hängendes Docling jede
- * Seite die vollen `TIMEOUT_MS`: ein Blatt mit acht Seiten wartete 24 Minuten
- * und lief damit sicher in die Frist des Postboten — Runde für Runde, und die
- * Blätter dahinter warteten mit. Mit der Pause zahlt die erste Seite einmal,
- * alles danach liest sofort nur das Foto.
+ * Seite die vollen `TIMEOUT_MS`: ein Blatt mit acht Seiten wartete 24 Minuten,
+ * bevor die Zuteilung es Claude gibt, und die Seiten dahinter warteten mit —
+ * die Zuteilung liest eine Seite nach der anderen. Mit der Pause zahlt die
+ * erste Seite einmal; jede Seite danach fragt Docling gar nicht erst und geht
+ * sofort an Claude („docling-pause" in `leser_grund`). Eine Seite, die in der
+ * Pause an Claude ging, bleibt dort — nachgeholt wird nichts.
  *
  * Zehn Minuten, weil eine abgebrochene Aufgabe in docling-serve weiterläuft
  * (es gibt keinen Weg, sie abzubrechen) und dort Rechenzeit belegt; kürzer
  * hieße, die nächste Seite in genau diesen Stau zu schicken. Die Pause gilt
- * für den ganzen Prozess — Postbote, Nachlese und jeder andere Client
- * gleichermaßen — und vergisst sich bei einem Neustart der App, was in
+ * für den ganzen Prozess und vergisst sich bei einem Neustart der App, was in
  * Ordnung ist: dann ist meist auch Docling neu.
  */
 export const PAUSE_MS = 10 * 60_000;
@@ -308,129 +323,22 @@ export function neuerSchalter(pauseMs: number = PAUSE_MS): Schalter {
 }
 
 /**
- * Wie lange ein gelesenes Ergebnis im Vorrat bleibt, und wie viele höchstens.
+ * Der Schalter des Prozesses — an `globalThis`, aus demselben Grund wie die
+ * Datenbank in @/db: Next kann dieses Modul in mehreren Bündeln auswerten,
+ * und zwei Schalter wüssten nichts voneinander — der eine schickte die
+ * nächste Seite in den Stau, vor dem der andere gerade pausiert.
  *
- * Eine Stunde reicht über einen Lauf des Postboten und seinen nächsten
- * Versuch hinaus, wenn ein Lauf an der Frist scheiterte. Fünfzig Seiten sind
- * vier volle Blätter; ein Ergebnis wiegt ein paar Kilobyte Markdown.
- */
-export const VORRAT_TTL_MS = 60 * 60_000;
-export const VORRAT_MAX = 50;
-
-/** Ein Vorrat laufender und fertiger Umrechnungen, je Schlüssel eine. */
-export type Vorrat<T> = {
-  /**
-   * Die Umrechnung zu diesem Schlüssel — die vorhandene, wenn es sie gibt,
-   * sonst eine neue aus `load`. `treffer` sagt, welches von beiden.
-   */
-  holen(
-    key: string,
-    load: () => Promise<T>,
-    now?: number,
-  ): { promise: Promise<T>; treffer: boolean };
-  /**
-   * Das FERTIGE Ergebnis zu diesem Schlüssel, ohne etwas anzustoßen — `null`,
-   * wenn es keins gibt, es abgelaufen ist oder die Umrechnung noch läuft.
-   *
-   * Für die Pause (`read_docling`, seit dem 4.10.2026): solange Docling ruht,
-   * soll nichts darauf warten und nichts Neues beginnen, aber was schon fertig
-   * dasteht, ist gelesen und kostet Docling nichts mehr. Ein Treffer hier lässt
-   * den Eintrag, wo er ist, und verdrängt nichts.
-   */
-  fertig(key: string, now?: number): { wert: T } | null;
-  groesse(): number;
-};
-
-/**
- * Ein neuer Vorrat.
- *
- * **Der Eintrag steht, bevor irgendetwas wartet.** `load` beginnt erst im
- * nächsten Mikrotask, der Eintrag ist da schon gesetzt. Ein zweiter Aufruf zum
- * selben Schlüssel — `read_docling` zweimal nebeneinander, oder Anfrage und
- * Vorauslesen — findet ihn deshalb immer und rechnet dieselbe Seite nicht
- * zweimal. Stünde der Eintrag erst hinter einem `await`, fände ihn der zweite
- * Aufruf genau in dem Moment nicht, in dem es darauf ankommt.
- *
- * **Ein Fehlschlag bleibt nicht liegen.** Der Eintrag geht weg, sobald die
- * Umrechnung scheitert; der nächste Versuch rechnet neu. Gelöscht wird nur,
- * wenn noch derselbe Eintrag dasteht — ein neuerer bleibt.
- *
- * Abgelaufene Einträge fallen beim nächsten Anlegen weg, und ist der Vorrat
- * dann noch voll, der älteste. Ein so verdrängter Eintrag, der noch rechnet,
- * rechnet weiter; wer auf ihn wartet, bekommt sein Ergebnis trotzdem.
- *
- * **Fertig heißt: das Ergebnis steht am Eintrag.** Ein Promise lässt sich
- * nicht fragen, ob es schon erfüllt ist; deshalb schreibt der Vorrat das
- * Ergebnis beim Erfüllen selbst an den Eintrag (`ergebnis`), und `fertig()`
- * liest nur das. Die Rückmeldung hängt am Promise, bevor irgendjemand anderes
- * darauf wartet — wer `await holen(…).promise` hinter sich hat, findet den
- * Eintrag also schon fertig vor.
- */
-export function neuerVorrat<T>(
-  ttlMs: number = VORRAT_TTL_MS,
-  max: number = VORRAT_MAX,
-): Vorrat<T> {
-  const eintraege = new Map<
-    string,
-    { promise: Promise<T>; at: number; ergebnis: { wert: T } | null }
-  >();
-
-  return {
-    fertig(key, now = Date.now()) {
-      const da = eintraege.get(key);
-      if (!da || now - da.at >= ttlMs) return null;
-      return da.ergebnis;
-    },
-    holen(key, load, now = Date.now()) {
-      const da = eintraege.get(key);
-      if (da && now - da.at < ttlMs) return { promise: da.promise, treffer: true };
-
-      eintraege.delete(key);
-      for (const [alt, eintrag] of eintraege) {
-        if (now - eintrag.at >= ttlMs) eintraege.delete(alt);
-      }
-      // Eine Map zählt in der Reihenfolge des Einfügens; der erste Schlüssel
-      // ist also der älteste.
-      while (eintraege.size >= max) {
-        const aeltester = eintraege.keys().next().value;
-        if (aeltester === undefined) break;
-        eintraege.delete(aeltester);
-      }
-
-      const promise = Promise.resolve().then(load);
-      const eintrag = { promise, at: now, ergebnis: null as { wert: T } | null };
-      eintraege.set(key, eintrag);
-      promise.then(
-        (wert) => {
-          eintrag.ergebnis = { wert };
-        },
-        () => {
-          if (eintraege.get(key) === eintrag) eintraege.delete(key);
-        },
-      );
-
-      return { promise, treffer: false };
-    },
-    groesse() {
-      return eintraege.size;
-    },
-  };
-}
-
-/**
- * Schalter und Vorrat des Prozesses — an `globalThis`, aus demselben Grund wie
- * die Datenbank in @/db: Next kann dieses Modul in mehreren Bündeln auswerten,
- * und zwei Vorräte rechneten dieselbe Seite zweimal.
+ * Bis zum 6.10.2026 stand daneben ein Vorrat fertiger Umrechnungen, für
+ * `read_docling` und das Vorauslesen der nächsten Seite. Seit Docling jede
+ * Seite genau einmal liest und das Ergebnis in `material_pages.docling_text`
+ * steht, ist die Datenbank dieser Vorrat.
  */
 const globalForDocling = globalThis as unknown as {
-  __schulappDocling?: { schalter: Schalter; vorrat: Vorrat<DoclingResult> };
+  __schulappDocling?: { schalter: Schalter };
 };
 
 function prozess() {
-  globalForDocling.__schulappDocling ??= {
-    schalter: neuerSchalter(),
-    vorrat: neuerVorrat<DoclingResult>(),
-  };
+  globalForDocling.__schulappDocling ??= { schalter: neuerSchalter() };
   return globalForDocling.__schulappDocling;
 }
 
@@ -456,51 +364,4 @@ export function doclingFehlschlag(error: unknown, now: number = Date.now()): boo
   }
 
   return offen;
-}
-
-/**
- * Die Umrechnung einer Seite, aus dem Vorrat oder neu.
- *
- * Geschlüsselt nach Nutzer UND Seite. `load` prüft beim ersten Mal, dass die
- * Seite diesem Nutzer gehört (`readPageImage()`); ein späterer Treffer
- * überspringt das, und das darf er nur, weil derselbe Nutzer im Schlüssel
- * steht. Ein Schlüssel aus der Seite allein gäbe einem Fremden, der die id
- * errät, das Markdown eines anderen Blattes.
- *
- * Der Schlüssel nimmt an, dass sich die Bytes einer Seite nie ändern. Das gilt
- * heute — eine Seite lässt sich löschen, aber nicht ersetzen oder drehen. Kommt
- * so etwas dazu, muss es hier den Eintrag wegnehmen.
- */
-export function doclingFor(
-  userId: string,
-  pageId: string,
-  load: () => Promise<DoclingResult>,
-  now: number = Date.now(),
-): { promise: Promise<DoclingResult>; treffer: boolean } {
-  return prozess().vorrat.holen(vorratsSchluessel(userId, pageId), load, now);
-}
-
-/**
- * Die schon fertige Umrechnung einer Seite, oder `null` — ohne zu warten und
- * ohne Docling zu fragen.
- *
- * Für die Pause, seit dem 4.10.2026: vorher wies `read_docling` während der
- * Pause jede Seite ab, auch eine, die längst fertig im Vorrat lag — meist
- * genau die, die das Vorauslesen kurz vor dem Ausfall noch geschafft hatte.
- * Derselbe Schlüssel wie bei `doclingFor()`, mit dem Nutzer darin; ein Treffer
- * heißt also, dass DIESER Nutzer die Seite schon einmal lesen durfte.
- */
-export function doclingFertig(
-  userId: string,
-  pageId: string,
-  now: number = Date.now(),
-): DoclingResult | null {
-  return (
-    prozess().vorrat.fertig(vorratsSchluessel(userId, pageId), now)?.wert ??
-    null
-  );
-}
-
-function vorratsSchluessel(userId: string, pageId: string): string {
-  return `${userId}:${pageId}`;
 }

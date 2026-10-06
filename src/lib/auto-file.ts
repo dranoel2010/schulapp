@@ -15,7 +15,11 @@ import {
   topicQuestions,
   type JevSubject,
 } from "@/lib/jev";
+import { titelAusErsterSeite } from "@/lib/leser/abschrift";
 import {
+  MATERIAL_TITLE_MAX,
+  defaultMaterialTitle,
+  ersteSeiteDocling,
   listMaterialTranscripts,
   type MaterialDetail,
   type MaterialPageTranscript,
@@ -25,13 +29,27 @@ import { listTopicsForSubjects } from "@/lib/subject-topics";
 import { listSubjects } from "@/lib/subjects";
 
 /**
- * Ein Foto, sonst nichts: Jev ordnet ein, was der Postbote abgeschrieben hat.
+ * Ein Foto, sonst nichts: Jev ordnet ein, was gelesen ist — von Claude oder
+ * von der App (Docling).
  *
  * Auftrag vom 4.10.2026: „so bauen, dass ich nur noch ein Foto machen muss“,
  * und auf die Frage, ob Claude und Jev sich dafür einig sein müssen: „wir
  * vertrauen Jev“. Also entscheidet Jev allein über Fach und Themen, und die
- * App übernimmt das ohne Rückfrage. Claude bleibt für das, was Jev nicht
- * kann — abschreiben, einen Titel finden, eine Notiz schreiben.
+ * App übernimmt das ohne Rückfrage. Abschreiben, einen Titel finden, eine
+ * Notiz schreiben kann Jev nicht — das bleibt beim Leser der Seite.
+ *
+ * Seit dem 6.10.2026 hat jede Seite genau einen Leser, und die App
+ * entscheidet, welchen (@/lib/leser/zuteilung). Daraus folgen zwei Wege in
+ * diese Funktion, und beide gehen durch dieselbe Tür:
+ *
+ * - **Ein Vorschlag des Postboten** (origin „agent“). Er bringt die
+ *   Abschrift der Claude-Seiten; die Docling-Seiten desselben Blattes stehen
+ *   schon im Bestand. Jev liest beides zusammen, und übernommen wird nur auf
+ *   Seiten ohne Abschrift (`nurUngelesene`) — eine Docling-Abschrift ersetzt
+ *   hier nichts still.
+ * - **Ein Vorschlag der App** (origin „app“) für ein Blatt, das Docling ganz
+ *   gelesen hat. Er trägt nur einen Titel; den Text liest Jev aus dem
+ *   Bestand.
  *
  * Der Agent darf dabei weiterhin nichts ändern. Er legt einen Vorschlag an,
  * wie bisher; übernommen wird von der App, nach dieser Regel, durch dieselbe
@@ -47,7 +65,9 @@ import { listSubjects } from "@/lib/subjects";
  * Fach, Titel, Tag, Notiz und Themen bleiben, wie sie sind. Die Ausnahme gilt
  * nur für Seiten, die die App selbst als nachgereicht kennt
  * (`onlyTranscribesAttachedPages()`); ein Nachlese-Vorschlag zu den alten
- * Seiten eines Altblatts bleibt für einen Menschen im Korb.
+ * Seiten eines Altblatts bleibt für einen Menschen im Korb. Eine nachgereichte
+ * Druckseite braucht diesen Weg nicht: ihre Abschrift schreibt die Zuteilung
+ * selbst.
  *
  * Im Korb bleibt ein Blatt nur noch, wenn das Einordnen nicht gehen kann:
  * kein Schlüssel eingerichtet, Jev nicht erreichbar, oder auf dem Blatt ist so
@@ -217,13 +237,17 @@ export async function autoFile(
     return { ok: false, grund: "Jev ist nicht eingerichtet." };
   }
 
-  // Der Text, den Jev liest: was der Vorschlag mitbringt, sonst was am Blatt
-  // schon steht. Je Seite das eine oder das andere, in der Seitenfolge.
+  // Der Text, den Jev liest: was am Blatt schon steht, sonst was der
+  // Vorschlag mitbringt. Je Seite das eine oder das andere, in der
+  // Seitenfolge. Der Bestand zuerst (seit dem 6.10.2026), weil übernommen
+  // ohnehin nur auf ungelesene Seiten wird (`nurUngelesene` unten): Jev soll
+  // das Blatt so einordnen, wie es danach dasteht — mit den
+  // Docling-Abschriften, die schon im Bestand sind.
   const vorgeschlagen = new Map(
     proposal.transcripts.map((entry) => [entry.pageId, entry.text] as const),
   );
   const text = pages
-    .map((page) => vorgeschlagen.get(page.pageId) ?? page.transcript ?? "")
+    .map((page) => page.transcript ?? vorgeschlagen.get(page.pageId) ?? "")
     .filter((entry) => entry.trim() !== "")
     .join("\n\n");
 
@@ -269,12 +293,26 @@ export async function autoFile(
     topics = readTopics(candidates, themen.answers);
   }
 
+  // Der Titel: Claudes, wenn Claude einen gefunden hat. Sonst, solange am
+  // Blatt noch der Platzhalter steht und die erste Seite eine Docling-Seite
+  // ist, deren erste Überschrift — so bekommt auch ein gemischtes Blatt einen
+  // Titel, dessen erste Seite Claude nie gesehen hat. Sonst bleibt der Titel
+  // des Blattes (`prefillFromProposal()` bei `null`).
+  const titel =
+    proposal.title ??
+    titelAusErsterSeite(
+      material.title,
+      defaultMaterialTitle(material.capturedOn),
+      await ersteSeiteDocling(userId, material.id),
+      MATERIAL_TITLE_MAX,
+    );
+
   const { werte } = prefillFromProposal(
     ausgangslage(material, pages),
     {
       subjectId: chosen.subject.id,
       subjectName: null,
-      title: proposal.title,
+      title: titel,
       capturedOn: proposal.capturedOn,
       note: proposal.note,
       topics,
@@ -282,7 +320,11 @@ export async function autoFile(
     },
   );
 
-  const applied = await applyProposal(userId, material.id, werte);
+  // `nurUngelesene`: auch hier, ohne Menschen, ersetzt keine Abschrift eine
+  // vorhandene — vor allem keine, die Docling geschrieben hat.
+  const applied = await applyProposal(userId, material.id, werte, {
+    nurUngelesene: true,
+  });
   if (!applied) return { ok: false, grund: "Das Blatt gibt es nicht mehr." };
 
   return {

@@ -40,6 +40,13 @@ export type Frage = {
   sourceQuote: string;
   blattTitel: string;
   seitenNummer: number;
+  /**
+   * Hat die App die Seite des Zitats maschinell gelesen (Docling)? Die Tür
+   * beim Bauen prüft das Zitat gegen die Abschrift — stimmt die nicht, weil
+   * Docling sich verlesen hat, prüft sie gegen einen Lesefehler, und die
+   * Frage steht trotzdem sauber gebunden da. Dann muss das Foto entscheiden.
+   */
+  maschinell: boolean;
 };
 
 export type Vorschlag = {
@@ -149,6 +156,15 @@ export function ProposalView({ vorschlag }: { vorschlag: Vorschlag }) {
                   <div className="ml-7 rounded-control border border-border bg-surface-muted px-3 py-2">
                     <p className="text-xs text-subtle">
                       {frage.blattTitel} · Seite {frage.seitenNummer}
+                      {/* In der Warnfarbe, weil es eine Bitte ist und keine
+                          Auskunft: wer übernimmt, ohne hinzusehen, übernimmt
+                          womöglich eine Frage zu einem Wort, das nie auf dem
+                          Blatt stand. */}
+                      {frage.maschinell ? (
+                        <span className="text-warning">
+                          {" · Quelle maschinell gelesen (Docling) – Zitat am Foto prüfen"}
+                        </span>
+                      ) : null}
                     </p>
                     <p className="mt-1 text-sm whitespace-pre-wrap text-foreground">
                       {frage.sourceQuote}

@@ -546,6 +546,75 @@ describe("buildSubjectPdf", () => {
   });
 });
 
+describe("der Vermerk an maschinell gelesenen Seiten", () => {
+  /*
+   * Gedruckt wird der Satz in Glyphen einer eingebetteten Teilschrift und in
+   * einem gepackten Strom — in den Bytes steht er nicht lesbar. Geprüft wird
+   * deshalb über den Vergleich ganzer Dokumente: Dieselben Blätter müssen
+   * Byte für Byte dasselbe PDF ergeben, wenn kein Vermerk dazukommt, und ein
+   * anderes, längeres, wenn einer dazukommt. Damit das geht, steht die Uhr
+   * still — pdfkit schreibt das Erstellungsdatum ins Dokument und rechnet
+   * daraus die Kennung der Datei.
+   */
+  const BLATT: PdfSheetEntry = {
+    id: "m",
+    title: "Handout — Kettenregel",
+    capturedOn: "2026-10-06",
+    note: null,
+    topics: ["Kettenregel"],
+    pages: [
+      { pageId: "m1", transcript: "Die Kettenregel gilt für verkettete Funktionen." },
+      { pageId: "m2", transcript: "" },
+      { pageId: "m3", transcript: null },
+    ],
+  };
+
+  /** Das Blatt, nur mit `maschinell` an den Seiten mit diesen Nummern (ab 1). */
+  function mitMaschinell(...nummern: number[]): PdfSheetEntry {
+    return {
+      ...BLATT,
+      pages: BLATT.pages.map((page, index) => ({
+        ...page,
+        maschinell: nummern.includes(index + 1),
+      })),
+    };
+  }
+
+  const bau = (blatt: PdfSheetEntry) =>
+    buildSubjectPdf({ ...EINGABE, sheets: [blatt] }, async () => ({ kind: "gone" }));
+
+  function gleich(a: Uint8Array, b: Uint8Array): boolean {
+    return Buffer.from(a).equals(Buffer.from(b));
+  }
+
+  it("ändert ohne das Feld kein einziges Byte", async (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 9, 6, 12) });
+
+    const ohneFeld = await bau(BLATT);
+    // Die Gegenprobe zuerst: Steht die Uhr wirklich, kommt dasselbe zweimal
+    // gleich heraus. Sonst bewiese der Vergleich unten nichts.
+    assert.ok(gleich(ohneFeld, await bau(BLATT)), "das PDF ist nicht wiederholbar");
+
+    assert.ok(gleich(ohneFeld, await bau(mitMaschinell())));
+  });
+
+  it("vermerkt nichts an ungelesenen und leeren Seiten", async (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 9, 6, 12) });
+
+    assert.ok(gleich(await bau(BLATT), await bau(mitMaschinell(2, 3))));
+  });
+
+  it("schreibt den Vermerk an eine maschinell gelesene Abschrift", async (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 9, 6, 12) });
+
+    const ohne = await bau(BLATT);
+    const mit = await bau(mitMaschinell(1));
+
+    assert.ok(!gleich(ohne, mit), "der Vermerk fehlt");
+    assert.ok(mit.byteLength > ohne.byteLength);
+  });
+});
+
 describe("withDeadline", () => {
   /*
    * Die Frist, die aus „das Dokument wird nie fertig" einen Fehler macht.

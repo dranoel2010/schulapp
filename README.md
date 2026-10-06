@@ -32,11 +32,14 @@ Das Herzstück, und der Grund für fast alles, was seit dem 21. August dazukam:
    Stundenplan, sonst aus dem zuletzt fotografierten Blatt — und steht sichtbar
    auf dem Kamerabild.
 
-3. **Jemand sieht hin.** Läuft [der Postbote](harness/README.md), schaut er alle
-   zwei Minuten in den Korb und setzt Claude auf jedes Blatt an, das noch keinen
-   Vorschlag hat. Er liest das Blatt, entscheidet über das Fach, schlägt Titel
-   und Themen vor, **schreibt jede Seite wörtlich ab** und vermerkt in einer
-   Notiz, was er **nicht** sicher weiß.
+3. **Jemand liest — je Seite genau einer.** Gleich nach dem Hochladen schickt
+   die App jede Seite durch Docling, eine Texterkennung auf dem NAS. Ist das
+   sauberer Druck, ist die Seite damit gelesen. Den Rest — Handschrift,
+   Formeln, alles Unsichere — liest Claude: Läuft [der Postbote](harness/README.md),
+   schaut er alle 15 Sekunden in den Korb, **schreibt diese Seiten wörtlich ab**,
+   schlägt Titel und Tag vor und vermerkt in einer Notiz, was er **nicht**
+   sicher weiß. Fach und Themen bestimmt danach Jev (siehe
+   [Jev ordnet ein](#jev-ordnet-ein--seit-dem-4102026-ohne-eingangskorb)).
 
 4. **Ein Druck.** Im Korb steht der Vorschlag mit Fach, Titel, Themen, Notiz und
    der Abschrift. *Übernehmen* schreibt ihn ans Blatt und hakt es ab. *Erst
@@ -54,6 +57,14 @@ und genau die zeigt das Formular hervorgehoben an, mit der Zahl daneben. Man
 korrigiert also nicht den ganzen Text, sondern die drei Stellen, an denen es
 darauf ankommt. Die Zahl zählt beim Tippen mit; wenn sie auf null steht, ist man
 fertig.
+
+**Gedrucktes liest die App selbst** (seit dem 6.10.2026). Eine solche Seite
+trägt den Vermerk „maschinell gelesen (Docling)" — am Blatt, im Korb, im PDF
+und im Wiki —, und sie hat **keine** spitzen Klammern: Docling weiß nicht, wo
+es unsicher war. Gegengelesen hat sie niemand. Wer ihren Text im Formular
+ändert, macht daraus eine Abschrift von Hand, und der Vermerk geht. Wann die
+App selbst liest und wann Claude, steht unter
+[Ein Leser je Seite](#ein-leser-je-seite--die-app-entscheidet).
 
 **Leer und ungelesen sind zweierlei.** Eine Seite, auf der wirklich nichts steht,
 ist gelesen. Eine, die zu unscharf war, ist es nicht und kommt nach einem
@@ -550,8 +561,11 @@ npx tsx harness/zugang.mts     # einmal zustimmen
 npx tsx harness/postbote.mts   # laufen lassen
 ```
 
-Es gehört ausdrücklich **nicht zur App**: abgeschrieben wird außerhalb, die App
-selbst ruft dafür kein Modell. Der Postbote benutzt sie von außen, durch dieselbe Tür wie die
+Es gehört ausdrücklich **nicht zur App**: was Claude abschreibt, schreibt es
+außerhalb ab. Welche Seiten das sind, entscheidet seit dem 6.10.2026 die App —
+sauberen Druck liest sie selbst mit Docling, der Postbote bekommt den Rest
+(siehe [Ein Leser je Seite](#ein-leser-je-seite--die-app-entscheidet)). Er
+benutzt sie von außen, durch dieselbe Tür wie die
 Claude-App, mit eigener Zustimmung und eigenem Trennen-Knopf in den
 Einstellungen. Er läuft über Claude Code und damit über das Abo — kein
 API-Schlüssel, keine Rechnung.
@@ -578,14 +592,18 @@ Nachlese schickt Abschriften durch dieselbe Tür.
 
 **Nachgereichte Seiten.** Hängt jemand an ein schon eingeordnetes Blatt eine
 Seite an — oder kommt eine Seite dazu, während der Postbote das Blatt gerade
-liest —, liest der Postbote sie von selbst nach, und die App übernimmt die
-reine Abschrift ohne Jev und ohne Rückfrage. Welche Seite als nachgereicht
-gilt, bestimmt die App (`nachgereichtUngelesen()` in `src/lib/materials.ts`):
-ungelesen, und entweder nach dem Einordnen hochgeladen oder nach einer schon
-abgeschriebenen Seite desselben Blattes. Die fünfzehn Altblätter vom August
-haben keine abgeschriebene Seite und bleiben damit außen vor — und schreibt
-ein Lauf ihre alten Seiten trotzdem mit ab, bleibt der Vorschlag für einen
-Menschen im Korb (`onlyTranscribesAttachedPages()` in `src/lib/auto-file.ts`).
+liest —, entscheidet die App auch für sie, wer liest. Liest Docling, steht die
+Abschrift gleich da. Liest Claude, holt der Postbote sie von selbst nach, und
+die App übernimmt die reine Abschrift ohne Jev und ohne Rückfrage. Welche Seite
+als nachgereicht gilt, bestimmt die App (`nachgereichtUngelesen()` in
+`src/lib/materials.ts`): ungelesen an einem eingeordneten Blatt, und dann nach
+`leser` — „claude" immer, „offen" und „docling" nie (die liest die App selbst),
+und eine Seite von vor dem 6.10.2026 (`leser` leer) wie bis dahin: nach dem
+Einordnen hochgeladen oder jünger als eine schon abgeschriebene Seite desselben
+Blattes. Die fünfzehn Altblätter vom August haben keine abgeschriebene Seite,
+ihre Seiten sind alle älter als das Einordnen, und sie bleiben damit außen vor —
+und schreibt ein Lauf ihre alten Seiten trotzdem mit ab, bleibt der Vorschlag
+für einen Menschen im Korb (`onlyTranscribesAttachedPages()` in `src/lib/auto-file.ts`).
 Dasselbe gilt für eine von Hand gestartete Nachlese.
 
 **Reihenfolge auf dem NAS.** Der neue Auftrag des Postboten lässt das Fach
@@ -604,28 +622,190 @@ halbe Sekunde, Kosten weit unter einem Hundertstel Cent.
 Der Schlüssel gehört in die `.env` auf dem NAS und muss im Container ankommen.
 Lokal steht er in `.env.local`.
 
-### Docling liest das Gedruckte vor
+### Ein Leser je Seite — die App entscheidet
 
-Seit dem 4.10.2026 ruft der Postbote für jede Seite zuerst `read_docling` und
-erst dann `read_page`. Docling (IBM, offen) läuft als eigener Container auf dem
-NAS und liest **gedruckten Text, Tabellen und abgesetzte Formeln** — Handschrift
-nicht, dafür ist es nicht gebaut. Claude übernimmt also das Gedruckte als
-Vorlage und schreibt die Handschrift aus dem Foto dazu; das Foto ist
-maßgeblich. In die Datenbank schreibt Docling nichts selbst.
+Seit dem 6.10.2026 liest jede Seite genau **ein** Leser, und welcher, entscheidet
+die App. Bis dahin las jede Seite zweimal: Docling rechnete sie für den
+Postboten vor (`read_docling`), und Claude schrieb sie danach trotzdem ganz vom
+Foto ab, mit Doclings Text als Vorlage — wer was übernimmt, entschied ein Satz im
+Prompt. Das kostete Kontingent für Text, der schon dastand, und die
+Entscheidung lag dort, wo sie niemand prüfen kann.
 
-Gemessen an einem gerenderten Arbeitsblatt (Mac, warm): rund 6 Sekunden je
-Seite. Die Tabelle kam fehlerfrei an; im Fließtext fehlte zweimal der Strich in
-`f'(x)`, und `x³` wurde `x3` — deshalb Vorlage und nicht Abschrift. Auf dem
-NAS ohne Grafikkarte ist es langsamer; ein Postboten-Lauf hat 5 Minuten plus
-4 je Seite (`fristFuer()`, höchstens 45), und `convertPage()` gibt nach drei
-Minuten je Seite auf.
+- **Docling** (IBM, offen, ein eigener Container auf dem NAS) liest jede neue
+  Seite genau einmal, angestoßen von der App gleich nach dem Hochladen. Sein
+  Rohtext bleibt in `material_pages.docling_text` und wird nie neu gerechnet.
+- Ist das **sauberer Druck**, wird er die Abschrift der Seite — gekennzeichnet,
+  und Claude sieht diese Seite nie.
+- **Alles andere liest Claude**, über den Postboten, vom Foto und ohne Vorlage:
+  Handschrift, Formeln, Seiten mit wenig Text und jede Seite, über die die App
+  nicht entscheiden kann.
 
-Gefragt wird über den **asynchronen** Weg (`/v1/convert/file/async`, dann
-nachfragen, dann abholen) und mit `code_formula_preset=codeformulav2` — warum,
-steht an `convertPage()` und `doclingForm()` in `src/lib/docling.ts`.
+**Die Regel** steht in `src/lib/leser/regel.ts`, billig zuerst, und jede Stufe
+kann nur zu Claude schicken, nie zu Docling:
+
+| | Docling liest allein, wenn … | sonst steht in `leser_grund` |
+|---|---|---|
+| a | Docling Erfolg meldet und der Text nicht leer ist | `nicht-erfolg`, `leer` |
+| b | mindestens 60 Wörter aus mindestens drei Buchstaben dastehen | `zu-wenig-woerter` |
+| c | nichts nach einer Formel aussieht: `$`, `formula-not-decoded`, ein LaTeX-Befehl, `=` `≤` `≥` `√` `^` `²` `³`, ein Buchstabe direkt vor einer Ziffer (`x3`) oder vor `(` (`f(x)`), ein Strich (`f'`) | `formel` |
+| d | die Abschrift in eine Seite passt (8 000 Zeichen) | `zu-lang` |
+| e | Jev den Text mit mindestens 0,5 für „überwiegend richtig geschriebene, sinnvolle Wörter und Sätze" hält | `jev-unsicher` |
+
+Ein Wörterbuch gibt es nicht. Ob sauberer Druck oder Kauderwelsch aus
+Handschrift, entscheidet Jev; die Regel davor hält nur fern, wo ein Lesefehler
+teuer wäre — in einer Formel ist ein verlesenes Vorzeichen zitierfähig — oder wo
+es nichts zu entscheiden gibt. Die Formelmuster sind keine Theorie: an einem
+gerenderten Arbeitsblatt fehlte Docling zweimal der Strich in `f'(x)`, und aus
+`x³` wurde `x3`. Und Jev bekommt den Text erst, wenn a bis d bestanden sind —
+der OCR-Text einer Handschriftseite geht meistens an gar kein Modell.
+
+**Jeder Fehler heißt Claude, und nichts wartet:** Docling nicht eingerichtet,
+in der Pause, im Zeitablauf oder mit einem Fehler (`docling-fehlt`,
+`docling-pause`, `docling-ausfall`, `docling-fehler`), Jev nicht eingerichtet
+oder nicht erreichbar (`jev-fehlt`, `jev-fehler`). Wiederholt wird kein
+Fehlschlag von Docling oder Jev; eine Seite, die Claude bekommen hat, bleibt
+bei Claude. Die eine Ausnahme ist ein Fehler der Zuteilung selbst, nach dem die
+Seite nicht einmal für Claude festgehalten werden konnte — meist war die
+Datenbank kurz weg: die Seite ruht dann zehn Minuten und bekommt einen neuen
+Versuch, statt bis zum nächsten Neustart auf `offen` zu hängen.
+
+Zwei Gründe stehen nur in Randfällen da: `schon-gelesen` — die Seite hatte
+eine Abschrift von Hand oder von Claude, bevor die App entschied, also fragt
+sie Docling gar nicht erst (oder schreibt Doclings Abschrift nicht mehr, wenn
+jemand während der Rechnung getippt hat); `nachgeholt` — Doclings Abschrift
+stand schon, nur die Entscheidung fehlte nach einem Abbruch, und Docling
+rechnet nicht ein zweites Mal.
+
+**Gemessen** an 37 echten Seiten vom 5.10.2026 — von Hand als gedruckt,
+gemischt oder Handschrift bestimmt, Docling gegen Claudes Abschrift verglichen:
+Jev ≥ 0,5 und mindestens 60 Wörter ließen 12 Seiten Docling allein, keine davon
+falsch; mit dem Formelverdacht dazu sind es 11. „Falsch" hieße: keine reine
+Druckseite, oder Docling trifft weniger als 80 % von Claudes Wörtern. Am
+6.10.2026 durch den eingebauten Code selbst nachgerechnet, mit echter Frage an
+Jev: 11 Seiten, alle gedruckt, keine falsch, die knappste mit Jev 0,56; Jev wich
+von den Werten des Vortags um höchstens 0,04 ab. Abgelehnt wurden 20 an der
+Wortzahl, 3 am Formelverdacht und 3 von Jev. Die Schwellen sind an genau diesen
+Seiten gewählt, zwei davon dasselbe Handout zweimal fotografiert — was sie im
+Betrieb taugen, zeigt erst `leser_grund`.
+
+Wer die Regel ändert, erhöht `REGEL_VERSION` und misst vorher an denselben
+Seiten nach — durch genau `leserWaehlen()` aus `src/lib/leser/zuteilung.ts`,
+ohne Text auszugeben. Seiten und Messskript liegen bewusst **außerhalb** des
+Repos: es sind Schülerseiten, und ein Skript im Repo, das sie mit dem
+Jev-Schlüssel an Jev schickt, wäre eine Einladung, genau das zu tun. Für die
+Abnahme reichen Jevs Werte aus der Messung; neu gefragt wird Jev dafür nicht.
+
+**Was an einer Seite steht** (`material_pages`, angelegt von
+`scripts/leser-tabellen.sql`):
+
+| Spalte | heißt |
+|---|---|
+| `leser` | `offen` — die App entscheidet gerade, Claude bekommt die Seite nicht; `docling` — Docling liest allein; `claude` — Claude liest vom Foto; leer (`NULL`) — eine Seite von vor dem 6.10.2026, gelesen wie bisher |
+| `leser_grund` | Regelfassung, Wortzahl, Formelverdacht, Länge der Abschrift, Jevs Wahrscheinlichkeit, Doclings Rechenzeit — und der Grund aus der Tabelle oben (`sauber`, wenn Docling liest) |
+| `docling_text` | Doclings Rohtext, auch zu Handschriftseiten. Nie in Listen, nie an Claude |
+| `maschinell` | die heutige Abschrift hat die App aus Docling geschrieben. Jede andere Schreibung — ein Mensch im Formular, Claude über einen Vorschlag — setzt es zurück; derselbe Text, unverändert mitgeschickt, behält es |
+
+Die App schreibt eine Docling-Abschrift nur in eine Seite ohne Abschrift. Und
+was zu einer Seite mit `leser` „docling" oder „offen" oder zu einer schon
+gelesenen Seite hereinkommt — von einem älteren Postboten oder aus einem Chat
+in der Claude-App —, verwirft `propose_sheet` und nennt es in der Antwort
+(`verworfen`), statt zu scheitern; die übrigen Seiten bleiben im Vorschlag.
+
+**Gekennzeichnet** ist eine maschinell gelesene Seite überall, wo ihre Abschrift
+erscheint: an der Blattseite („maschinell gelesen (Docling)", am Abschriftfeld
+der Satz, dass niemand gegengelesen hat, und „wird gerade gelesen", solange die
+App noch entscheidet), im Korb („1 Seite liest die App gerade.", „N von M
+Seiten maschinell gelesen"), im Fach-PDF und in der Wiki-Übergabe
+(„Maschinell gelesen (Docling) – von niemandem gegengelesen." über der
+Abschrift, nur an solchen Seiten — der Altbestand wird deshalb nicht neu
+geliefert), im Fragen-Eingang an jeder Frage, deren Zitat von einer solchen
+Seite stammt, und im Web MCP (`leser` und `maschinell` in `read_sheet`,
+`maschinell` in `read_transcript` und `read_exam_material`). Wichtig dabei: Eine
+maschinell gelesene Seite hat **keine ⟨spitzen Klammern⟩** — Docling weiß
+nicht, wo es unsicher war.
+
+**Ein Blatt, das Docling ganz gelesen hat, braucht keinen Postboten.** Sind alle
+Seiten entschieden und gelesen und ist die letzte mindestens 20 Sekunden alt —
+dieselbe Ruhe wie beim Postboten, denn die Rückseite kommt erst nach der
+Vorderseite —, legt die App **einmal** selbst einen Vorschlag an, mit der
+Herkunft „von der App": als Titel die erste Überschrift der ersten Seite,
+wörtlich und gekürzt (sonst bleibt der Platzhalter), keine Abschriften, denn die
+stehen schon am Blatt. Danach ordnet Jev ein wie nach einem Postboten-Lauf.
+Scheitert Jev, bleibt der Vorschlag im Korb für einen Menschen; einen zweiten
+Versuch gibt es nicht. Geprüft wird das nur nach einem Ereignis — eine Seite ist
+entschieden, die Ruhe ist um, oder ein Mensch hat eine Seite gelöscht (dann kann
+das Blatt gerade ganz von Docling gelesen sein). Ein gemischtes Blatt geht wie
+bisher an den Postboten, der aber nur noch die Claude-Seiten bekommt. Kann
+Claude keine davon lesen, legt er trotzdem einen Vorschlag an, nur mit der
+Notiz, welche Seite es war. Jev ordnet danach mit allen Abschriften ein, und
+übernommen wird immer nur Ungelesenes — eine Docling-Abschrift ersetzt dabei
+nichts still, auch nicht beim Übernehmen von Hand im Korb: schreibt die App
+zwischen Anzeigen und Übernehmen eine Abschrift, bleibt die Seite unberührt,
+und der Korb sagt es.
+
+**Angestoßen** wird das nach jedem Hochladen (`after()` in
+`src/app/(app)/material/actions.ts`, läuft nach der Antwort an den Browser) und
+bei jedem `read_inbox` des Postboten. Das Zweite ist das Netz nach einem
+Neustart: Seiten, die noch auf `offen` stehen, nimmt der nächste Anstoß mit.
+Einen Takt gibt es nicht. Eine Queue je Prozess sorgt dafür, dass Docling eine
+Seite nach der anderen rechnet und keine zweimal.
+
+**Im Protokoll der App** steht je Seite eine Zeile, und eine je Vorschlag der
+App (die ids hier ausgedacht):
+
+```
+Leser 3f2a9c01: docling (sauber, 160 Wörter, Formel –, Jev 0.89, Docling 5.2 s)
+Leser 7b1e44d0: claude (zu-wenig-woerter, 31 Wörter, Formel –, Jev –, Docling 6.8 s)
+Leser 9c0d1e2f: Vorschlag der App angelegt, Jev: Geografie
+```
+
+```bash
+sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose logs --tail=200 app' | grep -E 'Leser|Docling|Jev'
+```
+
+**Die Notbremse.** `LESER_REGEL=aus` schaltet Docling als Leser ab, ohne Bau:
+Jede neue Seite bekommt beim Anlegen `leser` „claude", Seiten, die noch offen
+stehen, gehen ohne Docling an Claude (`aus`) — der Stand vor Docling.
+Abschriften, die Docling schon geschrieben hat, bleiben, gekennzeichnet. Eine
+Zeile unter `services.app.environment` der `docker-compose.override.yml`
+(`sudo vi` — die Datei gehört `jev-und-docling.sh` und
+`kalender-einrichten.sh`, und keines der beiden trägt die Zeile ein). Vorsicht:
+Scheitert ein erneuter Lauf von `jev-und-docling.sh`, löscht es die Datei (siehe
+unten), und der nächste Lauf legt sie frisch an — ohne die Notbremse. Nach
+jedem Lauf dieses Skripts also mit dem `printenv` unten nachsehen.
+
+```yaml
+      LESER_REGEL: "aus"
+```
+
+Danach nur die App neu erzeugen, ohne Bau, und nachsehen, ob der Wert ankam:
+
+```bash
+sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose up -d app'
+sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose exec -T app printenv LESER_REGEL'
+```
+
+Zurück: die Zeile löschen, dieselben zwei Befehle.
+
+| Variable | wofür | ohne sie |
+|---|---|---|
+| `DOCLING_URL` | wo Docling antwortet (`http://docling:5001`, gesetzt von `jev-und-docling.sh`) | jede neue Seite liest Claude (`docling-fehlt`) |
+| `TYPESAFE_API_KEY` | Jev: die Einstufung der Docling-Seiten und das Einordnen | jede neue Seite liest Claude (`jev-fehlt`), und eingeordnet wird von Hand |
+| `LESER_REGEL` | `aus` ist die Notbremse; Groß- und Kleinschreibung egal | die Regel gilt |
+
+#### Docling auf dem NAS
+
+Docling liest **gedruckten Text, Tabellen und abgesetzte Formeln** — Handschrift
+nicht, dafür ist es nicht gebaut. Gemessen an einem gerenderten Arbeitsblatt
+(Mac, warm): rund 6 Sekunden je Seite; an den 37 echten Seiten: gedruckt rund
+94 % der Wörter, Handschrift rund 32 %, und das als Kauderwelsch. Gefragt wird
+über den **asynchronen** Weg (`/v1/convert/file/async`, dann nachfragen, dann
+abholen) und mit `code_formula_preset=codeformulav2` — warum, steht an
+`convertPage()` und `doclingForm()` in `src/lib/docling.ts`. Nach drei Minuten
+je Seite gibt die App auf.
 
 Auf dem NAS richtet es **`scripts/jev-und-docling.sh`** ein, zusammen mit dem
-Jev-Schlüssel und der Umstellung des Postboten — nach einem `hoch`:
+Jev-Schlüssel — nach einem `hoch`:
 
 ```bash
 sudo ~/nas.sh hoch
@@ -635,7 +815,7 @@ sudo bash /volume1/docker/schulapp/repo/scripts/jev-und-docling.sh
 Es legt eine `docker-compose.override.yml` neben die Compose-Datei (Docling
 nur im inneren Netz, kein `ports:`; die App bekommt `DOCLING_URL` und
 `TYPESAFE_API_KEY`), prüft aus dem App-Container heraus, ob Jev antwortet und
-Docling rechnet, und stellt den Postboten erst um, wenn Jev richtig
+Docling rechnet, und gleicht den Postboten erst an, wenn Jev richtig
 geantwortet hat. Was es vorher nachsieht und wie es sich rückgängig machen
 lässt, steht im Kopf des Skripts.
 
@@ -657,22 +837,102 @@ Docling nichts nach, sondern scheitert an **jeder** Seite mit „Model
 genau dieser Modellablage nachgestellt: ohne das Modell ein Fehler, mit ihm
 8,5 s für die erste und 2,1 s für die zweite Probeseite (Mac), bei 2,2 GB
 Speicher mit einem Arbeiter. Das Skript lädt es deshalb in ein Docker-Volume
-(`docling-tools models download code_formula`, 610 MB).
+(`docling-tools models download code_formula`, 610 MB). Ob es die
+Formelanreicherung überhaupt noch braucht, seit Formelseiten nie an Docling
+allein gehen, ist nicht gemessen (siehe *Offene Punkte* in KONZEPT.md).
 
-Hängt Docling oder antwortet es nicht, pausiert die App es für zehn Minuten
-(ein Fehler an einer einzelnen Seite reicht dafür nicht); der Postbote liest
-dann nur das Foto. Fertige Ergebnisse hält die App eine Stunde vor, und
-während Claude eine Seite liest, rechnet Docling schon die nächste
-ungelesene Seite desselben Blattes. Jede Seite steht mit ihrer Zeit im Log
-(`Docling <id>: Wand … s, gerechnet … s`), und der Postbote schreibt je Blatt
-Züge, Tokens und Zeiten dazu — daran ist auf dem NAS abzulesen, ob die
-Frist reicht (5 Minuten plus 4 je Seite, höchstens 45).
+Hängt Docling oder antwortet es nicht (Zeitablauf, 404, 5xx), pausiert die App
+es für zehn Minuten — ein Fehler an einer einzelnen Seite reicht dafür nicht.
+Jede Seite in der Pause liest Claude (`docling-pause`), nachgeholt wird nichts,
+und im Protokoll steht `Docling pausiert bis …` mit dem Grund.
 
-Ohne `DOCLING_URL` sagt `read_docling`, dass Docling fehlt, und der Postbote
-liest wie vorher nur das Foto. Der Postbote selbst braucht die neue
-`harness/auftrag.mts` — auf dem NAS ist `harness/` eine Kopie und kein Klon.
-Das Skript kopiert sie aus dem Klon daneben, vergleicht die Prüfsummen und
-legt die alte Fassung unter `/volume1/docker/postbote/harness-alt-<Zeit>` ab.
+#### Auf das NAS bringen — dieser Stand
+
+Vier Dinge machen diesen Stand anders als ein gewöhnliches `hoch`: Die
+Datenbank braucht vier neue Spalten, und zwar **vor** dem Bau (der neue Code
+scheitert ohne sie an jeder Seite, der alte verträgt sie); die SQL-Datei liegt
+erst nach dem Holen im Klon; App und Postbote müssen zusammen wechseln; und
+`~/nas.sh` ist noch die alte Kopie, die weder die Spalten prüft noch den
+Postboten angleicht. Daraus folgt diese Reihenfolge — vorher muss der Stand auf
+GitHub in `main` liegen:
+
+1. **Sichern** — ein Abzug der Datenbank neben die Compose-Datei:
+   ```bash
+   sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose exec -T db sh -c "exec pg_dump -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" --format=custom" > abzug-$(date +%Y%m%d)-vor-leser.dump && ls -l abzug-*-vor-leser.dump'
+   ```
+2. **Die neue `nas.sh` zuerst.** `fetch` holt nur und ändert weder den Klon
+   noch die App:
+   ```bash
+   sudo git -C /volume1/docker/schulapp/repo fetch origin main
+   sudo git -C /volume1/docker/schulapp/repo show origin/main:scripts/nas.sh > /tmp/nas.sh.neu && sudo cp /tmp/nas.sh.neu ~/nas.sh
+   ```
+3. **Den Postboten anhalten**, damit kein Lauf in den Wechsel fällt — `hoch`
+   startet ihn nach dem Angleichen wieder. Endet ein `hoch` vorher (der HALT in
+   Schritt 4, ein gescheiterter Bau), bleibt er aus; `nas.sh` sagt das dann und
+   nennt `sudo ~/nas.sh postbote` — mit der App, die dann läuft, verträgt er
+   sich:
+   ```bash
+   sudo sh -c 'cd /volume1/docker/postbote && /usr/local/bin/docker compose stop postbote'
+   ```
+4. **`sudo ~/nas.sh hoch`** — holt den Stand und hält vor dem Bau an:
+   „HALT: Der Datenbank fehlt material_pages.leser". Darunter steht die Zeile
+   zum Einspielen, mit Benutzer und Datenbank aus dem db-Container. Gebaut ist
+   nichts, die App läuft weiter wie bisher.
+5. **Zählen, einspielen, nachsehen.** psql öffnen:
+   ```bash
+   sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose exec db sh -c "exec psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\""'
+   ```
+   darin die beiden Zähl-Abfragen aus dem Kopf von `scripts/leser-tabellen.sql`
+   und `\q`. Dann die Zeile, die `hoch` genannt hat. Dann wieder psql:
+   `\d material_pages`, `SELECT leser, count(*) FROM material_pages GROUP BY 1;`
+   (erwartet: nur leer, so viele wie vorher Seiten) und
+   `SELECT count(*) FROM material_pages WHERE maschinell;` (erwartet: 0).
+6. **Noch einmal `sudo ~/nas.sh hoch`** — „Von GitHub kam nichts Neues — aber
+   es läuft noch …", baut nach, wartet auf die App, gleicht die Harness-Kopie
+   an (die alte liegt danach unter `/volume1/docker/postbote/harness-alt-<Zeit>`)
+   und startet den Postboten. Erst „Fertig." heißt: App und Postbote laufen
+   auf dem neuen Stand.
+7. **Probe** mit zwei Blättern: ein gedrucktes Handout und eine Seite mit
+   Handschrift. Erwartet im Protokoll der App (Befehl oben) je Seite eine Zeile
+   `Leser …` — das Handout `docling (sauber, …)`, die Handschrift `claude (…)`
+   — und gut zwanzig Sekunden später zum Handout `Vorschlag der App angelegt,
+   Jev: <Fach>`. Im Protokoll des Postboten
+   (`sudo sh -c 'cd /volume1/docker/postbote && /usr/local/bin/docker compose logs --tail=40 postbote'`)
+   für das Handout kein Lauf, für die Handschrift genau einer mit nur dieser
+   Seite. Am Handout steht „maschinell gelesen (Docling)" an der Blattseite, im
+   Fach-PDF und nach der nächsten Wiki-Übergabe auch dort.
+8. **Nach ein paar Tagen zählen**, in psql wie in Schritt 5:
+   ```sql
+   SELECT leser, leser_grund->>'grund' AS grund, count(*)
+     FROM material_pages WHERE leser IS NOT NULL GROUP BY 1, 2 ORDER BY 1, 2;
+   ```
+   und die ersten rund zwanzig Seiten, die Docling allein gelesen hat, neben
+   ihrem Foto durchsehen.
+
+Wurde Schritt 2 übersprungen, baut die alte `~/nas.sh` in Schritt 4 sofort.
+Dann muss das Einspielen vorher gelaufen sein, mit der Datei aus `origin/main`
+— im Klon liegt sie da noch nicht:
+
+```bash
+sudo sh -c 'cd /volume1/docker/schulapp && git -C repo show origin/main:scripts/leser-tabellen.sql | /usr/local/bin/docker compose exec -T db sh -c "exec psql -X -v ON_ERROR_STOP=1 --single-transaction -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -f -"'
+```
+
+Den Postboten holt danach
+`sudo cp /volume1/docker/schulapp/repo/scripts/nas.sh ~/nas.sh && sudo ~/nas.sh hoch`
+nach: Es baut nichts, gleicht aber an.
+
+**Rückweg:** `sudo ~/nas.sh zurueck`, ohne SQL — der alte Code sieht die
+Spalten nicht. Der Postbote geht dabei mit zurück: `zurueck` gleicht seine
+Kopie an den alten Stand an, sobald die alte App antwortet. Ohne das liefe der
+neue Postbote gegen die alte App, die `read_docling` anbietet, das sein Käfig
+verbietet — und jeder Lauf, der danach greift, endete als „nichts“. Eine
+Nebenwirkung bleibt: Der alte Code kennt `maschinell` nicht. Ändert in der
+Zwischenzeit jemand die Abschrift einer Docling-Seite (Formular, Korb, ein
+Vorschlag aus einem Chat), behält sie die Kennzeichnung und steht nach dem
+nächsten `hoch` als „maschinell gelesen" da, obwohl ein Mensch sie geschrieben
+hat. Nach einem längeren Rückweg deshalb vor dem nächsten `hoch` nachsehen:
+`SELECT id FROM material_pages WHERE maschinell;` und diese Seiten am Foto
+prüfen. Meist reicht ohnehin die Notbremse.
 
 ## Datenbank
 
@@ -735,7 +995,14 @@ mit dem Web MCP die Spalte `material_pages.reading` und die drei Tabellen
 Klassenfahrt die Tabelle `free_periods` (`scripts/freie-tage-tabelle.sql`), mit
 dem Google Kalender die beiden Tabellen `google_calendar_connections` und
 `google_calendar_events` (`scripts/google-kalender-tabellen.sql` — auf dem NAS
-per psql und VOR dem Neubau; warum, steht unter *Google Kalender*).
+per psql und VOR dem Neubau; warum, steht unter *Google Kalender*), mit „ein
+Leser je Seite" die vier Spalten `leser`, `leser_grund`, `docling_text` und
+`maschinell` an `material_pages` (`scripts/leser-tabellen.sql`, ebenfalls VOR
+dem Neubau). **Bei dieser einen ist `db:push` auf einem Bestand der falsche
+Weg:** drizzle-kit legt `leser` gleich mit der Vorgabe „offen" an, und Postgres
+setzte damit jede vorhandene Seite auf „offen" — die App schickte den ganzen
+Altbestand durch Docling und an Claude, die fünfzehn Altblätter eingeschlossen.
+Die SQL-Datei legt die Spalte erst leer an und setzt die Vorgabe danach.
 **Ohne Push bleibt nicht nur
 der Materialbereich stehen, sondern die ganze Startseite** — sie lädt die
 letzten Blätter mit.
@@ -1423,7 +1690,7 @@ lesbar — man käme sonst an das Skript nicht heran, mit dem man ihn aktualisie
 | Wort | Was es tut |
 |---|---|
 | `stand` | Welcher Commit ist live, laufen die Container, antwortet die App, wann hat der Postbote zuletzt gearbeitet. Ändert nichts. |
-| `hoch` | Pull, Bau, Start — und danach warten, bis die App wirklich antwortet. Ging der Bau schief, baut das nächste `hoch` nach. |
+| `hoch` | Pull, Bau, Start — und danach warten, bis die App wirklich antwortet, und die Harness-Kopie des Postboten angleichen. Ging der Bau schief, baut das nächste `hoch` nach. Fehlt der Datenbank eine Spalte, die der neue Stand braucht, hält es vor dem Bau an. |
 | `zurueck` | Auf den Stand vor dem letzten `hoch` — mit dem Rückfallbild in Sekunden, sonst per Neubau. |
 | `postbote` | Postbote anschalten, und vorher die liegengebliebene `lauf.lock` wegräumen. |
 
@@ -1465,11 +1732,48 @@ verschwand die Funktion, der Aufruf blieb, und `hoch` meldete
 vergleicht sie am Ende mit `scripts/nas.sh` im Klon und druckt den
 `sudo cp`-Befehl, wenn die beiden auseinanderliegen.
 
+**App und Postbote wechseln zusammen.** Unter `/volume1/docker/postbote/harness`
+liegt ebenfalls eine Kopie, und seit dem 6.10.2026 entscheidet die App, welche
+Seiten der Postbote bekommt — ein Postbote vom alten Stand liest Seiten, die
+die App längst gelesen hat. `hoch` gleicht die Kopie deshalb selbst an, sobald
+die neue App antwortet: Prüfsummen von `*.mts` und `README.md` vergleichen
+(über die Dateien, die der Klon hat — eine Datei, die aus dem Repo
+verschwindet, ließe sonst jedes `hoch` scheitern), bei einem Unterschied die
+alte Fassung nach `harness-alt-<Zeit>` sichern, den Postboten anhalten, kopieren,
+nachrechnen und über `postbote` wieder starten. `zugang.json`, `gesehen.json`
+und `lauf.lock` kopiert es nie. Geht das Kopieren schief, legt es die alte
+Fassung zurück und startet den Postboten mit ihr. Und weil die erste Fassung
+mit diesem Abgleich von einer älteren `~/nas.sh` gebaut werden kann, holt ein
+`hoch` ohne Neues den Abgleich nach, wenn die App antwortet — nach einem Blick
+in die Datenbank, denn dort läuft die neue App schon. `zurueck` gleicht die
+Kopie genauso an den alten Stand an, sobald der wieder antwortet: ein neuer
+Postbote gegen eine alte App liefe sonst in ein Werkzeug, das sein Käfig nicht
+erlaubt, und jeder Lauf endete als „nichts“. Scheitert `hoch` vorher (Spalte
+fehlt, Bau schief, App antwortet nicht) und ist der Postbote aus, sagt es das
+und nennt `sudo ~/nas.sh postbote`.
+
+**Vor dem Bau sieht es in die Datenbank.** Additive Spalten verträgt der alte
+Code; der neue scheitert ohne sie an jeder Seite. Liegt im neuen Stand eine
+SQL-Datei, die in `PFLICHTSPALTEN` steht (bisher nur
+`scripts/leser-tabellen.sql` für `material_pages.leser`), und fehlt die Spalte,
+hält `hoch` vor dem Bau an, druckt die Zeile zum Einspielen mit Benutzer und
+Datenbank aus dem db-Container, und das nächste `hoch` baut nach. Antwortet die
+Datenbank nicht, sagt es das und baut trotzdem — eine Prüfung, die selbst
+klemmt, soll nicht jeden `hoch` sperren.
+
 > **Wie weit gelaufen.** `stand`, `hoch` und `postbote` laufen auf dem NAS
 > seit dem 16.9.2026. Die Fassung vom 5.10.2026 — Nachbauen nach gescheitertem
 > Bau, Rückfallbild, `zurueck` ohne Neubau — ist am nachgebauten NAS geprüft
 > (Git echt, Docker und curl als Attrappe, 22 Abläufe mit 57 Prüfungen, dazu
-> zwei Runden Gegenlesen), auf dem echten noch nicht.
+> zwei Runden Gegenlesen), auf dem echten noch nicht. Ebenso die Fassung vom
+> 6.10.2026 mit Spaltenprüfung und Abgleich: fünfzehn Abläufe mit 97 Prüfungen
+> (Git und md5sum echt; Docker, curl und psql als Attrappe — fehlende Spalte,
+> auch im Zweig „Nichts Neues“, Datenbank stumm, Kopieren scheitert
+> mittendrin, Anhalten scheitert, kein Postbote, Bau scheitert, Abgleich
+> nachholen, eine liegengebliebene alte Datei beim Postboten, `zurueck` samt
+> Postbote, der Hinweis auf einen ausgeschalteten Postboten), dazu fünf
+> absichtlich beschädigte Fassungen, die alle auffielen. Auf dem echten NAS
+> noch nicht.
 
 ### Der Ausfall vom 11.9.2026 — die Freigabe entzieht der Datenbank die Rechte
 
@@ -1652,6 +1956,12 @@ Rechner sieht alle 15 Sekunden in den Korb und setzt Claude auf jedes Blatt an,
 das noch keinen Vorschlag hat; es gehört nicht zur App, sondern benutzt sie von
 außen durch dieselbe Tür. Es steht in [`harness/`](harness/README.md) und läuft
 nur, wenn man es startet.
+
+**Ein Leser je Seite** — seit dem 6.10.2026 liest die App sauberen Druck selbst
+(Docling) und schreibt ihn gekennzeichnet als Abschrift; der Postbote bekommt
+nur noch Handschrift, Formeln und alles Unsichere. Ein Blatt, das ganz gedruckt
+ist, ordnet die App mit Jev ein, ohne dass Claude es je sieht. Wie sie
+entscheidet und was sie dabei festhält, steht oben unter *Ein Leser je Seite*.
 
 **Google Kalender** — Klausuren, offene Hausaufgaben und freie Tage stehen
 als ganztägige Termine in einem eigenen Kalender „Schule" im Google Kalender,

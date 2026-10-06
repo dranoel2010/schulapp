@@ -281,7 +281,14 @@ export default async function ProposalPage({
           hat. Wer nicht vertrauenswürdige Blätter liest und gleichzeitig
           schreiben darf, ist über das Blatt selbst angreifbar — deshalb
           schreibt der Agent nie, und deshalb steht hier, was man gerade vor
-          sich hat. */}
+          sich hat.
+
+          Der Vorschlag der App (seit dem 6.10.2026) ist der dritte Fall und
+          bekommt einen eigenen Satz: kein Agent, aber ebenso aus dem Blatt
+          abgeleitet — der Titel ist eine Überschrift, die Docling gelesen hat.
+          Und er liegt nur dann hier, wenn etwas nicht geklappt hat: geht das
+          Einordnen mit Jev gut, übernimmt die App ihn selbst, und niemand
+          bekommt ihn zu sehen (@/lib/leser/zuteilung). */}
       <section className="space-y-2 rounded-card border border-border bg-surface p-4 sm:p-5">
         <p className="flex flex-wrap items-center gap-2 text-sm text-muted">
           <OriginBadge origin={proposal.origin} />
@@ -295,6 +302,17 @@ export default async function ProposalPage({
             anderes auf Papier gedruckt oder an eine Tafel geschrieben hat. Lies
             ihn, bevor du ihn übernimmst. Genau dafür steht diese Seite zwischen
             dem Vorschlag und deinem Bestand.
+          </p>
+        ) : proposal.origin === "app" ? (
+          <p className="text-sm text-foreground">
+            Diesen Vorschlag hat die App selbst angelegt, weil Docling alle
+            Seiten dieses Blattes maschinell gelesen hat — die Abschriften
+            stehen schon am Blatt, gekennzeichnet und von niemandem
+            gegengelesen. Der Titel ist wörtlich die erste Überschrift der
+            ersten Seite, gekürzt, wo sie zu lang war; stand dort keine, ist es
+            der bisherige Titel. Hier liegt er, weil das Einordnen mit Jev
+            nicht ging, und Fach und Themen schlägt er deshalb nicht vor. Lies
+            ihn, bevor du ihn übernimmst.
           </p>
         ) : (
           <p className="text-sm text-muted">

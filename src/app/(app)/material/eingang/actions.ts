@@ -24,7 +24,11 @@ import {
   type MaterialFieldErrors,
   type MaterialFormState,
 } from "@/lib/materials";
-import { transcriptsFromForm } from "@/lib/transcripts";
+import {
+  outdatedTranscriptPages,
+  transcriptBaseline,
+  transcriptsFromForm,
+} from "@/lib/transcripts";
 
 /**
  * Die Server Actions des Eingangskorbs.
@@ -344,6 +348,7 @@ async function anwenden(
   userId: string,
   materialId: string,
   werte: Parameters<typeof applyProposal>[2],
+  ueberholt = 0,
 ): Promise<string | null> {
   const ergebnis = await applyProposal(userId, materialId, werte);
   if (!ergebnis) return null;
@@ -366,6 +371,10 @@ async function anwenden(
     // nicht ankündigen — sie ist eine reine Rechnung und liest das Vokabular
     // nicht. Also wird es hinterher gesagt.
     andereSchreibweise: ergebnis.umbenannt,
+    // Seiten, an denen zwischen Anzeigen und Übernehmen jemand anders
+    // geschrieben hat — meist die App mit Doclings Abschrift. Ausgelassen,
+    // also gesagt (siehe `confirmProposalAction()`).
+    ueberholt,
   });
 }
 
@@ -527,21 +536,39 @@ export async function confirmProposalAction(
       found.proposal.transcripts.map((entry) => entry.pageId),
     );
 
-    const transcripts = transcriptsFromForm(
-      formData,
-      found.material.pages.map((page) => ({
-        pageId: page.id,
-        known: page.transcriptLength !== null || vorgeschlagen.has(page.id),
-      })),
-    );
+    /*
+     * `baseline` ist der Stand der Seite JETZT, und das Formular schickt den
+     * mit, auf den es sich beim Anzeigen berief (dasselbe versteckte Feld wie
+     * auf der Blattseite, siehe `transcriptBaselineFieldName()`). Seit dem
+     * 6.10.2026 ist das hier nötig: die App schreibt Doclings Abschrift von
+     * selbst, auch an einem Blatt, an dem ein Vorschlag liegt. Wer die
+     * Vorschlagsseite öffnet, solange eine neue Seite noch „offen“ ist, sieht
+     * ein leeres Feld; drückt er nach Doclings Abschrift auf „Übernehmen“,
+     * wäre `known` inzwischen wahr, und das leere Feld machte aus der
+     * Abschrift ein „gelesen, nichts darauf“. So bleibt die Seite unberührt
+     * und wird danach im Korb genannt.
+     */
+    const seiten = found.material.pages.map((page) => ({
+      pageId: page.id,
+      known: page.transcriptLength !== null || vorgeschlagen.has(page.id),
+      baseline: transcriptBaseline(page.transcriptLength),
+    }));
+
+    const transcripts = transcriptsFromForm(formData, seiten);
+    const ueberholt = outdatedTranscriptPages(formData, seiten).length;
 
     // Das Fach gehört dem Nutzer, das ist eine Zeile weiter oben geprüft —
     // bleibt als Grund für ein Nein nur noch das Blatt selbst.
-    ziel = await anwenden(user.id, materialId, {
-      ...parsed.data,
-      topics: titles,
-      transcripts,
-    });
+    ziel = await anwenden(
+      user.id,
+      materialId,
+      {
+        ...parsed.data,
+        topics: titles,
+        transcripts,
+      },
+      ueberholt,
+    );
   } catch (error) {
     console.error("Vorschlag übernehmen fehlgeschlagen", error);
     return { saves: state.saves, message: SAVE_FAILED };
@@ -589,6 +616,7 @@ function confirmedHref(outcome: {
   ohneFachwort: number;
   zusammengefallen: number;
   andereSchreibweise: number;
+  ueberholt: number;
 }): string {
   const query = new URLSearchParams({ uebernommen: outcome.materialId });
 
@@ -606,6 +634,10 @@ function confirmedHref(outcome: {
 
   if (outcome.andereSchreibweise > 0) {
     query.set("schreibweise", String(outcome.andereSchreibweise));
+  }
+
+  if (outcome.ueberholt > 0) {
+    query.set("ueberholt", String(outcome.ueberholt));
   }
 
   return `/material/eingang?${query.toString()}`;

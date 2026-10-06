@@ -46,14 +46,17 @@ export const dynamic = "force-dynamic";
  *
  * **Antwort ist immer JSON.** Die Spezifikation erlaubt daneben einen
  * SSE-Strom; der wäre für Werkzeuge gut, die lange rechnen und unterwegs
- * berichten. Lange dauern kann eine Antwort seit dem 4.10.2026 durchaus:
- * `read_docling` wartet auf Docling, auf dem Prozessor des NAS bis zu drei
- * Minuten je Seite (`TIMEOUT_MS` in @/lib/docling), und `propose_sheet` fragt
- * nach dem Anlegen noch Jev. Zu berichten gibt es unterwegs trotzdem nichts —
- * Docling sagt nur „fertig" oder „noch nicht", keinen Fortschritt —, also
- * bleibt es bei einer Antwort am Ende. Gibt ein Client vorher auf, rechnet
- * Docling weiter, und das Ergebnis liegt für den nächsten Aufruf zur selben
- * Seite im Vorrat (`doclingFor()`).
+ * berichten. Am längsten dauert hier `propose_sheet`: nach dem Anlegen fragt
+ * es Jev nach Fach und Themen, zwei Anfragen zu je höchstens 15 Sekunden
+ * (`TIMEOUT_MS` in @/lib/jev). Zu berichten gibt es unterwegs nichts, also
+ * bleibt es bei einer Antwort am Ende.
+ *
+ * Auf Docling wartet diese Tür nicht mehr (seit dem 6.10.2026). Vom 4.10. an
+ * rechnete `read_docling` hier bis zu drei Minuten je Seite, mit einem Vorrat
+ * für den Client, der vorher aufgab. Jetzt liest die App jede neue Seite
+ * selbst, genau einmal und gleich nach dem Hochladen
+ * (@/lib/leser/zuteilung); `read_inbox` stößt das höchstens an und wartet
+ * nicht darauf.
  */
 
 /** Wie sich diese Adresse einem Client vorstellt, der noch kein Token hat. */

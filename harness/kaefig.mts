@@ -103,14 +103,19 @@ export type Aufgabe<A> = {
  * Genau deshalb bricht ein Zeitablauf seit dem 5.9.2026 nur noch dieses eine
  * Blatt ab und nicht mehr die ganze Runde — siehe `LaufErgebnis`.
  *
- * Seit dem 4.10.2026 gilt diese Zahl nur noch, wo niemand eine andere nennt:
- * für die Nachlese von Hand und den Fragenlauf. Ein Blatt des Postboten
- * bekommt seine Frist nach Seitenzahl, siehe `fristFuer()`.
+ * Seit dem 4.10.2026 ist diese Zahl zugleich die Untergrenze: die Nachlese
+ * von Hand und der Fragenlauf bekommen sie so, ein Blatt des Postboten nie
+ * weniger — mehr nur, wenn es viele Seiten hat (`fristFuer()`).
  */
 export const FRIST_MS = 900_000;
 
 /**
- * Die längste Frist, die `fristFuer()` vergibt.
+ * Die längste Frist, die ein Lauf bekommen kann — `laufFuerAufgabe()` deckelt
+ * jede darauf. `fristFuer()` bleibt seit dem 6.10.2026 weit darunter
+ * (siebzehn Minuten bei zwölf Seiten); vom 4. bis zum 6.10.2026 reichte es
+ * mit Docling im Lauf bis hierher. Die Zahl bleibt trotzdem stehen: sie ist
+ * die Deckelung und keine Schätzung, und kleiner gemacht änderte sie nur die
+ * Bemessung des Tokens, ohne dass ein Lauf davon etwas hätte.
  *
  * Sie ist zugleich die Zahl, nach der `zugriffstoken()` in mcp.mts das Token
  * bemisst: Jedes Token, das in einen Käfig geht, muss die längste mögliche
@@ -124,31 +129,36 @@ export const FRIST_MAX_MS = 45 * 60_000;
 const GRUNDLAST_MS = 5 * 60_000;
 
 /**
- * Was eine Seite höchstens braucht: die 180 s, nach denen die App auf Docling
- * nicht mehr wartet (TIMEOUT_MS in @/lib/docling), und rund eine Minute für
- * Claude, der die Seite liest und abschreibt. Von Hand abgeschrieben, weil
- * dieser Ordner nichts aus src/ importieren darf (siehe RASPBERRY.md) — steigt
- * die Zahl dort, gehört sie hier nachgezogen.
+ * Was eine Seite höchstens braucht: rund eine Minute für Claude, der sie vom
+ * Foto liest und abschreibt — überschlagen, siehe `FRIST_MS`.
+ *
+ * Vom 4. bis zum 6.10.2026 waren es vier Minuten: davor stand je Seite noch
+ * `read_docling`, und das durfte auf dem NAS bis zu drei Minuten rechnen. Seit
+ * die App Docling selbst fragt, einmal nach dem Hochladen, wartet kein Lauf
+ * mehr darauf.
  */
-const PRO_SEITE_MS = 4 * 60_000;
+const PRO_SEITE_MS = 60_000;
 
-/** MAX_PAGES in @/lib/images, aus demselben Grund von Hand. */
+/** MAX_PAGES in @/lib/images, von Hand, weil dieser Ordner nichts aus src/ importieren darf (siehe RASPBERRY.md). */
 const MAX_SEITEN = 12;
 
 /**
- * Die Frist für ein Blatt mit so vielen Seiten.
+ * Die Frist für einen Lauf über so viele Seiten.
  *
- * Eingeführt am 4.10.2026 mit Docling. Eine feste Viertelstunde passte, solange
- * eine Seite in Sekunden gelesen war. Auf dem Prozessor des NAS kann Docling
- * für eine einzige Seite bis zu drei Minuten brauchen, und ein Blatt mit fünf
- * solchen Seiten liefe in die Viertelstunde, käme als „spaeter" zurück, liefe
- * in der nächsten Runde wieder hinein — und kostete jedes Mal einen ganzen
- * Lauf, ohne je fertig zu werden. Je Seite zu rechnen gibt dem großen Blatt die
- * Zeit, die es braucht, und dem kleinen nicht mehr als bisher.
+ * Nie kürzer als `FRIST_MS`, die Viertelstunde, die vor Docling für jedes
+ * Blatt galt — ihre Rechnung (zwölf volle Seiten Handschrift in rund acht
+ * Minuten Schreiben) steht dort und gilt weiter. Länger nur für ein Blatt mit
+ * mehr als zehn Seiten: fünf Minuten Grundlast und eine je Seite, bei zwölf
+ * Seiten also siebzehn. Gezählt werden die Seiten, die Claude wirklich liest
+ * (der Postbote gibt nur die mit, die die App ihm lässt), nicht die des
+ * Blattes.
  *
- * Der Preis steht auf der anderen Seite: ein Blatt, das trotzdem hängt, kostet
- * jetzt bis zu einer Dreiviertelstunde Kontingent je Runde statt einer
- * Viertelstunde, und drei solche halten eine Runde über zwei Stunden auf.
+ * Eingeführt am 4.10.2026 mit Docling, damals mit vier Minuten je Seite und
+ * ohne Untergrenze: ein Blatt mit fünf Docling-Seiten lief in die
+ * Viertelstunde und kam jede Runde wieder. Seit dem 6.10.2026 rechnet Docling
+ * nicht mehr im Lauf, und die Frist geht auf das Maß von davor zurück. Die
+ * Formel bleibt, weil sie dem großen Blatt nichts nimmt und dem kleinen die
+ * Viertelstunde lässt.
  *
  * Eine Seitenzahl, die keine ist, zählt als zwölf: lieber die volle Frist als
  * eine, die ein großes Blatt mitten in der Abschrift abschneidet.
@@ -158,45 +168,47 @@ const MAX_SEITEN = 12;
  */
 export function fristFuer(seiten: number): number {
   const anzahl = Number.isInteger(seiten) && seiten > 0 ? seiten : MAX_SEITEN;
-  return Math.min(FRIST_MAX_MS, GRUNDLAST_MS + anzahl * PRO_SEITE_MS);
+  return Math.min(
+    FRIST_MAX_MS,
+    Math.max(FRIST_MS, GRUNDLAST_MS + anzahl * PRO_SEITE_MS),
+  );
 }
 
 /**
  * Wie viele Züge ein Lauf hat.
  *
- * Gezählt ist der ungünstigste Fall, und der ist seit Docling (4.10.2026)
- * größer: ein Modell, das jeden Aufruf einzeln macht, statt read_docling und
- * read_page in einen Zug zu legen, und das nach jedem Bild noch einen eigenen
- * Zug zum Aufschreiben braucht. Das sind je Seite drei Züge, bei zwölf Seiten
- * (MAX_PAGES in @/lib/images) sechsunddreißig. Dazu read_sheet, read_subjects,
- * read_topics und propose_sheet — die mittleren beiden verlangt der Auftrag
- * seit dem 4.10.2026 nicht mehr, erlaubt sind sie aber weiter, und ein Aufruf
- * kostet einen Zug. Macht vierzig; dazu zwölf Luft für Fehlgriffe — ein
- * Werkzeug, das nein sagt und noch einmal richtig gerufen wird — und für die
- * Antwort am Ende. Zweiundfünfzig.
+ * Die Rechnung: read_sheet, read_subjects, read_topics und propose_sheet sind
+ * vier Aufrufe, dazu bis zu zwölf read_page (MAX_PAGES in @/lib/images) —
+ * sechzehn. Der Auftrag verlangt, die Abschrift DIREKT NACH JEDEM BILD
+ * aufzuschreiben statt am Ende alles auf einmal aus dem Gedächtnis; das sind
+ * bis zu zwölf weitere Züge, in denen gar kein Werkzeug läuft. Macht
+ * achtundzwanzig im dichtesten Fall. read_subjects und read_topics verlangt
+ * der Auftrag seit dem 4.10.2026 nicht mehr, erlaubt sind sie aber weiter, und
+ * ein Aufruf kostet einen Zug — sie bleiben deshalb mitgezählt.
  *
- * Folgt das Modell dem Auftrag, braucht dasselbe Blatt rund vierzehn: ein Zug
- * je Seite mit beiden Aufrufen, dazu propose_sheet und die Antwort.
+ * Vierzig lässt zwölf Züge Luft für Fehlgriffe — ein Werkzeug, das nein sagt
+ * und noch einmal richtig gerufen wird — und für die Antwort am Ende.
  *
- * Warum trotzdem der ungünstigste Fall: wer mitten in der Abschrift aus den
- * Zügen läuft, kommt nie zu propose_sheet. Herauskäme ein Lauf, der die ganze
- * Arbeit gemacht und nichts abgeliefert hat — und als „nichts" landet das
- * Blatt in gesehen.json und kommt nie wieder. Gegen ein Modell, das sich
- * verrennt, steht die Frist (`fristFuer()`), nicht diese Zahl.
+ * Warum der ungünstigste Fall: wer mitten in der Abschrift aus den Zügen
+ * läuft, kommt nie zu propose_sheet. Herauskäme ein Lauf, der die ganze Arbeit
+ * gemacht und nichts abgeliefert hat — und als „nichts" landet das Blatt in
+ * gesehen.json und kommt nie wieder. Gegen ein Modell, das sich verrennt,
+ * steht die Frist (`fristFuer()`), nicht diese Zahl.
  *
- * Zwanzig waren es bis zum 5.9.2026, vierzig bis zum 4.10.2026 — die vierzig
- * waren noch ohne read_docling gerechnet.
+ * Zwanzig waren es bis zum 5.9.2026, vierzig bis zum 4.10.2026, zweiundfünfzig
+ * bis zum 6.10.2026 — die zwölf mehr waren read_docling je Seite. Seit die App
+ * Docling selbst fragt, gilt wieder die Rechnung von davor.
  */
-const MAX_ZUEGE = 52;
+const MAX_ZUEGE = 40;
 
 /**
  * Was ein Lauf gekostet hat, in den Zahlen, die `claude` selbst mitschickt —
  * dazu die Wanduhr dieses Prozesses.
  *
  * Eingebaut am 4.10.2026, bevor irgendetwas schneller gemacht wird: ob die
- * Zeit im Modell steckt, in den Werkzeugen (Docling) oder davor, sagte bis
- * dahin keine Zeile im Mitlesen. API-Zeit gegen Wanduhr trennt das grob;
- * Ausgabe gegen Denken zeigt, ob die Abschrift zweimal geschrieben wird.
+ * Zeit im Modell steckt, in den Werkzeugen oder davor, sagte bis dahin keine
+ * Zeile im Mitlesen. API-Zeit gegen Wanduhr trennt das grob; Ausgabe gegen
+ * Denken zeigt, ob die Abschrift zweimal geschrieben wird.
  *
  * Jede Zahl geht durch `zahlAus()`: die Feldnamen gehören der Fassung von
  * `claude`, und benennt eine neue sie um, steht hier eine 0 statt eines
@@ -392,13 +404,6 @@ function starten<A>(
   // ist gewollt: ein Schlüssel in der Umgebung würde still Geld ausgeben.
   const umgebung = { ...process.env };
   delete umgebung.ANTHROPIC_API_KEY;
-
-  // Docling darf je Seite bis zu 180 s rechnen (TIMEOUT_MS in @/lib/docling),
-  // und so lange wartet read_docling. Wie lange `claude` von sich aus auf ein
-  // MCP-Werkzeug wartet, ist nicht belegt — also steht es hier ausdrücklich,
-  // mit zwanzig Sekunden Luft über der Grenze der App. Ohne das könnte der
-  // Käfig eine Seite aufgeben, an der Docling noch rechnet. (4.10.2026)
-  umgebung.MCP_TOOL_TIMEOUT = "200000";
 
   return new Promise((fertig) => {
     // Die Wanduhr beginnt vor dem Start: was `claude` braucht, bis es

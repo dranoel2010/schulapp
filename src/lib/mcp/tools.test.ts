@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, it } from "node:test";
 
 import { MAX_PAGES } from "@/lib/images";
@@ -368,6 +370,104 @@ describe("read_transcript", () => {
     // read_sheet nennt je Seite nur die Länge. Ohne diesen Verweis läse ein
     // Modell die Zahl und wüsste nicht, wie es an den Text kommt.
     assert.match(TOOLS.read_sheet.description, /read_transcript/);
+  });
+
+  it("sagt, dass eine maschinell gelesene Abschrift niemand gegengelesen hat", () => {
+    assert.match(TOOLS.read_transcript.description, /maschinell/);
+  });
+});
+
+/**
+ * Ein Leser je Seite (seit dem 6.10.2026): welche Seite Docling liest und
+ * welche Claude, entscheidet die App. Bis dahin lag Doclings Text als Vorlage
+ * an einem eigenen Werkzeug, und ein Satz im Auftrag sagte, wer was übernimmt.
+ * Diese Tests halten fest, dass davon an der Tür nichts übrig ist — und dass
+ * ein Modell an ihr liest, welche Seiten es nicht abschreiben soll.
+ */
+describe("ein Leser je Seite", () => {
+  it("kennt read_docling nicht mehr", () => {
+    assert.equal(isToolName("read_docling"), false);
+    assert.equal(
+      toolList().some((tool) => tool.name === "read_docling"),
+      false,
+    );
+  });
+
+  it("nennt Docling an keiner Stelle als Vorlage — auch nicht in einem Argument", () => {
+    // Das ganze Verzeichnis als Text, samt den Beschreibungen der Argumente:
+    // die Vorlage stand am 4.10.2026 an zwei Stellen, im Werkzeug und im
+    // Auftrag, und eine dritte fiele nur hier auf.
+    const verzeichnis = JSON.stringify(toolList());
+
+    assert.doesNotMatch(verzeichnis, /read_docling/);
+    for (const satz of verzeichnis.split(/(?<=[.!?])\s/)) {
+      assert.doesNotMatch(
+        satz,
+        /Docling[^.]*Vorlage|Vorlage[^.]*Docling/i,
+        `dieser Satz macht Docling wieder zur Vorlage: ${satz}`,
+      );
+    }
+  });
+
+  it("erklärt an read_sheet, wer eine Seite liest und was maschinell heißt", () => {
+    const text = TOOLS.read_sheet.description;
+
+    assert.match(text, /`leser`/);
+    // Alle drei Werte und der Altbestand — ein Modell, das nur zwei kennt,
+    // hält den dritten für einen Fehler.
+    for (const wert of ["„offen“", "„docling“", "„claude“", "`null`"]) {
+      assert.equal(text.includes(wert), true, `${wert} fehlt in der Beschreibung`);
+    }
+    assert.match(text, /`maschinell: true`/);
+    assert.match(text, /schreibst du nicht ab/);
+  });
+
+  it("sagt an propose_sheet, dass Abschriften zu Seiten der App verworfen werden", () => {
+    const transcripts = (
+      TOOLS.propose_sheet.args as unknown as {
+        shape: { transcripts: { description?: string } };
+      }
+    ).shape.transcripts;
+    const text = transcripts.description ?? "";
+
+    assert.match(text, /verworfen/);
+    assert.match(text, /„docling“ oder „offen“/);
+    // Die übrigen bleiben: das ist der Unterschied zwischen Verwerfen und
+    // Abweisen, und an ihm hängt ein Postbote von vor dem Umbau.
+    assert.match(text, /übrigen Einträge bleiben/);
+  });
+
+  it("nennt maschinell gelesene Seiten auch am Stoff einer Klausur", () => {
+    assert.match(TOOLS.read_exam_material.description, /`maschinell: true`/);
+  });
+
+  it("stößt aus der MCP-Tür nur an und schreibt nichts, was ein Agent bestimmt", () => {
+    // read_inbox trägt `readOnly`, und der Grenztest oben prüft nur diesen
+    // Schalter. Seit dem 6.10.2026 stößt read_inbox aber die Zuteilung an —
+    // die Ausnahme ist gewollt (das Netz nach einem Neustart), und sie ist
+    // nur eine, solange der Aufrufer allein den ZEITPUNKT bestimmt: geprüft
+    // werden schon hochgeladene Seiten mit leser „offen“, was mit ihnen
+    // geschieht, entscheiden Docling, die feste Regel und Jev. Holte sich
+    // run.ts mehr aus @/lib/leser, könnte ein Werkzeug Seiten festlegen oder
+    // Vorschläge der App anlegen — dann schlägt dieser Test an.
+    const quelle = readFileSync(
+      path.join(process.cwd(), "src", "lib", "mcp", "run.ts"),
+      "utf8",
+    );
+    const leserImporte = [
+      ...quelle.matchAll(/import\s*\{([^}]*)\}\s*from\s*"@\/lib\/leser[^"]*"/g),
+    ].flatMap((treffer) =>
+      treffer[1]
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean),
+    );
+
+    assert.deepEqual(leserImporte, ["zuteilungAnstossen"]);
+    // Und kein Weg an der Liste vorbei: kein Import ohne Klammern, und keine
+    // der Funktionen aus @/lib/materials, die Seiten festlegen.
+    assert.doesNotMatch(quelle, /import\s+\*\s+as\s+\w+\s+from\s+"@\/lib\/leser/);
+    assert.doesNotMatch(quelle, /\b(leserFestlegen|offeneSeiten|korbblattStand)\b/);
   });
 });
 

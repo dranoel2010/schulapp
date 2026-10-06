@@ -50,15 +50,18 @@ export type AppliedProposal = {
  * abhaken und der andere nicht, oder der eine räumte die übrigen Vorschläge
  * weg und der andere ließe sie liegen.
  *
- * Seit dem 4.10.2026 gibt es zwei Optionen, und gesetzt werden sie nur vom
- * Übernehmen ohne Jev an einem schon eingeordneten Blatt
- * (`abschriftNachreichen()` in @/lib/auto-file). Formular und Knöpfe lassen
- * sie weg und verhalten sich wie bisher.
+ * Es gibt drei Optionen, und gesetzt werden sie nur von den Wegen ohne
+ * Menschen in @/lib/auto-file. Formular und Knöpfe lassen sie weg und
+ * verhalten sich wie bisher.
  *
  * - `nurUngelesene`: die Abschrift landet nur auf Seiten, die noch keine haben
  *   — geprüft im Schreiben selbst (`setMaterialTranscripts()`), nicht in einer
  *   Frage davor. Dort hat kein Mensch die Abschrift gesehen, und sie darf keine
- *   ersetzen, die inzwischen jemand bestätigt hat.
+ *   ersetzen, die inzwischen jemand bestätigt hat. Seit dem 6.10.2026 setzt
+ *   sie auch das Einordnen durch Jev im Korb: an einem Blatt, dessen
+ *   Druckseiten Docling schon abgeschrieben hat, ersetzte ein Vorschlag sonst
+ *   still die Docling-Abschrift — zwei Leser für eine Seite, und der zweite
+ *   gewänne.
  * - `nurVorschlag`: weggeräumt wird nur dieser eine Vorschlag und nicht alle
  *   des Blattes. Der Grund, alle wegzuräumen (`clearProposals()`), ist eine
  *   Entscheidung über Fach, Titel und Themen; die trifft eine reine Abschrift
@@ -69,6 +72,12 @@ export type AppliedProposal = {
  *   wird nur die Abschrift geschrieben. Kein Mensch sieht diesen Weg, und ein
  *   Zurückschreiben aus dem eben gelesenen Stand stellte eine Änderung, die
  *   jemand dazwischen gespeichert hat, still wieder her.
+ *
+ * `maschinell` (die Kennzeichnung einer Docling-Abschrift) setzt dieser Weg
+ * nie: was hier geschrieben wird, kommt aus einem Vorschlag, also von Claude
+ * oder einem Menschen. `setMaterialTranscripts()` lässt die Kennzeichnung nur
+ * stehen, wo der Text gleich bleibt; einen geänderten Text kennzeichnet sie
+ * als nicht maschinell.
  */
 export async function applyProposal(
   userId: string,

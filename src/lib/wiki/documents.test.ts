@@ -410,6 +410,71 @@ describe("sheetDocument", () => {
   });
 });
 
+describe("sheetDocument mit maschinell gelesenen Seiten", () => {
+  const VERMERK = "*Maschinell gelesen (Docling) – von niemandem gegengelesen.*";
+
+  /** BLATT, nur dass die Zuteilung die Seiten mit diesen Nummern (ab 1) schrieb. */
+  function maschinell(...nummern: number[]) {
+    return {
+      ...BLATT,
+      pages: BLATT.pages.map((page, index) => ({
+        ...page,
+        maschinell: nummern.includes(index + 1),
+      })),
+    };
+  }
+
+  it("lässt den Altbestand Zeichen für Zeichen, wie er war", () => {
+    // Die Abdrücke sind am 6.10.2026 VOR dem Vermerk mit genau diesen
+    // Beispielblättern gerechnet worden. Ändert sich einer, liefert die
+    // nächste Übergabe jedes Blatt des Bestandes neu — das soll kein Umbau
+    // nebenbei tun. Wer das Format mit Absicht ändert, trägt die neuen
+    // Abdrücke hier mit Absicht ein.
+    assert.equal(
+      documentHash(sheetDocument(BLATT).text),
+      "8e4528b63a122b97023ce1401e4893608f15f231aecb2149a0a6356b76518214",
+    );
+    assert.equal(
+      documentHash(sheetDocument(BLATT_DEUTSCH).text),
+      "97bdff5864acab257b8a322c04bc75c54138fb6a40ed1dee14b76a4b0a5618fc",
+    );
+    assert.ok(!sheetDocument(BLATT).text.includes("Maschinell"));
+  });
+
+  it("setzt den Vermerk direkt unter die Überschrift der maschinellen Seite", () => {
+    const zeilen = sheetDocument(maschinell(1)).text.split("\n");
+    const seite1 = zeilen.indexOf("## Seite 1");
+
+    assert.equal(zeilen[seite1 + 1], "");
+    assert.equal(zeilen[seite1 + 2], VERMERK);
+    assert.equal(zeilen[seite1 + 3], "");
+    assert.ok(/^`{3,}$/.test(zeilen[seite1 + 4]), "dahinter beginnt die Abschrift");
+    assert.equal(zeilen.filter((zeile) => zeile === VERMERK).length, 1);
+  });
+
+  it("stellt den Vermerk nicht in den Codeblock", () => {
+    // Er ist eine Angabe der App, nicht Text vom Blatt — im Codeblock sähe er
+    // aus wie etwas, das jemand abgeschrieben hat.
+    assert.ok(!imCodeblock(sheetDocument(maschinell(1)).text, "Maschinell gelesen"));
+  });
+
+  it("vermerkt nichts an ungelesenen und leeren Seiten", () => {
+    // Seite 2 ist gelesen und leer, Seite 3 ungelesen. Über keiner von beiden
+    // steht eine Abschrift, der man zu viel glauben könnte.
+    const text = sheetDocument(maschinell(2, 3)).text;
+
+    assert.ok(!text.includes(VERMERK));
+    assert.equal(text, sheetDocument(BLATT).text);
+  });
+
+  it("ändert den Abdruck nur am Blatt mit der maschinellen Seite", () => {
+    assert.notEqual(
+      documentHash(sheetDocument(maschinell(1)).text),
+      documentHash(sheetDocument(BLATT).text),
+    );
+  });
+});
+
 describe("documentHash", () => {
   it("ändert sich mit jedem Zeichen", () => {
     assert.notEqual(documentHash("a"), documentHash("b"));

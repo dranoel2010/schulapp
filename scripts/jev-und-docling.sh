@@ -133,7 +133,17 @@ esac
 # Schritt 6 den Postboten auf einen Auftrag um, den die laufende App nicht
 # versteht — Blätter ohne Fach im Korb. Gesucht wird ein Name, den es erst
 # seit $STAND im gebauten Server gibt.
+#
+# Seit „ein Leser je Seite“ (6.10.2026) gehört ein zweiter dazu: Schritt 6
+# kopiert seitdem einen Postboten, der nur zu einer App mit `leser` passt.
+# `unreadAttachedPageIds` gibt es aber schon seit $STAND, auch in der App
+# davor — er allein unterschiede „Bau gelungen“ nicht mehr von „Bau
+# gescheitert, die Docling-App läuft noch“. `leser_grund` ist ein
+# Spaltenname, steht also als Zeichenkette im Bündel und übersteht das
+# Verkleinern. Der erste Name bleibt trotzdem stehen: er ist der Grund,
+# warum es diese Zeile gibt.
 dc exec -T app grep -rqs unreadAttachedPageIds .next/server \
+  && dc exec -T app grep -rqs leser_grund .next/server \
   || halt "Die laufende App ist noch die alte — der Bau beim letzten hoch ist wohl gescheitert. Erst:  sudo ~/nas.sh hoch  (und auf „Fertig.“ achten)"
 echo "App:       neuer Stand läuft"
 
@@ -330,7 +340,7 @@ echo "Docling:   $docling_ok"
 echo
 echo "Jetzt ein Foto hochladen. Nach ein bis drei Minuten liegt es im Fach, nicht im Eingangskorb."
 echo "Zusehen:   $(zum_abtippen "$POST" "logs -f --tail=20 postbote")"
-echo "Docling:   $(zum_abtippen "$APP" "logs --tail=200 app") | grep -E 'Docling|Jev'"
+echo "Docling:   $(zum_abtippen "$APP" "logs --tail=200 app") | grep -E 'Leser|Docling|Jev'"
 echo
 echo "Rückweg, falls nötig:"
 if [ -n "$alt" ]; then

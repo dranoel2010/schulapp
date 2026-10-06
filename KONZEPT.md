@@ -242,7 +242,7 @@ erfinden.
 
 ```
 Blatt ─── Vorschlag ─── Thema   freier Text, noch kein Verweis ins Vokabular
-             Herkunft (von Hand | vom Agenten)
+             Herkunft (von Hand | vom Agenten | von der App)
              Fach, Titel, Tag, Notiz — jedes einzeln, jedes darf fehlen
 ```
 
@@ -271,10 +271,17 @@ Datenschicht wie ein von Hand ausgefülltes Formular. Es gibt keine zweite Tür
 in den Bestand. Daneben steht, was der Vorschlag am Blatt ändern würde,
 gegenübergestellt; ändert er nichts, sagt die Seite auch das.
 
-Ein Vorschlag trägt seine **Herkunft** — von Hand oder von einem Agenten. Das
-ist keine Statistik. Ein Vorschlag vom Agenten ist aus dem Inhalt eines Blattes
-abgeleitet, also aus etwas, das die App nicht geschrieben hat; er wird deshalb
-als solcher angeschrieben, bevor man ihn bestätigt.
+Ein Vorschlag trägt seine **Herkunft** — von Hand, von einem Agenten oder,
+seit dem 6.10.2026, von der App selbst. Das ist keine Statistik. Ein Vorschlag
+vom Agenten ist aus dem Inhalt eines Blattes abgeleitet, also aus etwas, das
+die App nicht geschrieben hat; er wird deshalb als solcher angeschrieben, bevor
+man ihn bestätigt. Für den Vorschlag der App gilt dasselbe, und er trägt
+dieselbe Farbe: Die App legt ihn genau einmal an, für ein Blatt, dessen Seiten
+Docling alle gelesen hat und zu dem deshalb kein Agent mehr kommt. Er enthält
+nur einen Titel — die erste Überschrift der ersten Seite, wörtlich, sonst den
+Platzhalter —, denn die Abschriften stehen schon am Blatt. Danach ordnet Jev
+ihn ein wie jeden anderen; im Korb liegt er nur, wenn das nicht ging, und dann
+sagt die Vorschlagsseite, woher er kommt.
 
 **Es gibt keinen Zustand „übernommen" oder „verworfen".** Eine Zeile in der
 Vorschlagstabelle ist ein offener Vorschlag, sonst nichts — entschieden heißt:
@@ -362,15 +369,63 @@ und sie soll nichts von ihm wissen.
 ordnet seitdem die App selbst ein: nach dem Vorschlag des Postboten
 entscheidet **Jev** (TypeSafe, ein Entscheidungsmodell) über Fach und Themen,
 und die App übernimmt — durch dieselbe Tür wie der Knopf im Korb. Und
-**Docling** liest dem Postboten das Gedruckte vor. Damit ruft die App selbst
-zwei Dienste, und der Satz oben („Die App bekommt keinen Schlüssel und ruft
-nie ein Modell") gilt nicht mehr; der Agent darf aber weiterhin nur
-vorschlagen. Der Postbote sieht alle 15 Sekunden nach, wartet bei einem
-leeren Kontingent bis zu 30 Minuten, und Seiten, die an ein schon
-eingeordnetes Blatt angehängt werden, liest er von selbst nach — die fünfzehn
-Altblätter vom August ausdrücklich nicht. Was das Aufrufen nach jeder
-Aufnahme angeht, bleibt es beim Nein: angestupst wird weiter nichts, der Korb
-bleibt die Warteschlange.
+**Docling**, eine Texterkennung im eigenen Container, liest das Gedruckte —
+seit dem 6.10.2026 nicht mehr dem Postboten vor, sondern für die App selbst
+(siehe unten). Damit ruft die App selbst zwei Dienste, und der Satz oben („Die
+App bekommt keinen Schlüssel und ruft nie ein Modell") gilt nicht mehr; der
+Agent darf aber weiterhin nur vorschlagen. Der Postbote sieht alle 15 Sekunden
+nach, wartet bei einem leeren Kontingent bis zu 30 Minuten, und Seiten, die an
+ein schon eingeordnetes Blatt angehängt werden, liest er von selbst nach — die
+fünfzehn Altblätter vom August ausdrücklich nicht. Den Agenten ruft die App
+weiter nicht: angestupst wird er nicht, der Korb bleibt seine Warteschlange.
+
+**Entscheidung vom 6.10.2026: ein Leser je Seite, und die App entscheidet.**
+Bis dahin las jede Seite zweimal. Docling rechnete sie für den Postboten vor,
+Claude schrieb sie danach trotzdem ganz vom Foto ab, mit Doclings Text als
+Vorlage — und wer was übernimmt, entschied ein Satz im Prompt, also eine
+Stelle, die niemand prüfen kann. Seitdem
+liest Docling jede neue Seite genau einmal, angestoßen von der App nach dem
+Hochladen, und eine feste Regel samt Einstufung durch Jev entscheidet: Ist es
+sauberer Druck — mindestens 60 Wörter, nichts, was nach einer Formel aussieht,
+und Jev hält es für richtig geschriebene, sinnvolle Sätze —, wird Doclings Text
+die Abschrift der Seite. Alles andere liest Claude, vom Foto und ohne Vorlage.
+Jeder Fehler unterwegs heißt Claude, und nichts wartet. Gemessen an 37 echten
+Seiten: 11 lasen Docling allein, keine davon falsch.
+
+Das ist ein Aufruf nach jeder Aufnahme, und oben steht, dass es den nicht gibt.
+Gemeint war dort der Agent, ausgelöst vom Handy im Unterricht, ohne
+Warteschlange und ohne Zustand je Blatt. Dieser hier ruft keinen Agenten, läuft
+auf dem NAS nach der Antwort an das Handy, und beides, was ihm fehlte, hat er:
+eine Queue je Prozess, die Docling eine Seite nach der anderen rechnen lässt,
+und an jeder Seite `leser` und `leser_grund` — wer liest, und warum.
+
+Und dabei **schreibt die App die Abschrift direkt, ohne Vorschlag.** Das ist
+der erste Weg in den Bestand, an dem kein Mensch und kein Vorschlag steht, und
+er hat einen benannten Anlass. Die Regel „der Agent schreibt nie in den
+Bestand" (unten) schützt vor einem Leser, der einen Satz auf dem Blatt als
+Anweisung nehmen kann; deshalb muss zwischen ihm und dem Bestand eine
+Bestätigung stehen. **Docling ist kein solcher Leser.** Es erkennt Zeichen und
+befolgt nichts, und was es liefert, ist dieselbe Art Text, die ein Mensch beim
+Abtippen liefert, nur mit anderen Fehlern. Die Bestätigung gibt hier die feste
+Regel plus Jevs Einstufung — ein Entscheidungsmodell, das nur mit einer
+Wahrscheinlichkeit antwortet und keinen Text schreibt. Und der Weg ist eng
+gehalten: geschrieben wird nur in eine Seite, die noch keine Abschrift hat,
+und **gekennzeichnet** („maschinell gelesen (Docling)") an der Blattseite, im
+Korb, im PDF, im Wiki und im Fragen-Eingang — denn eine solche Abschrift hat
+keine ⟨spitzen Klammern⟩; Docling weiß nicht, wo es unsicher war. Wer den Text
+ändert, macht daraus eine Abschrift von Hand, und die Kennzeichnung geht. Ein
+Vorschlag mit genau diesem Text wäre nur ein Umweg gewesen: übernommen hätte
+ihn Jev und nicht ein Mensch, geprüft also auch dort niemand — und das Ziel
+ist, dass das Foto der einzige Handgriff bleibt.
+
+Was die Entscheidung **nicht** ändert: Agenten schreiben weiter nur über
+`propose_sheet` und `propose_questions`, und `src/lib/mcp/tools.test.ts` prüft
+das unverändert. Die Zuteilung ist App-Code und kein Werkzeug; ein Agent kann
+sie höchstens anstoßen (`read_inbox` nimmt Seiten mit, die noch auf eine
+Entscheidung warten), aber weder auslösen, was gelesen wird, noch das Ergebnis
+bestimmen. Und `propose_sheet` verwirft Abschriften zu Seiten, die die App
+liest oder gelesen hat, statt sie anzunehmen — so kann auch ein Chat in der
+Claude-App keine Docling-Abschrift überschreiben.
 
 Zwei Regeln stehen darüber:
 
@@ -379,9 +434,12 @@ braucht einen Weg in der Oberfläche. Umgekehrt gilt es nicht — der Agent beko
 nur `read_*` und `propose_*`, kein Anlegen, kein Ändern, kein Löschen.
 
 **Der Agent schreibt nie in den Bestand.** Er legt Vorschläge an; erst ein
-Mensch übernimmt sie, durch dieselbe Tür wie ein Formular. Das ist keine
-Vorsichtsmaßnahme, sondern die Bedingung: Wer nicht vertrauenswürdige Blätter
-liest und gleichzeitig schreiben darf, ist angreifbar über das Blatt selbst.
+Mensch übernimmt sie, durch dieselbe Tür wie ein Formular — oder seit dem
+4.10.2026 Jev, durch dieselbe Tür. Das ist keine Vorsichtsmaßnahme, sondern
+die Bedingung: Wer nicht vertrauenswürdige Blätter liest und gleichzeitig
+schreiben darf, ist angreifbar über das Blatt selbst. Die eine Abschrift, die
+ohne Vorschlag in den Bestand kommt — Doclings, seit dem 6.10.2026 —, ist
+keine Ausnahme davon: Docling ist kein Agent, der Anlass steht oben.
 
 Daraus folgte lange ein zweiter Satz: Zettel gehörten nie in eine
 Claude-Code-Sitzung, sondern in die Claude-App — „dort steht kein Bash und kein
@@ -443,7 +501,9 @@ an. Kein Anlegen, kein Ändern, kein Löschen — und ausdrücklich auch kein
 
 Das elfte Lesewerkzeug, `read_transcript`, kam am 5.9.2026 mit der Abschrift
 dazu. Es steht neben `read_page` und nicht darin: `read_page` liefert das Foto,
-`read_transcript` den Wortlaut, den ein Mensch bestätigt hat. Getrennt sind sie,
+`read_transcript` den Wortlaut, der am Blatt gespeichert ist — übernommen von
+einem Menschen oder von Jev, oder seit dem 6.10.2026 von der App aus Docling
+geschrieben und dann je Seite mit `maschinell` gekennzeichnet. Getrennt sind sie,
 weil ein Blatt mit zwölf Seiten als Bilder nie in ein Werkzeugergebnis passte —
 als Text passt es.
 
@@ -512,6 +572,49 @@ kein Tagesplaner werden.
   „Vorschläge holen" an der App überhaupt lohnt (siehe oben): bei schlechter
   Erkennung wird ohnehin jeder Vorschlag nachgetippt, und dann füllt ein
   automatischer Aufruf den Korb mit Arbeit, statt sie abzunehmen.
+- **Ein Leser je Seite — was die 37 Seiten nicht beantworten.** Die Regel ist
+  an genau den Seiten gewählt, an denen sie gemessen ist, und zwei davon sind
+  dasselbe Handout. Was sie im Betrieb taugt, zeigt `leser_grund`; die ersten
+  rund zwanzig Seiten, die Docling allein liest, gehören neben ihr Foto gelegt.
+  Offen ist im Einzelnen:
+  - **Gedruckte Formelblätter fehlen im Messbestand ganz.** Sie gehen nach der
+    Regel nie an Docling allein — ob das reicht oder zu viel ist, weiß niemand.
+  - **Die Formelmuster greifen weit.** „Buchstabe vor Ziffer" trifft auch CO2,
+    M1 und A4, „Buchstabe vor Klammer" auch „Schüler(innen)". Solche
+    Druckseiten liest dann Claude. An den 37 Seiten kostete das keine; zeigt
+    `leser_grund.formel` es im Betrieb öfter, könnte eine zweite Fassung der
+    Regel einen einzelnen Buchstaben verlangen.
+  - **Die Formelanreicherung in Docling** (`do_formula_enrichment`, ein
+    Formelmodell von 610 MB) rechnet für Seiten, die ohnehin an Claude gehen.
+    Liefern die 37 Seiten ohne sie dieselbe Entscheidung, kann sie weg.
+  - **Titel und Tag gemischter Blätter.** Die erste Überschrift taugt nicht
+    immer als Titel („3. Aufgabe"), und steht das Datum nur auf einer Seite,
+    die Docling liest, bleibt der Aufnahmetag.
+  - **Ein Vorschlag der App, den Jev nicht einordnen konnte,** sagt im Korb
+    nicht, warum — das steht nur im Protokoll der App.
+  - **Kein Takt, mit Absicht — und zwei Lücken daraus.** Startet die App in den
+    zwanzig Sekunden vor dem Vorschlag der App neu, bekommt ein reines
+    Docling-Blatt keinen; es bleibt für einen Menschen im Korb. Und läuft der
+    Postbote nicht, warten Seiten, die ein Neustart auf „offen" stehen ließ, bis
+    zum nächsten Hochladen. Ein `after()` auf der Korbseite wäre ein billiger
+    dritter Anstoß.
+  - **Doclings Rohtext bleibt gespeichert,** auch der von Handschriftseiten, in
+    der Datenbank auf dem NAS. An ein Modell (Jev) geht er nur, wenn er die
+    Regel bis zur Länge bestanden hat.
+  - **Der Vermerk fehlt noch beim Baustein-Bau im Abruf** (`/abruf/bausteine/neu`)
+    — im Fragen-Eingang und in `read_exam_material` steht er.
+  - **`MCP_TOOL_TIMEOUT` ist mit `read_docling` gegangen.** `propose_sheet`
+    fragt danach Jev, im ungünstigsten Fall zweimal fünfzehn Sekunden. Zeigt
+    das Protokoll des Postboten dort Zeitabläufe, gehört der Wert mit dieser
+    Begründung wieder hinein.
+  - **Die Notbremse `LESER_REGEL=aus`** trägt kein Skript ein; sie ist eine
+    Zeile von Hand in der Override-Datei, die zwei Skripten gehört.
+  - **Nach einem Rückweg (`nas.sh zurueck`) kennt der alte Code `maschinell`
+    nicht.** Ändert in der Zeit jemand eine Docling-Abschrift, behält sie die
+    Kennzeichnung. Ein Trigger in der Datenbank finge das ab, wäre aber die
+    erste Regel dort, die eine Sitzung der App von einer anderen unterscheiden
+    müsste; bis dahin steht im README, wonach nach einem längeren Rückweg zu
+    sehen ist.
 - **Was ein Vorschlag vom Agenten am Blatt ändern würde, steht nur beim
   Übernehmen.** Der Korb zeigt, dass einer da ist, und wer wissen will, was
   drinsteht, tippt ihn an. Bei einem Vorschlag von Hand war das richtig — man

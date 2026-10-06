@@ -26,15 +26,20 @@ const COVER_WIDTH = 48;
 const COVER_HEIGHT = 64;
 
 /**
- * Woher ein Vorschlag kommt, in zwei Wörtern.
+ * Woher ein Vorschlag kommt, in drei Wörtern.
  *
- * Kein „unbekannt" als dritter Fall: `toOrigin()` in @/lib/inbox faltet alles,
- * was nicht „agent" ist, auf „manuell" — die Spalte ist `text` und kann
- * enthalten, was jemand hineinschreibt. Hier steht deshalb nie etwas anderes
- * als eines von beiden.
+ * Drei Herkünfte: ein Agent (der Postbote oder ein Chat über propose_sheet),
+ * die App selbst (seit dem 6.10.2026, wenn Docling ein ganzes Blatt gelesen
+ * hat — @/lib/leser/zuteilung) und ein Mensch im Formular. Kein „unbekannt"
+ * als vierter Fall: `toOrigin()` in @/lib/inbox faltet jeden Wert, den es
+ * nicht kennt, auf „manuell" — die Spalte ist `text` und kann enthalten, was
+ * jemand hineinschreibt. Hier steht deshalb nie etwas anderes als eines der
+ * drei.
  */
 export function originLabel(origin: ProposalOrigin): string {
-  return origin === "agent" ? "vom Agenten" : "von Hand";
+  if (origin === "agent") return "vom Agenten";
+  if (origin === "app") return "von der App";
+  return "von Hand";
 }
 
 /**
@@ -66,11 +71,14 @@ export function OriginBadge({ origin }: { origin: ProposalOrigin }) {
     <span
       className={cn(
         "shrink-0 rounded-pill px-2 py-0.5 text-xs",
-        // Der Agentenvorschlag steht in der Akzentfarbe, der von Hand nicht.
-        // Nicht als Auszeichnung, sondern weil er der ist, den man lesen muss,
-        // bevor man ihn übernimmt — er stammt aus dem Inhalt eines Blattes,
-        // also aus etwas, das diese App nicht geschrieben hat.
-        origin === "agent"
+        // Der Vorschlag des Agenten und der der App stehen in der
+        // Akzentfarbe, der von Hand nicht. Nicht als Auszeichnung, sondern
+        // weil sie die sind, die man lesen muss, bevor man sie übernimmt:
+        // Beide sind aus dem Inhalt eines Blattes abgeleitet — der eine von
+        // einem Modell, der andere aus Doclings Lesung, deren Titel die erste
+        // Überschrift der ersten Seite ist. Keiner von beiden ist etwas, das
+        // ein Mensch geprüft hat.
+        origin === "agent" || origin === "app"
           ? "bg-accent-soft font-medium text-accent"
           : "bg-surface-muted text-muted",
       )}

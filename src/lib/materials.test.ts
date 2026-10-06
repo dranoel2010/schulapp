@@ -349,6 +349,24 @@ describe("transcriptSchema", () => {
     assert.equal(result.data.length, MATERIAL_TRANSCRIPT_MAX);
   });
 
+  it("macht aus CRLF und einzelnem CR ein LF, bevor gemessen wird", () => {
+    // Ein Formular schickt jeden Zeilenumbruch einer Textarea als CRLF. Ohne
+    // diese Regel käme eine unberührte Abschrift nie gleich zurück — und eine
+    // Docling-Seite verlöre beim Speichern des Titels ihre Kennzeichnung.
+    const result = transcriptSchema.safeParse("Zeile 1\r\n\r\nZeile 2\rZeile 3\r\n");
+
+    assert.ok(result.success);
+    assert.equal(result.data, "Zeile 1\n\nZeile 2\nZeile 3");
+
+    // Gezählt wird nach dem Vereinheitlichen: achttausend Zeichen mit LF
+    // passen, auch wenn das Formular sie mit CRLF länger macht.
+    const zeilen = Array.from({ length: 2_000 }, () => "abc").join("\r\n");
+    assert.ok(zeilen.length > MATERIAL_TRANSCRIPT_MAX);
+    const gezaehlt = transcriptSchema.safeParse(zeilen);
+    assert.ok(gezaehlt.success);
+    assert.equal(gezaehlt.data.length, 2_000 * 4 - 1);
+  });
+
   it("nimmt nur Text an", () => {
     for (const value of [null, undefined, 42, ["a"], { text: "a" }]) {
       const result = transcriptSchema.safeParse(value);

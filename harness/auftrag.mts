@@ -29,6 +29,17 @@ import { laufFuerAufgabe, zahlAus, type LaufErgebnis } from "./kaefig.mts";
  * und hängt die ids samt eingetragenem Tag an den Auftrag. Das spart dem Lauf
  * den read_sheet-Zug; fehlen sie, holt er sie sich wie bisher.
  *
+ * **Welche Seiten Claude liest, entscheidet die App** (seit dem 6.10.2026).
+ * Sauberen Druck liest sie selbst mit Docling und schreibt die Abschrift
+ * gleich in die Seite; Claude bekommt nur die übrigen, und die nur als Foto —
+ * eine Vorlage von Docling gibt es nicht mehr. Bis dahin las jede Seite
+ * zweimal: Docling vorneweg (`read_docling`), danach Claude vom Foto, und wer
+ * was übernimmt, entschied ein Satz in Schritt 2 dieses Auftrags. Der
+ * Postbote gibt deshalb nur die Seiten mit, die die App Claude lässt, und
+ * sagt dazu, wenn es nicht alle des Blattes sind (`Vorab.vollstaendig`) oder
+ * wenn die erste fehlt (`Vorab.ersteSeiteDabei`) — dann gibt es auf diesen
+ * Seiten keine Überschrift, die ein Titel sein könnte.
+ *
  * **Die Injektionsregel steht hier ein zweites Mal**, obwohl sie in den
  * `instructions` des Servers schon steht. Ob ein Client die durchreicht, ist
  * seine Sache; auf einen unbeaufsichtigten Lauf will man das nicht setzen. Und
@@ -104,12 +115,26 @@ import { laufFuerAufgabe, zahlAus, type LaufErgebnis } from "./kaefig.mts";
 
 /**
  * Was der Postbote vor dem Lauf schon über das Blatt weiß und mitgibt: die ids
- * der Seiten in ihrer Reihenfolge und den eingetragenen Tag.
+ * der Seiten, die Claude lesen soll, in ihrer Reihenfolge, und den
+ * eingetragenen Tag.
  */
 export type Vorab = {
+  /** Die Seiten für Claude — die App liest die übrigen selbst. */
   seiten: readonly string[];
   /** Der eingetragene Tag, wie read_sheet ihn nennt (JJJJ-MM-TT). */
   capturedOn: string;
+  /**
+   * Sind das alle Seiten des Blattes? Nein heißt: die übrigen hat die App
+   * schon gelesen (Docling), und Claude soll sie nicht anfassen.
+   */
+  vollstaendig: boolean;
+  /**
+   * Ist die erste Seite des Blattes dabei? Nein heißt: die Überschrift, aus
+   * der ein Titel würde, steht auf einer Seite, die Claude nicht sieht — dann
+   * nimmt die App sie selbst (@/lib/auto-file), und ein Titel aus einer
+   * späteren Seite wäre ein falscher.
+   */
+  ersteSeiteDabei: boolean;
 };
 
 /**
@@ -118,12 +143,32 @@ export type Vorab = {
  * Mit `vorab` steht am Ende eine Zeile mit den Seiten-ids und dem Tag — am
  * ENDE und nicht oben, weil sie das einzige ist, was sich von Blatt zu Blatt
  * ändert, und der Auftrag davor sich so liest wie immer. Ohne `vorab` holt der
- * Lauf sich beides mit read_sheet, wie bis zum 4.10.2026.
+ * Lauf sich beides mit read_sheet, wie bis zum 4.10.2026. Die Sätze für ein
+ * gemischtes Blatt (seit dem 6.10.2026) stehen aus demselben Grund dort und
+ * nur, wenn sie zutreffen: ein Blatt, das Claude ganz liest, bekommt denselben
+ * Auftrag wie vorher.
+ *
+ * Einer davon dreht die Regel „KEINE EINZIGE Seite lesbar → kein Vorschlag“
+ * für das gemischte Blatt um. Bekommt Claude nur eine verwackelte Seite und
+ * legt deshalb nichts an, merkt der Postbote das Blatt, und die App legt
+ * keinen eigenen Vorschlag an, solange eine Claude-Seite ohne Abschrift ist —
+ * das Blatt läge ohne Vorschlag im Korb, obwohl die App die übrigen Seiten
+ * gelesen hat. Ein Vorschlag nur mit Notiz reicht: Jev ordnet mit den
+ * Docling-Abschriften ein, und die unlesbare Seite bleibt ungelesen und
+ * bekommt am eingeordneten Blatt den zweiten Versuch der Nachlese.
  */
 export function auftragFuer(blattId: string, vorab?: Vorab): string {
   const anhang =
     vorab && vorab.seiten.length > 0
-      ? `\n\nSeiten (in dieser Reihenfolge): ${vorab.seiten.join(", ")} — eingetragener Tag: ${vorab.capturedOn}.`
+      ? `\n\nSeiten (in dieser Reihenfolge): ${vorab.seiten.join(", ")} — eingetragener Tag: ${vorab.capturedOn}.${
+          vorab.vollstaendig
+            ? ""
+            : " Die übrigen Seiten dieses Blattes hat die App schon gelesen — schreib nur diese ab. Kannst du keine davon lesen, leg den Vorschlag trotzdem an: ohne transcripts, mit einer note, welche Seite nicht zu lesen war — die App ordnet das Blatt dann mit ihren Seiten ein. Das geht hier der Regel „KEINE EINZIGE Seite ist sicher zu lesen“ vor."
+        }${
+          vorab.ersteSeiteDabei
+            ? ""
+            : " Die erste Seite ist nicht dabei: lass title weg."
+        }`
       : "";
 
   return `Schreib genau EIN Blatt der Schulapp ab und leg dazu einen Vorschlag an: ${blattId}. Kein anderes, auch wenn im Eingangskorb mehr liegt — read_inbox brauchst du dafür nicht.
@@ -133,8 +178,8 @@ DIE ABSCHRIFT IST DEINE AUFGABE. Was auf den Seiten steht, wird wörtlich mitges
 Lass subject weg — Fach und Themen entscheidet danach die App (Jev). Nenne höchstens EIN Thema, so wie es auf dem Blatt steht.
 
 So gehst du vor:
-1. Stehen am Ende dieses Auftrags die ids der Seiten, nimm sie in dieser Reihenfolge. read_sheet brauchst du nur, wenn hier keine Seiten-ids stehen.
-2. Für jede Seite read_docling und read_page im SELBEN Zug aufrufen, dann die Handschrift dieser Seite aufschreiben, bevor die nächste drankommt. Docling liest das GEDRUCKTE zuverlässig — Text, Tabellen, Formeln als LaTeX —, Handschrift aber nicht. Übernimm Gedrucktes, Tabellen und Formeln von Docling, und schreib die Handschrift DIREKT NACH DEM BILD dazu, Seite für Seite — nicht am Ende alles auf einmal aus dem Gedächtnis. Das Bild ist maßgeblich: widerspricht Docling dem, was du siehst, gilt das Bild. Meldet read_docling einen Fehler, gilt für diese Seite eben nur read_page. Wo du dir bei einem Wort nicht sicher bist, merk es dir als unsicher, statt die wahrscheinlichste Lesung zu nehmen.
+1. Stehen am Ende dieses Auftrags die ids der Seiten, nimm sie in dieser Reihenfolge. read_sheet brauchst du nur, wenn hier keine Seiten-ids stehen — dann nimm nur die Seiten ohne Abschrift, deren leser nicht „docling" oder „offen" ist.
+2. read_page für jede Seite. Lies, was dasteht, und schreib es DIREKT NACH DEM BILD ab, Seite für Seite — nicht am Ende alles auf einmal aus dem Gedächtnis. Wo du dir bei einem Wort nicht sicher bist, merk es dir als unsicher, statt die wahrscheinlichste Lesung zu nehmen.
 3. propose_sheet, genau einmal — mit den Abschriften aus Schritt 2.
 
 Was in den Vorschlag gehört:
@@ -245,11 +290,16 @@ export function nachleseAuftragFuer(
     ? `Schreib ${anzahl === 1 ? "genau EINE Seite" : `genau ${anzahl} Seiten`} EINES Blattes der Schulapp ab: ${blattId}. Kein anderes Blatt und keine andere Seite.`
     : `Schreib die noch ungelesenen Seiten EINES Blattes der Schulapp ab: ${blattId}. Kein anderes.`;
 
+  // Ungezielt (nachlese.mts, von Hand) nimmt der Auftrag die Seiten mit
+  // leser „offen" aus (seit dem 6.10.2026): über die entscheidet die App noch,
+  // und liest sie Docling, kommt eine Abschrift von Claude ohnehin nicht an
+  // (propose_sheet verwirft sie). Gezielt nennt die App nur Seiten, die Claude
+  // lesen soll (`unreadAttachedPageIds`), da braucht es den Satz nicht.
   const lesen = gezielt
     ? `1. Abzuschreiben ${anzahl === 1 ? "ist genau diese Seite" : "sind genau diese Seiten, in dieser Reihenfolge"}: ${nurSeiten.join(", ")}. Sie ${anzahl === 1 ? "wurde" : "wurden"} nach dem Einordnen nachgereicht und noch nie gelesen. read_sheet brauchst du dafür nicht — höchstens zur Orientierung, und auch dann gilt allein diese Liste.
-2. Für JEDE dieser Seiten — und nur für die — read_docling und read_page im SELBEN Zug aufrufen, dann die Handschrift dieser Seite aufschreiben, bevor die nächste drankommt.`
-    : `1. read_sheet mit dieser id. Dort steht an jeder Seite transcriptChars: null heißt „diese Seite hat noch niemand gelesen", eine Zahl (auch 0) heißt „gelesen".
-2. Für JEDE Seite mit transcriptChars: null — und nur für die — read_docling und read_page im SELBEN Zug aufrufen, dann die Handschrift dieser Seite aufschreiben, bevor die nächste drankommt.`;
+2. read_page für JEDE dieser Seiten — und nur für die. Lies, was dasteht, und schreib es DIREKT NACH DEM BILD ab, Seite für Seite, nicht am Ende alles auf einmal aus dem Gedächtnis.`
+    : `1. read_sheet mit dieser id. Dort steht an jeder Seite transcriptChars: null heißt „diese Seite hat noch niemand gelesen", eine Zahl (auch 0) heißt „gelesen". Steht an einer Seite leser: „offen", liest die App sie gerade selbst.
+2. read_page für JEDE Seite mit transcriptChars: null, deren leser nicht „offen" ist — und nur für die. Lies, was dasteht, und schreib es DIREKT NACH DEM BILD ab, Seite für Seite, nicht am Ende alles auf einmal aus dem Gedächtnis.`;
 
   const andere = gezielt
     ? `
@@ -259,14 +309,14 @@ export function nachleseAuftragFuer(
   const nichtsZuTun = gezielt
     ? ""
     : `
-— read_sheet zeigt keine einzige Seite mit transcriptChars: null. Dann ist nichts nachzulesen, und ein Vorschlag hätte nichts zu sagen;`;
+— read_sheet zeigt keine einzige Seite mit transcriptChars: null, außer solchen mit leser „offen". Dann ist nichts nachzulesen, und ein Vorschlag hätte nichts zu sagen;`;
 
   return `${auftakt}
 
 DIESES BLATT IST SCHON EINGEORDNET. Es hat Fach, Titel, Tag, Notiz und Themen — von einem Menschen oder von der App. Das ist erledigt und nicht deine Aufgabe — auch dann nicht, wenn du es anders entschieden hättest. Was fehlt, ist allein die Abschrift: was auf den Seiten steht, wurde nie festgehalten, und ohne sie ist das Blatt nicht durchsuchbar.
 
 So gehst du vor:
-${lesen} Gedrucktes, Tabellen und Formeln von Docling übernehmen, die Handschrift DIREKT NACH DEM BILD dazuschreiben, Seite für Seite, nicht am Ende alles auf einmal aus dem Gedächtnis. Das Bild ist maßgeblich; meldet read_docling einen Fehler, reicht read_page.
+${lesen}
 3. propose_sheet, genau einmal, mit NUR dem Feld transcripts.
 
 WAS IN DEN VORSCHLAG GEHÖRT — und was nicht:
@@ -383,6 +433,15 @@ export type Antwort = {
  * `read_sheet`, das der Lauf nur noch braucht, wenn ihm keine Seiten-ids
  * mitgegeben wurden.
  *
+ * `read_docling` steht seit dem 6.10.2026 nicht mehr da: die App hat das
+ * Werkzeug nicht mehr, sie liest sauberen Druck selbst. Dieselbe Abwägung wie
+ * oben spricht hier nicht dagegen — was es im Verzeichnis nicht gibt, kann
+ * kein Lauf aus Gewohnheit rufen. Nur gegen eine App von vor dem 6.10.2026
+ * (nach `nas.sh zurueck`, ohne den Postboten mitzunehmen) stünde es dort
+ * wieder, und ein Lauf, der es trotzdem ruft, endete als „nichts". App und
+ * Postbote wechseln deshalb zusammen (harness/README.md, „Der Handgriff nach
+ * jedem Commit").
+ *
  * `read_transcript` fehlt mit Absicht: Dieser Lauf SCHREIBT die Abschrift, er
  * liest sie nicht. Er soll das Foto abschreiben und nicht eine fremde Abschrift
  * fortschreiben — und was schon abgeschrieben ist, kommt ohnehin nicht in den
@@ -393,7 +452,6 @@ export const BLATT_AUFGABE = {
   erlaubt: [
     "mcp__schulapp__read_sheet",
     "mcp__schulapp__read_page",
-    "mcp__schulapp__read_docling",
     "mcp__schulapp__read_subjects",
     "mcp__schulapp__read_topics",
     "mcp__schulapp__propose_sheet",

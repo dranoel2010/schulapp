@@ -240,6 +240,7 @@ function toEntry(sheet: MaterialTranscriptExport): PdfSheetEntry {
     pages: sheet.pages.map((page) => ({
       pageId: page.pageId,
       transcript: page.transcript,
+      maschinell: page.maschinell,
     })),
   };
 }

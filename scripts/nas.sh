@@ -16,10 +16,16 @@
 # Die vier Wörter:
 #
 #   stand      Was ist gerade live? Ändert nichts. Das meistgebrauchte.
-#   hoch       Neuen Stand von GitHub holen, bauen, starten, nachsehen.
-#              Ging der Bau schief, baut das nächste `hoch` nach.
+#   hoch       Neuen Stand von GitHub holen, bauen, starten, nachsehen —
+#              und danach die Harness-Kopie des Postboten angleichen, denn
+#              App und Postbote wechseln zusammen. Ging der Bau schief, baut
+#              das nächste `hoch` nach. Fehlt der Datenbank eine Spalte, die
+#              der neue Stand braucht, hält es VOR dem Bau an und nennt die
+#              Zeile, die sie anlegt.
 #   zurueck    Auf den Stand vor dem letzten `hoch` zurück — mit dem
-#              Rückfallbild in Sekunden, ohne es per Neubau.
+#              Rückfallbild in Sekunden, ohne es per Neubau. Der Postbote
+#              geht mit zurück (seine Kopie wird an den alten Stand
+#              angeglichen).
 #   postbote   Den Postboten anschalten (räumt die Sperre vorher weg).
 #
 set -u
@@ -371,6 +377,218 @@ stand() {
   return 0
 }
 
+# ------------------------------------------------- Spalten vor dem Bau
+#
+# Spalten, ohne die ein Stand nicht läuft — je Zeile Tabelle, Spalte und die
+# SQL-Datei, die sie anlegt. Geprüft wird eine Zeile nur, wenn ihre Datei im
+# neuen Stand liegt: dann gehört die Spalte zu ihm.
+#
+# Warum vor dem Bau: Additive Spalten verträgt der alte Code, er fragt sie
+# nicht ab. Der neue Code ohne sie scheitert an jeder Seite mit „column does
+# not exist“ — Ablage, Korb, Hochladen. Deshalb kommt die SQL-Datei VOR den
+# Bau, und dieses Skript sieht nach, statt es zu glauben.
+PFLICHTSPALTEN="material_pages leser scripts/leser-tabellen.sql"
+
+# Postgres im db-Container, Benutzer und Datenbank aus SEINER Umgebung — wie
+# psql_db() in scripts/kalender-einrichten.sh; "schulapp" nur als Rückfall.
+#
+# db_spalte <tabelle> <spalte>  →  "1", "0" oder leer (nicht nachzusehen)
+db_spalte() {
+  # shellcheck disable=SC2016  # die $-Ausdrücke wertet die Shell IM Container aus
+  ( cd "$APP" && $DC exec -T db sh -c 'exec psql -X -tA -U "${POSTGRES_USER:-schulapp}" -d "${POSTGRES_DB:-${POSTGRES_USER:-schulapp}}" -c "$1"' psql \
+      "select count(*) from information_schema.columns where table_schema = current_schema() and table_name = '$1' and column_name = '$2'" \
+  ) < /dev/null 2>/dev/null | tr -d '[:space:]'
+}
+
+# Benutzer und Datenbank, wie sie im db-Container stehen — damit die Zeile
+# zum Abtippen die echten Namen trägt und nicht geratene.
+db_namen() {
+  local namen
+  # shellcheck disable=SC2016
+  namen=$( cd "$APP" && $DC exec -T db sh -c 'echo "${POSTGRES_USER:-schulapp} ${POSTGRES_DB:-${POSTGRES_USER:-schulapp}}"' < /dev/null 2>/dev/null )
+  echo "${namen:-schulapp schulapp}"
+}
+
+# spalten_pruefen <Commit> [laeuft] — hält an (Rückgabe 1), wenn eine Spalte
+# fehlt. Lässt es sich nicht nachsehen (db antwortet nicht), sagt es das und
+# lässt weitermachen: ohne Datenbank ist die App ohnehin kaputt, und eine
+# Prüfung, die jeden `hoch` sperrt, weil sie selbst klemmt, wäre schlimmer als
+# keine.
+#
+# Mit „laeuft“ ist es der Zweig „Nichts Neues“: gebaut wird dort nichts, die
+# laufende App IST schon der Stand — fehlt ihr die Spalte, scheitert sie jetzt
+# schon an jeder Seite. Das passiert, wenn eine alte Kopie dieses Skripts ohne
+# Prüfung gebaut hat und das SQL vergessen war. Ohne diesen Blick meldete der
+# zweite `hoch` Erfolg, gliche den Postboten an, und der scheiterte danach in
+# jeder Runde an read_inbox.
+spalten_pruefen() {
+  local tabelle spalte datei antwort benutzer datenbank
+  while read -r tabelle spalte datei; do
+    [ -n "$tabelle" ] || continue
+    git -C "$APP/repo" cat-file -e "$1:$datei" 2>/dev/null || continue
+    antwort=$(db_spalte "$tabelle" "$spalte")
+    case "$antwort" in
+      1)
+        echo "Datenbank: $tabelle.$spalte ist da." ;;
+      0)
+        read -r benutzer datenbank <<< "$(db_namen)"
+        echo >&2
+        if [ "${2:-}" = "laeuft" ]; then
+          echo "HALT: Der Datenbank fehlt $tabelle.$spalte — und die App, die läuft, braucht sie schon." >&2
+          echo "Gebaut wird nichts; bis die Spalte da ist, scheitert jede Seite. Den Postboten gleiche ich nicht an." >&2
+        else
+          echo "HALT: Der Datenbank fehlt $tabelle.$spalte — der neue Stand braucht sie." >&2
+          echo "Gebaut ist nichts, die App läuft weiter wie bisher." >&2
+        fi
+        echo >&2
+        echo "Vorher sichern und zählen — die Zählzeilen stehen im Kopf von $datei," >&2
+        echo "die ganze Reihenfolge im README. Dann einspielen, in einer Transaktion, mit" >&2
+        echo "Abbruch beim ersten Fehler und mit Benutzer und Datenbank aus dem db-Container:" >&2
+        echo "  sudo sh -c 'cd $APP && $DC exec -T db psql -X -v ON_ERROR_STOP=1 --single-transaction -U $benutzer -d $datenbank -f - < repo/$datei'" >&2
+        if [ "${2:-}" = "laeuft" ]; then
+          echo "Danach noch einmal:  sudo $0 hoch   — es gleicht dann den Postboten an." >&2
+        else
+          echo "Danach noch einmal:  sudo $0 hoch   — es baut dann nach." >&2
+        fi
+        postbote_aus_hinweis
+        return 1 ;;
+      *)
+        echo "(Ob $tabelle.$spalte da ist, ließ sich nicht nachsehen — die Datenbank antwortet nicht."
+        echo " Ich mache trotzdem weiter. Fehlt sie, scheitert danach jede Seite: dann $datei einspielen.)" ;;
+    esac
+  done <<< "$PFLICHTSPALTEN"
+  return 0
+}
+
+# Ist der Postbote aus, ein Satz dazu. README „Auf das NAS bringen“ hält ihn
+# vor dem Wechsel an, und erst ein `hoch`, das durchgeht, startet ihn wieder —
+# scheitert es vorher (HALT, Bau, App antwortet nicht), stünde sonst nirgends,
+# dass neue Fotos bis auf Weiteres niemand liest. Seine Kopie ist dann nicht
+# angeglichen, passt also zur App, die vorher lief.
+postbote_aus_hinweis() {
+  [ -d "$POST" ] || return 0
+  postbote_laeuft && return 0
+  echo >&2
+  echo "Der Postbote ist aus. Seine Kopie passt zur App von vorher — wieder an, solange die läuft:" >&2
+  echo "  sudo $0 postbote      (ein hoch, das durchgeht, startet ihn ohnehin)" >&2
+}
+
+# ------------------------------------------------- Postbote angleichen
+#
+# Wo der Postbote läuft, liegt eine KOPIE von harness/ und kein Klon
+# ($POST/harness, siehe harness/README.md) — `git pull` rührt sie nicht an.
+# Bis zum 6.10.2026 war das ein Handgriff nach jedem Commit, und vergessen
+# kostete schon einmal sieben Tage. Seit „ein Leser je Seite“ müssen App und
+# Postbote zusammen wechseln: die App entscheidet, welche Seiten Claude liest,
+# und der Auftrag des Postboten muss es wissen. Deshalb gleicht `hoch` die
+# Kopie selbst an, sobald die neue App antwortet — und `zurueck` ebenso an
+# den alten Stand, sobald der wieder antwortet.
+#
+# Verglichen und kopiert wird, was scripts/jev-und-docling.sh in Schritt 6
+# kopiert: *.mts und README.md aus dem Klon. zugang.json, gesehen.json und
+# lauf.lock liegen im selben Ordner und werden beim Kopieren nie angefasst —
+# der Zugang ist neunzig Tage lang der Schlüssel zur App, die Merkliste das
+# Gedächtnis des Postboten.
+#
+# Erst anhalten, dann kopieren, dann starten: ein Postbote, der während des
+# Kopierens einen Lauf beginnt, liefe mit halb alten, halb neuen Dateien. Ein
+# Blatt, das er beim Anhalten gerade las, kommt in der nächsten Runde wieder
+# dran. Gestartet wird über `postbote`, das die nach `docker stop`
+# liegengebliebene Sperre wegräumt.
+#
+# Geht das Kopieren schief, kommt die alte Fassung aus der Sicherung zurück,
+# und der Postbote läuft mit ihr weiter — der alte Postbote verträgt die neue
+# App. Die App bleibt in jedem Fall, wie sie ist.
+
+# harness_summen <ordner> — md5sum, sortiert, über die Dateien, die der KLON
+# hat (*.mts und README.md), jede in <ordner> gelesen; fehlt dort eine, steht
+# „fehlt“ da. Über die Liste des Klons und nicht über das, was im Ordner
+# liegt: Verschwindet eine Datei aus dem Repo, bliebe ihre alte Kopie beim
+# Postboten liegen, die Summen wären nie gleich, und jedes `hoch` endete mit
+# einem Fehler. Der Postbote lädt nur, was sein Code importiert — eine
+# liegengebliebene Datei stört ihn nicht.
+harness_summen() {
+  local f
+  ( cd "$APP/repo/harness" 2>/dev/null && ls *.mts README.md 2>/dev/null ) | while read -r f; do
+    if [ -f "$1/$f" ]; then ( cd "$1" && md5sum "$f" ); else echo "fehlt  $f"; fi
+  done | sort
+}
+
+# Läuft der Postbote-Container? Gefragt wird Docker — `ps` auf dem Synology
+# sieht Container-Prozesse nicht (siehe postbote() unten).
+postbote_laeuft() {
+  local cid
+  cid=$( cd "$POST" 2>/dev/null && $DC ps -q postbote 2>/dev/null | head -1 )
+  [ -n "$cid" ] && [ "$("$DOCKER" inspect -f '{{.State.Running}}' "$cid" 2>/dev/null)" = "true" ]
+}
+
+harness_abgleichen() {
+  local quelle="$APP/repo/harness" ziel="$POST/harness"
+  echo
+  echo "Postbote: vergleiche $ziel mit dem Klon ..."
+
+  if [ ! -d "$ziel" ]; then
+    echo "Kein $ziel — der Postbote läuft nicht auf diesem NAS. Nichts anzugleichen."
+    return 0
+  fi
+  # Ohne md5sum wären beide Summen leer und damit „gleich“ — ein stilles Ja.
+  if ! command -v md5sum >/dev/null 2>&1; then
+    echo "FEHLER: md5sum fehlt — ohne Prüfsummen gleiche ich nicht ab." >&2
+    echo "Von Hand, wie unter „Der Handgriff nach jedem Commit“ in harness/README.md." >&2
+    return 1
+  fi
+
+  local soll
+  soll=$(harness_summen "$quelle")
+  if [ -z "$soll" ]; then
+    echo "FEHLER: Im Klon unter $quelle liegt kein Harness." >&2
+    return 1
+  fi
+  if [ "$soll" = "$(harness_summen "$ziel")" ]; then
+    echo "Die Kopie ist schon aktuell."
+    postbote_laeuft || echo "Er läuft allerdings nicht. Anschalten:  sudo $0 postbote"
+    return 0
+  fi
+
+  local alt
+  alt="$POST/harness-alt-$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$alt" && cp -p "$ziel"/*.mts "$ziel"/README.md "$alt"/ 2>/dev/null
+  if ! ls "$alt"/*.mts >/dev/null 2>&1; then
+    echo "FEHLER: Die Sicherung nach $alt ging nicht — ich kopiere nichts." >&2
+    return 1
+  fi
+  echo "Sicherung: $alt"
+
+  echo "Halte den Postboten an ..."
+  if ! ( cd "$POST" && $DC stop postbote ); then
+    echo "FEHLER: Er ließ sich nicht anhalten — kopiert ist nichts, er läuft wie vorher." >&2
+    return 1
+  fi
+
+  # Auf vorhandene Dateien kopiert, behalten sie Eigentümer und Rechte — der
+  # Postbote läuft nicht als root und muss sie lesen können.
+  if cp "$quelle"/*.mts "$quelle"/README.md "$ziel"/ \
+     && [ "$soll" = "$(harness_summen "$ziel")" ]; then
+    echo "Kopiert und verglichen: $(printf '%s\n' "$soll" | wc -l | tr -d ' ') Dateien gleich mit dem Klon."
+    postbote
+    echo
+    echo "Rückweg nur für den Postboten, falls nötig:"
+    echo "  $(zum_abtippen "$POST" "stop postbote")"
+    echo "  sudo sh -c 'cp -p $alt/* $ziel/'   und   sudo $0 postbote"
+    return 0
+  fi
+
+  echo >&2
+  echo "FEHLER: Kopieren ging schief, oder die Prüfsummen weichen danach ab." >&2
+  if cp -p "$alt"/* "$ziel"/; then
+    echo "Die alte Fassung liegt wieder dort; der Postbote startet mit ihr." >&2
+  else
+    echo "Auch das Zurücklegen ging nicht. Von Hand:  sudo sh -c 'cp -p $alt/* $ziel/'" >&2
+  fi
+  postbote
+  return 1
+}
+
 # ----------------------------------------------------------------- hoch
 hoch() {
   finde_dc
@@ -433,6 +651,19 @@ hoch() {
       echo "Ob er auch gebaut ist, weiß ich nicht. Ging der letzte Bau schief, so von Hand:"
       echo "  $(zum_abtippen "$APP" "up -d --build")"
     fi
+    # Der Postbote kann trotzdem hinterherhinken: Kam der neue Stand mit einer
+    # älteren Kopie dieses Skripts aufs NAS, die den Abgleich noch nicht
+    # kannte, holt das nächste `hoch` ihn hier nach. Nur bei einer App, die
+    # antwortet — der neue Postbote gehört zur neuen App, nicht zu einer, die
+    # gerade nicht läuft. Und erst nach einem Blick in die Datenbank: `/`
+    # antwortet ohne Anmeldung auch dann, wenn jede Seite an einer fehlenden
+    # Spalte scheitert (spalten_pruefen, „laeuft“).
+    if gut "$(erreichbar_innen)"; then
+      spalten_pruefen "$nachher" laeuft || exit 1
+      harness_abgleichen || exit 1
+    else
+      echo "Die App antwortet gerade nicht — den Postboten gleiche ich erst an, wenn sie läuft."
+    fi
     exit 0
   fi
 
@@ -463,6 +694,11 @@ hoch() {
   # das nächste `hoch` sähe „nichts Neues" — genau der Fehler vom 5.10.2026.
   # Das "?" sorgt dafür, dass aus der Annahme nie ein Rückfallbild wird.
   [ -n "$GEB_COMMIT" ] || merke_gebaut "$laeuft" "?"
+
+  # Fehlt der Datenbank eine Spalte, die der neue Stand braucht, hier anhalten
+  # — vor dem Bau und vor dem Rückweg, es ändert sich also nichts. Weil eben
+  # notiert ist, was läuft, baut das nächste `hoch` nach, sobald sie da ist.
+  spalten_pruefen "$nachher" || exit 1
 
   # Der Rückweg ist der Stand, der jetzt läuft — aber nur, wenn er auch
   # antwortet. War die App schon kaputt, bleibt der alte Rückweg stehen: Er
@@ -499,6 +735,7 @@ hoch() {
       echo "Und die App antwortet nicht (HTTP ${jetzt:-000})." >&2
       rueckweg_hinweis >&2
     fi
+    postbote_aus_hinweis
     exit 1
   fi
 
@@ -507,6 +744,12 @@ hoch() {
   local code
   if code=$(warte_bis_wach); then
     echo "Da ist sie: HTTP $code unter $ADRESSE"
+    if ! harness_abgleichen; then
+      echo >&2
+      echo "Die App läuft auf dem neuen Stand — nur der Postbote ist nicht angeglichen (siehe oben)." >&2
+      exit 1
+    fi
+    echo
     echo "Fertig."
   else
     echo >&2
@@ -515,6 +758,7 @@ hoch() {
     echo "  $(zum_abtippen "$APP" "logs --tail=50 app")" >&2
     echo "Und wenn es nicht offensichtlich ist:" >&2
     rueckweg_hinweis >&2
+    postbote_aus_hinweis
     exit 1
   fi
 }
@@ -547,6 +791,18 @@ zurueck() {
   local code
   if code=$(warte_bis_wach); then
     echo "Wieder da: HTTP $code"
+    # App und Postbote wechseln zusammen — auch zurück. Der Klon steht jetzt
+    # auf dem alten Stand, also gleicht derselbe Abgleich wie bei `hoch` die
+    # Harness-Kopie an dessen harness/ an (die neue liegt danach als
+    # harness-alt-<Zeit> daneben). Ohne das liefe der neue Postbote gegen die
+    # alte App: deren Verzeichnis bietet ein Werkzeug an, das sein Käfig nicht
+    # erlaubt, und ein verweigerter Aufruf macht den ganzen Lauf zu „nichts“ —
+    # das Blatt wäre gemerkt und bliebe ungelesen im Korb.
+    if ! harness_abgleichen; then
+      echo >&2
+      echo "Die App läuft wieder auf dem alten Stand — nur der Postbote ist nicht angeglichen (siehe oben)." >&2
+      exit 1
+    fi
     echo
     echo "Du stehst jetzt auf einem abgekoppelten HEAD. Das ist Absicht."
     echo "Der nächste \"hoch\" holt dich von selbst auf main zurück."
@@ -618,8 +874,8 @@ case "${1:-}" in
     echo "Die Schulapp vom Handy aus bedienen."
     echo
     echo "  sudo $0 stand      Was ist live? Ändert nichts."
-    echo "  sudo $0 hoch       Neuen Stand holen, bauen, starten."
-    echo "  sudo $0 zurueck    Auf den Stand vor dem letzten \"hoch\"."
+    echo "  sudo $0 hoch       Neuen Stand holen, bauen, starten, Postbote angleichen."
+    echo "  sudo $0 zurueck    Auf den Stand vor dem letzten \"hoch\", Postbote mit."
     echo "  sudo $0 postbote   Postbote anschalten (Sperre wird weggeräumt)."
     exit 1 ;;
 esac

@@ -9,10 +9,13 @@ import { seitenIds } from "@/lib/materials";
  * (4.10.2026).
  *
  * Die Regel selbst — welche Seite als nachgereicht und ungelesen zählt — ist
- * SQL (`nachgereichtUngelesen()` in @/lib/materials) und gehört in einen Lauf
- * gegen eine echte Datenbank, so wie scripts/probe-abschrift.mts es vormacht.
- * Hier stehen die beiden Ränder davor und dahinter: wie die ids aus der
- * Abfrage wieder zur Liste werden, und wie der Postbote danach fragen darf.
+ * SQL (`nachgereichtUngelesen()` in @/lib/materials) und läuft gegen eine
+ * echte Datenbank in scripts/probe-leser.mts. Seit dem 6.10.2026 fragt sie
+ * zuerst, wer die Seite liest: `leser = 'claude'` an einem eingeordneten
+ * Blatt immer, `leser` NULL (Seiten von vorher) nach der Regel vom 4.10.2026
+ * samt dem Schutz der Altblätter, `'offen'` und `'docling'` nie. Hier stehen
+ * die beiden Ränder davor und dahinter: wie die ids aus der Abfrage wieder
+ * zur Liste werden, und wie der Postbote danach fragen darf.
  */
 
 describe("seitenIds", () => {

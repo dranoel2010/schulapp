@@ -1,23 +1,8 @@
 import { z } from "zod";
 
 import type { User } from "@/db/schema";
-import {
-  daysBetween,
-  formatGerman,
-  timeInBerlin,
-  todayInBerlin,
-} from "@/lib/dates";
+import { daysBetween, formatGerman, todayInBerlin } from "@/lib/dates";
 import { autoFile, type AutoFileResult } from "@/lib/auto-file";
-import {
-  convertPage,
-  doclingConfigured,
-  doclingFehlschlag,
-  doclingFertig,
-  doclingFor,
-  doclingPausiertBis,
-  trifftDocling,
-  type DoclingResult,
-} from "@/lib/docling";
 import { getExam, listExams } from "@/lib/exams";
 import { formatAverage, gradeLabel } from "@/lib/grade-scale";
 import { gradeSummary, gradesBySubject } from "@/lib/grades";
@@ -34,7 +19,6 @@ import {
   listMaterialTranscripts,
   listMaterials,
   listPageActivity,
-  nextUnreadPage,
   readPageImage,
   resolveMaterialTopic,
   LIST_LIMIT,
@@ -42,6 +26,7 @@ import {
   type MaterialPageTranscript,
   type PageActivity,
 } from "@/lib/materials";
+import { zuteilungAnstossen } from "@/lib/leser/zuteilung";
 import { listSubjects } from "@/lib/subjects";
 import {
   vorratZuKlausur,
@@ -56,6 +41,12 @@ import { loadWeek, WEEKDAYS } from "@/lib/timetable";
 
 import { looksLikeId, matchSubject, matchTopic, type Match } from "./resolve";
 import { TOOLS, type ToolArgs, type ToolName } from "./tools";
+import {
+  abschriftenSieben,
+  nurVerworfen,
+  verworfenSatz,
+  type Verworfen,
+} from "./verwerfen";
 
 /**
  * Was die Werkzeuge tun, wenn sie gerufen werden.
@@ -439,10 +430,26 @@ const HANDLERS: Handlers = {
       (page) => page.transcriptLength !== null,
     ).length;
 
+    // Wer welche Seite liest (seit dem 6.10.2026), ebenfalls im Satz und aus
+    // demselben Grund: ein Modell im Chat soll nach EINEM Aufruf wissen, dass
+    // es eine Seite nicht abschreiben soll, weil die App sie gerade selbst
+    // liest — und dass eine Abschrift von der App kommt und nicht von einem
+    // Menschen. Bei null bleibt der Halbsatz weg, wie oben.
+    const beiDerApp = sheet.pages.filter((page) => page.leser === "offen").length;
+    const maschinell = sheet.pages.filter((page) => page.maschinell).length;
+
     return daten(
       `„${sheet.title}“ aus ${sheet.subject.name}, ${zahl(sheet.pages.length, "Seite", "Seiten", "f")}.${
         abgeschrieben > 0
           ? ` Davon ${zahl(abgeschrieben, "Seite", "Seiten", "f")} abgeschrieben — den Wortlaut holt read_transcript.`
+          : ""
+      }${
+        maschinell > 0
+          ? ` ${maschinell === 1 ? "Eine davon hat" : `${maschinell} davon hat`} die App maschinell gelesen (Docling).`
+          : ""
+      }${
+        beiDerApp > 0
+          ? ` ${beiDerApp === 1 ? "Eine Seite liest" : `${beiDerApp} Seiten liest`} die App gerade selbst — die schreibst du nicht ab.`
           : ""
       }${sheet.filedAt ? "" : " Es liegt noch im Eingangskorb."}`,
       {
@@ -476,6 +483,28 @@ const HANDLERS: Handlers = {
            * Zeichen und nicht in UTF-16-Einheiten.
            */
           transcriptChars: page.transcriptLength,
+          /**
+           * Wer diese Seite liest (seit dem 6.10.2026) — die Antwort der App
+           * auf die Frage, die bis dahin ein Satz im Auftrag des Postboten
+           * beantwortete. „offen": die App liest sie gerade selbst;
+           * „docling": die App hat sie maschinell gelesen; „claude": sie
+           * wartet auf jemanden, der sie vom Foto abschreibt; `null`: eine
+           * Seite von vorher, sie wird gelesen wie bisher.
+           *
+           * Der Postbote nimmt daraus die Seiten für seinen Auftrag und
+           * lässt ein Blatt mit einer offenen Seite in dieser Runde liegen
+           * (harness/postbote.mts). Dieselben Werte stehen an der Spalte in
+           * src/db/schema.ts; hier wird nichts übersetzt, damit Postbote und
+           * Datenbank dasselbe Wort für dieselbe Sache haben.
+           */
+          leser: page.leser,
+          /**
+           * Hat die App die heutige Abschrift maschinell geschrieben
+           * (Docling)? Dann hat sie niemand gegengelesen, und Lesefehler sind
+           * nicht mit ⟨Klammern⟩ markiert. Ein Mensch, der den Text ändert,
+           * macht daraus eine Abschrift von Hand — dann steht hier `false`.
+           */
+          maschinell: page.maschinell,
         })),
       },
     );
@@ -517,105 +546,6 @@ const HANDLERS: Handlers = {
     };
   },
 
-  async read_docling(user, args) {
-    if (!doclingConfigured()) {
-      return fehler(
-        "Docling ist hier nicht eingerichtet. Lies die Seite mit read_page.",
-      );
-    }
-
-    // Zuerst die Pause (@/lib/docling, `PAUSE_MS`): ist Docling vorhin
-    // ausgefallen, kostete jede weitere Seite bis zu drei Minuten Warten auf
-    // dasselbe Nichts. Der Satz sagt ausdrücklich „pausiert" und nennt die
-    // Uhrzeit — er landet im Protokoll des Laufs, und dort soll später zu
-    // lesen sein, dass Docling nicht kaputt war, sondern absichtlich ruhte.
-    //
-    // Was schon FERTIG im Vorrat liegt, geht trotzdem hinaus (seit dem
-    // 4.10.2026; vorher stand die Pause vor dem Vorrat und wies auch das ab).
-    // Gelesen ist gelesen, und Docling kostet es nichts mehr. Auf eine
-    // laufende Umrechnung wird in der Pause nicht gewartet, und eine neue
-    // beginnt nicht — `doclingFertig()` stößt nichts an.
-    const start = Date.now();
-    const pausiert = doclingPausiertBis(start);
-
-    let ergebnis: DoclingResult;
-    let treffer: boolean;
-
-    if (pausiert !== null) {
-      const fertig = doclingFertig(user.id, args.page, start);
-
-      if (fertig === null) {
-        return fehler(
-          `Docling ist bis ${timeInBerlin(new Date(pausiert))} pausiert (vorhin zu langsam oder nicht erreichbar). Lies die Seite mit read_page.`,
-        );
-      }
-
-      ergebnis = fertig;
-      treffer = true;
-    } else {
-      // Aus dem Vorrat, wenn die Seite schon umgerechnet wird oder ist — sonst
-      // neu. Seit dem 4.10.2026: Während Claude eine Seite abschreibt, rechnet
-      // Docling schon die nächste (`vorauslesen()`), und die Anfrage danach
-      // findet sie hier fertig vor oder wartet auf die laufende Umrechnung,
-      // statt eine zweite zu beginnen. Wie der Vorrat das sicherstellt, steht
-      // an `neuerVorrat()` in @/lib/docling.
-      const geholt = doclingFor(user.id, args.page, () =>
-        seiteDurchDocling(user.id, args.page, false),
-      );
-      treffer = geholt.treffer;
-
-      try {
-        ergebnis = await geholt.promise;
-      } catch (error) {
-        if (error instanceof SeiteNichtLesbar) return fehler(error.message);
-
-        console.error(
-          `Docling fehlgeschlagen nach ${sekunden(Date.now() - start)} s`,
-          error,
-        );
-
-        // Eine einzelne gescheiterte Seite sagt über die nächste nichts — die
-        // darf trotzdem schon anlaufen. Nach einem Ausfall steht der Schalter
-        // offen, und `vorauslesen()` lässt es von selbst.
-        vorauslesen(user.id, args.page);
-
-        const bis = trifftDocling(error) ? doclingPausiertBis() : null;
-
-        return fehler(
-          bis !== null
-            ? `Docling ist ausgefallen und pausiert bis ${timeInBerlin(new Date(bis))}. Lies die Seite mit read_page — das geht auch ohne.`
-            : "Docling hat diese Seite nicht lesen können. Lies sie mit read_page — das geht auch ohne.",
-        );
-      }
-    }
-
-    // Die Zeile für die Umrechnung selbst schreibt `seiteDurchDocling()`, auch
-    // beim Vorauslesen. Hier steht nur noch, wenn die Anfrage aus dem Vorrat
-    // kam — und wie lange sie dort noch warten musste.
-    if (treffer) {
-      console.info(
-        `Docling ${kurz(args.page)}: aus dem Vorrat${pausiert !== null ? " (Docling pausiert)" : ""}, gewartet ${sekunden(Date.now() - start)} s, gerechnet ${ergebnis.seconds.toFixed(1)} s, ${ergebnis.markdown.length} Zeichen`,
-      );
-    }
-
-    vorauslesen(user.id, args.page);
-
-    // Leer UND „success": Docling hat die Seite fertig gelesen und nichts
-    // Gedrucktes gefunden. Leer mit einem anderen Status kommt hier nicht an —
-    // das wirft `convertPage()` als Fehler, siehe dort.
-    if (ergebnis.markdown === "") {
-      return daten(
-        "Docling hat auf dieser Seite nichts Gedrucktes gefunden — vermutlich ist alles Handschrift. Lies sie mit read_page.",
-        { page: args.page, markdown: "" },
-      );
-    }
-
-    return daten(
-      `Was Docling auf der Seite liest (${ergebnis.markdown.length} Zeichen, ${ergebnis.seconds.toFixed(1)} s). Gedrucktes, Tabellen und Formeln von hier übernehmen, Handschrift aus read_page ergänzen.`,
-      { page: args.page, markdown: ergebnis.markdown },
-    );
-  },
-
   async read_transcript(user, args) {
     // Zwei Abfragen, und die erste ist keine Bequemlichkeit. `listMaterial-
     // Transcripts()` gibt zu einem Blatt, das es nicht gibt, dieselbe leere
@@ -641,6 +571,14 @@ const HANDLERS: Handlers = {
       0,
     );
     const offen = pages.length - gelesen;
+    // Seit dem 6.10.2026 kann eine Abschrift auch von der App stammen
+    // (Docling). Der Satz über die ⟨Klammern⟩ stimmt für sie nicht: Docling
+    // markiert nichts, was es falsch gelesen hat. Das steht deshalb eigens da,
+    // sobald eine solche Seite dabei ist — wer daraus zitiert, soll wissen,
+    // dass die glatte Zeile nicht „sicher gelesen" heißt.
+    const maschinell = pages.filter(
+      (page) => page.maschinell && page.transcript !== null,
+    ).length;
 
     // Kein Fehler, sondern eine Antwort — dieselbe Entscheidung wie bei einem
     // Fach ohne Noten ein paar Handler weiter oben. `isError` hieße für das
@@ -657,6 +595,10 @@ const HANDLERS: Handlers = {
       `Die Abschrift von „${sheet.title}“: ${gelesen} von ${pages.length} ${
         pages.length === 1 ? "Seite" : "Seiten"
       } abgeschrieben, ${tausender(zeichen)} Zeichen. Was in ⟨spitzen Klammern⟩ steht, war beim Abschreiben unsicher.${
+        maschinell > 0
+          ? ` ${maschinell === 1 ? "Eine Seite hat" : `${maschinell} Seiten hat`} die App maschinell gelesen (Docling, „maschinell: true“) — dort markiert keine Klammer, was falsch gelesen sein kann; im Zweifel gilt das Foto.`
+          : ""
+      }${
         offen > 0
           ? ` Die übrigen ${offen} stehen mit „transcript: null“ da — die hat noch niemand gelesen, dafür read_page.`
           : ""
@@ -671,6 +613,25 @@ const HANDLERS: Handlers = {
   },
 
   async read_inbox(user, args) {
+    // Das Netz nach einem Neustart (seit dem 6.10.2026). Angestoßen wird die
+    // Zuteilung sonst nur nach dem Hochladen (`after()` in den Server Actions
+    // unter src/app/(app)/material); fiel die App dazwischen um — das
+    // DSM-Update donnerstags startet App und Postboten zusammen neu —, blieben
+    // Seiten mit leser „offen" liegen, und der Postbote ließe ihr Blatt Runde
+    // für Runde stehen. Er fragt den Korb alle 15 Sekunden, also kommt der
+    // Anstoß von selbst.
+    //
+    // Kein Takt, der irgendetwas wiederholt: angefasst werden nur Seiten mit
+    // leser „offen", und ein Fehlschlag von Docling oder Jev entscheidet sofort
+    // für Claude. Idempotent über die Queue in @/lib/leser/zuteilung — ein
+    // Anstoß, während ein Lauf schon wartet, hängt sich an ihn an. Er kehrt
+    // sofort zurück und wirft nie; die Antwort hier wartet auf nichts davon.
+    //
+    // Und er ist keine Schreibtür für einen Agenten: was mit einer Seite
+    // geschieht, entscheiden Docling, die feste Regel und Jev. Der Aufrufer
+    // bestimmt nur, WANN die App sich schon hochgeladene Seiten ansieht.
+    zuteilungAnstossen(user.id);
+
     const entries = await listInbox(user.id, { limit: args.limit });
     const offen = entries.filter((entry) => entry.filedAt === null).length;
     const seitenstand = await listPageActivity(
@@ -739,12 +700,13 @@ const HANDLERS: Handlers = {
     // nicht plötzlich ein Blatt nachschlagen, das `createProposal()` gleich
     // darauf ohnehin prüft.
     const transcripts: { pageId: string; text: string }[] = [];
+    const verworfen: Verworfen[] = [];
 
     if (args.transcripts && args.transcripts.length > 0) {
       const sheet = await getMaterial(user.id, args.sheet);
       if (!sheet) return fehler("Dieses Blatt gibt es nicht.");
 
-      const seiten = new Set(sheet.pages.map((page) => page.id));
+      const seiten = new Map(sheet.pages.map((page) => [page.id, page]));
       const fremd = args.transcripts
         .map((eintrag) => eintrag.page)
         .filter((page) => !seiten.has(page));
@@ -755,16 +717,37 @@ const HANDLERS: Handlers = {
         );
       }
 
+      // Ein Leser je Seite (seit dem 6.10.2026, Entscheidung 7 des Umbaus).
+      // Eine Abschrift zu einer Seite, die die App selbst liest oder schon
+      // gelesen hat, oder die schon eine Abschrift trägt, kommt nicht in den
+      // Vorschlag. Sonst läge dort eine zweite Lesung derselben Seite, und wer
+      // den Vorschlag übernimmt — ein Mensch im Formular —, ersetzte damit die
+      // Docling-Abschrift oder die schon bestätigte, ohne es zu merken. Das gilt
+      // für den Postboten und genauso für einen Chat in der Claude-App: auch
+      // der kann so keine Docling-Abschrift überschreiben.
+      //
+      // VERWORFEN und nicht abgewiesen, und darauf kommt es an: ein Postbote
+      // von vor dem Umbau schreibt noch jede Seite eines Blattes ab, auch die
+      // Docling-Seiten. Scheiterte der Aufruf daran, merkte er sich das Blatt
+      // als „kein Vorschlag" (gesehen.json) — und die Seiten, die wirklich
+      // Claude lesen sollte, gingen mit verloren. So bleibt, was übrig ist,
+      // und die Antwort sagt, was weg ist.
+      //
+      // Geprüft wird gegen den Stand von eben. Wird eine Seite in den
+      // Millisekunden danach entschieden, fängt das `nurUngelesene` beim
+      // Übernehmen auf (@/lib/inbox-apply): eine Abschrift landet nie auf
+      // einer Seite, die schon eine hat. Die Regel selbst steht als reine
+      // Rechnung in ./verwerfen, mit Tests.
+      const gesiebt = abschriftenSieben(args.transcripts, seiten);
+      verworfen.push(...gesiebt.verworfen);
+
       // Draußen `page`, drinnen `pageId`: dieselbe Übersetzung wie von
       // `captured_on` nach `capturedOn`, an derselben Stelle — dem einen
-      // Bauplatz der Eingabe. `text` heißt an beiden Türen gleich, so steht es
-      // an `NewPageTranscript` in @/lib/materials.
-      transcripts.push(
-        ...args.transcripts.map((eintrag) => ({
-          pageId: eintrag.page,
-          text: eintrag.text,
-        })),
-      );
+      // Bauplatz der Eingabe. `text` heißt an beiden Türen gleich, so steht
+      // es an `NewPageTranscript` in @/lib/materials.
+      for (const eintrag of gesiebt.bleiben) {
+        transcripts.push({ pageId: eintrag.page, text: eintrag.text });
+      }
     }
 
     // Geprüft wird mit genau dem Schema, das auch das Handformular benutzt —
@@ -780,6 +763,19 @@ const HANDLERS: Handlers = {
     });
 
     if (!parsed.success) {
+      // Blieb nach dem Verwerfen nichts übrig, ist das kein Fehler des
+      // Aufrufs, sondern das Ergebnis der Regel oben: der Aufrufer hat nur
+      // Seiten abgeschrieben, die die App selbst liest. Als `isError` liefe
+      // es auf dasselbe hinaus wie das Abweisen, das das Verwerfen gerade
+      // vermeiden soll — ein alter Postbote merkte sich „kein Vorschlag".
+      // Wie der leere Vorschlag erkannt wird, steht an `nurVerworfen()`.
+      if (nurVerworfen(parsed.error.issues, verworfen, transcripts.length)) {
+        return daten(
+          `Nichts angelegt: ${verworfenSatz(verworfen)} Sonst stand nichts im Vorschlag, also gibt es keinen.`,
+          { id: null, sheet: args.sheet, verworfen },
+        );
+      }
+
       return fehler(
         parsed.error.issues.map((issue) => issue.message).join(" "),
       );
@@ -842,10 +838,14 @@ const HANDLERS: Handlers = {
           : eingeordnet.art === "jev"
             ? `Jev hat ihn übernommen: ${eingeordnet.subjectName}${mitThemen(eingeordnet.topics)}.`
             : `Das Blatt war schon eingeordnet, also hat die App nur die Abschrift übernommen (${zahl(eingeordnet.seiten, "Seite", "Seiten", "f")}); Fach und Themen bleiben: ${eingeordnet.subjectName}${mitThemen(eingeordnet.topics)}.`
-      }`,
+      }${verworfen.length > 0 ? ` ${verworfenSatz(verworfen)}` : ""}`,
       {
         id,
         sheet: args.sheet,
+        // Was nicht in den Vorschlag kam, je Seite mit Grund — leer, wenn
+        // alles ankam. Steht immer da, damit ein Aufrufer nicht zwischen
+        // „fehlt" und „nichts verworfen" unterscheiden muss.
+        verworfen,
         // `via` sagt, welcher der beiden Wege übernommen hat. Beim Weg ohne
         // Jev gibt es keine Sicherheit, die man nennen könnte — dort steht
         // `null` und keine erfundene Eins.
@@ -896,8 +896,13 @@ const HANDLERS: Handlers = {
     // dieselbe Datenmenge wie die weite — genau das, was `topic` verhindern
     // soll — und dazu Seiten, die zum genannten Thema nicht gehören.
     const gesehen = new Set<string>();
-    const seiten: { id: string; sortOrder: number; chars: number; transcript: string }[] =
-      [];
+    const seiten: {
+      id: string;
+      sortOrder: number;
+      chars: number;
+      transcript: string;
+      maschinell: boolean;
+    }[] = [];
 
     for (const thema of themen) {
       for (const seite of thema.seiten) {
@@ -908,9 +913,17 @@ const HANDLERS: Handlers = {
           sortOrder: seite.sortOrder,
           chars: seite.transcript.length,
           transcript: seite.transcript,
+          // Seit dem 6.10.2026: diese Abschrift hat die App aus Docling
+          // geschrieben, und niemand hat sie gegengelesen. Ein Zitat daraus
+          // besteht die Quellbindung genauso — es steht ja wörtlich da —,
+          // kann aber einen Lesefehler zitieren, den keine ⟨Klammer⟩ verrät.
+          // Der Fragen-Eingang zeigt deshalb an solchen Fragen einen Hinweis.
+          maschinell: seite.maschinell,
         });
       }
     }
+
+    const maschinell = seiten.filter((seite) => seite.maschinell).length;
 
     // Der Vorrat wird über die Seiten DIESER Antwort gezählt und nicht über
     // alle der Klausur: Mit `topic` ist nur ein Thema gemeint, und „18
@@ -954,6 +967,10 @@ const HANDLERS: Handlers = {
       }${
         seiten.length === 0
           ? " Ohne abgeschriebene Seite lässt sich keine Frage stellen — melde das, statt eine zu erfinden. Häufigste Ursache: das Thema steht im falschen Fach."
+          : ""
+      }${
+        maschinell > 0
+          ? ` ${maschinell === 1 ? "Eine Seite hat" : `${maschinell} Seiten hat`} die App maschinell gelesen (Docling, „maschinell: true“) — dort können Lesefehler stehen, die keine ⟨Klammer⟩ markiert; zitiere von dort nur, was in sich stimmig ist.`
           : ""
       }${
         vorrat.offeneFragen > 0
@@ -1219,125 +1236,6 @@ function listRow(
   };
 }
 
-/**
- * Eine Seite durch Docling — das, was im Vorrat als Umrechnung steht.
- *
- * Das Lesen des Bildes gehört mit hinein und steht nicht davor: der Vorrat
- * soll beides auf einmal abdecken, damit zwei Anfragen zur selben Seite auch
- * das Vollbild nur einmal aus der Datenbank holen. Dass die Seite diesem
- * Nutzer gehört, prüft `readPageImage()`; ein späterer Treffer im Vorrat darf
- * das überspringen, weil der Nutzer im Schlüssel steht (`doclingFor()`).
- *
- * Eine Seite, die es nicht gibt oder die ein falsches Format trägt, geht gar
- * nicht erst zu Docling. Sie wirft `SeiteNichtLesbar` mit dem Satz für das
- * Modell — und bleibt als Fehlschlag nicht im Vorrat liegen.
- *
- * Je Umrechnung eine Zeile im Protokoll, auch bei einer leeren Seite und
- * beim Vorauslesen: wie lange Docling von außen gesehen gebraucht hat (Wand),
- * wie lange es nach eigener Angabe gerechnet hat, und wie viel herauskam. Die
- * Differenz ist die Zeit in der Warteschlange von docling-serve. Auf dem NAS
- * ist keine dieser Zahlen gemessen; diese Zeile misst sie.
- */
-async function seiteDurchDocling(
-  userId: string,
-  pageId: string,
-  voraus: boolean,
-): Promise<DoclingResult> {
-  // Das Vollbild und nicht die Lesefassung: Docling bekommt die Bytes direkt
-  // und nicht durch ein Tool-Ergebnis, die Grenze von rund 100 KB gilt hier
-  // also nicht — und für kleine Schrift zählt jedes Pixel.
-  const page = await readPageImage(userId, pageId, "voll");
-
-  if (!page) {
-    throw new SeiteNichtLesbar(
-      "Diese Seite gibt es nicht. Die id einer Seite steht in read_sheet unter „pages“ — die id des Blattes ist eine andere.",
-    );
-  }
-
-  if (!isAllowedMime(page.mimeType)) {
-    throw new SeiteNichtLesbar(
-      "Diese Seite trägt ein Format, das die App nicht ausliefert.",
-    );
-  }
-
-  const start = Date.now();
-
-  try {
-    const ergebnis = await convertPage(page.bytes, page.mimeType);
-
-    console.info(
-      `Docling ${kurz(pageId)}: Wand ${sekunden(Date.now() - start)} s, gerechnet ${ergebnis.seconds.toFixed(1)} s, ${ergebnis.markdown.length} Zeichen${voraus ? " (vorausgelesen)" : ""}`,
-    );
-
-    return ergebnis;
-  } catch (error) {
-    // Hier und nicht in read_docling: so öffnet auch ein Ausfall beim
-    // Vorauslesen den Schalter, und der nächste Aufruf wartet nicht noch
-    // einmal drei Minuten auf dasselbe.
-    doclingFehlschlag(error);
-    throw error;
-  }
-}
-
-/** Eine Seite, die gar nicht erst zu Docling geht. Die Meldung ist der Satz für das Modell. */
-class SeiteNichtLesbar extends Error {
-  constructor(satz: string) {
-    super(satz);
-    this.name = "SeiteNichtLesbar";
-  }
-}
-
-/**
- * Stößt die Umrechnung der nächsten ungelesenen Seite desselben Blattes an —
- * und wartet nicht darauf.
- *
- * Eine Seite voraus und nicht das ganze Blatt: so rechnet Docling, während
- * Claude die eben gelieferte Seite abschreibt, und nie zwei Seiten zugleich
- * für denselben Lauf. Das ganze Blatt auf einmal hieße mehrere schwere
- * Umrechnungen nebeneinander auf einem NAS, dessen Speicher niemand kennt, und
- * Rechenzeit für Seiten, die womöglich niemand mehr abfragt — ein Lauf, der an
- * seiner Frist scheitert, ließe sie weiterlaufen.
- *
- * Gerufen wird es erst, wenn die angefragte Seite fertig ist; nur ungelesene
- * Seiten kommen in Frage (`nextUnreadPage()`), und nur, solange der Schalter
- * zu ist. Liegt die nächste Seite schon im Vorrat, passiert nichts.
- *
- * Ein Fehler hier geht niemanden etwas an, der gerade wartet: eine Zeile im
- * Protokoll, sonst nichts. Die Seite fehlt danach im Vorrat und wird bei ihrer
- * eigenen Anfrage neu gerechnet.
- */
-function vorauslesen(userId: string, pageId: string): void {
-  if (doclingPausiertBis() !== null) return;
-
-  void nextUnreadPage(userId, pageId)
-    .then((naechste) => {
-      if (naechste === null || doclingPausiertBis() !== null) return;
-
-      const { promise, treffer } = doclingFor(userId, naechste, () =>
-        seiteDurchDocling(userId, naechste, true),
-      );
-
-      // Ein Treffer gehört einer anderen Anfrage; deren Fehler meldet sie
-      // selbst.
-      return treffer ? undefined : promise;
-    })
-    .catch((error: unknown) => {
-      console.error(
-        `Docling: Vorauslesen fehlgeschlagen — ${error instanceof Error ? error.message : String(error)}`,
-      );
-    });
-}
-
-/** Die ersten acht Zeichen einer id — genug, um eine Seite im Protokoll wiederzufinden. */
-function kurz(id: string): string {
-  return id.slice(0, 8);
-}
-
-/** Millisekunden als Sekunden mit einer Nachkommastelle, für das Protokoll. */
-function sekunden(ms: number): string {
-  return (ms / 1000).toFixed(1);
-}
-
 /** „, Kettenregel, Ableitung" hinter dem Fach — oder nichts. */
 function mitThemen(topics: string[]): string {
   return topics.length > 0 ? `, ${topics.join(", ")}` : "";
@@ -1361,6 +1259,8 @@ function transcriptRows(pages: MaterialPageTranscript[]) {
     id: page.pageId,
     sortOrder: page.sortOrder,
     transcript: page.transcript,
+    /** Die App hat diese Abschrift maschinell geschrieben (Docling); gegengelesen hat sie niemand. */
+    maschinell: page.maschinell,
   }));
 }
 

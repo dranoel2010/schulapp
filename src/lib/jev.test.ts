@@ -10,7 +10,11 @@ import {
 import {
   MAX_STATE_CHARS,
   MAX_TOPICS,
+  OCR_RAHMEN,
+  SAUBER_FRAGE,
   jevState,
+  ocrState,
+  readNoul,
   readSubject,
   readTopics,
   subjectQuestion,
@@ -205,5 +209,50 @@ describe("onlyTranscribesAttachedPages", () => {
 
   it("lässt eine leere Abschrift nicht als Zustimmung durch", () => {
     assert.equal(onlyTranscribesAttachedPages({ transcripts: [] }, nachgereicht), false);
+  });
+});
+
+describe("die Einstufung von Doclings Text", () => {
+  // Wörtlich die Frage und der Rahmen der Messung vom 5.10.2026. Ein anderer
+  // Wortlaut wäre eine andere, ungemessene Regel — deshalb steht der Text
+  // hier noch einmal ausgeschrieben und nicht aus der Quelle übernommen.
+  it("fragt wörtlich wie gemessen", () => {
+    assert.equal(
+      OCR_RAHMEN,
+      "Ausgabe einer automatischen Texterkennung (OCR) eines abfotografierten Schulblatts:",
+    );
+    assert.deepEqual(SAUBER_FRAGE, {
+      type: "noul",
+      instructions:
+        "Besteht dieser Text überwiegend aus richtig geschriebenen, sinnvollen Wörtern und Sätzen auf Deutsch, Französisch oder Englisch?",
+    });
+  });
+
+  it("setzt den Rahmen, eine Leerzeile und den Text ohne Kommentare", () => {
+    assert.equal(
+      ocrState("  ## Hafen\n\n<!-- image -->\n\nText  "),
+      `${OCR_RAHMEN}\n\n## Hafen\n\n \n\nText`,
+    );
+  });
+
+  it("kürzt auf die Grenze", () => {
+    const state = ocrState("a".repeat(MAX_STATE_CHARS + 500));
+    assert.equal(state, `${OCR_RAHMEN}\n\n${"a".repeat(MAX_STATE_CHARS)}`);
+  });
+
+  it("schreibt „(leer)“ statt nichts", () => {
+    assert.equal(ocrState(""), `${OCR_RAHMEN}\n\n(leer)`);
+    assert.equal(ocrState("<!-- image -->"), `${OCR_RAHMEN}\n\n(leer)`);
+  });
+
+  it("liest die Wahrscheinlichkeit nur aus einer Ja/Nein-Antwort", () => {
+    assert.equal(readNoul({ type: "noul", noul: 0.73 }), 0.73);
+    assert.equal(readNoul({ type: "noul", noul: 0 }), 0);
+    assert.equal(readNoul(undefined), null);
+    assert.equal(
+      readNoul({ type: "choice", choice: "f0", confidence: 1, probabilities: {} }),
+      null,
+    );
+    assert.equal(readNoul({ type: "noul", noul: Number.NaN }), null);
   });
 });

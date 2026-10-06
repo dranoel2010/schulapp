@@ -42,6 +42,13 @@ export type AbschriftSeite = {
   pageId: string;
   sortOrder: number;
   transcript: string;
+  /**
+   * Hat die App diese Abschrift aus Docling geschrieben (seit dem
+   * 6.10.2026)? Dann hat sie niemand gegengelesen, und ein Lesefehler steht
+   * ohne ⟨⟩ darin — zitierfähig für die Tür in @/recall/items, die nur ⟨⟩
+   * erkennt. `read_exam_material` sagt es dem Agenten, der Fragen baut.
+   */
+  maschinell: boolean;
 };
 
 export type BlattMitAbschrift = {
@@ -81,6 +88,7 @@ export async function blaetterMitAbschrift(
       pageId: materialPages.id,
       sortOrder: materialPages.sortOrder,
       transcript: materialPages.transcript,
+      maschinell: materialPages.maschinell,
     })
     .from(materialPages)
     .innerJoin(materials, eq(materials.id, materialPages.materialId))
@@ -104,6 +112,7 @@ export async function blaetterMitAbschrift(
       pageId: z.pageId,
       sortOrder: z.sortOrder,
       transcript: z.transcript,
+      maschinell: z.maschinell,
     };
 
     if (vorhanden) vorhanden.seiten.push(seite);
@@ -244,6 +253,7 @@ export async function stoffZuKlausur(
         pageId: materialPages.id,
         sortOrder: materialPages.sortOrder,
         transcript: materialPages.transcript,
+        maschinell: materialPages.maschinell,
       })
       .from(materialTopics)
       .innerJoin(materials, eq(materials.id, materialTopics.materialId))
@@ -265,6 +275,7 @@ export async function stoffZuKlausur(
         pageId: z.pageId,
         sortOrder: z.sortOrder,
         transcript: z.transcript,
+        maschinell: z.maschinell,
       });
       seitenJeVokabel.set(z.subjectTopicId, liste);
     }

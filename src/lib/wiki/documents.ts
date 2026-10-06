@@ -598,6 +598,20 @@ const BLATT_HINWEIS = [
  * jemanden wartet oder ob sie leer war. Eine übersprungene Seite 3 zwischen
  * Seite 2 und Seite 4 sähe dagegen aus wie ein vollständiges Blatt.
  *
+ * ── Maschinell gelesen ──────────────────────────────────────────────────────
+ *
+ * Seit dem 6.10.2026 liest die App sauber gedruckte Seiten selbst (Docling,
+ * @/lib/leser/zuteilung). Eine solche Abschrift hat niemand gegengelesen, und
+ * sie kann Lesefehler enthalten, die keine ⟨⟩ markieren — also steht über ihr
+ * der Vermerk aus `pageLines()`. Der Agent im Vault soll einer maschinellen
+ * Seite nicht dasselbe Vertrauen schenken wie einer gelesenen.
+ *
+ * Der Vermerk steht NUR an Seiten mit `maschinell`. Jede andere Seite kommt
+ * Zeichen für Zeichen so heraus wie vorher: Der Abdruck (`documentHash()`)
+ * eines Blattes ohne maschinelle Seite bleibt derselbe, und der ganze
+ * Altbestand wird nicht ein zweites Mal geliefert. Ein Feld im Frontmatter
+ * hätte genau das getan — es stünde in jeder blatt-Datei, auch als `0`.
+ *
  * ── Kein Bild ───────────────────────────────────────────────────────────────
  *
  * Die Übergabe schreibt Text. Ein Blatt wiegt als Vollbild rund 250 KB, ein
@@ -644,10 +658,18 @@ export function sheetDocument(sheet: MaterialTranscriptExport): WikiDocument {
         : []),
       ...(sheet.note ? ["", "## Notiz", "", codeBlock(sheet.note)] : []),
       "",
-      ...sheet.pages.flatMap((page, index) => pageLines(index + 1, page.transcript)),
+      ...sheet.pages.flatMap((page, index) => pageLines(index + 1, page)),
     ],
   });
 }
+
+/**
+ * Die Zeile über einer Abschrift, die Docling geschrieben hat. Kursiv wie die
+ * beiden anderen Zustandszeilen in `pageLines()` und außerhalb des Codeblocks:
+ * sie ist eine Angabe der App über die Seite, nicht Text vom Blatt.
+ */
+const MASCHINELL_VERMERK =
+  "*Maschinell gelesen (Docling) – von niemandem gegengelesen.*";
 
 /**
  * Eine Seite eines Blattes.
@@ -656,8 +678,18 @@ export function sheetDocument(sheet: MaterialTranscriptExport): WikiDocument {
  * `sortOrder`: `listMaterialsWithTranscripts()` sortiert genauso wie die
  * Detailseite, und „Seite 2" muss überall dieselbe Seite sein. `sortOrder`
  * beginnt bei 0 und kann Lücken haben — als Seitenzahl wäre sie falsch.
+ *
+ * Der Vermerk „maschinell gelesen“ steht über einer Abschrift mit Text, nie
+ * über einer ungelesenen oder leeren Seite: dort gibt es nichts, dem man zu
+ * viel glauben könnte. Steht er nicht da, sind die Zeilen genau die von vor
+ * dem 6.10.2026 — warum das zählt, steht an `sheetDocument()`.
  */
-function pageLines(nummer: number, transcript: string | null): string[] {
+function pageLines(
+  nummer: number,
+  page: { transcript: string | null; maschinell: boolean },
+): string[] {
+  const { transcript } = page;
+
   if (transcript === null) {
     return [
       `## Seite ${nummer}`,
@@ -676,5 +708,11 @@ function pageLines(nummer: number, transcript: string | null): string[] {
     ];
   }
 
-  return [`## Seite ${nummer}`, "", codeBlock(transcript), ""];
+  return [
+    `## Seite ${nummer}`,
+    "",
+    ...(page.maschinell ? [MASCHINELL_VERMERK, ""] : []),
+    codeBlock(transcript),
+    "",
+  ];
 }

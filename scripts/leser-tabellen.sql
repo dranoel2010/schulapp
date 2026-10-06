@@ -1,0 +1,88 @@
+-- Ein Leser je Seite: wer eine Seite liest, entscheidet die App (6.10.2026).
+--
+-- Rein additiv: vier neue Spalten an `material_pages` und eine
+-- CHECK-Bedingung. Kein DROP, kein UPDATE — keine vorhandene Zeile bekommt
+-- einen anderen Wert als den, den Postgres beim Anlegen einer Spalte ohnehin
+-- setzt (NULL, bei `maschinell` false).
+--
+-- Die Anweisungen sind aus `drizzle-kit generate` über src/db/schema.ts
+-- kopiert — zweimal in einen Ordner außerhalb des Repos, einmal mit dem Stand
+-- vor der Änderung als Basis und einmal danach:
+--
+--   mkdir P && ln -s <worktree>/node_modules P/node_modules
+--   git show main:src/db/schema.ts > P/schema.ts
+--   cd P && ./node_modules/.bin/drizzle-kit generate --dialect postgresql \
+--     --schema ./schema.ts --out ./out --name basis
+--   cp <worktree>/src/db/schema.ts P/schema.ts
+--   ./node_modules/.bin/drizzle-kit generate --dialect postgresql \
+--     --schema ./schema.ts --out ./out --name leser
+--
+-- Am 6.10.2026 genau so gelaufen; `out/0001_leser.sql` ist die Datei unten —
+-- mit EINER Ausnahme, von Hand und mit Absicht: drizzle-kit schreibt
+-- `ADD COLUMN "leser" text DEFAULT 'offen'`. Postgres füllte damit jede
+-- vorhandene Seite mit 'offen', und die App schickte danach den ganzen
+-- Altbestand durch Docling und an Claude — auch die fünfzehn Altblätter, die
+-- nach dem Willen des Nutzers niemand von selbst liest. Hier stehen deshalb
+-- zwei Schritte: erst die Spalte ohne Vorgabe (Altbestand bleibt NULL und
+-- verhält sich wie bisher), dann die Vorgabe für alles, was danach kommt. Der
+-- Endzustand ist genau der, den drizzle-kit erwartet; ein späteres `db:push`
+-- sieht keinen Unterschied.
+--
+-- ⚠ `npm run db:push` gegen eine Datenbank mit Bestand ist hier der falsche
+-- Weg — er nähme die Zeile von drizzle-kit und setzte den Altbestand auf
+-- 'offen'.
+--
+-- ── Reihenfolge ──────────────────────────────────────────────────────────────
+--
+-- VOR dem Bau einspielen. Der alte Code verträgt die Spalten: er fragt sie
+-- nicht ab, und eine Seite, die er in der Zwischenzeit anlegt, bekommt
+-- 'offen' und wird vom neuen Code beim ersten Anstoß nachgeholt — hat der
+-- alte Postbote sie inzwischen schon abgeschrieben, hält der neue Code nur
+-- fest, dass sie gelesen ist (`schon-gelesen`), ohne Docling. Andersherum
+-- (neuer Code vor der Spalte) scheitert jede Seite des Blattes mit „column
+-- does not exist“. Ein Rückbau braucht kein SQL: `nas.sh zurueck` läuft mit
+-- den Spalten weiter, der alte Code sieht sie nicht.
+--
+-- Auf dem NAS liegt diese Datei erst nach dem `git pull` im Klon, und den
+-- macht `nas.sh hoch`. Deshalb sieht `hoch` seit dem 6.10.2026 vor dem Bau
+-- nach, ob `material_pages.leser` da ist, hält sonst an und druckt die Zeile
+-- zum Einspielen mit Benutzer und Datenbank aus dem db-Container; das nächste
+-- `hoch` baut nach. Die ganze Reihenfolge (sichern, neue nas.sh, zählen,
+-- einspielen, bauen, Postbote angleichen, Probe) steht im README unter „Ein
+-- Leser je Seite“ → „Auf das NAS bringen“.
+--
+-- ── Vorher zählen (ändert nichts) ───────────────────────────────────────────
+--
+--   SELECT count(*) AS seiten, count(transcript) AS gelesen FROM material_pages;
+--   SELECT count(*) FILTER (WHERE m.filed_at IS NULL)                         AS im_korb,
+--          count(*) FILTER (WHERE m.filed_at IS NOT NULL AND p.transcript IS NULL) AS ungelesen_eingeordnet
+--     FROM material_pages p JOIN materials m ON m.id = p.material_id;
+--
+-- ── Einspielen (NAS) ────────────────────────────────────────────────────────
+--
+-- So, wie es dasteht, abzutippen: Der Ordner gehört root (`sudo cd` gibt es
+-- nicht), `sudo docker` findet docker nicht (sudo kennt /usr/local/bin
+-- nicht), und Benutzer und Datenbank wertet die Shell IM db-Container aus,
+-- wo sie gesetzt sind — nicht die auf dem NAS:
+--
+--   sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose exec -T db sh -c "exec psql -X -v ON_ERROR_STOP=1 --single-transaction -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -f -" < repo/scripts/leser-tabellen.sql'
+--
+-- Lokal gegen die Datei-Datenbank:  npx tsx scripts/sql-einspielen.ts scripts/leser-tabellen.sql
+--
+-- ── Nachher nachsehen, statt es zu glauben ──────────────────────────────────
+--
+--   \d material_pages
+--   SELECT leser, count(*) FROM material_pages GROUP BY 1;   -- erwartet: nur NULL, so viele wie „seiten“ oben
+--   SELECT count(*) FROM material_pages WHERE maschinell;     -- erwartet: 0
+--
+-- Nach ein paar Tagen Betrieb:
+--
+--   SELECT leser, leser_grund->>'grund' AS grund, count(*)
+--     FROM material_pages WHERE leser IS NOT NULL GROUP BY 1, 2 ORDER BY 1, 2;
+
+ALTER TABLE "material_pages" ADD COLUMN "leser" text;--> statement-breakpoint
+ALTER TABLE "material_pages" ALTER COLUMN "leser" SET DEFAULT 'offen';--> statement-breakpoint
+ALTER TABLE "material_pages" ADD COLUMN "leser_grund" jsonb;--> statement-breakpoint
+ALTER TABLE "material_pages" ADD COLUMN "docling_text" text;--> statement-breakpoint
+ALTER TABLE "material_pages" ADD COLUMN "maschinell" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "material_pages" ADD CONSTRAINT "material_pages_leser_check" CHECK ("material_pages"."leser" in ('offen', 'docling', 'claude'));

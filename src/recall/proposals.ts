@@ -406,6 +406,15 @@ export type OffeneFrage = {
   /** Der Titel des Blattes, aus dem sie stammt — damit der Mensch weiß, wo er ist */
   blattTitel: string;
   seitenNummer: number;
+  /**
+   * Stammt das Zitat von einer Seite, die die App maschinell gelesen hat
+   * (Docling, seit dem 6.10.2026)? Dann steht im Fragen-Eingang ein Hinweis,
+   * das Zitat am Foto zu prüfen: die Tür beim Bauen prüft das Zitat nur
+   * gegen die Abschrift, und die hat hier niemand gegengelesen. Gelesen wird
+   * der heutige Stand der Seite — ändert ein Mensch die Abschrift, fällt der
+   * Hinweis weg.
+   */
+  maschinell: boolean;
 };
 
 export type OffenerVorschlag = {
@@ -459,6 +468,7 @@ export async function offeneVorschlaege(
       sortOrder: recallProposalItems.sortOrder,
       blattTitel: materials.title,
       seitenNummer: materialPages.sortOrder,
+      maschinell: materialPages.maschinell,
     })
     .from(recallProposalItems)
     .innerJoin(
@@ -490,6 +500,7 @@ export async function offeneVorschlaege(
       materialKind: z.materialKind,
       blattTitel: z.blattTitel,
       seitenNummer: z.seitenNummer + 1,
+      maschinell: z.maschinell,
     });
     jeVorschlag.set(z.proposalId, liste);
   }

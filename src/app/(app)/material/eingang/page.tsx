@@ -6,7 +6,11 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { requireUser } from "@/lib/auth";
 import { todayInBerlin } from "@/lib/dates";
 import { INBOX_LIMIT, listInbox, type InboxEntry } from "@/lib/inbox";
-import { getMaterial } from "@/lib/materials";
+import {
+  getMaterial,
+  listPageActivity,
+  type PageActivity,
+} from "@/lib/materials";
 import { listSubjects } from "@/lib/subjects";
 
 import { acceptProposalAction, markFiledAction } from "./actions";
@@ -116,6 +120,18 @@ export default async function InboxPage({
 
   const items = await listInbox(user.id, { limit: INBOX_LIMIT });
 
+  // Wie weit die App mit dem Lesen der Seiten ist (seit dem 6.10.2026): was
+  // sie gerade liest und was Docling schon maschinell gelesen hat. Eine
+  // gruppierte Abfrage über die ids der fertigen Liste, also höchstens
+  // `INBOX_LIMIT` — dieselbe, die der Postbote über `read_inbox` bekommt.
+  // Ohne den Satz an der Zeile sähe ein Blatt, das die App gerade liest, aus
+  // wie eines, um das sich niemand kümmert, und eines, das Docling ganz
+  // gelesen hat, wie eines mit einer Abschrift, die jemand geprüft hat.
+  const activity = await listPageActivity(
+    user.id,
+    items.map((item) => item.id),
+  );
+
   // Eine Abfrage für alle Fächer, damit die Vorschläge ihren Fachnamen
   // hinschreiben können. In der Zeile eines Vorschlags steht nur eine id; je
   // Vorschlag nachzuschlagen wären bei einem vollen Korb hundert Abfragen für
@@ -158,6 +174,7 @@ export default async function InboxPage({
   const ohneFachwort = count(firstValue(query.ohnefachwort));
   const zusammengefallen = count(firstValue(query.zusammengefallen));
   const andereSchreibweise = count(firstValue(query.schreibweise));
+  const ueberholt = count(firstValue(query.ueberholt));
 
   return (
     <div className="space-y-6 md:max-w-3xl">
@@ -216,6 +233,19 @@ export default async function InboxPage({
               {abschrift === 1
                 ? "Die Abschrift einer Seite ist damit ans Blatt geschrieben — sie steht dort unter der Aufnahme, zu der sie gehört."
                 : `Die Abschrift von ${abschrift} Seiten ist damit ans Blatt geschrieben — sie steht dort jeweils unter der Aufnahme, zu der sie gehört.`}
+            </p>
+          ) : null}
+
+          {/* Seiten, an denen zwischen Anzeigen und Übernehmen jemand anders
+              geschrieben hat — meist die App, die Doclings Abschrift von
+              selbst schreibt. Sie wurden ausgelassen; still darf das nicht
+              bleiben, sonst steht am Blatt etwas anderes als im Formular, und
+              niemand sagt warum (wie auf der Blattseite). */}
+          {ueberholt > 0 ? (
+            <p className="text-sm text-muted">
+              {ueberholt === 1
+                ? "An einer Seite hat inzwischen jemand anders geschrieben, meist die App — sie wurde nicht überschrieben. Am Blatt steht, was wirklich an ihr steht."
+                : `An ${ueberholt} Seiten hat inzwischen jemand anders geschrieben, meist die App — sie wurden nicht überschrieben. Am Blatt steht, was wirklich an ihnen steht.`}
             </p>
           ) : null}
 
@@ -288,6 +318,7 @@ export default async function InboxPage({
               <InboxRow
                 key={item.id}
                 item={item}
+                stand={activity.get(item.id)}
                 subjectNames={subjectNames}
                 today={today}
               />
@@ -313,10 +344,16 @@ export default async function InboxPage({
 /** Ein Blatt im Korb, mit seinen Vorschlägen darunter. */
 function InboxRow({
   item,
+  stand,
   subjectNames,
   today,
 }: {
   item: InboxEntry;
+  /**
+   * Wie weit die App mit dem Lesen der Seiten ist. Fehlt, wenn das Blatt
+   * keine Seite hat — dann gibt es auch nichts dazu zu sagen.
+   */
+  stand?: PageActivity;
   /** Fachname je id, einmal für die ganze Seite geladen. */
   subjectNames: Map<string, string>;
   /** Der heutige Kalendertag — für „heute“ und „gestern“ an den Vorschlägen. */
@@ -331,6 +368,33 @@ function InboxRow({
   return (
     <li className="space-y-3 rounded-card border border-border bg-surface p-4 sm:p-5">
       <MaterialGlance item={item} />
+
+      {/* Zwei leise Sätze, je einer nur, wenn er etwas sagt — an einem Blatt
+          von vor dem 6.10.2026 steht keiner von beiden.
+
+          „Liest die App gerade“: Docling läuft über die Seite, danach
+          entscheidet die App, ob sie selbst liest oder der Postbote. Bis
+          dahin ist ein leeres Blatt kein vergessenes.
+
+          „Maschinell gelesen“ mit der Gesamtzahl daneben, weil es oft nicht
+          alle Seiten sind: eine gedruckte Vorderseite liest Docling, die
+          handschriftliche Rückseite der Postbote. Wer übernimmt, soll wissen,
+          welcher Teil des Textes von niemandem gegengelesen ist. */}
+      {stand && stand.offenPages > 0 ? (
+        <p className="text-sm text-muted">
+          {stand.offenPages === 1
+            ? "1 Seite liest die App gerade."
+            : `${stand.offenPages} Seiten liest die App gerade.`}
+        </p>
+      ) : null}
+
+      {stand && stand.maschinellPages > 0 ? (
+        <p className="text-sm text-muted">
+          {`${stand.maschinellPages} von ${item.pageCount} ${
+            item.pageCount === 1 ? "Seite" : "Seiten"
+          } maschinell gelesen (Docling) — von niemandem gegengelesen.`}
+        </p>
+      ) : null}
 
       {/* Ohne diesen Satz sieht die Zeile aus wie ein Fehler: das Blatt ist
           abgehakt und steht trotzdem im Korb. Der Grund ist, dass danach noch

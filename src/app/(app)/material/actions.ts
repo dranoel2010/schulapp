@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 
 import { requireUser } from "@/lib/auth";
 import { formErrors } from "@/lib/form-errors";
@@ -13,6 +14,10 @@ import {
   MAX_THUMB_BYTES,
   isAllowedMime,
 } from "@/lib/images";
+import {
+  korbblattAnstossen,
+  zuteilungAnstossen,
+} from "@/lib/leser/zuteilung";
 import {
   addPage,
   createMaterialWithPage,
@@ -267,6 +272,16 @@ export async function captureMaterialAction(
   try {
     const id = await createMaterialWithPage(user.id, parsed.data, page.page);
 
+    // Wer die neue Seite liest, entscheidet die App — nach der Antwort, damit
+    // die Kamera nicht auf Docling wartet. `after()` läuft in Server
+    // Functions, nachdem die Antwort raus ist, und ist unter `next start`
+    // voll unterstützt (node_modules/next/dist/docs: after.md,
+    // self-hosting.md). Der Callback stößt nur an und kehrt sofort zurück:
+    // ein Herunterfahren wartet auf offene `after()`-Callbacks, und auf
+    // Docling soll es nicht warten. Geht der Anstoß verloren, holt ihn der
+    // nächste Upload oder das nächste `read_inbox` des Postboten nach.
+    after(() => zuteilungAnstossen(user.id));
+
     revalidateMaterial(id);
     return { ok: true, id };
   } catch (error) {
@@ -312,6 +327,10 @@ export async function addPageAction(
     if (!created) {
       return { ok: false, message: SAVE_FAILED };
     }
+
+    // Wie beim Aufnehmen: die App entscheidet, wer die neue Seite liest —
+    // angestoßen nach der Antwort, siehe `captureMaterialAction()`.
+    after(() => zuteilungAnstossen(user.id));
 
     revalidateMaterial(material.id);
     return { ok: true, id: material.id };
@@ -548,7 +567,16 @@ export async function deletePageAction(
 ): Promise<void> {
   const user = await requireUser();
 
-  await deletePage(user.id, pageId);
+  const ergebnis = await deletePage(user.id, pageId);
+
+  // War es die einzige Seite, die Claude noch lesen sollte (ein verwackeltes
+  // Foto), ist das Blatt danach ganz von Docling gelesen — und weil Löschen
+  // keine Seite entscheidet, fragte sonst niemand nach einem Vorschlag der
+  // App. Nach der Antwort angestoßen, wie beim Hochladen. Gehört das Blatt
+  // nicht diesem Nutzer, findet die Prüfung es nicht (`korbblattStand()`).
+  if (ergebnis === "geloescht") {
+    after(() => korbblattAnstossen(user.id, materialId));
+  }
 
   revalidateMaterial(materialId);
 }

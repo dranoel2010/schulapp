@@ -22,10 +22,13 @@ import { z } from "zod";
 import { db } from "@/db";
 import {
   materialPages,
+  materialProposals,
   materialTopics,
   materials,
   subjectTopics,
   subjects,
+  type Leser,
+  type LeserGrund,
 } from "@/db/schema";
 import { germanShortParts, isCalendarDate, todayInBerlin } from "@/lib/dates";
 import {
@@ -35,6 +38,7 @@ import {
   MAX_THUMB_BYTES,
   isAllowedMime,
 } from "@/lib/images";
+import { leserBeimAnlegen } from "@/lib/leser/regel";
 import { ensureTopics, resolveTopic } from "@/lib/subject-topics";
 import { normalizeTopics, topicKey } from "@/lib/topics";
 
@@ -174,12 +178,22 @@ function optionalText(maxLength: number, tooLong: string) {
  * entschiede ein nachgestellter Zeilenumbruch darüber, ob eine Abschrift durch
  * die Tür passt.
  *
+ * **Zeilenenden werden zuerst vereinheitlicht** (seit dem 6.10.2026): CRLF und
+ * einzelnes CR werden LF. Ein Formular kommt als multipart/form-data an, und
+ * dabei wird JEDER Zeilenumbruch einer Textarea zu CRLF — eine Abschrift, die
+ * mit LF in der Spalte steht, käme vom unberührten Feld also nie Byte für Byte
+ * gleich zurück. Ohne diese Zeile verlöre eine Docling-Seite beim Speichern
+ * des Titels ihre Kennzeichnung `maschinell` (der Vergleich steht in
+ * `setMaterialTranscripts()`), jede Abschrift würde bei jedem Speichern still
+ * umgeschrieben, und die Grenze zählte jeden Umbruch doppelt.
+ *
  * Was der Agent nicht sicher lesen konnte, markiert er mit ⟨spitzen Klammern⟩.
  * Das ist Text wie jeder andere; hier steht bewusst keine Regel, die daran
  * etwas ändert, und keine, die ihn zählt.
  */
 export const transcriptSchema = z
   .string("Die Abschrift muss Text sein.")
+  .overwrite((text) => text.replace(/\r\n?/g, "\n"))
   .trim()
   .max(
     MATERIAL_TRANSCRIPT_MAX,
@@ -357,6 +371,19 @@ export type MaterialPageInfo = {
    * gegen `MATERIAL_TRANSCRIPT_MAX` in JavaScript, bevor geschrieben wird.
    */
   transcriptLength: number | null;
+  /**
+   * Wer diese Seite liest (`material_pages.leser`, seit dem 6.10.2026):
+   * `'offen'` heißt, die App entscheidet gerade — die Blattseite schreibt
+   * „wird gerade gelesen“, `read_sheet` sagt dem Postboten, dass er das
+   * Blatt in dieser Runde lässt. `null` ist eine Seite von vorher.
+   */
+  leser: Leser | null;
+  /**
+   * Hat die Zuteilung die heutige Abschrift aus Docling geschrieben? Dann
+   * steht an der Seite „maschinell gelesen (Docling)“ — gegengelesen hat
+   * sie niemand. Die Regel steht an der Spalte in src/db/schema.ts.
+   */
+  maschinell: boolean;
 };
 
 /** Ein Blatt in der Ablage. */
@@ -451,7 +478,9 @@ type ListOptions = {
   order?: "schultag" | "aufnahme";
   /**
    * Nur eingeordnete Blätter mit mindestens einer nachgereichten, ungelesenen
-   * Seite (`nachgereichtUngelesen()`).
+   * Seite (`nachgereichtUngelesen()`) — seit dem 6.10.2026 jede Seite, die
+   * Claude lesen soll, und von den Seiten davor die nach der alten Regel;
+   * nie eine, über die die App noch entscheidet oder die Docling liest.
    *
    * Für den Postboten, seit dem 4.10.2026 (`read_material` mit
    * `nachgereicht: true`). Gefiltert wird in der Abfrage und VOR dem `limit`:
@@ -624,6 +653,8 @@ export async function getMaterial(
       // `length(NULL)` ist NULL und bleibt es — genau das ist der Zustand
       // „diese Seite hat noch niemand gelesen".
       transcriptLength: sql<number | null>`length(${materialPages.transcript})`,
+      leser: materialPages.leser,
+      maschinell: materialPages.maschinell,
     })
     .from(materialPages)
     .innerJoin(
@@ -682,9 +713,15 @@ export async function createMaterialWithPage(
       throw new Error("Das Blatt konnte nicht gespeichert werden.");
     }
 
-    await tx
-      .insert(materialPages)
-      .values({ ...values, materialId: created.id, sortOrder: 0 });
+    // Wer die Seite liest, steht schon beim Anlegen fest, wenn die
+    // Notbremse gezogen ist (`leserBeimAnlegen()`); sonst beginnt sie
+    // offen, und die Zuteilung entscheidet nach dem Hochladen.
+    await tx.insert(materialPages).values({
+      ...values,
+      ...leserBeimAnlegen(),
+      materialId: created.id,
+      sortOrder: 0,
+    });
 
     return created.id;
   });
@@ -809,9 +846,16 @@ export async function addPage(
       -1,
     );
 
+    // Wie in `createMaterialWithPage()`: offen, oder bei gezogener
+    // Notbremse gleich Claude.
     const [created] = await tx
       .insert(materialPages)
-      .values({ ...values, materialId, sortOrder: highest + 1 })
+      .values({
+        ...values,
+        ...leserBeimAnlegen(),
+        materialId,
+        sortOrder: highest + 1,
+      })
       .returning({ id: materialPages.id });
 
     return created?.id ?? null;
@@ -1033,7 +1077,10 @@ export type NewPageTranscript = {
  * `setMaterialTopics()` und aus demselben Grund wie die beiden: **der Agent
  * schreibt nie in den Bestand.** Seine Abschrift liegt bis dahin in
  * `material_proposal_transcripts` und wandert erst hier hinüber, wenn ein
- * Mensch zugestimmt hat.
+ * Mensch oder Jev zugestimmt hat. Der zweite Rufer ist seit dem 6.10.2026 die
+ * Zuteilung der App (@/lib/leser/zuteilung): sie schreibt Doclings Abschrift
+ * einer Druckseite, nur in eine leere Seite und gekennzeichnet — warum das
+ * kein Agent ist, steht dort im Kopf.
  *
  * **Genannte Seiten werden gesetzt, ungenannte bleiben, wie sie sind.** Das ist
  * der eine Punkt, an dem diese Funktion sich von `setMaterialTopics()`
@@ -1078,13 +1125,33 @@ export type NewPageTranscript = {
  * ersetzte dann still eine bestätigte. So bleibt die stehen, und gezählt wird
  * nur, was wirklich geschrieben wurde. Ohne die Option schreibt die Funktion
  * wie bisher jede genannte Seite; das Formular und die Knöpfe im Korb ersetzen
- * mit Absicht.
+ * mit Absicht. Seit dem 6.10.2026 setzen sie auch die Zuteilung (die
+ * Docling-Abschrift kommt nur in eine leere Seite) und das Einordnen durch Jev
+ * im Korb (keine Docling-Abschrift wird still durch eine andere ersetzt).
+ *
+ * **`maschinell` sagt, wer den Text geschrieben hat** (seit dem 6.10.2026).
+ * Gerechnet wird es im `update` selbst, Seite für Seite, und nicht vorher:
+ *
+ * - Bleibt der Text, wie er war, bleibt auch die Kennzeichnung. Das Formular
+ *   der Blattseite und das im Korb schicken JEDE Seite mit, auch die
+ *   unberührte; ohne diese Zeile verlöre eine Docling-Seite ihren Vermerk,
+ *   weil jemand den Titel verbessert hat. „Wie er war“ heißt: nach dem
+ *   Vereinheitlichen der Zeilenenden in `transcriptSchema` — das Formular
+ *   schickt CRLF, die Spalte hält LF.
+ * - Ändert sich der Text, wird sie `false` — ein Mensch oder Claude hat ihn
+ *   geschrieben.
+ * - Nur mit `maschinell: true` wird sie `true`, und das setzt allein die
+ *   Zuteilung (@/lib/leser/zuteilung), wenn sie Doclings Abschrift schreibt.
+ *
+ * Verglichen wird mit dem ALTEN Wert der Zeile: in einem `update` sieht jeder
+ * Ausdruck auf der rechten Seite die Zeile, wie sie vorher war. Die Zählung
+ * ändert sich dadurch nicht.
  */
 export async function setMaterialTranscripts(
   userId: string,
   materialId: string,
   transcripts: NewPageTranscript[],
-  options?: { nurUngelesene?: boolean },
+  options?: { nurUngelesene?: boolean; maschinell?: boolean },
 ): Promise<number> {
   if (!isId(materialId)) return 0;
   if (transcripts.length === 0) return 0;
@@ -1156,7 +1223,10 @@ export async function setMaterialTranscripts(
 
       const written = await tx
         .update(materialPages)
-        .set({ transcript: text })
+        .set({
+          transcript: text,
+          maschinell: sql`case when ${materialPages.transcript} is not distinct from ${text} then ${materialPages.maschinell} else ${sql.raw(options?.maschinell ? "true" : "false")} end`,
+        })
         .where(
           and(
             eq(materialPages.id, page.id),
@@ -1183,11 +1253,17 @@ export async function setMaterialTranscripts(
  * es stand nichts darauf", alles andere ist die Abschrift. Wer die drei auf
  * zwei zusammenzieht, verliert genau die Auskunft, für die die Spalte NULL
  * zulässt.
+ *
+ * `maschinell` reist mit, weil PDF und Wiki genau hier den Vermerk
+ * „maschinell gelesen (Docling)“ brauchen und `read_transcript` ihn dem
+ * Agenten sagt (seit dem 6.10.2026). Eine Abschrift, die niemand
+ * gegengelesen hat, soll in keiner Ausgabe aussehen wie eine gelesene.
  */
 export type MaterialPageTranscript = {
   pageId: string;
   sortOrder: number;
   transcript: string | null;
+  maschinell: boolean;
 };
 
 /**
@@ -1225,6 +1301,7 @@ export async function listMaterialTranscripts(
       pageId: materialPages.id,
       sortOrder: materialPages.sortOrder,
       transcript: materialPages.transcript,
+      maschinell: materialPages.maschinell,
     })
     .from(materialPages)
     .innerJoin(
@@ -1248,32 +1325,46 @@ export async function listMaterialTranscripts(
  * `listRows()` je Blatt —, und zwei getippte Fassungen wären genau die Stelle,
  * an der die Liste ein Blatt nennt und die Zeile darin 0 Seiten zählt.
  *
- * Nachgereicht und ungelesen heißt, seit dem 4.10.2026:
+ * Seit dem 6.10.2026 entscheidet zuerst, wer die Seite liest (`leser`, siehe
+ * die Spalte in src/db/schema.ts). Nachgereicht und ungelesen heißt:
  *
  * - die Seite hat keine Abschrift (`transcript is null` — `""` heißt
  *   gelesen),
  * - das Blatt ist eingeordnet (`filed_at` gesetzt; im Korb liest der Postbote
- *   ohnehin das ganze Blatt),
- * - UND entweder kam die Seite nach dem Einordnen dazu (`created_at >
- *   filed_at`), ODER an demselben Blatt gibt es eine gelesene Seite, die vor
- *   ihr aufgenommen wurde.
+ *   ohnehin das Blatt),
+ * - UND entweder liest Claude sie (`leser = 'claude'`) — dann immer, ohne
+ *   jede Rechnung über Zeitpunkte —, ODER sie ist eine Seite von vor dem
+ *   6.10.2026 (`leser is null`), und für sie gilt die Regel vom 4.10.2026
+ *   unverändert: sie kam nach dem Einordnen dazu (`created_at > filed_at`),
+ *   oder an demselben Blatt gibt es eine gelesene Seite, die vor ihr
+ *   aufgenommen wurde.
  *
- * Der zweite Zweig ist der Grund, warum die Regel nicht mehr in einer Zeile
- * steht. Hängt jemand die Rückseite an, WÄHREND der Postbote die Vorderseite
- * abschreibt, entsteht sie vor dem Einordnen: `created_at < filed_at`, und nach
- * der ersten Fassung (nur `created_at > filed_at`) käme sie nie an die Reihe.
- * Erkennbar ist sie trotzdem — sie ist jünger als eine Seite, die schon
- * gelesen ist. Eine Seite, die beim Abschreiben ungelesen blieb, obwohl eine
- * ältere gelesen wurde, fällt in denselben Zweig und bekommt damit einen
- * zweiten Versuch.
+ * `'offen'` und `'docling'` fallen nie hinein. Über eine offene Seite hat die
+ * App noch nicht entschieden, und eine Docling-Seite schreibt die Zuteilung
+ * selbst — beide gehen damit weder in `unreadAttachedPageIds` noch in
+ * `read_material {nachgereicht}` noch durch `onlyTranscribesAttachedPages()`
+ * in @/lib/auto-file.
  *
- * Die Altblätter bleiben dabei draußen, und das ist die Absicht dahinter: die
- * fünfzehn Blätter von vor der Abschrift wurden im August eingeordnet, ohne
- * dass eine einzige Seite gelesen wurde. Der zweite Zweig greift an ihnen nie,
- * und der erste nur für eine Seite, die nach dem Einordnen dazukam. Ihre alten
- * Seiten schreibt nach dem Willen des Nutzers niemand von selbst ab — wer sie
- * will, ruft harness/nachlese.mts von Hand. Auch eine gelesene NACHGEREICHTE
- * Seite ändert daran nichts: sie ist jünger als die alten, nicht älter.
+ * **Warum die alte Rechnung nur noch für NULL gilt.** Ihr zweiter Zweig fing
+ * die Rückseite, die angehängt wurde, WÄHREND der Postbote die Vorderseite
+ * abschrieb: sie entsteht vor dem Einordnen, `created_at < filed_at`, ist aber
+ * jünger als eine gelesene Seite. Eine Seite, die beim Abschreiben ungelesen
+ * blieb, obwohl eine ältere gelesen wurde, fiel in denselben Zweig — die
+ * erste Seite eines Blattes aber nie, und das war eine Lücke: blieb Seite 1
+ * unlesbar und wurde Seite 2 gelesen, galt Seite 1 als Altblatt. Für eine
+ * neue Seite weiß die App jetzt, dass Claude sie lesen soll; an einem
+ * eingeordneten Blatt ist sie damit nachgereicht, gleich wann sie entstand.
+ * Wie oft der Postbote es versucht, begrenzt sein Gedächtnis
+ * (`nachlese:<id>:<lastPageAt>` in gesehen.json), nicht diese Regel.
+ *
+ * **Die Altblätter bleiben draußen, und das ist die Absicht des NULL-Zweigs.**
+ * Die fünfzehn Blätter von vor der Abschrift wurden im August eingeordnet,
+ * ohne dass eine einzige Seite gelesen wurde. Ihre Seiten sind NULL (die
+ * Wanderung setzt kein `leser` am Bestand), der zweite Zweig greift an ihnen
+ * nie, und der erste nur für eine Seite, die nach dem Einordnen dazukam —
+ * und die ist seit dem 6.10.2026 nie NULL, zieht also keine alte mit. Ihre
+ * alten Seiten schreibt nach dem Willen des Nutzers niemand von selbst ab —
+ * wer sie will, ruft harness/nachlese.mts von Hand.
  *
  * „Vor ihr" heißt nach `created_at` und nicht nach `sort_order`. Gefragt ist,
  * was beim Abschreiben schon da war, und nicht, wo die Seite im Blatt steht.
@@ -1282,6 +1373,7 @@ function nachgereichtUngelesen(seite: {
   materialId: AnyColumn;
   transcript: AnyColumn;
   createdAt: AnyColumn;
+  leser: AnyColumn;
 }): SQL {
   const frueher = alias(materialPages, "frueher_gelesen");
 
@@ -1289,18 +1381,24 @@ function nachgereichtUngelesen(seite: {
     isNull(seite.transcript),
     isNotNull(materials.filedAt),
     or(
-      gt(seite.createdAt, materials.filedAt),
-      exists(
-        db
-          .select({ vorhanden: sql`1` })
-          .from(frueher)
-          .where(
-            and(
-              eq(frueher.materialId, seite.materialId),
-              isNotNull(frueher.transcript),
-              lt(frueher.createdAt, seite.createdAt),
-            ),
+      sql`${seite.leser} = 'claude'`,
+      and(
+        isNull(seite.leser),
+        or(
+          gt(seite.createdAt, materials.filedAt),
+          exists(
+            db
+              .select({ vorhanden: sql`1` })
+              .from(frueher)
+              .where(
+                and(
+                  eq(frueher.materialId, seite.materialId),
+                  isNotNull(frueher.transcript),
+                  lt(frueher.createdAt, seite.createdAt),
+                ),
+              ),
           ),
+        ),
       ),
     ),
   ) as SQL;
@@ -1349,11 +1447,13 @@ function nachgereichteSeiten() {
 }
 
 /**
- * Wann an einem Blatt zuletzt eine Seite dazukam, und welche der
- * nachgereichten Seiten noch niemand gelesen hat.
+ * Wann an einem Blatt zuletzt eine Seite dazukam, welche der nachgereichten
+ * Seiten noch niemand gelesen hat, und wie viele Seiten die App gerade liest
+ * oder maschinell gelesen hat.
  *
- * Für den Postboten, seit dem 4.10.2026. `read_inbox` und `read_material`
- * tragen alles drei je Zeile:
+ * Für den Postboten, seit dem 4.10.2026, und seit dem 6.10.2026 auch für den
+ * Eingangskorb. `read_inbox` und `read_material` tragen die ersten drei je
+ * Zeile:
  *
  * - `lastPageAt` ist die jüngste Seite des Blattes. Daran sieht der Postbote,
  *   ob ein Blatt noch wächst — die Rückseite kommt über „Seite hinzufügen“
@@ -1368,6 +1468,15 @@ function nachgereichteSeiten() {
  * - `unreadAttachedPages` ist die Länge dieser Liste. Sie bleibt für Leser,
  *   die nur zählen; gerechnet wird sie aus der Liste und nicht ein zweites Mal
  *   in SQL, damit die beiden nie verschieden sein können.
+ * - `offenPages` und `maschinellPages` (6.10.2026) zählen die Seiten mit
+ *   `leser = 'offen'` und mit `maschinell`. Der Korb schreibt damit „liest
+ *   die App gerade“ und „maschinell gelesen (Docling)“ unter ein Blatt.
+ *   Gezählt in SQL mit `::int` — `count()` ist `bigint` und käme über
+ *   postgres-js als Zeichenkette an.
+ *
+ * Der Name `unreadAttachedPageIds` bleibt, obwohl die Regel dahinter seit
+ * dem 6.10.2026 auch `leser` fragt: scripts/jev-und-docling.sh erkennt am
+ * gebauten Stand (`grep` in .next/server), ob die laufende App die neue ist.
  *
  * Eine eigene Abfrage und nicht ein Feld an `MaterialListItem`: die Ablage,
  * die Startseite und die Kamera-Seite zeigen nichts davon, und eine Spalte,
@@ -1401,6 +1510,10 @@ export type PageActivity = {
   unreadAttachedPageIds: string[];
   /** Wie viele das sind — immer `unreadAttachedPageIds.length`. */
   unreadAttachedPages: number;
+  /** Seiten, über die die App noch entscheidet (`leser = 'offen'`). */
+  offenPages: number;
+  /** Seiten, deren Abschrift die Zuteilung aus Docling geschrieben hat. */
+  maschinellPages: number;
 };
 
 export async function listPageActivity(
@@ -1423,6 +1536,8 @@ export async function listPageActivity(
       // hier gleich die leere Zeichenkette und in `seitenIds()` die leere
       // Liste.
       unreadAttachedPageIds: sql<string>`coalesce(string_agg(${materialPages.id}::text, ',' order by ${materialPages.sortOrder}, ${materialPages.createdAt}, ${materialPages.id}) filter (where ${nachgereichtUngelesen(materialPages)}), '')`,
+      offenPages: sql<number>`(count(*) filter (where ${materialPages.leser} = 'offen'))::int`,
+      maschinellPages: sql<number>`(count(*) filter (where ${materialPages.maschinell}))::int`,
     })
     .from(materialPages)
     .innerJoin(
@@ -1442,6 +1557,8 @@ export async function listPageActivity(
       lastPageAt: row.lastPageAt,
       unreadAttachedPageIds: ids,
       unreadAttachedPages: ids.length,
+      offenPages: row.offenPages,
+      maschinellPages: row.maschinellPages,
     });
   }
 
@@ -1764,6 +1881,7 @@ export async function listMaterialsWithTranscripts(
       pageId: materialPages.id,
       sortOrder: materialPages.sortOrder,
       transcript: materialPages.transcript,
+      maschinell: materialPages.maschinell,
     })
     .from(materialPages)
     .innerJoin(
@@ -1784,6 +1902,7 @@ export async function listMaterialsWithTranscripts(
       pageId: page.pageId,
       sortOrder: page.sortOrder,
       transcript: page.transcript,
+      maschinell: page.maschinell,
     });
     byMaterial.set(page.materialId, list);
   }
@@ -1869,31 +1988,34 @@ export async function readPageImage(
   return row ?? null;
 }
 
+/** Eine Seite auf der Arbeitsliste der Zuteilung. */
+export type OffeneSeite = {
+  pageId: string;
+  materialId: string;
+  /** Steht schon eine Abschrift an ihr (auch die leere)? */
+  gelesen: boolean;
+  /** Ist diese Abschrift Doclings, geschrieben von der Zuteilung selbst? */
+  maschinell: boolean;
+};
+
 /**
- * Die nächste ungelesene Seite desselben Blattes — für das Vorauslesen in
- * `read_docling`.
+ * Die Seiten dieses Nutzers, über die die App noch nicht entschieden hat
+ * (`leser = 'offen'`), die älteste zuerst — die Arbeitsliste der Zuteilung
+ * (@/lib/leser/zuteilung).
  *
- * „Nächste" in der Reihenfolge von `getMaterial()`: nach `sortOrder`, dann nach
- * dem Zeitpunkt der Aufnahme, und bei völligem Gleichstand nach der id, damit
- * die Antwort feststeht. „Ungelesen" heißt `transcript is null` — eine Seite mit
- * Abschrift schreibt niemand noch einmal ab, und Docling für sie zu bemühen
- * kostete den Prozessor des NAS Rechenzeit für nichts.
- *
- * Die aktuelle Seite kommt über einen zweiten Namen derselben Tabelle in die
- * Abfrage; ihr Blatt muss dem Nutzer gehören, sonst gibt es keine nächste.
- * `null` heißt: es gibt keine — die Seite war die letzte ungelesene, oder es
- * gibt sie gar nicht.
+ * Nur ids und zwei Wahrheitswerte: das Bild holt die Zuteilung je Seite über
+ * `readPageImage()`, und zwar erst, wenn sie an der Reihe ist. `gelesen` und
+ * `maschinell` sagen ihr, ob es überhaupt etwas zu lesen gibt — eine offene
+ * Seite mit Abschrift schickt sie nicht durch Docling (dort im Kopf).
  */
-export async function nextUnreadPage(
-  userId: string,
-  pageId: string,
-): Promise<string | null> {
-  if (!isId(pageId)) return null;
-
-  const current = alias(materialPages, "current_page");
-
-  const [row] = await db
-    .select({ id: materialPages.id })
+export async function offeneSeiten(userId: string): Promise<OffeneSeite[]> {
+  return db
+    .select({
+      pageId: materialPages.id,
+      materialId: materialPages.materialId,
+      gelesen: sql<boolean>`${materialPages.transcript} is not null`,
+      maschinell: materialPages.maschinell,
+    })
     .from(materialPages)
     .innerJoin(
       materials,
@@ -1902,19 +2024,94 @@ export async function nextUnreadPage(
         eq(materials.userId, userId),
       ),
     )
-    .innerJoin(
-      current,
-      and(
-        eq(current.id, pageId),
-        eq(current.materialId, materialPages.materialId),
-      ),
-    )
+    .where(eq(materialPages.leser, "offen"))
+    .orderBy(asc(materialPages.createdAt), asc(materialPages.id));
+}
+
+/**
+ * Hält fest, wer eine Seite liest — und warum. Falsch heißt: die Seite gibt
+ * es nicht (mehr), sie gehört einem anderen, oder sie war nicht mehr offen.
+ *
+ * Nur aus `'offen'`: eine einmal getroffene Entscheidung überschreibt hier
+ * nichts, auch nicht eine zweite Zuteilung, die dieselbe Seite aus einem
+ * alten Stand noch einmal anfasst. Die Bedingung steht im `update` selbst,
+ * nicht in einer Frage davor — aus demselben Grund wie `nurUngelesene` in
+ * `setMaterialTranscripts()`.
+ *
+ * Ob das Blatt dem Nutzer gehört, steht als Unterabfrage im `update`; an der
+ * Seite hängt keine userId (Kopf dieser Datei).
+ */
+export async function leserFestlegen(
+  userId: string,
+  pageId: string,
+  wahl: {
+    leser: "docling" | "claude";
+    grund: LeserGrund;
+    doclingText: string | null;
+  },
+): Promise<boolean> {
+  if (!isId(pageId)) return false;
+
+  const geaendert = await db
+    .update(materialPages)
+    .set({
+      leser: wahl.leser,
+      leserGrund: wahl.grund,
+      doclingText: wahl.doclingText,
+    })
     .where(
       and(
-        isNull(materialPages.transcript),
-        sql`(${materialPages.sortOrder}, ${materialPages.createdAt}, ${materialPages.id}) > (${current.sortOrder}, ${current.createdAt}, ${current.id})`,
+        eq(materialPages.id, pageId),
+        eq(materialPages.leser, "offen"),
+        exists(
+          db
+            .select({ vorhanden: sql`1` })
+            .from(materials)
+            .where(
+              and(
+                eq(materials.id, materialPages.materialId),
+                eq(materials.userId, userId),
+              ),
+            ),
+        ),
       ),
     )
+    .returning({ id: materialPages.id });
+
+  return geaendert.length > 0;
+}
+
+/** Die erste Seite eines Blattes, wie die Zuteilung sie für den Titel braucht. */
+export type ErsteSeite = { leser: Leser | null; doclingText: string | null };
+
+/**
+ * Wer die erste Seite eines Blattes liest und was Docling dort gelesen hat —
+ * für den Titel aus der ersten Überschrift (`titelAusErsterSeite()` in
+ * @/lib/leser/abschrift).
+ *
+ * „Erste“ in der Reihenfolge von `getMaterial()`. Eine der zwei Stellen, an
+ * denen `docling_text` gelesen wird; die andere ist `korbblattStand()`.
+ */
+export async function ersteSeiteDocling(
+  userId: string,
+  materialId: string,
+): Promise<ErsteSeite | null> {
+  if (!isId(materialId)) return null;
+
+  const [row] = await db
+    .select({
+      leser: materialPages.leser,
+      doclingText: materialPages.doclingText,
+    })
+    .from(materialPages)
+    .innerJoin(
+      materials,
+      and(
+        eq(materials.id, materialPages.materialId),
+        eq(materials.userId, userId),
+      ),
+    )
+    .where(eq(materialPages.materialId, materialId))
     .orderBy(
       asc(materialPages.sortOrder),
       asc(materialPages.createdAt),
@@ -1922,7 +2119,103 @@ export async function nextUnreadPage(
     )
     .limit(1);
 
-  return row?.id ?? null;
+  return row ?? null;
+}
+
+/**
+ * Was die App über ein Blatt wissen muss, um selbst einen Vorschlag
+ * anzulegen (`appVorschlagFaellig()` in @/lib/leser/regel).
+ */
+export type KorbblattStand = {
+  eingeordnet: boolean;
+  /** Offene Vorschläge an diesem Blatt, gleich von wem. */
+  vorschlaege: number;
+  /** Seiten mit `leser = 'offen'`. */
+  offen: number;
+  /** Seiten ohne Abschrift. */
+  ungelesen: number;
+  /** Seiten mit `maschinell`. */
+  maschinell: number;
+  /** Wie lange die jüngste Seite schon da ist, nach der Uhr der Datenbank. */
+  seitLetzterSeiteMs: number;
+  title: string;
+  capturedOn: string;
+  ersteSeite: ErsteSeite;
+};
+
+/**
+ * Der Stand eines Blattes für den Vorschlag der App, oder `null`, wenn es das
+ * Blatt nicht (mehr) gibt.
+ *
+ * Gezählt in Postgres mit `::int`, aus demselben Grund wie in
+ * `listPageActivity()`. Das Alter der jüngsten Seite rechnet die Datenbank
+ * selbst gegen `now()` — dieselbe Uhr, die `created_at` gesetzt hat; die Uhr
+ * des App-Containers kann eine andere sein. Als `float8` und nicht als
+ * `int`: Millisekunden sprengen `int` nach gut 24 Tagen, und ein Blatt kann
+ * länger im Korb liegen.
+ */
+export async function korbblattStand(
+  userId: string,
+  materialId: string,
+): Promise<KorbblattStand | null> {
+  if (!isId(materialId)) return null;
+
+  const [material] = await db
+    .select({
+      title: materials.title,
+      capturedOn: materials.capturedOn,
+      filedAt: materials.filedAt,
+    })
+    .from(materials)
+    .where(and(eq(materials.userId, userId), eq(materials.id, materialId)))
+    .limit(1);
+
+  if (!material) return null;
+
+  const [seiten] = await db
+    .select({
+      offen: sql<number>`(count(*) filter (where ${materialPages.leser} = 'offen'))::int`,
+      ungelesen: sql<number>`(count(*) filter (where ${materialPages.transcript} is null))::int`,
+      maschinell: sql<number>`(count(*) filter (where ${materialPages.maschinell}))::int`,
+      seitLetzterSeiteMs: sql<number | null>`floor(extract(epoch from (now() - max(${materialPages.createdAt}))) * 1000)::float8`,
+    })
+    .from(materialPages)
+    .innerJoin(
+      materials,
+      and(
+        eq(materials.id, materialPages.materialId),
+        eq(materials.userId, userId),
+      ),
+    )
+    .where(eq(materialPages.materialId, materialId));
+
+  const [vorschlaege] = await db
+    .select({ anzahl: sql<number>`count(*)::int` })
+    .from(materialProposals)
+    .innerJoin(
+      materials,
+      and(
+        eq(materials.id, materialProposals.materialId),
+        eq(materials.userId, userId),
+      ),
+    )
+    .where(eq(materialProposals.materialId, materialId));
+
+  const ersteSeite = await ersteSeiteDocling(userId, materialId);
+
+  return {
+    eingeordnet: material.filedAt !== null,
+    vorschlaege: vorschlaege?.anzahl ?? 0,
+    offen: seiten?.offen ?? 0,
+    ungelesen: seiten?.ungelesen ?? 0,
+    maschinell: seiten?.maschinell ?? 0,
+    // Ein Blatt ohne Seite gibt es nicht (`deletePage()`); käme doch eins,
+    // gilt es als frisch — der sichere Ausgang.
+    seitLetzterSeiteMs: Number(seiten?.seitLetzterSeiteMs ?? 0),
+    title: material.title,
+    capturedOn: material.capturedOn,
+    ersteSeite: ersteSeite ?? { leser: null, doclingText: null },
+  };
 }
 
 /**

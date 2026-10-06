@@ -283,11 +283,11 @@ export type TranscriptTarget = {
    * zwischen Anzeigen und Absenden jemand anders an dieser Seite geschrieben,
    * und dann wird sie nicht angefasst.
    *
-   * Optional und nicht Pflicht, weil es zwei Aufrufer gibt und nur einer den
-   * Vergleich heute führt. `confirmProposalAction` im Eingangskorb rechnet
-   * seinen `known` aus zwei Quellen (Bestand ODER Vorschlag) und braucht
-   * deshalb einen eigenen Satz Zeilen; das Formular schickt die Stände dort
-   * bereits mit.
+   * Beide Aufrufer führen den Vergleich: die Blattseite seit dem 5.9.2026,
+   * `confirmProposalAction` im Eingangskorb seit dem 6.10.2026 — seitdem
+   * schreibt die App Doclings Abschrift von selbst, auch an einem Blatt, an
+   * dem ein Vorschlag liegt. Optional bleibt das Feld für einen Aufrufer, der
+   * keinen Stand kennt.
    */
   baseline?: string;
 };

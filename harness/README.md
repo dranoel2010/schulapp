@@ -6,6 +6,10 @@ Seiten steht, und legt einen Vorschlag mit Titel, Tag und höchstens einem Thema
 an. Fach und Themen entscheidet danach Jev in der App (seit dem 4.10.2026). Vom
 Foto bis zum eingeordneten Blatt ohne einen Handgriff.
 
+Welche Seiten Claude dabei bekommt, entscheidet seit dem 6.10.2026 die App:
+sauberen Druck liest sie selbst mit Docling, Claude bekommt den Rest, nur als
+Foto (siehe [Welche Seiten Claude bekommt](#welche-seiten-claude-bekommt)).
+
 **Er gehört nicht zur App.** Die App weiß nichts von ihm, hat keinen Schlüssel
 und ruft nie ein Modell. Der Postbote ist ein Programm auf deinem Rechner, das
 sie von außen benutzt — durch dieselbe Tür wie die Claude-App: den Web MCP.
@@ -93,7 +97,7 @@ So sieht eine Runde aus (die Zahlen sind ein Beispiel):
 „eingeordnet" heißt: Jev hat übernommen, Fach und Themen sind die des Blattes.
 Steht dort „liegt im Korb", wartet der Vorschlag auf dich. Die letzte Zeile ist
 die Messung je Lauf — API-Zeit gegen Wanduhr zeigt, wie viel davon Werkzeuge
-(Docling) und Start waren.
+und Start waren.
 
 ## Der Käfig
 
@@ -119,14 +123,16 @@ Regel über Erlaubnis, und die Einstellungen des Rechners können sie weiten.
 Wegnehmen schlägt Verbieten.
 
 Dazu: Der Lauf arbeitet in einem leeren, frisch angelegten Verzeichnis, das
-danach gelöscht wird. Und er darf von allen Werkzeugen nur sechs: `read_sheet`,
-`read_page`, `read_docling`, `read_subjects`, `read_topics` und
-`propose_sheet`. Sonst nichts. Der Auftrag braucht davon nur `read_docling`,
-`read_page` und `propose_sheet`; die übrigen bleiben erlaubt, weil ein
-verweigerter Aufruf den ganzen Lauf zu „nichts" machte.
+danach gelöscht wird. Und er darf von allen Werkzeugen nur fünf: `read_sheet`,
+`read_page`, `read_subjects`, `read_topics` und `propose_sheet`. Sonst nichts.
+Der Auftrag braucht davon nur `read_page` und `propose_sheet`; die übrigen
+bleiben erlaubt, weil ein verweigerter Aufruf den ganzen Lauf zu „nichts"
+machte.
 
-`claude` bekommt `MCP_TOOL_TIMEOUT=200000` mit: Docling darf je Seite bis zu
-180 s rechnen, und wie lange `claude` von sich aus wartet, ist nicht belegt.
+`read_docling` stand vom 4. bis zum 6.10.2026 auf der Liste, und mit ihm
+`MCP_TOOL_TIMEOUT=200000` für `claude`, weil Docling im Lauf bis zu 180 s je
+Seite rechnen durfte. Beides ist weg: die App fragt Docling jetzt selbst,
+nach dem Hochladen, und kein Werkzeug wartet mehr darauf.
 
 ## Claude schreibt ab, Jev ordnet ein
 
@@ -142,6 +148,49 @@ Die Seiten-ids und den eingetragenen Tag gibt der Postbote mit. Er liest das
 Blatt vor jedem Lauf selbst (`read_sheet`) und überspringt es, wenn es
 inzwischen eingeordnet ist — auch bei `--blatt`.
 
+## Welche Seiten Claude bekommt
+
+Seit dem 6.10.2026 liest jede Seite genau **ein** Leser, und die App
+entscheidet, welcher. Nach dem Hochladen schickt sie jede neue Seite einmal
+durch Docling; ist das Ergebnis sauberer Druck (eine feste Regel, dann Jev),
+wird es die Abschrift der Seite, gekennzeichnet als „maschinell gelesen
+(Docling)". Alles andere — Handschrift, Formeln, ein Docling, das nicht
+antwortet — liest Claude, vom Foto und ohne Vorlage. Bis dahin las jede Seite
+zweimal: Docling rechnete sie für den Lauf vor, und Claude schrieb sie danach
+trotzdem ab.
+
+An jeder Seite steht in `read_sheet`, wer sie liest (`leser`):
+
+| `leser` | heißt | der Postbote |
+|---|---|---|
+| `offen` | die App entscheidet noch (meist ein paar Sekunden) | lässt das **ganze Blatt** in dieser Runde liegen und merkt es sich **nicht** — in 15 Sekunden ist es wieder dran |
+| `docling` | die App hat die Seite selbst gelesen | gibt sie dem Lauf nicht |
+| `claude` | die Seite ist für Claude | gibt sie dem Lauf, wenn sie noch keine Abschrift hat |
+| `null` | eine Seite von vor dem 6.10.2026 | wie bisher: dem Lauf, wenn sie keine Abschrift hat |
+
+Liest Claude nur einen Teil eines Blattes, sagt der Auftrag das dazu („Die
+übrigen Seiten dieses Blattes hat die App schon gelesen — schreib nur diese
+ab"), und fehlt die erste Seite, lässt der Lauf den Titel weg — steht am Blatt
+noch der Platzhalter, nimmt die App die erste Überschrift, die Docling auf der
+ersten Seite gelesen hat. Kann Claude keine seiner Seiten lesen, legt er den
+Vorschlag trotzdem an, nur mit einer Notiz, welche Seite es war — sonst läge das
+Blatt ohne Vorschlag im Korb, obwohl die App die übrigen Seiten gelesen hat. Jev
+ordnet dann mit den Docling-Abschriften ein, und die unlesbare Seite bekommt am
+eingeordneten Blatt einen zweiten Versuch in der Nachlese. Bleibt für Claude
+gar nichts, läuft nichts: `alle Seiten gelesen — kein Lauf, einordnen tut die
+App.` Die App legt dann nach der Ruhe selbst einen Vorschlag an („von der App")
+und lässt Jev einordnen — auch, wenn ein Mensch die letzte Claude-Seite eines
+Blattes löscht.
+
+Was trotzdem zu einer Seite der App hereinkommt — von einem älteren Postboten
+oder aus einem Chat —, verwirft `propose_sheet` und nennt es in der Antwort
+unter `verworfen`. Der Aufruf scheitert daran nicht: die übrigen Seiten bleiben
+im Vorschlag. Eine App von vor dem 6.10.2026 kennt `leser` nicht; dann liest
+Claude wie bisher jede Seite ohne Abschrift — nur bietet eine solche App noch
+`read_docling` an, das der neue Käfig verbietet, und ein verweigerter Aufruf
+macht den Lauf zu „nichts“. Zu einer alten App gehört deshalb der alte
+Postbote; `nas.sh zurueck` gleicht ihn mit an.
+
 ## Die Abschrift
 
 Seit dem 5.9.2026 schreibt der Lauf zusätzlich ab, was auf den Seiten steht —
@@ -150,10 +199,8 @@ wird, wie alles andere daran, erst dann geschrieben, wenn der Vorschlag
 übernommen wird — von Jev oder von dir.
 
 Sie hängt an der **Seite** und nicht am Blatt, weil je Seite gelesen wird und an
-ein Blatt bis zu zwölf Seiten passen. Je Seite ruft der Lauf `read_docling` und
-`read_page` im selben Zug: Docling liefert das Gedruckte (Text, Tabellen,
-Formeln), das Foto die Handschrift — und das Foto ist maßgeblich. Die
-Handschrift einer Seite schreibt er auf, bevor die nächste drankommt.
+ein Blatt bis zu zwölf Seiten passen. Je Seite ruft der Lauf `read_page` und
+schreibt ab, was auf dem Foto steht, bevor die nächste drankommt.
 
 Was der Auftrag dafür verlangt:
 
@@ -195,17 +242,20 @@ kein Vorschlag.
 
 ### Was sie am Lauf ändert
 
-| | bis 5.9.2026 | bis 4.10.2026 | jetzt |
-|---|---|---|---|
-| Züge (`--max-turns`) | 20 | 40 | **52** |
-| Frist | 3 Minuten | 15 Minuten | **5 Minuten + 4 je Seite, höchstens 45** |
+| | bis 5.9.2026 | bis 4.10.2026 | bis 6.10.2026 | ab 6.10.2026 |
+|---|---|---|---|---|
+| Züge (`--max-turns`) | 20 | 40 | 52 | **40** |
+| Frist | 3 Minuten | 15 Minuten | 5 Minuten + 4 je Seite, höchstens 45 | **max(15 Minuten, 5 + 1 je Seite)** |
 
 Die Rechnung steht in `kaefig.mts` (`MAX_ZUEGE`, `fristFuer()`). Die Züge sind
-für den ungünstigsten Fall gezählt — jeder Aufruf einzeln, read_docling
-mitgerechnet —, denn wer mitten in der Abschrift aus den Zügen läuft, liefert
-nichts ab. Die vier Minuten je Seite sind die 180 s, nach denen die App auf
-Docling nicht mehr wartet, plus rund eine Minute für Claude — geschätzt; was
-ein Lauf wirklich braucht, zeigt die Messzeile darunter. Nachlese von Hand und
+für den ungünstigsten Fall gezählt — vier Aufrufe, zwölf `read_page` und zwölf
+Züge zum Aufschreiben, dazu zwölf Luft —, denn wer mitten in der Abschrift aus
+den Zügen läuft, liefert nichts ab. Vom 4. bis zum 6.10.2026 kam je Seite noch
+`read_docling` dazu (52 Züge, vier Minuten je Seite); seit die App Docling
+selbst fragt, gilt wieder die Rechnung von davor. Die Frist ist nie kürzer als
+die Viertelstunde von vorher und wächst erst ab elf Seiten, gezählt werden nur
+die Seiten, die Claude liest — siebzehn Minuten bei zwölf. Geschätzt; was ein
+Lauf wirklich braucht, zeigt die Messzeile darunter. Nachlese von Hand und
 Fragenlauf behalten die festen 15 Minuten.
 
 ## Ein zähes Blatt hält die Runde nicht auf
@@ -288,11 +338,26 @@ nächsten Durchgang wieder.
 Seit Jev einordnet, liegt ein Blatt nur Sekunden im Korb. Kommt die Rückseite
 danach („Seite hinzufügen" an einem eingeordneten Blatt), sähe der Korb sie nie.
 Die App nennt solche Seiten deshalb an jedem Blatt beim Namen
-(`unreadAttachedPageIds`, dazu die Zahl `unreadAttachedPages`): ohne Abschrift
-an einem eingeordneten Blatt, und entweder nach dem Einordnen dazugekommen oder
-jünger als eine schon abgeschriebene Seite desselben Blattes. Das Zweite fängt
-die Seite, die WÄHREND eines Laufs dazukam — sie ist älter als das Einordnen,
-aber jünger als die Seiten, die der Lauf abgeschrieben hat.
+(`unreadAttachedPageIds`, dazu die Zahl `unreadAttachedPages`): Seiten ohne
+Abschrift an einem eingeordneten Blatt, und welche davon, sagt seit dem
+6.10.2026 `leser`:
+
+| `leser` | nachgereicht? |
+|---|---|
+| `claude` | immer — die App hat die Seite Claude gegeben |
+| `offen`, `docling` | nie — die liest die App selbst |
+| `null` (von vor dem 6.10.2026) | wie bis dahin: wenn sie nach dem Einordnen dazukam oder jünger ist als eine schon abgeschriebene Seite desselben Blattes |
+
+Die letzte Zeile fängt bei alten Seiten die, die WÄHREND eines Laufs dazukam —
+älter als das Einordnen, aber jünger als die Seiten, die der Lauf
+abgeschrieben hat. Bei neuen Seiten braucht es diese Rechnung nicht mehr: die
+App weiß, dass sie für Claude ist.
+
+Steht am Blatt noch eine Seite auf `offen`, wartet auch die Nachlese — kein
+Lauf, kein Eintrag in `gesehen.json`, wie im Korb. Gemerkt wird ein Blatt
+unter dem Zeitpunkt seiner jüngsten Seite, und das wäre schon die offene: fiele
+sie nach dem Lauf Claude zu, stünde sie unter einem gemerkten Schlüssel und
+käme nie dran.
 
 Ist im Korb nichts zu tun, schreibt der Postbote genau diese Seiten mit dem
 Auftrag der Nachlese ab, höchstens drei Blätter je Runde. Der Auftrag nennt
@@ -313,10 +378,11 @@ vor ihrer Grenze von zweihundert Zeilen — und höchstens einmal je Minute
 `unreadAttachedPageIds` noch nicht kennt, bekommt keine Nachlese: ohne die
 Liste schriebe der Auftrag jede ungelesene Seite ab.
 
-Die fünfzehn Altblätter vom August bleiben liegen — keine ihrer Seiten hat eine
-Abschrift, und alle sind älter als ihr Einordnen. Ob sie abgeschrieben werden,
-entscheidest du mit `nachlese.mts`. Bekommt ein Altblatt eine neue Seite, wird
-nur diese abgeschrieben.
+Die fünfzehn Altblätter vom August bleiben liegen — ihre Seiten stehen auf
+`null`, keine hat eine Abschrift, und alle sind älter als ihr Einordnen. Ob sie
+abgeschrieben werden, entscheidest du mit `nachlese.mts`. Bekommt ein Altblatt
+eine neue Seite, geht nur diese ihren Weg: die App liest sie selbst, oder sie
+wird nachgereicht und abgeschrieben. Die alten Seiten zieht sie nicht mit.
 
 ## Die Nachlese
 
@@ -476,8 +542,29 @@ lief der Postbote sieben Tage mit Code vom 29.8. und scheiterte in fast jeder
 Runde mit „fetch failed". Gesucht wurde tagelang beim Zugang — dort, wo der
 Fehler nie war.
 
-Deshalb nach jedem Commit, der `harness/` berührt, erst vergleichen und dann
-kopieren:
+Seit dem 6.10.2026 gleicht `nas.sh hoch` die Kopie selbst ab, nachdem die neue
+App läuft, und `nas.sh zurueck` ebenso an den alten Stand: es vergleicht die
+Prüfsummen von `*.mts` und `README.md`, sichert die alte Kopie
+(`harness-alt-<Zeit>` daneben), kopiert nur diese Dateien — `zugang.json` und
+`gesehen.json` werden nie kopiert oder überschrieben —, hält den Postboten
+dafür an und startet ihn danach über `nas.sh postbote` neu, das die nach dem
+Anhalten liegengebliebene `lauf.lock` wegräumt. Der Grund ist dieser Stand
+selbst: App und Postbote müssen zusammen wechseln. Der alte Postbote verträgt
+die neue App, liest aber jede Seite, auch die, die die App schon gelesen hat —
+Kontingent für nichts. Der neue Postbote gegen die alte App ist schlimmer: die
+bietet `read_docling` an, sein Käfig verbietet es, und ein verweigerter Aufruf
+macht den ganzen Lauf zu „nichts“.
+
+Der Abgleich hängt an der neuen `nas.sh`, und die Datenbank braucht für diesen
+Stand vorher neue Spalten. Die Reihenfolge steht im README des Repos unter
+„Ein Leser je Seite“ → „Auf das NAS bringen — dieser Stand“: erst die neue
+`nas.sh` nach `~/nas.sh`, dann `hoch` (hält vor dem Bau an und nennt die
+SQL-Zeile), dann `scripts/leser-tabellen.sql` einspielen, dann noch einmal
+`hoch`. Nicht andersherum — eine alte `~/nas.sh` baut den neuen Stand, ohne
+nach der Spalte zu sehen.
+
+Nachprüfen geht weiter von Hand, und nach jedem Commit, der `harness/` berührt,
+lohnt der Blick:
 
 ```bash
 ssh nas 'cd /volume1/docker/schulapp/repo/harness && md5sum *.mts README.md | sort' > /tmp/repo.txt
@@ -504,6 +591,8 @@ fällt niemandem auf, solange man sie nicht liest.
 | `Abschrift: 2 von 3 Seiten` | eine Seite war nicht zu lesen; sie gilt weiter als ungelesen — neu abfotografieren |
 | `--ruhe erwartet eine Zahl von Sekunden …` | Tippfehler beim Start (`20s`, Zahl vergessen); der Postbote ist gar nicht erst angelaufen |
 | `2 Blatt/Blätter warten noch auf Ruhe.` | ihre letzte Seite ist jünger als `--ruhe`; sie sind dran, sobald nichts mehr nachkommt. Steht einmal da, nicht jede Runde |
+| `1 Blatt/Blätter liest die App gerade selbst — kein Lauf: …` | an dem Blatt steht eine Seite auf `leser: offen` — die App fragt gerade Docling und Jev (an einer Formelseite bis zu drei Minuten). Gemerkt wird nichts; danach ist das Blatt dran. Steht dieselbe id länger als zehn Minuten da, im Log der App nach `Leser …: Zuteilung gescheitert` sehen — eine Seite, die nicht einmal für Claude festgehalten werden konnte (meist war die Datenbank weg), bekommt nach zehn Minuten von selbst einen neuen Versuch. Eilt es: die App neu starten (`docker compose restart app` im App-Ordner) oder die Notbremse ziehen (README, „Ein Leser je Seite“) |
+| `alle Seiten gelesen — kein Lauf, einordnen tut die App.` | für Claude ist an diesem Blatt nichts übrig; die App legt selbst einen Vorschlag an. Liegt er danach im Korb, konnte Jev ihn nicht einordnen — dann bist du dran |
 | `Nachgereichte Seiten bleiben liegen — read_material sagt: …` | die App kennt `nachgereicht` noch nicht — sie ist älter als der Postbote. App aktualisieren |
 | `⚠ dazu ist 1 Seite gelesen, die nicht im Auftrag stand` | der Lauf hat eine Seite mit abgeschrieben, die er nicht anfassen sollte — und die App hat sie übernommen. Sieh nach, ob es ein Altblatt war |
 | `Port 41751 ist belegt` | dort lauscht etwas anderes; die Rückadresse ist angemeldet und lässt sich nicht ausweichen |

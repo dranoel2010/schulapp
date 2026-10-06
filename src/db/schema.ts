@@ -1,10 +1,12 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   customType,
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -679,16 +681,85 @@ export const materialPages = pgTable(
      * nichts darauf". Fielen beide zusammen, käme jede leere Seite bei jedem Lauf
      * wieder an die Reihe.
      *
-     * Geschrieben wird sie ausschließlich beim Übernehmen eines Vorschlags, nie
-     * direkt von einem Agenten. Der Weg dorthin führt über
-     * `material_proposal_transcripts`.
+     * Geschrieben wird sie auf drei Wegen, und keiner davon ist ein Agent:
+     *
+     * - von einem Menschen im Formular an der Blattseite;
+     * - beim Übernehmen eines Vorschlags — der Weg über
+     *   `material_proposal_transcripts`, durch Formular oder Knopf im Korb
+     *   oder das Einordnen durch Jev (@/lib/auto-file);
+     * - von der Zuteilung der App (@/lib/leser/zuteilung), wenn Docling die
+     *   Seite allein liest (seit dem 6.10.2026). Dann nur in eine Seite, die
+     *   noch keine Abschrift hat, und mit `maschinell` = true. Docling ist
+     *   kein Agent: es befolgt keine Sätze auf dem Blatt, und was es liefert,
+     *   hat vorher eine feste Regel samt Einstufung durch Jev bestanden. Der
+     *   benannte Anlass für diesen direkten Weg steht in KONZEPT.md.
      */
     transcript: text("transcript"),
+    /**
+     * Wer diese Seite liest — entschieden von der App, nicht vom Postboten
+     * (seit dem 6.10.2026).
+     *
+     * - `'offen'`: die App hat noch nicht entschieden. Docling rechnet
+     *   gerade, oder der Anstoß steht noch aus. Eine solche Seite geht nie an
+     *   Claude; ein Blatt mit einer offenen Seite überspringt der Postbote.
+     * - `'docling'`: Docling liest allein. Die Abschrift hat die Zuteilung
+     *   geschrieben; Claude sieht die Seite nie.
+     * - `'claude'`: Claude liest vom Foto, ohne Vorlage.
+     * - NULL: eine Seite von vor dem 6.10.2026. Für sie gilt, was vorher galt
+     *   — Claude liest, was ungelesen ist, samt dem Schutz der Altblätter in
+     *   `nachgereichtUngelesen()` (@/lib/materials).
+     *
+     * Deshalb nullbar und mit Vorgabe `'offen'`: jede NEUE Seite beginnt
+     * offen, der Bestand bleibt NULL. In der Wanderung
+     * (scripts/leser-tabellen.sql) kommt die Vorgabe erst NACH dem Anlegen
+     * der Spalte — mit ihr im ADD füllte Postgres jede vorhandene Seite mit
+     * `'offen'`, und die App schickte den ganzen Altbestand durch Docling.
+     * Die erlaubten Werte hält die CHECK-Bedingung unten fest.
+     */
+    leser: text("leser").$type<Leser>().default("offen"),
+    /**
+     * Warum die App so entschieden hat — für das Nachmessen im Betrieb, nicht
+     * für eine Entscheidung. Regelversion, Wortzahl, Formelverdacht,
+     * Jev-Wahrscheinlichkeit, Grund (`LeserGrund`). NULL, solange `leser`
+     * NULL oder `'offen'` ist.
+     */
+    leserGrund: jsonb("leser_grund").$type<LeserGrund>(),
+    /**
+     * Was Docling auf dieser Seite gelesen hat, roh als Markdown — genau
+     * einmal gerechnet, nie neu.
+     *
+     * Gespeichert, damit sich die Regel später an echten Seiten nachmessen
+     * lässt, ohne Docling ein zweites Mal rechnen zu lassen, und damit eine
+     * Docling-Seite ihre erste Überschrift als Titel hergeben kann. Er steht
+     * in keiner Liste und geht nie an Claude: an ein Modell geht er nur zur
+     * Einstufung an Jev, und das nur, wenn die feste Regel davor bestanden
+     * ist. Gelesen wird er ausschließlich in `ersteSeiteDocling()` und
+     * `korbblattStand()` in @/lib/materials.
+     */
+    doclingText: text("docling_text"),
+    /**
+     * Hat die heutige Abschrift die Zuteilung aus Docling geschrieben?
+     *
+     * Nur dann steht hier true. Jede andere Schreibung — ein Mensch im
+     * Formular, Claude über einen Vorschlag — setzt false, sobald sich der
+     * Text dabei ändert; schickt das Formular eine Docling-Seite unverändert
+     * mit, bleibt die Kennzeichnung (`setMaterialTranscripts()`). Daran
+     * hängt der Vermerk „maschinell gelesen (Docling)" an Blattseite, Korb,
+     * PDF, Wiki und Fragen-Eingang: eine solche Abschrift hat niemand
+     * gegengelesen, und Lesefehler stehen darin ohne ⟨⟩.
+     */
+    maschinell: boolean("maschinell").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  (t) => [index("material_pages_material_idx").on(t.materialId, t.sortOrder)],
+  (t) => [
+    index("material_pages_material_idx").on(t.materialId, t.sortOrder),
+    check(
+      "material_pages_leser_check",
+      sql`${t.leser} in ('offen', 'docling', 'claude')`,
+    ),
+  ],
 );
 
 /**
@@ -747,13 +818,19 @@ export const materialTopics = pgTable(
  * @/lib/inbox, an einer Stelle und nicht an vier.
  *
  * `origin` hält fest, woher der Vorschlag kam: "manuell" von Hand über die
- * Oberfläche, "agent" von einem Agenten. Die Spalte ist keine Statistik. Ein
- * Vorschlag vom Agenten ist aus dem Inhalt eines Blattes abgeleitet, also aus
- * etwas, das die App nicht geschrieben hat; einer von Hand nicht. Auf dem
- * Bildschirm steht deshalb, welcher von beiden gerade vor einem liegt — das
- * ist der ganze Zweck. Nebenbei hält sie den Weg offen, auf dem die App später
- * selbst ein Modell fragt: dieser Weg wäre bloß ein weiterer Schreiber auf
- * diese Tabelle, und der Korb müsste sich dafür nicht ändern.
+ * Oberfläche, "agent" von einem Agenten, "app" von der App selbst (seit dem
+ * 6.10.2026). Die Spalte ist keine Statistik. Ein Vorschlag vom Agenten ist
+ * aus dem Inhalt eines Blattes abgeleitet, also aus etwas, das die App nicht
+ * geschrieben hat; einer von Hand nicht. Auf dem Bildschirm steht deshalb,
+ * welcher gerade vor einem liegt — das ist der ganze Zweck.
+ *
+ * "app" ist der Weg, den diese Spalte von Anfang an offenhielt: ein weiterer
+ * Schreiber auf diese Tabelle, ohne dass der Korb sich ändern muss. Die
+ * Zuteilung (@/lib/leser/zuteilung) legt ihn an, wenn Docling ALLE Seiten
+ * eines Blattes im Korb gelesen hat und kein Agent mehr kommt — mit einem
+ * Titel aus der ersten Überschrift, sonst nichts —, und lässt Jev einordnen.
+ * Kein Agent, aber aus Blattinhalt abgeleitet; auf dem Bildschirm steht er
+ * deshalb wie einer vom Agenten in der Akzentfarbe, mit eigenem Namen.
  *
  * **Es gibt keinen Zustand "übernommen" oder "verworfen".** Eine Zeile in
  * dieser Tabelle ist ein offener Vorschlag, sonst nichts — entschieden heißt
@@ -776,7 +853,7 @@ export const materialProposals = pgTable(
     materialId: uuid("material_id")
       .notNull()
       .references(() => materials.id, { onDelete: "cascade" }),
-    /** manuell | agent — wer den Vorschlag geschrieben hat */
+    /** manuell | agent | app — wer den Vorschlag geschrieben hat */
     origin: text("origin").notNull().default("manuell"),
     /**
      * Das vorgeschlagene Fach. Leer heißt: das Fach des Blattes bleibt.
@@ -1631,10 +1708,86 @@ export type StudyBlockStatus = "open" | "done" | "skipped";
  *
  * "manuell" heißt: über die Oberfläche, von Hand. "agent" heißt: aus dem
  * Inhalt eines Blattes abgeleitet — also aus etwas, das die App nicht
- * geschrieben hat. Warum dieser Unterschied auf dem Bildschirm steht, sagt der
- * Kommentar an `materialProposals`.
+ * geschrieben hat. "app" heißt: die App selbst, für ein Blatt, das Docling
+ * ganz gelesen hat (seit dem 6.10.2026) — kein Agent, aber ebenfalls aus dem
+ * Blattinhalt abgeleitet. Warum dieser Unterschied auf dem Bildschirm steht,
+ * sagt der Kommentar an `materialProposals`.
  */
-export type ProposalOrigin = "manuell" | "agent";
+export type ProposalOrigin = "manuell" | "agent" | "app";
+
+/**
+ * Wer eine Seite liest — die Werte der Spalte `material_pages.leser`. Was
+ * jeder bedeutet und warum NULL ein vierter Zustand ist, steht dort.
+ */
+export type Leser = "offen" | "docling" | "claude";
+
+/**
+ * Warum die App eine Seite so zugeteilt hat — ein Wort je Ausgang, in der
+ * Reihenfolge, in der @/lib/leser/zuteilung prüft:
+ *
+ * - `aus`: Notbremse `LESER_REGEL=aus`, Docling wurde nicht gefragt.
+ * - `docling-fehlt`, `docling-pause`: Docling ist nicht eingerichtet oder
+ *   ruht nach einem Ausfall.
+ * - `docling-ausfall`, `docling-fehler`: Docling hat es versucht und ist
+ *   gescheitert — als Ganzes (Zeitablauf, 404, 5xx) oder nur an dieser
+ *   Seite.
+ * - `nicht-erfolg`, `leer`, `zu-wenig-woerter`, `formel`, `zu-lang`: die
+ *   feste Regel a bis d (@/lib/leser/regel).
+ * - `jev-fehlt`, `jev-fehler`, `jev-unsicher`: die Einstufung durch Jev ging
+ *   nicht oder blieb unter der Schwelle.
+ * - `sauber`: alles bestanden — Docling liest allein.
+ * - `fehler`: die Zuteilung selbst brach unerwartet ab.
+ * - `schon-gelesen`: an der Seite stand schon eine Abschrift von Hand oder
+ *   von Claude, bevor die App entschied — sie hat sie nicht noch einmal
+ *   gelesen (Docling nicht gefragt) oder ihre Abschrift nicht mehr
+ *   geschrieben. `leser` ist dann `'claude'`, weil Docling es nicht war;
+ *   lesen muss die Seite niemand mehr.
+ * - `nachgeholt`: Doclings Abschrift stand schon an der Seite, nur die
+ *   Entscheidung fehlte (ein Abbruch zwischen den beiden Schritten). Sie
+ *   wird ohne zweite Rechnung als `'docling'` festgehalten.
+ *
+ * Alle außer `sauber` und `nachgeholt` heißen `leser = 'claude'`.
+ */
+export type LeserGrundCode =
+  | "aus"
+  | "docling-fehlt"
+  | "docling-pause"
+  | "docling-ausfall"
+  | "docling-fehler"
+  | "nicht-erfolg"
+  | "leer"
+  | "zu-wenig-woerter"
+  | "formel"
+  | "zu-lang"
+  | "jev-fehlt"
+  | "jev-fehler"
+  | "jev-unsicher"
+  | "sauber"
+  | "fehler"
+  | "schon-gelesen"
+  | "nachgeholt";
+
+/**
+ * Was in `material_pages.leser_grund` steht. Jede Zahl ist `null`, wenn es
+ * bis zu ihr nicht kam — eine Seite, die Docling nie gesehen hat, hat keine
+ * Wortzahl, und eine, die schon an der Wortzahl scheiterte, keine
+ * Jev-Wahrscheinlichkeit.
+ */
+export type LeserGrund = {
+  /** Die Fassung der Regel (`REGEL_VERSION` in @/lib/leser/regel). */
+  regel: number;
+  grund: LeserGrundCode;
+  /** Wörter aus mindestens drei Buchstaben in Doclings Text. */
+  woerter: number | null;
+  /** Name des ersten Formelmusters, das traf — oder `null`. */
+  formel: string | null;
+  /** Länge der Abschrift nach der Umwandlung, in Zeichen. */
+  zeichen: number | null;
+  /** Wahrscheinlichkeit, mit der Jev den Text für sauber hält. */
+  jev: number | null;
+  /** Wie lange Docling nach eigener Angabe gerechnet hat. */
+  sekunden: number | null;
+};
 
 /**
  * Art einer Note. Schriftlich und mündlich sind die beiden Töpfe, aus denen

@@ -1,13 +1,22 @@
 /**
- * Jev — das Entscheidungsmodell, das ein abgeschriebenes Blatt einordnet.
+ * Jev — das Entscheidungsmodell der App, für zwei Fragen.
  *
  * Jev von TypeSafe schreibt keinen Text. Es beantwortet festgelegte Fragen
  * (eine Auswahl, ein Ja/Nein) und nennt zu jeder Antwort, wie sicher es ist.
- * Genau das ist Einordnen: welches der dreizehn Fächer, welche der Themen.
- * Abschreiben kann es nicht, es liest keine Bilder. Das bleibt beim Postboten.
+ * Abschreiben kann es nicht, es liest keine Bilder.
  *
- * Gemessen am 4.10.2026 an 20 schon eingeordneten Blättern: 19 Mal dasselbe
- * Fach wie der Mensch, und das zwanzigste hatte der Mensch falsch abgelegt.
+ * 1. **Einordnen** (seit dem 4.10.2026): welches der dreizehn Fächer, welche
+ *    der Themen — für ein abgeschriebenes Blatt (@/lib/auto-file).
+ * 2. **Einstufen** (seit dem 6.10.2026): ist Doclings Text sauberer Druck
+ *    oder Kauderwelsch aus Handschrift? Davon hängt ab, ob Docling eine Seite
+ *    allein liest oder Claude vom Foto (@/lib/leser/zuteilung). Frage und
+ *    Rahmensatz stehen hier wörtlich so, wie sie am 5.10.2026 an 37 Seiten
+ *    gemessen wurden (`SAUBER_FRAGE`, `OCR_RAHMEN`); ein anderer Wortlaut
+ *    wäre eine andere, ungemessene Regel.
+ *
+ * Das Einordnen, gemessen am 4.10.2026 an 20 schon eingeordneten Blättern:
+ * 19 Mal dasselbe Fach wie der Mensch, und das zwanzigste hatte der Mensch
+ * falsch abgelegt.
  * Pro Blatt etwa 0,3 Sekunden und weit unter einem Hundertstel Cent.
  *
  * Den Unterschied machten die Themen als Hinweis am Fach. Ohne sie hielt Jev
@@ -26,7 +35,10 @@
 const ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 const MODEL = "jev-latest";
 
-/** Länger wartet der Postbote nicht — dann bleibt das Blatt im Korb. */
+/**
+ * Länger wartet niemand: beim Einordnen bleibt das Blatt dann im Korb, beim
+ * Einstufen liest Claude die Seite.
+ */
 const TIMEOUT_MS = 15_000;
 
 /**
@@ -87,6 +99,52 @@ export function jevState(text: string): string {
     "",
     body,
   ].join("\n");
+}
+
+/**
+ * Der Rahmensatz vor Doclings Text, wenn Jev ihn einstuft — wörtlich der der
+ * Messung vom 5.10.2026.
+ */
+export const OCR_RAHMEN =
+  "Ausgabe einer automatischen Texterkennung (OCR) eines abfotografierten Schulblatts:";
+
+/**
+ * Die Frage, ob Doclings Text sauber ist — wörtlich die der Messung. Ab
+ * `JEV_SCHWELLE` (@/lib/leser/regel) liest Docling die Seite allein.
+ */
+export const SAUBER_FRAGE: JevQuestion = {
+  type: "noul",
+  instructions:
+    "Besteht dieser Text überwiegend aus richtig geschriebenen, sinnvollen Wörtern und Sätzen auf Deutsch, Französisch oder Englisch?",
+};
+
+/**
+ * Was Jev zum Einstufen liest: der Rahmensatz, eine Leerzeile, dann Doclings
+ * Markdown ohne HTML-Kommentare (`<!-- image -->` sagt nichts über die
+ * Schrift), auf `MAX_STATE_CHARS` gekürzt. Ein leerer Text wird zu
+ * „(leer)“ und nicht zu nichts — so stand es in der Messung.
+ */
+export function ocrState(markdown: string): string {
+  const text = markdown.replace(/<!--[\s\S]*?-->/g, " ").trim();
+
+  return [
+    OCR_RAHMEN,
+    "",
+    text.length > 0 ? text.slice(0, MAX_STATE_CHARS) : "(leer)",
+  ].join("\n");
+}
+
+/**
+ * Die Wahrscheinlichkeit aus einer Ja/Nein-Antwort, oder `null` bei einer
+ * Auswahl, einer fehlenden oder einer kaputten Antwort. `null` heißt für die
+ * Zuteilung: Jev hat nichts gesagt, also liest Claude.
+ */
+export function readNoul(answer: JevAnswer | undefined): number | null {
+  if (!answer || answer.type === "choice") return null;
+
+  return typeof answer.noul === "number" && Number.isFinite(answer.noul)
+    ? answer.noul
+    : null;
 }
 
 /**
