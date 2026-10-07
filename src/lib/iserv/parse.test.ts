@@ -138,6 +138,16 @@ describe("parseEventSources", () => {
       CFG,
     );
     assert.equal(alt.quellen[1].rolle, "aufgaben");
+    const neu = parseEventSources(
+      [QUELLE_OEFFENTLICH, { ...QUELLE_AUFGABEN, url: "/iserv/calendar/api/plugin?plugin=exercise" }],
+      ORIGIN,
+      CFG,
+    );
+    assert.equal(neu.quellen[1].rolle, "aufgaben");
+    wirft(
+      () => parseEventSources([QUELLE_OEFFENTLICH, { ...QUELLE_AUFGABEN, url: "/iserv/calendar/api/etwas" }], ORIGIN, CFG),
+      "format",
+    );
   });
 
   it("wirft „format“ ohne öffentlichen Kalender oder bei kaputter Liste", () => {

@@ -63,8 +63,8 @@ function maxTag(a: string, b: string): string {
 
 const MAX_QUELLEN = 50;
 const CAL_FEED_PATH = "/iserv/calendar/feed/calendar";
-/** Der Plugin-Pfad wechselt je IServ-Version: calendar4/plugin, calendar/feed/plugin. */
-const PLUGIN_FEED_PATH = /^\/iserv\/calendar\d*\/(?:feed\/)?plugin$/;
+/** Der Plugin-Pfad wechselt je IServ-Version: calendar4/plugin, calendar/feed/plugin, calendar/api/plugin (seit 7.10.2026). */
+const PLUGIN_FEED_PATH = /^\/iserv\/calendar\d*\/(?:feed\/|api\/)?plugin$/;
 
 const VERWENDET: ReadonlySet<IservRolle> = new Set(["oeffentlich", "klasse", "aufgaben"]);
 
