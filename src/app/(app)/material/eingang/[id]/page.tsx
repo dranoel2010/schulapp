@@ -463,7 +463,7 @@ export default async function ProposalPage({
          * selbst vorkommen darf: die Notiz ist mehrzeilig — beide Formulare
          * bieten dafür ein <textarea rows={3}> an, `optionalText()` in
          * @/lib/inbox schneidet nur die Ränder ab, und der Auftrag des
-         * Postboten schickt ausdrücklich mehrere Aussagen dorthin. Dann ist die
+         * Claude-Lesers schickt ausdrücklich mehrere Aussagen dorthin. Dann ist die
          * Kette nicht mehr eindeutig: eine Notiz „a\nb" ohne Thema ergibt
          * Zeichen für Zeichen denselben Schlüssel wie die Notiz „a" mit dem
          * Thema „b". Ändert jemand den Vorschlag von der einen Vorbelegung in

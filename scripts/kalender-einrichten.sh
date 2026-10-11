@@ -639,12 +639,14 @@ echo "Dienste:   $DIENSTE_VORHER"
 
 if [ ! -e "$OVERRIDE" ]; then
   # Steht ein Jev-Schlüssel in der .env, waren Jev und Docling eingerichtet,
-  # und ihre Datei ist weg — jev-und-docling.sh löscht sie selbst, wenn ein
-  # erneuter Lauf am Bild oder am Formelmodell scheitert. Legte ich jetzt eine
+  # und ihre Datei ist weg — bis zum 11.10.2026 löschte jev-und-docling.sh sie
+  # selbst, wenn ein erneuter Lauf am Bild oder am Formelmodell scheiterte;
+  # seitdem nur noch, wenn derselbe Lauf sie angelegt hat, sonst geht sie nur
+  # von Hand verloren. Legte ich jetzt eine
   # an, trüge sie MEINE Marke, und jev-und-docling.sh weigerte sich danach für
   # immer, sie anzufassen.
   if [ -n "$(env_wert TYPESAFE_API_KEY)" ]; then
-    halt "Es gibt keine $OVERRIDE, aber in der .env steht ein TYPESAFE_API_KEY — Jev und Docling waren also eingerichtet, und ihre Datei ist verschwunden (jev-und-docling.sh entfernt sie, wenn es bei einem erneuten Lauf scheitert). Erst Jev und Docling zurückholen:  sudo bash $APP/repo/scripts/jev-und-docling.sh  — dann dieses Skript noch einmal; es ergänzt die Datei dann nur. Lege ich sie jetzt an, trägt sie meine Marke, und jev-und-docling.sh fasst sie danach nicht mehr an. Sind Jev und Docling mit Absicht abgeschaltet: die Zeile TYPESAFE_API_KEY in der .env mit # auskommentieren (sudo vi $ENVDATEI), dann dieses Skript noch einmal."
+    halt "Es gibt keine $OVERRIDE, aber in der .env steht ein TYPESAFE_API_KEY — Jev und Docling waren also eingerichtet, und ihre Datei ist verschwunden (von Hand gelöscht, oder ein älteres jev-und-docling.sh hat sie bei einem gescheiterten Lauf entfernt). Erst Jev und Docling zurückholen:  sudo bash $APP/repo/scripts/jev-und-docling.sh  — dann dieses Skript noch einmal; es ergänzt die Datei dann nur. Lege ich sie jetzt an, trägt sie meine Marke, und jev-und-docling.sh fasst sie danach nicht mehr an. Sind Jev und Docling mit Absicht abgeschaltet: die Zeile TYPESAFE_API_KEY in der .env mit # auskommentieren (sudo vi $ENVDATEI), dann dieses Skript noch einmal."
   fi
   echo "Override:  keine — lege ich an (Jev und Docling sind hier nicht eingerichtet)"
 elif grep -qF "# angelegt von scripts/jev-und-docling.sh" "$OVERRIDE"; then
@@ -1323,9 +1325,9 @@ echo "  Cron:      die Zeile mit kalender.sh aus $CRONTAB löschen (Sicherung ob
 if grep -qF "# angelegt von scripts/jev-und-docling.sh" "$OVERRIDE" 2>/dev/null; then
   echo "  App:       NUR die GOOGLE_*-Zeilen samt Kommentar aus $OVERRIDE löschen — nicht die"
   echo "             Datei, darin stehen auch Jev und Docling. Dann  $(zum_abtippen "up -d app")"
-  echo "             Umgekehrt gilt dasselbe: Der Rückweg von jev-und-docling.sh (die Datei löschen) und ein"
-  echo "             erneuter Lauf, der dort scheitert, schalten den Kalender mit ab. Danach dieses Skript noch"
-  echo "             einmal — es sagt, in welcher Reihenfolge es weitergeht."
+  echo "             Umgekehrt gilt dasselbe: Wer die Datei löscht, schaltet den Kalender mit ab — und"
+  echo "             IServ und den Claude-Leser. Danach dieses Skript noch einmal — es sagt, in welcher"
+  echo "             Reihenfolge es weitergeht."
 else
   echo "  App:       die GOOGLE_*-Zeilen samt Kommentar aus $OVERRIDE löschen, dann  $(zum_abtippen "up -d app")"
 fi

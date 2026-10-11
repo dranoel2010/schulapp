@@ -323,11 +323,12 @@ describe("die Abschrift an propose_sheet", () => {
   });
 
   it("sagt dem Modell in der Beschreibung, WIE abgeschrieben wird", () => {
-    // Diese Beschreibung ist kein Kommentar, sondern die Anweisung: sie ist das
-    // Einzige, was steuert, wie eine Abschrift entsteht. Ein Modell an der
-    // Claude-App sieht harness/auftrag.mts nie, für den Menschen dort ist das
-    // hier der ganze Text. Wer sie kürzt, nimmt Regeln weg, die kein anderer
-    // Test vermisst — deshalb steht jede der fünf hier einzeln.
+    // Diese Beschreibung ist kein Kommentar, sondern die Anweisung: für den
+    // Menschen im Chat ist sie das Einzige, was steuert, wie eine Abschrift
+    // entsteht. Die Regeln selbst kommen seit dem 11.10.2026 aus
+    // @/lib/abschrift-regeln (dort geprüft, auch dass der Leser der App
+    // dieselben bekommt); hier steht trotzdem jede der fünf einzeln, damit
+    // auch ein Umbau des Moduls sie an DIESER Tür nicht verliert.
     const transcripts = (
       TOOLS.propose_sheet.args as unknown as {
         shape: { transcripts: { description?: string } };
@@ -433,7 +434,8 @@ describe("ein Leser je Seite", () => {
     assert.match(text, /verworfen/);
     assert.match(text, /„docling“ oder „offen“/);
     // Die übrigen bleiben: das ist der Unterschied zwischen Verwerfen und
-    // Abweisen, und an ihm hängt ein Postbote von vor dem Umbau.
+    // Abweisen, und an ihm hängt jeder Chat, der Seiten mitschickt, die die
+    // App inzwischen selbst gelesen hat.
     assert.match(text, /übrigen Einträge bleiben/);
   });
 
@@ -450,24 +452,34 @@ describe("ein Leser je Seite", () => {
     // geschieht, entscheiden Docling, die feste Regel und Jev. Holte sich
     // run.ts mehr aus @/lib/leser, könnte ein Werkzeug Seiten festlegen oder
     // Vorschläge der App anlegen — dann schlägt dieser Test an.
-    const quelle = readFileSync(
-      path.join(process.cwd(), "src", "lib", "mcp", "run.ts"),
-      "utf8",
-    );
-    const leserImporte = [
-      ...quelle.matchAll(/import\s*\{([^}]*)\}\s*from\s*"@\/lib\/leser[^"]*"/g),
-    ].flatMap((treffer) =>
-      treffer[1]
-        .split(",")
-        .map((name) => name.trim())
-        .filter(Boolean),
-    );
+    //
+    // Seit dem 11.10.2026 gehört die Tür von propose_sheet mit dazu: sie
+    // steht in @/lib/blatt-vorschlag, run.ts ruft sie, und der Leser der App
+    // geht durch dieselbe. Sie holt sich aus @/lib/leser gar nichts — was ein
+    // Modell vorschlägt, legt keine Seite fest. Was sie sonst importieren
+    // darf, hält blatt-vorschlag.test.ts fest.
+    const erwartet: [string[], string[]][] = [
+      [["src", "lib", "mcp", "run.ts"], ["zuteilungAnstossen"]],
+      [["src", "lib", "blatt-vorschlag.ts"], []],
+    ];
 
-    assert.deepEqual(leserImporte, ["zuteilungAnstossen"]);
-    // Und kein Weg an der Liste vorbei: kein Import ohne Klammern, und keine
-    // der Funktionen aus @/lib/materials, die Seiten festlegen.
-    assert.doesNotMatch(quelle, /import\s+\*\s+as\s+\w+\s+from\s+"@\/lib\/leser/);
-    assert.doesNotMatch(quelle, /\b(leserFestlegen|offeneSeiten|korbblattStand)\b/);
+    for (const [teile, leserErlaubt] of erwartet) {
+      const quelle = readFileSync(path.join(process.cwd(), ...teile), "utf8");
+      const leserImporte = [
+        ...quelle.matchAll(/import\s*\{([^}]*)\}\s*from\s*"@\/lib\/leser[^"]*"/g),
+      ].flatMap((treffer) =>
+        treffer[1]
+          .split(",")
+          .map((name) => name.trim())
+          .filter(Boolean),
+      );
+
+      assert.deepEqual(leserImporte, leserErlaubt, teile.join("/"));
+      // Und kein Weg an der Liste vorbei: kein Import ohne Klammern, und
+      // keine der Funktionen aus @/lib/materials, die Seiten festlegen.
+      assert.doesNotMatch(quelle, /import\s+\*\s+as\s+\w+\s+from\s+"@\/lib\/leser/);
+      assert.doesNotMatch(quelle, /\b(leserFestlegen|offeneSeiten|korbblattStand)\b/);
+    }
   });
 });
 

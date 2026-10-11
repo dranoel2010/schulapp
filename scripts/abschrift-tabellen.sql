@@ -18,8 +18,8 @@
 -- Aber selbst auf einer leeren Tabelle wäre NOT NULL hier falsch. NULL und
 -- leerer String bedeuten verschiedene Dinge: NULL heißt „diese Seite hat noch
 -- niemand gelesen", der leere String heißt „gelesen, und es stand nichts
--- darauf". Fielen beide zusammen, käme jede leere Seite bei jedem Lauf des
--- Postboten wieder an die Reihe. Die Begründung steht ausführlich am
+-- darauf". Fielen beide zusammen, käme jede leere Seite bei jedem Lauf eines
+-- Lesers wieder an die Reihe. Die Begründung steht ausführlich am
 -- Spaltenkommentar in src/db/schema.ts.
 --
 -- ── ⚠ WIE SIE WIRKLICH IN DIE LAUFENDE DATENBANK KOMMT ───────────────────────

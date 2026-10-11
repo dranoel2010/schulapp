@@ -738,7 +738,8 @@ describe("proposalInputSchema", () => {
   });
 
   it("nimmt einen Vorschlag an, der nur eine Abschrift nennt", () => {
-    // Seit dem Postboten der Normalfall: Fach, Titel und Tag stehen nach dem
+    // Seit die Blätter von selbst gelesen werden, der Normalfall: Fach,
+    // Titel und Tag stehen nach dem
     // Auslösen der Kamera schon da, das einzig Neue ist, was auf der Seite
     // steht. Wiese das Schema ihn ab, käme der eine Fakt, für den die Stufe
     // gebaut ist, nie an.
@@ -756,7 +757,7 @@ describe("proposalInputSchema", () => {
   it("hält eine Abschrift aus lauter Leerzeichen für eine Aussage", () => {
     // Anders als bei den Themen: aus „   " wird der leere String, und der heißt
     // „gelesen, und es stand nichts darauf". Ein Vorschlag, der das sagt, ist
-    // nicht leer — er ist die Auskunft, nach der der Postbote sucht.
+    // nicht leer — er ist die Auskunft, nach der ein Leser sucht.
     const result = proposalInputSchema.safeParse({
       transcripts: [{ pageId: SEITE_1, text: "   " }],
     });

@@ -28,8 +28,9 @@ const COVER_HEIGHT = 64;
 /**
  * Woher ein Vorschlag kommt, in drei Wörtern.
  *
- * Drei Herkünfte: ein Agent (der Postbote oder ein Chat über propose_sheet),
- * die App selbst (seit dem 6.10.2026, wenn Docling ein ganzes Blatt gelesen
+ * Drei Herkünfte: ein Agent (der Claude-Leser der App oder ein Chat über
+ * propose_sheet — beide durch dieselbe Tür, @/lib/blatt-vorschlag), die App
+ * selbst (seit dem 6.10.2026, wenn Docling ein ganzes Blatt gelesen
  * hat — @/lib/leser/zuteilung) und ein Mensch im Formular. Kein „unbekannt"
  * als vierter Fall: `toOrigin()` in @/lib/inbox faltet jeden Wert, den es
  * nicht kennt, auf „manuell" — die Spalte ist `text` und kann enthalten, was

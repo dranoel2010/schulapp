@@ -34,8 +34,8 @@ import { useIsFrontPage } from "./pager-context";
  * Vorbelegt wird, was der Stundenplan sagt; sagt er nichts — abends, am
  * Wochenende —, das Fach des zuletzt aufgenommenen Blattes. Das ist eine
  * Vermutung und wird als solche behandelt: sie steht sichtbar da, sie ist mit
- * einem Antipper zu ändern, und stimmt sie nicht, schlägt der Postbote das
- * richtige Fach vor, sobald er das Blatt liest. Was sie NICHT mehr tut, ist den
+ * einem Antipper zu ändern, und stimmt sie nicht, bestimmt Jev das richtige
+ * Fach, sobald das Blatt gelesen ist. Was sie NICHT mehr tut, ist den
  * Weg zur Kamera zu versperren.
  *
  * **Die Kamera läuft nur, wenn die Seite vorn ist.** Alle drei Seiten der

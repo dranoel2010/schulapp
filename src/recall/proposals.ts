@@ -301,16 +301,18 @@ export async function vorschlagAnlegen(
  *
  * ── Warum das an der Auskunft hängt und nicht in einer Merkliste ─────────────
  *
- * Der Postbote hat eine Merkliste (harness/gesehen.json), und sie ist dort mit
- * Bedacht die EINZIGE: „der Korb ist die Warteschlange". Für Fragen gibt es
- * diesen Korb auch — nur konnte ihn von außen niemand sehen. Ein Lauf, der das
- * nicht weiß, legt jede Nacht zwanzig neue Fragen auf dieselbe Klausur, und der
- * Mensch sieht am Morgen sechzig, von denen vierzig Dubletten sind.
+ * Für Fragen gibt es einen Korb wie für Blätter, den Fragen-Eingang. Ein
+ * Lauf, der ihn nicht sieht, legt bei jedem Anstoß neue Fragen auf dieselbe
+ * Klausur, und der Mensch findet im Eingang dieselben Fragen zwei-, dreimal.
+ * Eine eigene Merkliste des Laufs wäre eine zweite Wahrheit neben dem
+ * Eingang, und die beiden liefen auseinander, sobald jemand im Eingang
+ * entscheidet.
  *
- * Also dieselbe Antwort wie beim Postboten, nur ohne Datei: Die Zahl steht in
- * der Auskunft, die ohnehin der erste Aufruf jedes Laufs ist. Damit gibt es
- * nichts, was zwischen App und Dienst auseinanderlaufen könnte — und nichts
- * aufzuräumen, wenn der Dienst wochenlang aus war.
+ * Also steht die Zahl in der Auskunft selbst — in `read_exam_material` für
+ * einen Chat, im Stand des Fragenlaufs der App für dessen Vorab-Prüfung
+ * (`bedarf()`, seit dem 11.10.2026). Damit gibt es nichts, was zwischen App
+ * und Lauf auseinanderlaufen könnte. Bis zu diesem Tag lief der Fragenlauf
+ * außerhalb der App (harness/fragen.mts), und dieselbe Antwort galt dort.
  *
  * `seitenIds` kommt vom Aufrufer und wird hier nicht noch einmal hergeleitet:
  * Wer diese Zahl braucht, hat den Stoff gerade geholt (`stoffZuKlausur`) und
@@ -328,9 +330,9 @@ export type KlausurVorrat = {
    * Ohne diese Zahl war das Gedächtnis der App löchrig, und zwar an der
    * teuersten Stelle: Wer einen ganzen Vorschlag verwirft, setzt `settledAt`,
    * damit fällt `offeneFragen` auf null, und der nächste Lauf baut aus demselben
-   * Stoff dieselben Fragen noch einmal. `fragen.mts` beschreibt genau das als
-   * unmöglich („die App gibt die Auskunft selbst"). Am 12.9.2026 von einer
-   * Abnahme gefunden.
+   * Stoff dieselben Fragen noch einmal. Der Fragenlauf von damals
+   * (harness/fragen.mts) hielt genau das für unmöglich („die App gibt die
+   * Auskunft selbst"). Am 12.9.2026 von einer Abnahme gefunden.
    */
   verworfen: number;
 };

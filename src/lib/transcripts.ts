@@ -33,10 +33,12 @@ import type { NewPageTranscript } from "@/lib/materials";
  * Es sind U+27E8 und U+27E9 (MATHEMATICAL LEFT/RIGHT ANGLE BRACKET) und
  * ausdrücklich nicht < und >: die stehen auf Arbeitsblättern in Mathematik und
  * Physik in fast jeder zweiten Zeile, und dann wäre jede Ungleichung eine
- * unsichere Stelle. Dieselben beiden Zeichen nennt der Auftrag des Postboten
- * in harness/auftrag.mts und die Beschreibung von `propose_sheet` in
- * @/lib/mcp/tools.ts — sie stehen dort ausgeschrieben, damit ein Modell sie
- * abtippen kann, und hier als Konstante, damit die Anzeige sie findet.
+ * unsichere Stelle. Die Regeln, die einem Modell das Markieren beibringen,
+ * bauen ihre Beispiele aus genau diesen beiden Konstanten
+ * (@/lib/abschrift-regeln, seit dem 11.10.2026) — für die Beschreibung von
+ * `propose_sheet` im Chat und für den Leser, mit dem die App Opus selbst
+ * ruft. Ein Modell sieht die Zeichen also dort ausgeschrieben, wo die Anzeige
+ * sie hier sucht; eine zweite, getippte Fassung gibt es nicht mehr.
  */
 export const UNCERTAIN_OPEN = "⟨";
 export const UNCERTAIN_CLOSE = "⟩";
@@ -216,7 +218,7 @@ export function transcriptFieldId(pageId: string): string {
  * Ohne dieses Feld schreibt ein Bildschirm, der vor einer fremden Änderung
  * gerendert wurde, die frische Abschrift mit dem leeren String zu. Der Ablauf
  * ist gemessen und nicht ausgedacht: die Seite trägt beim Rendern NULL, das
- * Feld steht deshalb leer und ist zugeklappt; dann schreibt der Postbote 1240
+ * Feld steht deshalb leer und ist zugeklappt; dann schreibt ein Leser 1240
  * Zeichen hinein; dann drückt jemand am alten Bildschirm auf „Speichern". Das
  * leere Feld kommt mit, `known` ist inzwischen `true` — und daraus wird „"",
  * gelesen, es stand nichts darauf". Die 1240 Zeichen sind weg, ohne Meldung,
@@ -314,8 +316,8 @@ export type TranscriptTarget = {
  *   diese Seite schon eine Abschrift hat oder der Vorschlag eine zu ihr
  *   mitbringt (`known`). Sonst bleibt sie NULL. Ohne diese Bedingung machte
  *   jedes Speichern eines Blattes aus zwölf ungelesenen Seiten zwölf
- *   „gelesen, und es stand nichts darauf" — der Postbote sähe danach keine
- *   Arbeit mehr, und niemand hätte je hingesehen.
+ *   „gelesen, und es stand nichts darauf" — kein Leser sähe danach noch
+ *   Arbeit, und niemand hätte je hingesehen.
  *
  * Und über allen dreien ein vierter Fall, seit dem 5.9.2026: das Feld bezieht
  * sich auf einen Stand, den es nicht mehr gibt. Trägt die Seite in

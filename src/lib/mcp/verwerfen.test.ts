@@ -13,8 +13,8 @@ import {
  * Die Tür propose_sheet und ein Leser je Seite (Entscheidung 7): was an ihr
  * verworfen wird und wann daraus kein Fehler wird. Die Regel schützt eine
  * Docling-Abschrift und jede schon gelesene Seite davor, beim Übernehmen
- * still ersetzt zu werden — ob der Vorschlag vom Postboten kommt oder aus
- * einem Chat.
+ * still ersetzt zu werden — ob der Vorschlag vom Claude-Leser der App kommt
+ * oder aus einem Chat.
  */
 describe("verwerfGrund", () => {
   const faelle: [SeitenStand, ReturnType<typeof verwerfGrund>][] = [
@@ -80,8 +80,9 @@ describe("nurVerworfen", () => {
   const verworfen = [{ page: "druck", grund: "docling" as const }];
 
   it("ist wahr, wenn nur die Regel am Ganzen anschlägt und alles verworfen ist", () => {
-    // Sonst liefe es als isError auf das Abweisen hinaus, das ein alter
-    // Postbote als „kein Vorschlag" merkt — und die Claude-Seiten verlöre.
+    // Sonst liefe es als isError auf das Abweisen hinaus — für einen Chat
+    // ein Scheitern, für die Tür der App ein „abgewiesen“ statt „leer“.
+    // Bis zum 11.10.2026 merkte der Postbote es als „kein Vorschlag“.
     assert.equal(nurVerworfen(leer, verworfen, 0), true);
   });
 

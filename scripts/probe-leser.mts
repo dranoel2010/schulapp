@@ -3,7 +3,7 @@
  * Datenbank und nicht gegen Typen, mit einem nachgemachten Docling und einem
  * nachgemachten Jev.
  *
- * Warum es ihn gibt: die Regel, welche Seite der Postbote bekommt, ist SQL
+ * Warum es ihn gibt: die Regel, welche Seite der Claude-Leser bekommt, ist SQL
  * (`nachgereichtUngelesen()`), die Kennzeichnung `maschinell` wird im
  * `update` selbst gerechnet, und das EINMAL des App-Vorschlags hängt an einer
  * Sperre in der Transaktion. Nichts davon prüft `npm test`; dort gibt es
@@ -17,7 +17,7 @@
  * Basis-Datei entsteht so (P ist ein Ordner außerhalb des Repos):
  *
  *   mkdir -p P && ln -s "$PWD/node_modules" P/node_modules
- *   git show main:src/db/schema.ts > P/schema.ts
+ *   git show e21e4f1^:src/db/schema.ts > P/schema.ts
  *   (cd P && ./node_modules/.bin/drizzle-kit generate --dialect postgresql \
  *     --schema ./schema.ts --out ./out --name basis)
  *   npx tsx scripts/probe-leser.mts P/db P/out/0000_basis.sql
@@ -30,6 +30,14 @@
  * Bestand NULL, die Zuteilung liest jede offene Seite genau einmal und keine
  * schon gelesene, die Tür propose_sheet verwirft statt abzuweisen, und CRLF
  * aus einem Formular lässt die Kennzeichnung stehen.
+ *
+ * Am 11.10.2026 wieder gelaufen, nachdem die Tür aus @/lib/mcp/run nach
+ * @/lib/blatt-vorschlag gezogen ist (Abschnitt 10 ruft sie direkt, wie der
+ * Leser der App) — 71 von 71. Die Basis ist seitdem der Stand vor dem Leser
+ * (oben `e21e4f1^` statt `main`), denn auf main stehen die Spalten der
+ * Wanderung schon. Nach der Abnahme vom selben Tag 72 von 72: eine Seite,
+ * deren Zuteilung scheiterte, bekommt jetzt einen Wecker für ihren zweiten
+ * Versuch (Abschnitt 7 g).
  */
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -61,10 +69,15 @@ if (existsSync(verzeichnis) && readdirSync(verzeichnis).length > 0) {
 }
 
 // Weder Jev noch die Notbremse aus der Umgebung dieses Rechners: die Probe
-// bestimmt beides selbst.
+// bestimmt beides selbst. Und kein Schlüssel für Opus: seit dem 11.10.2026
+// stößt jeder Lauf der Zuteilung an seinem Ende den Claude-Leser an
+// (@/lib/leser/claude-leser) — mit einem Schlüssel aus der Umgebung riefe er
+// die echte API. Ohne bleibt er stehen, bevor er die Datenbank fragt; geprüft
+// wird er in scripts/probe-claude-leser.mts.
 delete process.env.TYPESAFE_API_KEY;
 delete process.env.LESER_REGEL;
 delete process.env.DOCLING_URL;
+delete process.env.ANTHROPIC_API_KEY;
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const pg = new PGlite(verzeichnis);
@@ -494,7 +507,7 @@ const einmalBlatt = await blatt(leo, geo, { seiten: [{ art: DRUCK, leser: "docli
     eintrag?.proposals.length === 1 && eintrag.proposals[0]?.origin === "app",
     eintrag?.proposals,
   );
-  // Ohne die Option legt der Postbote weiter an, wie bisher.
+  // Ohne die Option legt ein Agent weiter an, wie bisher.
   const agent = await createProposal(leo, einmalBlatt.id, eingabe, "agent");
   pruefe("ohne die Option entsteht einer wie bisher", agent !== null, agent);
 }
@@ -678,9 +691,10 @@ const frisch = await blatt(leo, geo, { seiten: [{ art: DRUCK, leser: "offen" }] 
       { art: DRUCK, leser: "offen" },
     ],
   });
-  // Seite 1: von Hand abgetippt, bevor die App entschied (oder vom alten
-  // Postboten im Deploy-Fenster). Seite 2: Doclings Abschrift steht schon,
-  // nur die Entscheidung fehlt — ein Abbruch zwischen den beiden Schritten.
+  // Seite 1: von Hand abgetippt, bevor die App entschied (oder, bis zum
+  // 11.10.2026, vom Postboten im Deploy-Fenster). Seite 2: Doclings Abschrift
+  // steht schon, nur die Entscheidung fehlt — ein Abbruch zwischen den beiden
+  // Schritten.
   await pg.query(`update material_pages set transcript = 'Von Hand.' where id = $1`, [
     schonBlatt.pages[0],
   ]);
@@ -766,9 +780,21 @@ const frisch = await blatt(leo, geo, { seiten: [{ art: DRUCK, leser: "offen" }] 
   await pg.exec(`drop trigger probe_klemmt on material_pages; drop function probe_klemmt();`);
   // Die Ruhe vorspulen, statt zehn Minuten zu warten.
   const prozess = (globalThis as unknown as {
-    __schulappLeser: { gescheitert: Map<string, number> };
+    __schulappLeser: {
+      gescheitert: Map<string, number>;
+      timer: Map<string, ReturnType<typeof setTimeout>>;
+    };
   }).__schulappLeser;
   pruefe("sie ruht", prozess.gescheitert.has(id), [...prozess.gescheitert.keys()]);
+  // Und nach der Ruhe stößt ein Wecker die Zuteilung wieder an — bis zum
+  // 11.10.2026 tat das das read_inbox des Postboten alle fünfzehn Sekunden,
+  // danach kam niemand mehr (Abnahme vom 11.10.2026).
+  const nochmal = prozess.timer.get(`nochmal:${leo}`);
+  pruefe("ein Wecker für den zweiten Versuch ist gestellt", nochmal !== undefined, [...prozess.timer.keys()]);
+  if (nochmal) {
+    clearTimeout(nochmal);
+    prozess.timer.delete(`nochmal:${leo}`);
+  }
   prozess.gescheitert.set(id, Date.now() - ZWEITER_VERSUCH_MS - 1);
   doclingAufrufe.length = 0;
   await zuteilungLaufen(leo, deps);
@@ -878,6 +904,106 @@ console.log("\n── 9. Löschen kann ein Blatt zum reinen Docling-Blatt machen
     eintrag?.proposals.length === 1 && eintrag.proposals[0]?.origin === "app",
     eintrag?.proposals,
   );
+}
+
+console.log("\n── 10. Die Tür direkt — so, wie der Leser der App sie ruft ──");
+{
+  // Seit dem 11.10.2026 steht der Kern von propose_sheet als eigene Tür in
+  // @/lib/blatt-vorschlag; Abschnitt 8 geht über den Chat hindurch, hier
+  // wird sie so gerufen, wie es der Leser der App tut — ohne Sätze, mit Typ.
+  const { blattVorschlagen } = await import("@/lib/blatt-vorschlag");
+
+  const nachgereicht = await blatt(leo, geo, {
+    filedAt: new Date(Date.now() - 3_600_000),
+    seiten: [{ art: HANDSCHRIFT, leser: "claude" }],
+  });
+  const angelegt = await blattVorschlagen(leo, {
+    sheet: nachgereicht.id,
+    subjectId: null,
+    transcripts: [{ page: nachgereicht.pages[0], text: "Erfundene Rückseite." }],
+  });
+  pruefe(
+    "eingeordnetes Blatt, nachgereichte Seite: angelegt und gleich übernommen",
+    angelegt.art === "angelegt" &&
+      angelegt.eingeordnet.ok &&
+      angelegt.eingeordnet.art === "abschrift" &&
+      angelegt.eingeordnet.seiten === 1,
+    angelegt,
+  );
+  const rueckseite = await seite(nachgereicht.pages[0]);
+  pruefe(
+    "die Abschrift steht an der Seite, nicht maschinell",
+    rueckseite.transcript === "Erfundene Rückseite." && !rueckseite.maschinell,
+    rueckseite,
+  );
+
+  const anderes = await blatt(leo, geo, { seiten: [{ art: HANDSCHRIFT, leser: "claude" }] });
+  const fremdeSeite = await blattVorschlagen(leo, {
+    sheet: anderes.id,
+    subjectId: null,
+    transcripts: [{ page: nachgereicht.pages[0], text: "falsches Blatt" }],
+  });
+  pruefe(
+    "eine Seite eines anderen Blattes: abgewiesen und beim Namen genannt",
+    fremdeSeite.art === "abgewiesen" &&
+      fremdeSeite.grund === "fremde-seiten" &&
+      fremdeSeite.seiten.join() === nachgereicht.pages[0],
+    fremdeSeite,
+  );
+
+  const keinBlatt = await blattVorschlagen(leo, {
+    sheet: "00000000-0000-4000-8000-000000000000",
+    subjectId: null,
+    transcripts: [{ page: anderes.pages[0], text: "x" }],
+  });
+  pruefe(
+    "ein Blatt, das es nicht gibt",
+    keinBlatt.art === "abgewiesen" && keinBlatt.grund === "kein-blatt",
+    keinBlatt,
+  );
+
+  const druck = await blatt(leo, geo, { seiten: [{ art: DRUCK, leser: "docling" }] });
+  const leer = await blattVorschlagen(leo, {
+    sheet: druck.id,
+    subjectId: null,
+    transcripts: [{ page: druck.pages[0], text: "zweite Lesung" }],
+  });
+  pruefe(
+    "nur Verworfenes: leer, kein Fehler",
+    leer.art === "leer" && leer.verworfen[0]?.grund === "docling",
+    leer,
+  );
+
+  const kunst = await rohFach(fremd, "Kunst");
+  const fremdesFach = await blattVorschlagen(leo, {
+    sheet: anderes.id,
+    subjectId: kunst,
+    title: "Titel",
+  });
+  pruefe(
+    "ein Fach eines anderen Nutzers: nicht angelegt",
+    fremdesFach.art === "abgewiesen" &&
+      fremdesFach.grund === "nicht-angelegt" &&
+      !fremdesFach.mitAbschrift,
+    fremdesFach,
+  );
+
+  const kaputt = await blattVorschlagen(leo, {
+    sheet: anderes.id,
+    subjectId: null,
+    capturedOn: "2026-13-45",
+  });
+  pruefe(
+    "ein Datum, das es nicht gibt: ungültig, mit Meldung",
+    kaputt.art === "abgewiesen" && kaputt.grund === "ungueltig" && kaputt.meldungen.length > 0,
+    kaputt,
+  );
+
+  const vorschlaege = await pg.query<{ n: number }>(
+    `select count(*)::int as n from material_proposals where material_id = $1`,
+    [anderes.id],
+  );
+  pruefe("keiner der Abgewiesenen hat etwas angelegt", vorschlaege.rows[0].n === 0, vorschlaege.rows);
 }
 
 console.log(`\n${proben - fehler} von ${proben} Proben bestanden.`);

@@ -15,7 +15,8 @@ import { seitenIds } from "@/lib/materials";
  * Blatt immer, `leser` NULL (Seiten von vorher) nach der Regel vom 4.10.2026
  * samt dem Schutz der Altblätter, `'offen'` und `'docling'` nie. Hier stehen
  * die beiden Ränder davor und dahinter: wie die ids aus der Abfrage wieder
- * zur Liste werden, und wie der Postbote danach fragen darf.
+ * zur Liste werden, und wie ein Agent danach fragen darf
+ * (`read_material {nachgereicht}`).
  */
 
 describe("seitenIds", () => {

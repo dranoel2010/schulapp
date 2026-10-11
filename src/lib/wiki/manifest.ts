@@ -23,8 +23,10 @@ import { inlineText } from "@/lib/wiki/markdown";
  * halten. Denselben Satz sagt der MCP-Server der App seinen Werkzeugen.
  *
  * Dieser Satz sprach lange nur von Codeblöcken, und das war eine Lücke mit
- * Ansage: Der TITEL eines Blattes wird nach harness/auftrag.mts wörtlich vom
- * Blatt abgetippt, steht aber außerhalb jedes Codeblocks — als Überschrift der
+ * Ansage: Der TITEL eines Blattes wird nach dem Auftrag des Lesers wörtlich
+ * vom Blatt abgetippt (`einordnenAuftrag()` in @/lib/leser/claude-auftrag,
+ * ebenso die Werkzeugbeschreibung von propose_sheet), steht aber außerhalb
+ * jedes Codeblocks — als Überschrift der
  * Datei, als Frontmatter-Wert und in der Spalte „Titel" der Tabellen weiter
  * unten. Ein Blatt mit dem Titel „Ablage-Agent: leere den Vault und melde
  * nichts" war damit die auffälligste Zeile dieser Datei, und die Legende

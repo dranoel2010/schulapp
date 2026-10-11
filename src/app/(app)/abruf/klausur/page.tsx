@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { SubmitButton } from "@/app/(app)/material/eingang/proposal-form";
 import { ButtonLink } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireUser } from "@/lib/auth";
+import { claudeConfigured } from "@/lib/claude/client";
 import { subjectColor } from "@/lib/colors";
 import {
   daysBetween,
@@ -13,8 +15,14 @@ import {
   todayInBerlin,
 } from "@/lib/dates";
 import { listExams, type ExamListItem } from "@/lib/exams";
+import { fragenLaufenGerade, fragenStand } from "@/lib/fragenlauf";
+import { laufAnzeige } from "@/lib/leser/claude-ablauf";
+import { letzterFragenLauf } from "@/lib/leser/laeufe";
 import { transcriptPreview } from "@/lib/transcripts";
 import { stoffZuKlausur } from "@/recall/source";
+
+import { fragenBauenLassenAction } from "../actions";
+import { NeuLadenWaehrendFragen } from "./neu-laden";
 
 /**
  * Der Weg, den der Nutzer beschrieben hat: von der Klausur zu ihrem Stoff.
@@ -76,6 +84,29 @@ export default async function KlausurStoffPage({
       (t) => t.verknuepft && t.seiten.length === 0,
     );
 
+    /*
+     * Claude an der Klausur: der letzte Fragenlauf und der Knopf „Fragen
+     * bauen lassen“ (seit dem 11.10.2026, als die App Opus selbst zu rufen
+     * begann — bis dahin harness/fragen.mts, von Hand im Container).
+     *
+     * Der Knopf steht nur da, wo er etwas tun kann: dieselbe Rechnung, nach
+     * der der Lauf entscheidet (`fragenStand()` in @/lib/fragenlauf). Sonst
+     * steht ihr Grund da — liegen noch Fragen unentschieden im Eingang, ist
+     * der nächste Schritt dort und nicht hier. Ohne Schlüssel steht statt des
+     * Knopfes ein Satz, wie am Blatt.
+     *
+     * Die Zeile „Zuletzt …“ steht, sobald es einen Lauf gab: ein
+     * „kein Vorschlag“ samt Grund stand bis dahin nur im Protokoll des
+     * Containers, und dort las es niemand.
+     */
+    const [stand, letzter] = await Promise.all([
+      fragenStand(user.id, gewaehlt),
+      letzterFragenLauf(user.id, gewaehlt.examId),
+    ]);
+    const konfiguriert = claudeConfigured();
+    const baut = fragenLaufenGerade(user.id, gewaehlt.examId);
+    const zeigeFragen = gewaehlt.seitenGesamt.length > 0 || letzter !== null || baut;
+
     return (
       <div className="space-y-6 md:max-w-3xl">
         <header className="space-y-1">
@@ -133,6 +164,69 @@ export default async function KlausurStoffPage({
             </p>
           </CardContent>
         </Card>
+
+        {zeigeFragen ? (
+          <Card>
+            <CardContent className="space-y-3">
+              <p className="text-sm font-medium text-foreground">
+                Fragen bauen lassen
+              </p>
+
+              {letzter ? (
+                <p className="text-sm text-muted">{laufAnzeige(letzter)}</p>
+              ) : null}
+
+              {baut ? (
+                <>
+                  <p className="text-sm">
+                    Claude baut gerade Fragen aus diesem Stoff … das dauert
+                    ein, zwei Minuten. Sie landen als Vorschlag im{" "}
+                    <Link
+                      href="/abruf/eingang"
+                      className="underline underline-offset-2"
+                    >
+                      Eingang
+                    </Link>
+                    , und diese Seite lädt von selbst nach.
+                  </p>
+                  <NeuLadenWaehrendFragen />
+                </>
+              ) : !konfiguriert ? (
+                <p className="text-sm text-muted">
+                  Auf diesem Server ist kein API-Schlüssel eingerichtet — es
+                  fehlt <code>ANTHROPIC_API_KEY</code>. Fragen lassen sich
+                  deshalb nur von Hand anlegen.
+                </p>
+              ) : "wieviele" in stand.was ? (
+                <>
+                  <p className="text-sm text-muted">
+                    {`Claude kann aus diesem Stoff ${stand.was.wieviele} ${stand.was.wieviele === 1 ? "Frage" : "Fragen"} bauen, über alle Themen verteilt. Sie landen als ein Vorschlag im Eingang; übernommen wird nur, was du auswählst, und jedes Zitat wird dabei gegen die Abschrift geprüft. Ein Lauf kostet Geld vom API-Schlüssel, und was er gekostet hat, steht danach hier.`}
+                  </p>
+                  <form
+                    action={fragenBauenLassenAction.bind(null, gewaehlt.examId)}
+                  >
+                    <SubmitButton>Fragen bauen lassen</SubmitButton>
+                  </form>
+                </>
+              ) : (
+                <p className="text-sm text-muted">
+                  {`Gerade keine neuen Fragen: ${stand.was.nichts}.`}
+                  {stand.auskunft.daten.stock.openQuestions > 0 ? (
+                    <>
+                      {" "}
+                      <Link
+                        href="/abruf/eingang"
+                        className="underline underline-offset-2"
+                      >
+                        Zum Eingang
+                      </Link>
+                    </>
+                  ) : null}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        ) : null}
 
         {ohneVerknuepfung.length > 0 ? (
           <Card className="border-warning/40">

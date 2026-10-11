@@ -1,19 +1,15 @@
 import { z } from "zod";
 
 import type { User } from "@/db/schema";
-import { daysBetween, formatGerman, todayInBerlin } from "@/lib/dates";
-import { autoFile, type AutoFileResult } from "@/lib/auto-file";
+import { blattVorschlagen } from "@/lib/blatt-vorschlag";
+import { formatGerman, todayInBerlin } from "@/lib/dates";
 import { getExam, listExams } from "@/lib/exams";
 import { formatAverage, gradeLabel } from "@/lib/grade-scale";
 import { gradeSummary, gradesBySubject } from "@/lib/grades";
 import { listHomework } from "@/lib/homework";
 import { formatBytes, isAllowedMime } from "@/lib/images";
-import {
-  createProposal,
-  listInbox,
-  proposalInputSchema,
-  INBOX_LIMIT,
-} from "@/lib/inbox";
+import { listInbox, INBOX_LIMIT } from "@/lib/inbox";
+import { stoffAuskunft, vorschlagsFragen } from "@/lib/klausur-stoff";
 import {
   getMaterial,
   listMaterialTranscripts,
@@ -29,7 +25,6 @@ import {
 import { zuteilungAnstossen } from "@/lib/leser/zuteilung";
 import { listSubjects } from "@/lib/subjects";
 import {
-  vorratZuKlausur,
   vorschlagAnlegen,
   FRAGEN_MAX,
   ZITAT_MIN,
@@ -39,14 +34,10 @@ import { stoffZuKlausur, type KlausurStoff } from "@/recall/source";
 import { listTopics, listTopicsForSubjects } from "@/lib/subject-topics";
 import { loadWeek, WEEKDAYS } from "@/lib/timetable";
 
+import { MAX_DATA_CHARS, auskunftZeichen, tausender, zahl } from "./auskunft";
 import { looksLikeId, matchSubject, matchTopic, type Match } from "./resolve";
 import { TOOLS, type ToolArgs, type ToolName } from "./tools";
-import {
-  abschriftenSieben,
-  nurVerworfen,
-  verworfenSatz,
-  type Verworfen,
-} from "./verwerfen";
+import { verworfenSatz } from "./verwerfen";
 
 /**
  * Was die Werkzeuge tun, wenn sie gerufen werden.
@@ -379,9 +370,11 @@ const HANDLERS: Handlers = {
       ueberschrift = `„${gefunden.treffer.title}“ (${gefunden.fach})`;
     }
 
-    // Nur Blätter mit nachgereichten, ungelesenen Seiten — die Frage des
-    // Postboten (seit dem 4.10.2026). Gefiltert wird in der Abfrage, vor der
-    // Grenze von zweihundert, und Fach und Thema wirken daneben weiter.
+    // Nur Blätter mit nachgereichten, ungelesenen Seiten — gebaut als Frage
+    // des Postboten (4.10.2026), seit dem 11.10.2026 für Chats, die
+    // abschreiben; der Claude-Leser der App fragt die Datenbank selbst.
+    // Gefiltert wird in der Abfrage, vor der Grenze von zweihundert, und Fach
+    // und Thema wirken daneben weiter.
     if (args.nachgereicht) {
       ueberschrift = `${ueberschrift}, nur eingeordnete Blätter mit nachgereichten ungelesenen Seiten`;
     }
@@ -409,9 +402,11 @@ const HANDLERS: Handlers = {
   },
 
   async read_sheet(user, args) {
-    // `lastPageAt` VOR dem Blatt gelesen, nicht danach (4.10.2026). Der
-    // Postbote merkt sich ein Blatt unter diesem Stand und baut seinen Auftrag
-    // aus den Seiten unten. Käme der Stand später, könnte er eine Seite
+    // `lastPageAt` VOR dem Blatt gelesen, nicht danach (4.10.2026). Wer sich
+    // ein Blatt unter diesem Stand merkt — bis zum 11.10.2026 der Postbote,
+    // seitdem nach derselben Reihenfolge der Claude-Leser der App
+    // (@/lib/leser/claude-leser) —, baut seinen Auftrag aus den Seiten unten.
+    // Käme der Stand später, könnte er eine Seite
     // mitzählen, die unten noch fehlt — und die verschwände hinter dem
     // Schlüssel, ohne je gelesen zu werden. Früher gelesen ist er höchstens
     // älter als die Seiten, und dann kommt das Blatt einmal zu viel dran.
@@ -491,11 +486,11 @@ const HANDLERS: Handlers = {
            * wartet auf jemanden, der sie vom Foto abschreibt; `null`: eine
            * Seite von vorher, sie wird gelesen wie bisher.
            *
-           * Der Postbote nimmt daraus die Seiten für seinen Auftrag und
-           * lässt ein Blatt mit einer offenen Seite in dieser Runde liegen
-           * (harness/postbote.mts). Dieselben Werte stehen an der Spalte in
-           * src/db/schema.ts; hier wird nichts übersetzt, damit Postbote und
-           * Datenbank dasselbe Wort für dieselbe Sache haben.
+           * Ein Chat, der abschreibt, nimmt daraus die Seiten für seinen
+           * Vorschlag und lässt ein Blatt mit einer offenen Seite liegen — so
+           * tat es bis zum 11.10.2026 der Postbote. Dieselben Werte stehen an
+           * der Spalte in src/db/schema.ts; hier wird nichts übersetzt, damit
+           * Agent und Datenbank dasselbe Wort für dieselbe Sache haben.
            */
           leser: page.leser,
           /**
@@ -613,13 +608,14 @@ const HANDLERS: Handlers = {
   },
 
   async read_inbox(user, args) {
-    // Das Netz nach einem Neustart (seit dem 6.10.2026). Angestoßen wird die
-    // Zuteilung sonst nur nach dem Hochladen (`after()` in den Server Actions
-    // unter src/app/(app)/material); fiel die App dazwischen um — das
-    // DSM-Update donnerstags startet App und Postboten zusammen neu —, blieben
-    // Seiten mit leser „offen" liegen, und der Postbote ließe ihr Blatt Runde
-    // für Runde stehen. Er fragt den Korb alle 15 Sekunden, also kommt der
-    // Anstoß von selbst.
+    // Ein Anstoß der Zuteilung (seit dem 6.10.2026). Bis zum 11.10.2026 war
+    // er das Netz nach einem Neustart: der Postbote fragte den Korb alle 15
+    // Sekunden, also kam der Anstoß von selbst. Dieses Netz ist seitdem der
+    // Start der App (`register()` in src/instrumentation.ts). Hier bleibt der
+    // Anstoß, weil ein Chat, der in den Korb sieht, nicht vor Seiten stehen
+    // soll, die seit einem Neustart auf „offen" hängen — und am Ende der
+    // Zuteilung kommt der Claude-Leser dran, der vor jedem Aufruf sein
+    // Gedächtnis fragt; ein Chat löst also kein zweites Bezahlen aus.
     //
     // Kein Takt, der irgendetwas wiederholt: angefasst werden nur Seiten mit
     // leser „offen", und ein Fehlschlag von Docling oder Jev entscheidet sofort
@@ -677,152 +673,74 @@ const HANDLERS: Handlers = {
       subjectId = subject.treffer.id;
     }
 
-    // Die Abschriften hängen an SEITEN, und das Argument nennt sie nur als ids.
-    // Eine id kann von überall herkommen: aus einem früheren Aufruf, aus einem
-    // anderen Blatt, aus dem Blatt eines anderen Nutzers. Geprüft wird sie
-    // deshalb gegen genau das Blatt, um das es hier geht — `getMaterial()`
-    // liefert nur Seiten, die diesem Nutzer und diesem Blatt gehören. Ohne
-    // diese Zeilen hinge am Vorschlag die Abschrift einer fremden Seite, und
-    // beim Übernehmen schriebe ein Mensch sie in ein Blatt, das er nie gesehen
-    // hat. Der Fremdschlüssel allein fängt das nicht: eine fremde Seite gibt es
-    // ja, sie gehört nur woandershin.
-    //
-    // `createProposal()` stellt dieselbe Frage gleich darauf noch einmal
-    // (`ownsProposedPages()`), und das ist keine Verdopplung, die man sich
-    // sparen könnte: dort ist sie die Sicherung der Datenschicht und antwortet
-    // mit `null` — also mit einem Satz, in dem drei mögliche Ursachen stehen.
-    // Hier ist sie die Auskunft an das Modell und nennt die fremden ids beim
-    // Namen, damit ein Modell, das die Blatt-id statt der Seiten-id geschickt
-    // hat, im selben Satz liest, wo die richtige steht.
-    //
-    // Der Aufruf steht IN der Bedingung: ein Vorschlag ohne Abschrift — der
-    // Normalfall des Handformulars und jedes älteren Clients — soll deswegen
-    // nicht plötzlich ein Blatt nachschlagen, das `createProposal()` gleich
-    // darauf ohnehin prüft.
-    const transcripts: { pageId: string; text: string }[] = [];
-    const verworfen: Verworfen[] = [];
-
-    if (args.transcripts && args.transcripts.length > 0) {
-      const sheet = await getMaterial(user.id, args.sheet);
-      if (!sheet) return fehler("Dieses Blatt gibt es nicht.");
-
-      const seiten = new Map(sheet.pages.map((page) => [page.id, page]));
-      const fremd = args.transcripts
-        .map((eintrag) => eintrag.page)
-        .filter((page) => !seiten.has(page));
-
-      if (fremd.length > 0) {
-        return fehler(
-          `Zu diesem Blatt gehören diese Seiten nicht: ${fremd.join(", ")}. Die ids seiner Seiten stehen in read_sheet unter „pages“ — die id des Blattes ist eine andere.`,
-        );
-      }
-
-      // Ein Leser je Seite (seit dem 6.10.2026, Entscheidung 7 des Umbaus).
-      // Eine Abschrift zu einer Seite, die die App selbst liest oder schon
-      // gelesen hat, oder die schon eine Abschrift trägt, kommt nicht in den
-      // Vorschlag. Sonst läge dort eine zweite Lesung derselben Seite, und wer
-      // den Vorschlag übernimmt — ein Mensch im Formular —, ersetzte damit die
-      // Docling-Abschrift oder die schon bestätigte, ohne es zu merken. Das gilt
-      // für den Postboten und genauso für einen Chat in der Claude-App: auch
-      // der kann so keine Docling-Abschrift überschreiben.
-      //
-      // VERWORFEN und nicht abgewiesen, und darauf kommt es an: ein Postbote
-      // von vor dem Umbau schreibt noch jede Seite eines Blattes ab, auch die
-      // Docling-Seiten. Scheiterte der Aufruf daran, merkte er sich das Blatt
-      // als „kein Vorschlag" (gesehen.json) — und die Seiten, die wirklich
-      // Claude lesen sollte, gingen mit verloren. So bleibt, was übrig ist,
-      // und die Antwort sagt, was weg ist.
-      //
-      // Geprüft wird gegen den Stand von eben. Wird eine Seite in den
-      // Millisekunden danach entschieden, fängt das `nurUngelesene` beim
-      // Übernehmen auf (@/lib/inbox-apply): eine Abschrift landet nie auf
-      // einer Seite, die schon eine hat. Die Regel selbst steht als reine
-      // Rechnung in ./verwerfen, mit Tests.
-      const gesiebt = abschriftenSieben(args.transcripts, seiten);
-      verworfen.push(...gesiebt.verworfen);
-
-      // Draußen `page`, drinnen `pageId`: dieselbe Übersetzung wie von
-      // `captured_on` nach `capturedOn`, an derselben Stelle — dem einen
-      // Bauplatz der Eingabe. `text` heißt an beiden Türen gleich, so steht
-      // es an `NewPageTranscript` in @/lib/materials.
-      for (const eintrag of gesiebt.bleiben) {
-        transcripts.push({ pageId: eintrag.page, text: eintrag.text });
-      }
-    }
-
-    // Geprüft wird mit genau dem Schema, das auch das Handformular benutzt —
-    // sonst käme durch diese Tür ein Vorschlag herein, den die andere nicht
-    // annimmt, und niemand könnte ihn übernehmen.
-    const parsed = proposalInputSchema.safeParse({
+    // Durch die Tür @/lib/blatt-vorschlag (seit dem 11.10.2026): dieselbe,
+    // durch die der Leser der App geht, der Opus selbst ruft. Was dort
+    // geprüft wird — die Seiten gegen das Blatt, ein Leser je Seite, das
+    // Schema des Handformulars, `createProposal(…, "agent")`, gleich danach
+    // `autoFile()` —, steht dort; hier steht nur, was davon ein Modell im
+    // Chat zu lesen bekommt. Die Sätze sind die von vorher, Wort für Wort:
+    // ein Modell im Chat merkt von dem Umzug nichts.
+    const ergebnis = await blattVorschlagen(user.id, {
+      sheet: args.sheet,
       subjectId,
-      title: args.title ?? null,
-      capturedOn: args.captured_on ?? null,
-      note: args.note ?? null,
-      topics: args.topics ?? [],
-      transcripts,
+      title: args.title,
+      capturedOn: args.captured_on,
+      note: args.note,
+      topics: args.topics,
+      transcripts: args.transcripts,
     });
 
-    if (!parsed.success) {
-      // Blieb nach dem Verwerfen nichts übrig, ist das kein Fehler des
-      // Aufrufs, sondern das Ergebnis der Regel oben: der Aufrufer hat nur
-      // Seiten abgeschrieben, die die App selbst liest. Als `isError` liefe
-      // es auf dasselbe hinaus wie das Abweisen, das das Verwerfen gerade
-      // vermeiden soll — ein alter Postbote merkte sich „kein Vorschlag".
-      // Wie der leere Vorschlag erkannt wird, steht an `nurVerworfen()`.
-      if (nurVerworfen(parsed.error.issues, verworfen, transcripts.length)) {
-        return daten(
-          `Nichts angelegt: ${verworfenSatz(verworfen)} Sonst stand nichts im Vorschlag, also gibt es keinen.`,
-          { id: null, sheet: args.sheet, verworfen },
-        );
+    if (ergebnis.art === "abgewiesen") {
+      switch (ergebnis.grund) {
+        case "kein-blatt":
+          return fehler("Dieses Blatt gibt es nicht.");
+        case "fremde-seiten":
+          // Die fremden ids beim Namen, damit ein Modell, das die Blatt-id
+          // statt der Seiten-id geschickt hat, im selben Satz liest, wo die
+          // richtige steht.
+          return fehler(
+            `Zu diesem Blatt gehören diese Seiten nicht: ${ergebnis.seiten.join(", ")}. Die ids seiner Seiten stehen in read_sheet unter „pages“ — die id des Blattes ist eine andere.`,
+          );
+        case "ungueltig":
+          return fehler(ergebnis.meldungen.join(" "));
+        case "nicht-angelegt":
+          // Der dritte Grund steht nur da, wenn er überhaupt in Frage kommt:
+          // seit der Abschrift sagt `createProposal()` auch dann Nein, wenn
+          // eine der genannten Seiten nicht zu diesem Blatt gehört. Die Tür
+          // hat das gerade erst verneint — bleibt das Rennen: wird die Seite
+          // in den Millisekunden dazwischen gelöscht (ein unscharfes Foto,
+          // das jemand wegwirft, während der Agent liest), ist sie hier weg.
+          // Ohne diesen Satz suchte das Modell den Fehler bei Blatt und Fach,
+          // die beide in Ordnung sind.
+          return fehler(
+            `Der Vorschlag konnte nicht angelegt werden: das Blatt gibt es nicht, oder das vorgeschlagene Fach gehört nicht dazu.${
+              ergebnis.mitAbschrift
+                ? " Möglich ist auch, dass eine der abgeschriebenen Seiten inzwischen weg ist — read_sheet nennt die, die es noch gibt."
+                : ""
+            }`,
+          );
       }
+    }
 
-      return fehler(
-        parsed.error.issues.map((issue) => issue.message).join(" "),
+    // Nur Verworfenes ist kein Fehler, sondern das Ergebnis der Regel „ein
+    // Leser je Seite“: der Aufrufer hat nur Seiten abgeschrieben, die die App
+    // selbst liest. Als `isError` liefe es auf dasselbe hinaus wie das
+    // Abweisen, das das Verwerfen gerade vermeiden soll.
+    if (ergebnis.art === "leer") {
+      return daten(
+        `Nichts angelegt: ${verworfenSatz(ergebnis.verworfen)} Sonst stand nichts im Vorschlag, also gibt es keinen.`,
+        { id: null, sheet: args.sheet, verworfen: ergebnis.verworfen },
       );
     }
 
-    const id = await createProposal(user.id, args.sheet, parsed.data, "agent");
+    const { id, verworfen, vorschlag, eingeordnet } = ergebnis;
 
-    if (!id) {
-      // Der dritte Grund steht nur da, wenn er überhaupt in Frage kommt: seit
-      // der Abschrift sagt `createProposal()` auch dann Nein, wenn eine der
-      // genannten Seiten nicht zu diesem Blatt gehört. Die Prüfung oben hat das
-      // gerade erst verneint — bleibt das Rennen: wird die Seite in den
-      // Millisekunden dazwischen gelöscht (ein unscharfes Foto, das jemand
-      // wegwirft, während der Agent liest), ist sie hier weg. Ohne diesen Satz
-      // suchte das Modell den Fehler bei Blatt und Fach, die beide in Ordnung
-      // sind.
-      return fehler(
-        `Der Vorschlag konnte nicht angelegt werden: das Blatt gibt es nicht, oder das vorgeschlagene Fach gehört nicht dazu.${
-          transcripts.length > 0
-            ? " Möglich ist auch, dass eine der abgeschriebenen Seiten inzwischen weg ist — read_sheet nennt die, die es noch gibt."
-            : ""
-        }`,
-      );
-    }
-
-    // Gleich danach ordnet Jev ein (@/lib/auto-file). Scheitert das — kein
-    // Schlüssel, Jev nicht erreichbar, nichts lesbar —, bleibt der Vorschlag
-    // im Korb, und genau das steht dann in der Antwort. Ein Fehler beim
-    // Einordnen darf den angelegten Vorschlag nicht mitreißen.
-    //
-    // Ist das Blatt schon eingeordnet, fragt die App Jev nicht. Bringt der
-    // Vorschlag dann nur die Abschrift ungelesener Seiten — die nachgereichte
-    // Rückseite —, übernimmt sie ihn trotzdem gleich (seit dem 4.10.2026);
-    // alles andere bleibt dort wie bisher für einen Menschen liegen.
-    const eingeordnet = await autoFile(user.id, id).catch(
-      (error): AutoFileResult => {
-        console.error("Einordnen durch Jev fehlgeschlagen", error);
-        return { ok: false, grund: "Jev war nicht erreichbar." };
-      },
-    );
-
-    // Was wirklich angekommen ist, und nicht, was hereinkam: `parsed.data` ist
+    // Was wirklich angekommen ist, und nicht, was hereinkam: `vorschlag` ist
     // das, was das Schema durchgelassen hat. Nähme @/lib/inbox das Feld
     // `transcripts` eines Tages nicht mehr an, stünde hier eine leere Liste —
     // und niemand läse „Der Vorschlag liegt im Eingangskorb" und glaubte, die
     // Abschrift sei mit drin.
-    const gespeichert = parsed.data.transcripts ?? [];
+    const gespeichert = vorschlag.transcripts ?? [];
 
     return daten(
       // `zahl()` steht hier nicht: es baut den Nominativ („eine Seite"), und
@@ -865,11 +783,11 @@ const HANDLERS: Handlers = {
                 topics: eingeordnet.topics,
                 pages: eingeordnet.seiten,
               },
-        subjectId: parsed.data.subjectId,
-        title: parsed.data.title,
-        capturedOn: parsed.data.capturedOn,
-        note: parsed.data.note,
-        topics: parsed.data.topics,
+        subjectId: vorschlag.subjectId,
+        title: vorschlag.title,
+        capturedOn: vorschlag.capturedOn,
+        note: vorschlag.note,
+        topics: vorschlag.topics,
         // Je Seite die Länge und nicht der Text. Der Text stünde sonst zweimal
         // in derselben Unterhaltung — einmal hingeschickt, einmal
         // zurückgelesen — und verdoppelte die Kosten des Aufrufs für nichts.
@@ -890,137 +808,15 @@ const HANDLERS: Handlers = {
     const themen = args.topic ? einThema(stoff, args.topic) : stoff.themen;
     if ("fehler" in themen) return themen.fehler;
 
-    // Die Seiten werden HIER noch einmal zusammengefasst und nicht aus
-    // `seitenGesamt` genommen: Das gilt für alle Themen, und mit `topic` ist
-    // nur eines gemeint. Stünde dort die Gesamtliste, lieferte die engere Frage
-    // dieselbe Datenmenge wie die weite — genau das, was `topic` verhindern
-    // soll — und dazu Seiten, die zum genannten Thema nicht gehören.
-    const gesehen = new Set<string>();
-    const seiten: {
-      id: string;
-      sortOrder: number;
-      chars: number;
-      transcript: string;
-      maschinell: boolean;
-    }[] = [];
-
-    for (const thema of themen) {
-      for (const seite of thema.seiten) {
-        if (gesehen.has(seite.pageId)) continue;
-        gesehen.add(seite.pageId);
-        seiten.push({
-          id: seite.pageId,
-          sortOrder: seite.sortOrder,
-          chars: seite.transcript.length,
-          transcript: seite.transcript,
-          // Seit dem 6.10.2026: diese Abschrift hat die App aus Docling
-          // geschrieben, und niemand hat sie gegengelesen. Ein Zitat daraus
-          // besteht die Quellbindung genauso — es steht ja wörtlich da —,
-          // kann aber einen Lesefehler zitieren, den keine ⟨Klammer⟩ verrät.
-          // Der Fragen-Eingang zeigt deshalb an solchen Fragen einen Hinweis.
-          maschinell: seite.maschinell,
-        });
-      }
-    }
-
-    const maschinell = seiten.filter((seite) => seite.maschinell).length;
-
-    // Der Vorrat wird über die Seiten DIESER Antwort gezählt und nicht über
-    // alle der Klausur: Mit `topic` ist nur ein Thema gemeint, und „18
-    // Bausteine" neben einem Thema, zu dem keiner gehört, wäre eine Zahl, die
-    // zur falschen Frage antwortet.
-    const vorrat = await vorratZuKlausur(
-      user.id,
-      stoff.examId,
-      seiten.map((seite) => seite.id),
-    );
-
-    const heute = todayInBerlin();
-    const tage = daysBetween(heute, stoff.klausurtag);
-    const ohneBlatt = themen.filter((t) => !t.verknuepft).length;
-    // „Verknüpft, aber ohne Seite" ist EIN Fall und nicht zwei: Die Abfrage
-    // liefert nur Seiten MIT Abschrift, also sieht ein Thema ohne jedes Blatt
-    // genauso aus wie eines, dessen Blätter noch niemand abgeschrieben hat. Der
-    // Satz darf die Unterscheidung deshalb nicht behaupten — bis zum 12.9.2026
-    // stand dort „hat Blätter, aber keine Abschrift", und das war bei einem
-    // Thema ohne jedes Blatt einfach falsch. Die Oberfläche unter
-    // /abruf/klausur sagt es seit dem ersten Tag richtig; hier stand es anders.
-    const ohneAbschrift = themen.filter(
-      (t) => t.verknuepft && t.seiten.length === 0,
-    ).length;
+    // Satz, Warnungen und Daten stehen seit dem 11.10.2026 in
+    // @/lib/klausur-stoff: der Fragenlauf der App gibt Opus dieselbe Auskunft
+    // über die API, und zwei Fassungen davon liefen auseinander. Die Grenze
+    // prüft hier wie überall `daten()`; sie zählt genau so wie die Auskunft.
+    const auskunft = await stoffAuskunft(user.id, stoff, themen);
 
     return daten(
-      // Der Satz sagt zuerst, was da ist, und dann, was fehlt — in dieser
-      // Reihenfolge, weil das Fehlende den nächsten Schritt bestimmt. Null
-      // Seiten bei vorhandenen Themen ist der Fall aus dem 11.9.: vier Themen
-      // standen im falschen Fach, und der Stoff war trotzdem da.
-      `${stoff.subjectName} am ${formatGerman(stoff.klausurtag)}${
-        tage >= 0 ? ` (in ${tage} ${tage === 1 ? "Tag" : "Tagen"})` : ""
-      }: ${zahl(themen.length, "Thema", "Themen")}, ${zahl(seiten.length, "abgeschriebene Seite", "abgeschriebene Seiten", "f")} mit ${tausender(seiten.reduce((summe, seite) => summe + seite.chars, 0))} Zeichen.${
-        ohneBlatt > 0
-          ? ` ${ohneBlatt} ${ohneBlatt === 1 ? "Thema hängt" : "Themen hängen"} an keinem Blatt.`
-          : ""
-      }${
-        ohneAbschrift > 0
-          ? ` Zu ${ohneAbschrift} ${ohneAbschrift === 1 ? "Thema führt kein abgeschriebenes Blatt" : "Themen führt kein abgeschriebenes Blatt"} — entweder ist keines abfotografiert, oder es ist noch nicht abgeschrieben.`
-          : ""
-      }${
-        seiten.length === 0
-          ? " Ohne abgeschriebene Seite lässt sich keine Frage stellen — melde das, statt eine zu erfinden. Häufigste Ursache: das Thema steht im falschen Fach."
-          : ""
-      }${
-        maschinell > 0
-          ? ` ${maschinell === 1 ? "Eine Seite hat" : `${maschinell} Seiten hat`} die App maschinell gelesen (Docling, „maschinell: true“) — dort können Lesefehler stehen, die keine ⟨Klammer⟩ markiert; zitiere von dort nur, was in sich stimmig ist.`
-          : ""
-      }${
-        vorrat.offeneFragen > 0
-          ? ` Im Eingang liegen schon ${vorrat.offeneFragen} unentschiedene ${vorrat.offeneFragen === 1 ? "Frage" : "Fragen"} zu dieser Klausur — schlag nichts vor, was dort schon liegt.`
-          : ""
-      }${
-        vorrat.bausteine > 0
-          ? ` ${vorrat.bausteine} ${vorrat.bausteine === 1 ? "Baustein" : "Bausteine"} sind aus diesem Stoff bereits gebaut.`
-          : ""
-      }${
-        vorrat.verworfen > 0
-          ? ` ${vorrat.verworfen} ${vorrat.verworfen === 1 ? "Frage wollte der Mensch" : "Fragen wollte der Mensch"} zu dieser Klausur nicht — bau nicht dasselbe noch einmal.`
-          : ""
-      }`,
-      {
-        exam: stoff.examId,
-        subject: stoff.subjectName,
-        subjectId: stoff.subjectId,
-        kind: stoff.kind,
-        date: stoff.klausurtag,
-        today: heute,
-        topics: themen.map((thema) => ({
-          id: thema.examTopicId,
-          title: thema.title,
-          /** Für das Feld `topic` an propose_questions. NULL heißt: freier Text. */
-          subjectTopicId: thema.subjectTopicId,
-          linked: thema.verknuepft,
-          // Die ids und nicht die Seiten selbst: Eine Seite kann an mehreren
-          // Themen hängen, und ihr Wortlaut stünde sonst mehrfach in derselben
-          // Antwort — bei zwei Themen das Doppelte an Kosten für nichts.
-          pages: thema.seiten.map((seite) => seite.pageId),
-        })),
-        pages: seiten,
-        /**
-         * Was zu dieser Klausur schon da ist — die Antwort auf „liegt da schon
-         * was?". Ohne sie legt ein unbeaufsichtigter Lauf jede Nacht dieselben
-         * Fragen noch einmal in den Korb.
-         */
-        stock: {
-          items: vorrat.bausteine,
-          openQuestions: vorrat.offeneFragen,
-          /**
-           * Fragen, die der Mensch zu dieser Klausur NICHT wollte. Ohne diese
-           * Zahl baute ein Lauf nach einem verworfenen Vorschlag dieselben
-           * Fragen noch einmal — `openQuestions` fällt beim Verwerfen ja auf
-           * null.
-           */
-          discardedQuestions: vorrat.verworfen,
-        },
-      },
+      auskunft.satz,
+      auskunft.daten,
       "read_exam_material nimmt `topic` — damit kommt nur ein Thema dieser Klausur, und die Antwort wird entsprechend kleiner.",
     );
   },
@@ -1029,15 +825,7 @@ const HANDLERS: Handlers = {
     const ergebnis = await vorschlagAnlegen(
       user.id,
       args.exam,
-      args.questions.map((frage) => ({
-        pageId: frage.page,
-        subjectTopicId: frage.topic ?? null,
-        promptFree: frage.question,
-        solution: frage.solution,
-        misconception: frage.misconception,
-        sourceQuote: frage.quote,
-        materialKind: frage.kind,
-      })),
+      vorschlagsFragen(args.questions),
       args.note ?? null,
     );
 
@@ -1147,40 +935,6 @@ function einThema(
 const MAX_IMAGE_BYTES = 105_000;
 
 /**
- * Wie lang ein Datenergebnis werden darf.
- *
- * Die Schwester von `MAX_IMAGE_BYTES`, von der anderen Seite gerechnet: dort
- * werden aus drei Bytes vier Base64-Zeichen, hier ist der Text schon Text. Die
- * Grenze ist dieselbe — ein Werkzeugergebnis endet in der Claude-App bei rund
- * 150 000 Zeichen —, und wie beim Bild bleiben zehntausend für den
- * JSON-RPC-Umschlag, die Feldnamen und den Satz drumherum.
- *
- * Bis zur Abschrift konnte kein Leseergebnis in die Nähe kommen: zweihundert
- * Blattzeilen wiegen ein paar Zehntausend Zeichen, und deshalb stand hier bis
- * heute nichts — der Datenzweig lief ungedeckelt in `JSON.stringify()`. Was
- * dann passiert, hängt vom Client ab: abgeschnitten, abgewiesen oder still
- * verschluckt, und keine dieser drei Antworten sagt jemandem, was los ist.
- * Eine Abschrift kann die Grenze erreichen — `MAX_PAGES` mal
- * `PROPOSAL_TRANSCRIPT_MAX` sind 96 000 —, und genau deshalb sind die beiden
- * Zahlen an der Tür so gewählt, dass sie darunter bleiben, statt sich darauf zu
- * verlassen.
- *
- * Abgeschnitten wird nichts. Ein halbes JSON ist kein JSON, und eine halbe
- * Antwort sähe aus wie eine ganze: das Modell arbeitete mit ihr weiter, und
- * niemand sähe je, dass etwas fehlt. Dieselbe Ehrlichkeit wie bei
- * `grenzeErreicht()` weiter unten, nur schärfer — dort steht ein Hinweis unter
- * einer vollständigen Liste, hier ein Fehler statt einer unvollständigen
- * Antwort.
- *
- * Gezählt werden Zeichen des Rohtextes; der JSON-RPC-Umschlag verlängert
- * Anführungszeichen und Zeilenumbrüche noch einmal um ein bis drei Prozent, und
- * beide kommen in einer Abschrift häufiger vor als in unseren übrigen
- * Antworten. Die zehntausend Reserve decken das — gerechnet, nicht gemessen,
- * dieselbe Ehrlichkeit wie bei `MAX_IMAGE_BYTES`.
- */
-const MAX_DATA_CHARS = 140_000;
-
-/**
  * Ein Blatt, wie es in jeder der drei Listen steht.
  *
  * `firstPageId` steht mit dabei, obwohl es aussieht wie ein Detail für die
@@ -1211,11 +965,12 @@ function sheetRow(sheet: MaterialListItem) {
  * gelesen hat — als Zahl (`unreadAttachedPages`) und als ids
  * (`unreadAttachedPageIds`, in der Reihenfolge des Blattes).
  *
- * Seit dem 4.10.2026, für den Postboten, und nur an diesen beiden Türen —
+ * Seit dem 4.10.2026 — gebaut für den Postboten, seit dem 11.10.2026 für
+ * Chats, die abschreiben —, und nur an diesen beiden Türen —
  * `read_sheet` nennt jede Seite einzeln mit der Länge ihrer Abschrift und
  * braucht die Zusammenfassung nicht. Was „nachgereicht" heißt und warum die
  * Altblätter dabei leer ausgehen, steht an `nachgereichtUngelesen()` in
- * @/lib/materials. Die ids stehen da, damit der Postbote genau diese Seiten
+ * @/lib/materials. Die ids stehen da, damit ein Agent genau diese Seiten
  * abschreibt und keine andere ungelesene daneben.
  *
  * Fehlt ein Blatt in `seitenstand`, hat es keine Seite. Über die App kommt das
@@ -1453,29 +1208,6 @@ function heuteSatz(heute: string): string {
 }
 
 /**
- * „3 Blätter", „ein Blatt", „keine Seite" — Zahlen, die sich lesen lassen.
- *
- * Das Geschlecht steht dabei, weil es im Deutschen nicht am Wort abzulesen ist
- * und weil „ein Seite" auffällt: diese Sätze gehen an ein Modell, das dem
- * Nutzer gleich darauf antwortet, und ein schiefer Satz hier wird oben im
- * Chatfenster wiederholt. Vorgabe ist sächlich — das ist bei Blatt, Fach und
- * Thema richtig, also bei der Mehrzahl der Fälle.
- */
-function zahl(
-  anzahl: number,
-  einzahl: string,
-  mehrzahl: string,
-  genus: "m" | "f" | "n" = "n",
-): string {
-  const artikel = genus === "f" ? "eine" : "ein";
-
-  if (anzahl === 0) return `k${artikel} ${einzahl}`;
-  if (anzahl === 1) return `${artikel} ${einzahl}`;
-
-  return `${anzahl} ${mehrzahl}`;
-}
-
-/**
  * Der erste Buchstabe eines Satzes gehört groß.
  *
  * Nötig, weil die Sätze aus Bausteinen entstehen und oft mit `zahl()`
@@ -1493,28 +1225,14 @@ function schnitt(average: number | null): string {
 }
 
 /**
- * 142 300 statt 142300 — mit dem Leerzeichen, das im Deutschen die Tausender
- * trennt.
- *
- * Von Hand und nicht mit `toLocaleString("de-DE")`: das hängt an den
- * Sprachdaten der Laufzeit, und eine node-Fassung ohne volle ICU-Daten schriebe
- * still „142,300" — im deutschen Satz daneben ist das Komma das Dezimalzeichen,
- * die Zahl behauptete also das Gegenteil. `formatBytes()` in @/lib/images setzt
- * seine Zahlen aus demselben Grund selbst zusammen.
- */
-function tausender(wert: number): string {
-  return Math.round(wert)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/gu, " ");
-}
-
-/**
  * Ein Datenergebnis — und die Prüfung, ob es überhaupt eines werden kann.
  *
  * Gemessen wird genau der Text, den der Route Handler gleich zusammensetzt:
- * Satz, Zeilenumbruch, JSON (`toolResult()` in @/app/api/mcp/route.ts).
- * `grossAmAnfang()` ändert nur einen Buchstaben und keine Länge, die Rechnung
- * stimmt also auf das Zeichen.
+ * Satz, Zeilenumbruch, JSON (`toolResult()` in @/app/api/mcp/route.ts), mit
+ * `auskunftZeichen()` und gegen `MAX_DATA_CHARS` aus ./auskunft — dort stehen
+ * sie seit dem 11.10.2026, weil der Fragenlauf der App den Stoff einer Klausur
+ * mit derselben Zahl misst. `grossAmAnfang()` ändert nur einen Buchstaben und
+ * keine Länge, die Rechnung stimmt also auf das Zeichen.
  *
  * Dass dabei zweimal serialisiert wird — hier zum Messen, dort zum Senden — ist
  * der bewusste Preis dafür, dass `ToolOutcome` weiterhin Daten trägt und keinen
@@ -1533,8 +1251,7 @@ function tausender(wert: number): string {
  * Werkzeug ohne `limit` nicht weiter.
  */
 function daten(satz: string, daten: unknown, rat?: string): ToolOutcome {
-  const json = JSON.stringify(daten);
-  const zeichen = satz.length + 1 + json.length;
+  const zeichen = auskunftZeichen(satz, daten);
 
   if (zeichen > MAX_DATA_CHARS) {
     return fehler(

@@ -365,7 +365,7 @@ function TranscriptText({ text }: { text: string }) {
  * Zustände. Das ist eine Abwägung und keine Vergesslichkeit: „noch niemand
  * gelesen" und „gelesen, nichts darauf" sind zwei verschiedene Zustände, aber
  * unter einem Bild sind sie zwei Sätze über etwas, das man dort gerade nicht
- * vorhat. Ein Blatt, das der Postbote noch nie gesehen hat, trüge sonst unter
+ * vorhat. Ein Blatt, das noch kein Leser gesehen hat, trüge sonst unter
  * jeder seiner zwölf Seiten dieselbe Zeile — die App nähme einer Ansicht, die
  * Bilder zeigt, den Platz weg, um über eine Funktion zu reden, die niemand
  * aufgerufen hat. Verloren geht der Unterschied dadurch nicht: das Formular
@@ -760,7 +760,7 @@ type TranscriptFieldsProps = {
  *   Tipp mehr.
  *
  * Eine Seite, auf der zum ersten Mal etwas steht, bleibt dagegen zu, und das
- * ist der Fall, der sonst alles gekippt hätte: der Postbote schreibt ein
+ * ist der Fall, der sonst alles gekippt hätte: der Claude-Leser schreibt ein
  * frisches Blatt in einem Zug ab, also wäre an ZWÖLF Seiten etwas anderes als
  * am Blatt — zwölf Vollbilder und zwölf zehnzeilige Felder auf einem
  * Handybildschirm, genau die Zumutung, gegen die diese Bauweise steht.

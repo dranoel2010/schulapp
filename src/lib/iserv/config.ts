@@ -18,8 +18,10 @@ import { normalisiere } from "@/lib/iserv/klasse";
  * Benutzer und Passwort des Schülers stehen NUR in der Umgebung (auf dem NAS
  * in der .env). Nie in der Datenbank, nie in einem Protokoll, einem
  * Fehlersatz, der Karte, der Antwort des Crons oder einer Push-Nachricht — und
- * nie bei einem KI-Agenten: Weder der Web MCP noch der Postbote lesen
- * irgendetwas aus IServ. Deshalb steckt das Passwort in `IservZugang` in einem
+ * nie bei einem KI-Agenten: Weder der Web MCP noch der Leser, mit dem die App
+ * seit dem 11.10.2026 Opus selbst ruft (@/lib/leser/claude-leser), lesen
+ * irgendetwas aus IServ — der Leser bekommt nur die Fotos eines Blattes und
+ * seinen Auftrag. Deshalb steckt das Passwort in `IservZugang` in einem
  * privaten Feld: `JSON.stringify()` und `console.log()` sehen davon nur
  * „«verborgen»“, und wer es braucht, bekommt es nur als fertigen Formularkörper
  * für die eine Anfrage, die es braucht. `schwaerze()` ist die zweite

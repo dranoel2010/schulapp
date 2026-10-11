@@ -7,11 +7,13 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   primaryKey,
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
@@ -696,12 +698,13 @@ export const materialPages = pgTable(
      */
     transcript: text("transcript"),
     /**
-     * Wer diese Seite liest — entschieden von der App, nicht vom Postboten
-     * (seit dem 6.10.2026).
+     * Wer diese Seite liest — entschieden von der App, nicht von einem
+     * Agenten (seit dem 6.10.2026).
      *
      * - `'offen'`: die App hat noch nicht entschieden. Docling rechnet
      *   gerade, oder der Anstoß steht noch aus. Eine solche Seite geht nie an
-     *   Claude; ein Blatt mit einer offenen Seite überspringt der Postbote.
+     *   Claude; ein Blatt mit einer offenen Seite lässt der Claude-Leser
+     *   liegen, bis sie entschieden ist.
      * - `'docling'`: Docling liest allein. Die Abschrift hat die Zuteilung
      *   geschrieben; Claude sieht die Seite nie.
      * - `'claude'`: Claude liest vom Foto, ohne Vorlage.
@@ -961,6 +964,200 @@ export const materialProposalTranscripts = pgTable(
       columns: [t.proposalId, t.pageId],
     }),
     index("material_proposal_transcripts_page_idx").on(t.pageId),
+  ],
+);
+
+/**
+ * Was der Claude-Leser der App schon versucht hat — das Gedächtnis, damit kein
+ * Blatt zweimal bezahlt wird (seit dem 11.10.2026).
+ *
+ * Bis dahin las ein eigener Dienst neben der App, der Postbote, über ein
+ * Claude-Abo, und sein Gedächtnis war eine Datei neben ihm (`gesehen.json`).
+ * Seit die App das Modell selbst ruft, kostet jeder Lauf Geld vom
+ * API-Schlüssel — und das Gedächtnis gehört dorthin, wo der Zustand der Seiten
+ * schon liegt. Eine Liste im Speicher überlebte keinen Neustart: nach jedem
+ * `nas.sh hoch` würde jedes Blatt, an dem schon einmal „nichts“ herauskam, neu
+ * gelesen und neu bezahlt.
+ *
+ * ── Eine Zeile je Lauf, gemerkt sind nur drei Ergebnisse ────────────────────
+ *
+ * Jeder Lauf steht hier, auch `pause` und `spaeter`: sie sind die Spur für
+ * die Anzeige am Blatt („zuletzt: …“) und für `nas.sh stand`. Als GEMERKT —
+ * „für diesen Stand des Blattes nicht noch einmal“ — gelten nur `vorschlag`,
+ * `kein-vorschlag` und `nichts`. `pause` (Kontingent, Schlüssel, API weg)
+ * liegt nicht am Blatt, `spaeter` (Frist) nur an diesem einen Versuch; beide
+ * kommen beim nächsten Anstoß wieder dran. Dieselbe Trennung wie im Käfig
+ * des Postboten, und aus demselben Grund: ein Schlüsselfehler, der als
+ * „nichts“ gemerkt würde, legte jedes Blatt des Ausfalls für immer still.
+ *
+ * ── `laeuft`: die Zeile steht VOR dem Aufruf ────────────────────────────────
+ *
+ * Seit der Abnahme vom 11.10.2026 legt der Abschreiber seine Zeile an, bevor
+ * er Opus ruft — mit `ergebnis = 'laeuft'` und `frist_bis`, der eigenen Frist
+ * des Aufrufs —, und schreibt danach das Ergebnis in DIESELBE Zeile. Bis dahin
+ * stand sie erst hinter dem Aufruf, und ein Neustart mitten im Strom (`nas.sh
+ * hoch`, das DSM-Update am Donnerstag) hinterließ einen bezahlten Versuch ohne
+ * jede Spur: das Blatt kam gleich wieder dran, bei jedem Neustart von vorn
+ * bezahlt. Jetzt bleibt eine `laeuft`-Zeile stehen, und ist ihre Frist um,
+ * zählt sie wie ein bezahlter Abbruch (`abbruch` unten). Solange sie frisch
+ * ist, nimmt kein zweiter Lauf das Blatt.
+ *
+ * ── `abbruch`: was Geld gekostet hat, ohne etwas zu ergeben ─────────────────
+ *
+ * Gesetzt nur, wenn ein Versuch bezahlt war — das Modell hatte zu schreiben
+ * begonnen — und trotzdem nicht gemerkt ist: `frist` (die eigene Frist lief
+ * ab), `strom` (der Strom brach mitten in der Antwort ab, und am Blatt
+ * ausgeschlossen ist es nicht: ein `api_error` oder ein 400 im Strom, eine
+ * abreißende Verbindung), `ausfall` (dasselbe, aber mit einer Art, die nie am
+ * Blatt liegt: Überlastung, Grenzen, Konto, Schlüssel), `rueckfall`
+ * (abgelehnt, und das Rückfallmodell war selbst ausgelastet) und `ablage` (die
+ * Antwort kam, ließ sich aber nicht speichern). An ihnen sieht die
+ * Monatssumme, dass ihr etwas fehlen kann („mindestens …“). Auf die Grenze je
+ * Stand (`SPAETER_HOECHSTENS` in @/lib/leser/claude-ablauf) zählen alle außer
+ * `ausfall` — gleich, ob die Zeile `spaeter` oder `pause` heißt. Ein Ausfall
+ * von Anthropic legt so kein Blatt still, und ein Blatt, an dem der Strom
+ * jedes Mal abreißt, wird höchstens zweimal bezahlt (Regression vom
+ * 11.10.2026: zählte `strom` nicht, kostete so ein Blatt jeden Anstoß aufs
+ * Neue). Was vor dem Inhalt scheitert — ein 400 vor dem Strom, ein 429,
+ * keine Verbindung —, kostet nichts und hat keinen `abbruch`.
+ *
+ * ── `abgeschrieben`: welche Seiten der Lauf wirklich abgeschrieben hat ──────
+ *
+ * Die ids der Seiten, deren Abschrift durch die Tür in einen Vorschlag kam —
+ * nicht, was das Modell nannte. Das Gedächtnis braucht sie für die eine
+ * Ausnahme: ein Einordnen erledigt das Blatt auch für die Nachlese, nur eine
+ * Seite, die es NICHT abschreiben konnte, bekommt am eingeordneten Blatt
+ * ihren zweiten Versuch (`gedaechtnisAus()` in @/lib/leser/claude-ablauf).
+ * Leer oder NULL heißt: keine. An einem gemerkten Einordnen kommen die Seiten
+ * jedes Vorschlags von außen dazu, den ein Mensch in diesem Stand verwirft
+ * (unten): dann heißt die Liste „zu diesen Seiten lag in diesem Stand schon
+ * eine Abschrift vor“, vom Lauf selbst oder von einem Verworfenen.
+ *
+ * ── Zwei Sorten Zeilen ohne Aufruf ──────────────────────────────────────────
+ *
+ * `einordnen` / `kein-vorschlag`, ohne Messung: „vor dem Wechsel gesehen“
+ * (scripts/claude-einrichten.sh, Schritt 4b — die Korbblätter, die der
+ * Postbote schon gesehen hatte) und die Spur eines verworfenen Vorschlags von
+ * außen (`verworfenVermerken()` in @/lib/leser/laeufe, seit der Nachprüfung
+ * vom 11.10.2026: ein Vorschlag aus einem Chat oder vom Postboten, den ein
+ * Mensch verworfen hat). Beide sagen dem Gedächtnis „in diesem Stand
+ * gesehen“, mit den Seiten in `abgeschrieben`, die nicht noch einmal gelesen
+ * werden sollen. Gekostet haben sie nichts. Steht für den Stand schon ein
+ * gemerktes Einordnen, entsteht keine zweite Zeile (der Teilindex unten), die
+ * Spur erweitert dessen `abgeschrieben` — seit der zweiten Nachprüfung vom
+ * 11.10.2026; bis dahin fiel sie dann weg, und die Reihenfolge des Verwerfens
+ * entschied, ob eine verworfene Abschrift bezahlt nachgelesen wurde.
+ *
+ * ── `schluessel`: wann ein Blatt wieder dran ist ────────────────────────────
+ *
+ * `lastPageAt` des Blattes beim Lauf, so wie `listPageActivity()` ihn liefert
+ * (ISO, Millisekunden, UTC) — leer, wo es keinen gibt (der Fragenlauf). Eine
+ * neue Seite macht einen neuen Schlüssel und damit einen neuen Fall.
+ * Verwerfen eines Vorschlags, „wieder in den Korb“ oder ein Neustart ändern
+ * ihn nicht, und deshalb löst keines davon ein neues, bezahltes Lesen aus —
+ * ein gemerktes Ergebnis gleich welcher Art erledigt den Stand für Einordnen
+ * UND Nachlese. Gelesen wird der Stand VOR den Seiten (dieselbe Reihenfolge
+ * wie read_sheet in @/lib/mcp/run): früher gelesen ist er höchstens älter, und
+ * das Blatt kommt einmal zu viel dran; später gelesen könnte eine Seite hinter
+ * dem Schlüssel verschwinden, ohne je gelesen zu werden.
+ *
+ * ── Der Teilindex ───────────────────────────────────────────────────────────
+ *
+ * Eindeutig über (material_id, art, schluessel) — aber nur für die gemerkten
+ * Ergebnisse und nur für die beiden Arten, die das Gedächtnis befragen
+ * (`einordnen`, `nachlese`). Zwei Läufe, die sich nach einem Neustart
+ * überschneiden, können so nicht beide ein Ergebnis für denselben Stand
+ * eintragen; gesichert in der Datenbank und nicht nur in der Queue des
+ * Prozesses. `von-hand` steht nicht darin: der Knopf fragt das Gedächtnis
+ * nicht, und ein zweiter Druck nach einem „nichts“ muss sich eintragen lassen.
+ * `fragen` hängt an keinem Blatt, und NULL ist in Postgres keinem NULL gleich.
+ * Eine `laeuft`-Zeile fällt nicht darunter; erst ihr Ergebnis. Stößt es dort
+ * an, war der Lauf doppelt, und die Zeile endet als `spaeter` mit diesem Grund
+ * (`laufAbschliessen()` in @/lib/leser/laeufe).
+ *
+ * ── Woran eine Zeile hängt ──────────────────────────────────────────────────
+ *
+ * An genau einem Ziel: ein Blatt für die drei Arten des Abschreibers, eine
+ * Klausur für den Fragenlauf — das hält die CHECK-Bedingung fest. Alle drei
+ * Fremdschlüssel tragen „cascade“: ohne Nutzer, Blatt oder Klausur ist eine
+ * Zeile darüber, was mit ihnen versucht wurde, sinnlos. Ein neu fotografiertes
+ * Blatt ist ein neues Blatt und beginnt ohne Gedächtnis.
+ *
+ * ── `modell`, `kosten_usd`, `messung` ───────────────────────────────────────
+ *
+ * `modell` ist, wer WIRKLICH geantwortet hat — nach einem Rückfall
+ * (`fallbacks` in @/lib/claude/client) ein anderes Modell als das bestellte.
+ * `kosten_usd` NULL heißt „unbekannt“ (kein Aufruf, oder ein Modell ohne
+ * bekannten Preis) und ausdrücklich nicht „kostenlos“. `messung` ist die ganze
+ * Messung (@/lib/claude/ergebnis) zum Nachrechnen; Spalten für Modell und
+ * Kosten stehen trotzdem daneben, weil „was hat der Monat gekostet?“ eine
+ * Summe über eine Spalte sein soll und keine über jsonb.
+ *
+ * Keine `relations()`, aus demselben Grund wie bei `wiki_deliveries`: keine
+ * Abfrage liest diese Tabelle über `db.query`.
+ */
+export const leserLaeufe = pgTable(
+  "leser_laeufe",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    materialId: uuid("material_id").references(() => materials.id, {
+      onDelete: "cascade",
+    }),
+    examId: uuid("exam_id").references(() => exams.id, { onDelete: "cascade" }),
+    /** einordnen | nachlese | von-hand | fragen */
+    art: text("art").$type<LeserLaufArt>().notNull(),
+    /** `lastPageAt` beim Lauf, ISO; '' ohne Blatt */
+    schluessel: text("schluessel").notNull().default(""),
+    /** vorschlag | kein-vorschlag | nichts | spaeter | pause | laeuft */
+    ergebnis: text("ergebnis").$type<LeserLaufErgebnis>().notNull(),
+    /** Ein Satz, warum — leer, wenn es nichts zu sagen gibt. */
+    grund: text("grund").notNull().default(""),
+    /** frist | strom | ausfall | rueckfall | ablage — nur ein bezahlter Versuch ohne gemerktes Ergebnis. */
+    abbruch: text("abbruch").$type<LeserLaufAbbruch>(),
+    /** Die Seiten, deren Abschrift dieser Lauf durch die Tür brachte — und, an einem Einordnen, die verworfener Vorschläge desselben Stands. */
+    abgeschrieben: jsonb("abgeschrieben").$type<string[]>(),
+    /** Bis wann der Aufruf höchstens dauert (seine Frist) — gesetzt mit `laeuft`. */
+    fristBis: timestamp("frist_bis", { withTimezone: true }),
+    /** Wer geantwortet hat; NULL, wenn keine Antwort kam. */
+    modell: text("modell"),
+    kostenUsd: numeric("kosten_usd", {
+      precision: 10,
+      scale: 6,
+      mode: "number",
+    }),
+    messung: jsonb("messung").$type<LeserLaufMessung>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("leser_laeufe_gemerkt_key")
+      .on(t.materialId, t.art, t.schluessel)
+      .where(
+        sql`${t.ergebnis} in ('vorschlag', 'kein-vorschlag', 'nichts') and ${t.art} in ('einordnen', 'nachlese')`,
+      ),
+    index("leser_laeufe_material_idx").on(t.materialId, t.createdAt),
+    index("leser_laeufe_exam_idx").on(t.examId, t.createdAt),
+    index("leser_laeufe_user_idx").on(t.userId, t.createdAt),
+    check(
+      "leser_laeufe_art_check",
+      sql`${t.art} in ('einordnen', 'nachlese', 'von-hand', 'fragen')`,
+    ),
+    check(
+      "leser_laeufe_ergebnis_check",
+      sql`${t.ergebnis} in ('vorschlag', 'kein-vorschlag', 'nichts', 'spaeter', 'pause', 'laeuft')`,
+    ),
+    check(
+      "leser_laeufe_abbruch_check",
+      sql`${t.abbruch} is null or ${t.abbruch} in ('frist', 'strom', 'ausfall', 'rueckfall', 'ablage')`,
+    ),
+    check(
+      "leser_laeufe_ziel_check",
+      sql`(${t.art} = 'fragen' and ${t.examId} is not null and ${t.materialId} is null) or (${t.art} <> 'fragen' and ${t.materialId} is not null and ${t.examId} is null)`,
+    ),
   ],
 );
 
@@ -1827,6 +2024,8 @@ export type GoogleCalendarConnection =
 export type GoogleCalendarEventRow = typeof googleCalendarEvents.$inferSelect;
 export type IservStateRow = typeof iservState.$inferSelect;
 export type IservSnapshotRow = typeof iservSnapshots.$inferSelect;
+export type LeserLauf = typeof leserLaeufe.$inferSelect;
+export type NewLeserLauf = typeof leserLaeufe.$inferInsert;
 
 /** Art einer Prüfung */
 export type ExamKind = "klausur" | "test" | "referat" | "muendlich";
@@ -1919,6 +2118,73 @@ export type LeserGrund = {
   jev: number | null;
   /** Wie lange Docling nach eigener Angabe gerechnet hat. */
   sekunden: number | null;
+};
+
+/**
+ * Was ein Lauf des Claude-Lesers war — die Werte von `leser_laeufe.art`.
+ *
+ * - `einordnen`: ein Blatt im Korb ohne Vorschlag; das Modell schreibt ab und
+ *   schlägt Titel, ein Thema und die Notiz vor, Jev ordnet danach ein.
+ * - `nachlese`: nachgereichte, ungelesene Seiten an einem eingeordneten
+ *   Blatt; das Modell schreibt NUR ab.
+ * - `von-hand`: ein Mensch hat den Knopf gedrückt — läuft, ohne das
+ *   Gedächtnis zu fragen (der Weg nach einem „nichts“ und für die Altblätter).
+ * - `fragen`: der Fragenlauf zu einer Klausur (@/recall bleibt dabei frei
+ *   von jedem Modellaufruf).
+ */
+export type LeserLaufArt = "einordnen" | "nachlese" | "von-hand" | "fragen";
+
+/**
+ * Wie ein Lauf ausging — die Werte von `leser_laeufe.ergebnis`. Gemerkt
+ * werden nur die ersten drei; warum, steht an der Tabelle. `laeuft` ist kein
+ * Ausgang, sondern die Zeile, solange der Aufruf noch unterwegs ist (seit dem
+ * 11.10.2026, ebenfalls an der Tabelle).
+ */
+export type LeserLaufErgebnis =
+  | "vorschlag"
+  | "kein-vorschlag"
+  | "nichts"
+  | "spaeter"
+  | "pause"
+  | "laeuft";
+
+/**
+ * Warum ein bezahlter Versuch nichts Gemerktes ergab — die Werte von
+ * `leser_laeufe.abbruch`. Diese Zeilen machen die Monatssumme zu einer
+ * Untergrenze; welche davon auf die Grenze je Stand zählen und was jeder Wert
+ * heißt, steht an der Tabelle.
+ */
+export type LeserLaufAbbruch = "frist" | "strom" | "ausfall" | "rueckfall" | "ablage";
+
+/**
+ * Was in `leser_laeufe.messung` steht: die Zahlen eines Aufrufs, aus `usage`
+ * der Antwort gelesen und hier nicht weiter gedeutet. Geschrieben von
+ * @/lib/claude/ergebnis; dort steht, woher jede Zahl kommt.
+ */
+export type LeserLaufMessung = {
+  /** Wer geantwortet hat (`model` der Antwort) — nach einem Rückfall nicht das bestellte. */
+  modell: string;
+  /** Hat ein Rückfallmodell geantwortet (`fallback_message` in `usage.iterations`)? */
+  rueckfall: boolean;
+  /** Die Modelle, die abgelehnt und weitergegeben haben, in ihrer Reihenfolge. */
+  abgelehntVon: string[];
+  /** `stop_reason` der Antwort; leer, wenn keiner dastand. */
+  stopGrund: string;
+  /** Bei `refusal` die Kategorie aus `stop_details`, sonst `null`. */
+  ablehnung: string | null;
+  /** Tokens über alle Anläufe dieses Aufrufs, auch die abgelehnten. */
+  eingabe: number;
+  ausgabe: number;
+  /** Davon Denken (`output_tokens_details.thinking_tokens`, nur der letzte Anlauf). */
+  denken: number;
+  cacheGelesen: number;
+  cacheGeschrieben: number;
+  /** In US-Dollar über alle Anläufe; `null` heißt unbekannt, nicht kostenlos. */
+  kostenUsd: number | null;
+  /** Modelle, für die kein Preis bekannt ist — leer, wenn die Kosten feststehen. */
+  ohnePreis: string[];
+  /** Hier gemessen, vom Absenden bis zur fertigen Antwort. */
+  wandMs: number;
 };
 
 /**

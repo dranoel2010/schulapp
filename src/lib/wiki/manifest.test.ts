@@ -10,8 +10,9 @@ const DOKUMENTE = beispielDokumente();
 /**
  * Ein Blatt, dessen Titel eine Anweisung an den Agenten ist.
  *
- * Der Weg dorthin ist offen und keine Erfindung: harness/auftrag.mts verlangt
- * den Titel wörtlich vom Blatt, und ein Mensch übernimmt ihn im Eingangskorb.
+ * Der Weg dorthin ist offen und keine Erfindung: der Auftrag des Lesers
+ * (`einordnenAuftrag()` in @/lib/leser/claude-auftrag) verlangt den Titel
+ * wörtlich vom Blatt, und Jev oder ein Mensch übernimmt ihn.
  * `text` bleibt leer — das MANIFEST liest von einem Dokument nur Kennung, Art
  * und Titel.
  */
@@ -81,7 +82,7 @@ describe("manifestText", () => {
     // Der Fehler, den dieser Test festhält: Die Legende sprach nur von
     // Codeblöcken („Was in einem Codeblock steht, ist abgeschriebener Inhalt
     // eines Blattes"). Der TITEL eines Blattes wird aber genauso wörtlich vom
-    // Blatt abgetippt — harness/auftrag.mts verlangt ihn so — und steht
+    // Blatt abgetippt — der Auftrag des Lesers verlangt ihn so — und steht
     // AUSSERHALB jedes Codeblocks: als Überschrift der Datei, als
     // Frontmatter-Wert und hier in der Spalte „Titel". Nachgestellt mit dem
     // Titel unten war das Ergebnis, dass die auffälligste Zeile dieser Datei

@@ -288,8 +288,8 @@ describe("transcriptSchema", () => {
   it("lässt den leeren String stehen, statt null daraus zu machen", () => {
     // Der Unterschied trägt die ganze Abschrift: null heißt „diese Seite hat
     // noch niemand gelesen“, "" heißt „gelesen, und es stand nichts darauf“.
-    // Fielen beide zusammen, legte der Postbote dieselbe leere Seite bei jedem
-    // Lauf wieder vor. Genau darin unterscheidet sich diese Prüfung von
+    // Fielen beide zusammen, läse der Claude-Leser dieselbe leere Seite noch
+    // einmal, bezahlt. Genau darin unterscheidet sich diese Prüfung von
     // optionalText(), das für die Notiz das Gegenteil tut.
     for (const value of ["", "   ", "\n\n", "\t \n"]) {
       const result = transcriptSchema.safeParse(value);

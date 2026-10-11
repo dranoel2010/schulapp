@@ -4,8 +4,9 @@
  *
  * Seit die App selbst entscheidet, wer eine Seite liest, passiert nach dem
  * Auslösen vieles ohne Zutun: Docling liest in ein paar Sekunden, die App
- * legt einen Vorschlag an, Jev ordnet ein, oder der Postbote holt sich das
- * Blatt und Claude schreibt ab. Bis hierher sah das nur, wer neu lud. Jetzt
+ * legt einen Vorschlag an, Jev ordnet ein, oder Claude schreibt ab — bis zum
+ * 11.10.2026 über den Postboten, seitdem ruft die App Opus selbst. Bis hierher
+ * sah das nur, wer neu lud. Jetzt
  * fragt `AutoRefresh` (@/components/material/auto-refresh) in festem Takt
  * nach `/api/material/stand` und lädt die Seite nach, sobald sich der Stand
  * geändert hat — und nur dann.
@@ -51,9 +52,23 @@ export const ABFRAGE_FRIST_MS = 10_000;
 /**
  * Was jünger ist, zählt als „gerade in Arbeit“: eine Seite, über die die App
  * noch entscheidet, und eine Claude-Seite, auf deren Abschrift gewartet wird.
- * Der Postbote braucht etwa eine Minute je Blatt; auch ein Stapel von zehn
- * Blättern ist in einer halben Stunde durch. Was danach noch so dasteht, ist
- * liegengeblieben — und keines, auf das man im 5-s-Takt warten müsste.
+ *
+ * Die halbe Stunde ist dieselbe Zahl wie zu Zeiten des Postboten, mit einer
+ * neuen Rechnung (11.10.2026). Der Leser der App liest nacheinander, ein Blatt
+ * nach dem anderen (@/lib/leser/claude-leser): erst die Ruhe von zwanzig
+ * Sekunden nach der letzten Seite, dann ein Aufruf, der für ein Blatt mit
+ * wenigen Seiten Minuten dauert. Seine Frist ist länger (gut 19 Minuten für
+ * eine Seite, gut 45 ab sechs, `fristFuer()` in @/lib/leser/claude-auftrag),
+ * aber die ist für eine Antwort da, die nicht aufhört, und nicht der
+ * gewöhnliche Fall. Ein paar Blätter nach dem Unterricht sind in einer halben
+ * Stunde durch; ein Blatt, das so lange keinen Vorschlag hat, wartet in der
+ * Pause oder auf den nächsten Anstoß und nicht auf einen Lauf — und läuft
+ * doch einer länger, sagt es der Prozess selbst (`claudeBeschaeftigt()`).
+ *
+ * Seltener als früher ist das Fenster die einzige Grenze: was der Leser
+ * erledigt hat, steht in `leser_laeufe`, und `blaetterStand()` in
+ * @/lib/materials zählt eine Seite dann nicht mehr — auch innerhalb der halben
+ * Stunde. Und solange er gerade liest, sagt es der Prozess selbst.
  */
 export const IN_ARBEIT_MINUTEN = 30;
 
@@ -104,6 +119,8 @@ export type StandZahlen = {
   seitenInArbeit: number;
   vorschlaege: number;
   neuesterVorschlag: string | null;
+  /** Der jüngste Lauf des Claude-Lesers — auch einer, der nichts anlegte. */
+  neuesterLauf: string | null;
 };
 
 /** Ein Konto ohne ein einziges Blatt. */
@@ -125,6 +142,7 @@ export const LEERER_STAND: StandZahlen = {
   seitenInArbeit: 0,
   vorschlaege: 0,
   neuesterVorschlag: null,
+  neuesterLauf: null,
 };
 
 /** Was `/api/material/stand` antwortet und die Seiten beim Rendern mitgeben. */
@@ -162,6 +180,7 @@ export function fingerabdruck(z: StandZahlen): string {
     z.seitenInArbeit,
     z.vorschlaege,
     z.neuesterVorschlag,
+    z.neuesterLauf,
   ]);
 }
 

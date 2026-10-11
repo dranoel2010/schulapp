@@ -133,7 +133,7 @@ export default async function InboxPage({
   // Wie weit die App mit dem Lesen der Seiten ist (seit dem 6.10.2026): was
   // sie gerade liest und was Docling schon maschinell gelesen hat. Eine
   // gruppierte Abfrage über die ids der fertigen Liste, also höchstens
-  // `INBOX_LIMIT` — dieselbe, die der Postbote über `read_inbox` bekommt.
+  // `INBOX_LIMIT`, dieselbe Grenze wie die Liste darüber.
   // Ohne den Satz an der Zeile sähe ein Blatt, das die App gerade liest, aus
   // wie eines, um das sich niemand kümmert, und eines, das Docling ganz
   // gelesen hat, wie eines mit einer Abschrift, die jemand geprüft hat.
@@ -390,12 +390,12 @@ function InboxRow({
           von vor dem 6.10.2026 steht keiner von beiden.
 
           „Liest die App gerade“: Docling läuft über die Seite, danach
-          entscheidet die App, ob sie selbst liest oder der Postbote. Bis
+          entscheidet die App, ob Docling liest oder Claude. Bis
           dahin ist ein leeres Blatt kein vergessenes.
 
           „Maschinell gelesen“ mit der Gesamtzahl daneben, weil es oft nicht
           alle Seiten sind: eine gedruckte Vorderseite liest Docling, die
-          handschriftliche Rückseite der Postbote. Wer übernimmt, soll wissen,
+          handschriftliche Rückseite Claude. Wer übernimmt, soll wissen,
           welcher Teil des Textes von niemandem gegengelesen ist. */}
       {stand && stand.offenPages > 0 ? (
         <p className="text-sm text-muted">
@@ -430,8 +430,9 @@ function InboxRow({
             darunter zu lesen ist: Fach, Titel, Themen, Notiz — und abgehakt
             ist es dann auch.
 
-            Seit der Postbote jedes Blatt liest und dabei das Fach zuordnet,
-            ist „der Vorschlag stimmt" die Regel und nicht die Ausnahme. Ihn
+            Seit jedes Blatt von selbst gelesen wird und Jev das Fach
+            bestimmt, ist „der Vorschlag stimmt" die Regel und nicht die
+            Ausnahme. Ihn
             dafür erst zu öffnen, das Formular zu lesen und unten zu
             bestätigen, waren drei Handgriffe für ein Ja.
 
@@ -444,7 +445,7 @@ function InboxRow({
             Schritt zurück und „Erst ansehen“ weiter unten nimmt seinen Platz
             als der auffällige ein.
 
-            Weggenommen wird er nicht: wer dem Postboten nach zwei Wochen
+            Weggenommen wird er nicht: wer dem Leser nach zwei Wochen
             vertraut, soll weiter mit einem Druck übernehmen dürfen. Aber die
             Begründung, mit der er überhaupt hier steht, hängt an einer
             Bedingung — „der Vorschlag steht mit Fach, Titel, Themen und Notiz

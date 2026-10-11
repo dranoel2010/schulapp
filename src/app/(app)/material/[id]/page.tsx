@@ -6,9 +6,13 @@ import { AutoRefresh } from "@/components/material/auto-refresh";
 import { CaptureButton } from "@/components/material/capture-button";
 import { ButtonLink } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
+import { claudeConfigured } from "@/lib/claude/client";
 import { subjectColor } from "@/lib/colors";
 import { berlinDay, formatGerman, todayInBerlin } from "@/lib/dates";
 import { MAX_PAGES, formatBytes } from "@/lib/images";
+import { kostenSatz, laufAnzeige, seitenZahl } from "@/lib/leser/claude-ablauf";
+import { claudeEingeplant, claudeLiestGerade } from "@/lib/leser/claude-zustand";
+import { blattKosten, letzterLauf, vorschlagStand } from "@/lib/leser/laeufe";
 import {
   blaetterStand,
   getMaterial,
@@ -20,6 +24,7 @@ import { listSubjects } from "@/lib/subjects";
 import { markFiledAction } from "../eingang/actions";
 import { SubmitButton } from "../eingang/proposal-form";
 import {
+  abschreibenLassenAction,
   deleteMaterialAction,
   deletePageAction,
   updateMaterialAction,
@@ -123,6 +128,41 @@ export default async function MaterialDetailPage({
   const totalBytes = item.pages.reduce((sum, page) => sum + page.byteSize, 0);
   const full = item.pages.length >= MAX_PAGES;
 
+  /*
+   * Claude am Blatt: der letzte Lauf und der Knopf „Abschreiben lassen“
+   * (seit dem 11.10.2026, als die App Opus selbst zu rufen begann).
+   *
+   * Der Knopf steht nur da, wo er etwas tun kann: es gibt Seiten ohne
+   * Abschrift, die weder Docling gehören noch gerade zugeteilt werden, an dem
+   * Blatt liegt kein Vorschlag — der hätte die Abschrift schon, und ein
+   * zweiter läge daneben —, es liest nicht schon jemand, und der Leser hat
+   * das Blatt nicht schon als Nächstes eingeplant (seit der Abnahme vom
+   * 11.10.2026 — ein Druck dann zahlte dasselbe Blatt zweimal). Ohne Schlüssel
+   * steht statt des Knopfes ein Satz: eine Seite, die niemand liest, soll nicht
+   * aussehen wie eine, auf deren Abschrift man nur warten muss.
+   *
+   * Die Zeile „Zuletzt …“ steht, sobald es einen Lauf gab, auch an einem
+   * fertigen Blatt: woher eine Abschrift kam und was sie gekostet hat, ist eine
+   * Angabe über das Blatt und keine Aufforderung. Gab es mehr als einen Lauf
+   * oder einen bezahlten Abbruch, steht darunter die Summe aller Läufe am
+   * Blatt — mit „mindestens“, wenn ihr etwas fehlt.
+   */
+  const fuerClaude = item.pages.filter(
+    (page) =>
+      page.transcriptLength === null && page.leser !== "docling" && page.leser !== "offen",
+  ).length;
+  const [letzter, vorschlaege, kosten] = await Promise.all([
+    letzterLauf(user.id, item.id),
+    vorschlagStand(user.id, item.id),
+    blattKosten(user.id, item.id),
+  ]);
+  const konfiguriert = claudeConfigured();
+  const liestGerade = claudeLiestGerade(item.id);
+  const eingeplant = !liestGerade && claudeEingeplant(item.id);
+  const knopf =
+    konfiguriert && fuerClaude > 0 && vorschlaege.anzahl === 0 && !liestGerade && !eingeplant;
+  const summeZeigen = kosten.laeufe + kosten.abgebrochen > 1 || kosten.abgebrochen > 0;
+
   return (
     <div className="space-y-6 md:max-w-3xl">
       <Link
@@ -217,7 +257,7 @@ export default async function MaterialDetailPage({
       <AutoRefresh
         stand={anfang.stand}
         inArbeit={anfang.inArbeit}
-        leseZeile={!item.pages.some((page) => page.leser === "offen")}
+        leseZeile={!item.pages.some((page) => page.leser === "offen") && !liestGerade}
       />
 
       <MaterialPages
@@ -227,6 +267,57 @@ export default async function MaterialDetailPage({
           deleteAction: deletePageAction.bind(null, item.id, page.id),
         }))}
       />
+
+      {letzter || liestGerade || fuerClaude > 0 ? (
+        <section className="space-y-3 rounded-card border border-border bg-surface p-4 sm:p-5">
+          {letzter ? <p className="text-sm text-muted">{laufAnzeige(letzter)}</p> : null}
+
+          {summeZeigen ? (
+            <p className="text-sm text-muted">{`Alle Läufe an diesem Blatt: ${kostenSatz(kosten)}.`}</p>
+          ) : null}
+
+          {liestGerade ? (
+            <p className="text-sm">
+              Claude liest dieses Blatt gerade … das Ergebnis steht gleich hier,
+              die Anzeige aktualisiert sich von selbst.
+            </p>
+          ) : null}
+
+          {eingeplant && fuerClaude > 0 ? (
+            <p className="text-sm">
+              Claude liest dieses Blatt gleich von selbst — das Ergebnis steht
+              danach hier, die Anzeige aktualisiert sich von selbst.
+            </p>
+          ) : null}
+
+          {knopf ? (
+            <>
+              <p className="text-sm text-muted">
+                {`${seitenZahl(fuerClaude)} ohne Abschrift, die Docling nicht liest. Claude kann sie vom Foto abschreiben; jeder Lauf kostet Geld vom API-Schlüssel, und was er gekostet hat, steht danach hier.`}
+              </p>
+              <form action={abschreibenLassenAction.bind(null, item.id, letzter?.id ?? null)}>
+                <SubmitButton>Abschreiben lassen</SubmitButton>
+              </form>
+            </>
+          ) : null}
+
+          {!konfiguriert && fuerClaude > 0 ? (
+            <p className="text-sm text-muted">
+              Auf diesem Server ist kein API-Schlüssel eingerichtet — es fehlt{" "}
+              <code>ANTHROPIC_API_KEY</code>. Diese Seiten liest deshalb niemand
+              von selbst; du kannst sie unten abtippen.
+            </p>
+          ) : null}
+
+          {konfiguriert && fuerClaude > 0 && vorschlaege.anzahl > 0 && !liestGerade && !eingeplant ? (
+            <p className="text-sm text-muted">
+              Am Blatt liegt ein Vorschlag — wird er im Eingangskorb entschieden
+              und fehlt danach noch eine Abschrift, lässt sie sich hier
+              abschreiben.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       {/* Der Satz sagt nicht, dass die Grenze überschritten sei — `addPage()`
           lässt keine Seite darüber hinaus zu, hier steht also immer genau

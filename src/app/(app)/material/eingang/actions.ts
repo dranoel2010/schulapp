@@ -381,9 +381,9 @@ async function anwenden(
 /**
  * Einen Vorschlag mit einem Druck übernehmen — so, wie er dasteht.
  *
- * **Der kurze Weg für den Normalfall.** Seit der Postbote jedes Blatt liest und
- * dabei auch das Fach zuordnet, ist „der Vorschlag stimmt" die Regel und nicht
- * die Ausnahme. Ihn dafür erst zu öffnen, das Formular zu lesen und unten zu
+ * **Der kurze Weg für den Normalfall.** Seit jedes Blatt von selbst gelesen
+ * wird und Jev das Fach bestimmt, ist „der Vorschlag stimmt" die Regel und
+ * nicht die Ausnahme. Ihn dafür erst zu öffnen, das Formular zu lesen und unten zu
  * bestätigen, sind drei Handgriffe für ein Ja. Der Vorschlag steht mit Fach,
  * Titel, Themen und Notiz schon auf der Karte im Korb; wer dort „Übernehmen"
  * drückt, hat ihn gelesen.
@@ -530,7 +530,7 @@ export async function confirmProposalAction(
      * Agent darf ausdrücklich „ich habe hingesehen, da steht nichts" sagen, und
      * genau das steht dann als leeres Feld auf dem Bildschirm. Ohne
      * `vorgeschlagen` fiele diese Aussage beim Übernehmen unter den Tisch, und
-     * der Postbote legte dieselbe leere Seite beim nächsten Lauf wieder vor.
+     * der Claude-Leser läse dieselbe leere Seite noch einmal — bezahlt.
      */
     const vorgeschlagen = new Set(
       found.proposal.transcripts.map((entry) => entry.pageId),

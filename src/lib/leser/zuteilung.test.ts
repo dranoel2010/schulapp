@@ -5,7 +5,9 @@ import { OCR_RAHMEN, ocrState } from "@/lib/jev";
 import { doclingZuAbschrift } from "@/lib/leser/abschrift";
 import { REGEL_VERSION } from "@/lib/leser/regel";
 import {
+  START_WIEDERHOLUNGEN_MS,
   ZWEITER_VERSUCH_MS,
+  leserBeimStart,
   leserWaehlen,
   nochGesperrt,
   type DoclingAusgang,
@@ -173,9 +175,9 @@ describe("leserWaehlen", () => {
 describe("nochGesperrt", () => {
   // Eine Seite, deren Zuteilung abbrach und die nicht einmal für Claude
   // festgehalten werden konnte, ruht — aber nicht für immer: sonst hinge sie
-  // bis zum nächsten Neustart auf „offen“, und der Postbote ließe ihr Blatt
-  // liegen. Und nicht gar nicht: sonst liefe jeder read_inbox alle 15 s in
-  // denselben Fehler und rechnete Docling von vorn.
+  // bis zum nächsten Neustart auf „offen“, und der Claude-Leser ließe ihr
+  // Blatt liegen. Und nicht gar nicht: sonst liefe jeder Anstoß in denselben
+  // Fehler und rechnete Docling von vorn.
   const jetzt = 1_000_000_000;
 
   it("sperrt nichts, das nie gescheitert ist", () => {
@@ -190,5 +192,83 @@ describe("nochGesperrt", () => {
   it("gibt die Seite nach zehn Minuten wieder frei", () => {
     assert.equal(ZWEITER_VERSUCH_MS, 10 * 60_000);
     assert.equal(nochGesperrt(jetzt - ZWEITER_VERSUCH_MS, jetzt), false);
+  });
+});
+
+describe("leserBeimStart", () => {
+  // Die Abnahme vom 11.10.2026: nach einem Neustart des NAS startet Docker
+  // App und Datenbank zugleich, und `register()` fragt, bevor Postgres
+  // annimmt. Mit genau einem Versuch blieb liegen, was der Neustart
+  // unterbrochen hatte — bis zum nächsten Foto.
+
+  /** Ein nachgemachter Start: Antworten der Datenbank der Reihe nach, Wecker von Hand. */
+  async function starten(antworten: (string[] | Error)[]) {
+    const gefragt: number[] = [];
+    const angestossen: string[] = [];
+    const wecker: { ms: number; aktion: () => void }[] = [];
+    let n = 0;
+    const fehler = console.error;
+    console.error = () => {};
+    try {
+      leserBeimStart({
+        nutzer: async () => {
+          gefragt.push(n);
+          const antwort = antworten[n++] ?? new Error("keine Antwort mehr");
+          if (antwort instanceof Error) throw antwort;
+          return antwort;
+        },
+        anstossen: (userId) => angestossen.push(userId),
+        spaeter: (ms, aktion) => wecker.push({ ms, aktion }),
+      });
+      // Jeder Wecker, sobald er gestellt ist — wie die Uhr, nur sofort.
+      for (let runde = 0; runde < 10; runde += 1) {
+        await new Promise((fertig) => setImmediate(fertig));
+        const naechster = wecker.shift();
+        if (!naechster) continue;
+        naechster.aktion();
+      }
+    } finally {
+      console.error = fehler;
+    }
+    return { gefragt, angestossen };
+  }
+
+  it("fragt nach einem Fehlschlag noch einmal und stößt dann jeden an", async () => {
+    const wartezeiten: number[] = [];
+    const fehler = console.error;
+    console.error = () => {};
+    leserBeimStart({
+      nutzer: async () => {
+        throw new Error("the database system is starting up");
+      },
+      anstossen: () => {},
+      spaeter: (ms) => wartezeiten.push(ms),
+    });
+    await new Promise((fertig) => setImmediate(fertig));
+    console.error = fehler;
+    assert.deepEqual(wartezeiten, [START_WIEDERHOLUNGEN_MS[0]]);
+
+    const { gefragt, angestossen } = await starten([
+      new Error("ECONNREFUSED"),
+      new Error("the database system is starting up"),
+      ["leo", "mia"],
+    ]);
+    assert.equal(gefragt.length, 3);
+    assert.deepEqual(angestossen, ["leo", "mia"]);
+  });
+
+  it("gibt nach den Wiederholungen auf — kein Takt auf Dauer", async () => {
+    assert.deepEqual(START_WIEDERHOLUNGEN_MS, [10_000, 30_000, 60_000, 300_000]);
+    const { gefragt, angestossen } = await starten(
+      Array.from({ length: 20 }, () => new Error("weg")),
+    );
+    assert.equal(gefragt.length, START_WIEDERHOLUNGEN_MS.length + 1);
+    assert.deepEqual(angestossen, []);
+  });
+
+  it("fragt einmal, wenn die Datenbank gleich antwortet", async () => {
+    const { gefragt, angestossen } = await starten([["leo"]]);
+    assert.equal(gefragt.length, 1);
+    assert.deepEqual(angestossen, ["leo"]);
   });
 });

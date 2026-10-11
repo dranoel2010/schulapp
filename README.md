@@ -35,10 +35,11 @@ Das Herzstück, und der Grund für fast alles, was seit dem 21. August dazukam:
 3. **Jemand liest — je Seite genau einer.** Gleich nach dem Hochladen schickt
    die App jede Seite durch Docling, eine Texterkennung auf dem NAS. Ist das
    sauberer Druck, ist die Seite damit gelesen. Den Rest — Handschrift,
-   Formeln, alles Unsichere — liest Claude: Läuft [der Postbote](harness/README.md),
-   schaut er alle 15 Sekunden in den Korb, **schreibt diese Seiten wörtlich ab**,
-   schlägt Titel und Tag vor und vermerkt in einer Notiz, was er **nicht**
-   sicher weiß. Fach und Themen bestimmt danach Jev (siehe
+   Formeln, alles Unsichere — liest Claude: Die App ruft dafür selbst Opus
+   ([der Claude-Leser](#der-claude-leser--vom-foto-bis-zum-vorschlag-ohne-handgriff)),
+   sobald das Blatt zwanzig Sekunden zur Ruhe gekommen ist. Er **schreibt diese
+   Seiten wörtlich ab**, schlägt Titel und Tag vor und vermerkt in einer Notiz,
+   was er **nicht** sicher weiß. Fach und Themen bestimmt danach Jev (siehe
    [Jev ordnet ein](#jev-ordnet-ein--seit-dem-4102026-ohne-eingangskorb)).
 
 4. **Ein Druck.** Im Korb steht der Vorschlag mit Fach, Titel, Themen, Notiz und
@@ -81,14 +82,18 @@ Aus dieser einen gespeicherten Abschrift entstehen die beiden Ausgaben:
   Obsidian-Vault einordnet. Die App ordnet dabei **nicht** selbst ein — sie
   liefert flach und beschriftet ab. Mehr unter [Die Wiki-Übergabe](#die-wiki-übergabe).
 
-**Der Agent ändert nie etwas selbst.** Er darf lesen und vorschlagen, sonst
-nichts — kein Anlegen, kein Löschen, kein Bestätigen. Die letzte Entscheidung
+**Der Agent ändert nie etwas selbst** — auch der nicht, den die App selbst
+ruft. Er darf lesen und vorschlagen, sonst nichts — kein Anlegen, kein
+Löschen, kein Bestätigen. Die letzte Entscheidung
 trifft immer ein Mensch. Und was auf einem Blatt steht, ist für ihn Inhalt und
 niemals eine Anweisung: eine Aufforderung auf dem Papier landet als Beobachtung
 in der Notiz und wird nicht befolgt.
 
-**Ohne Postboten funktioniert alles genauso**, nur trägt man Fach, Titel und
-Themen dann selbst ein — im Korb oder direkt am Blatt.
+**Ohne API-Schlüssel funktioniert alles genauso**, nur liest dann niemand
+Handschrift: Gedrucktes liest Docling weiter, ein Blatt mit Handschrift ordnet
+man selbst ein — im Korb oder direkt am Blatt —, und die Abschrift tippt man
+ab oder lässt sie fehlen. Die App sagt das in den Einstellungen und am Blatt,
+statt still zu warten.
 
 ### Der Alltag
 
@@ -259,6 +264,30 @@ src/
     inbox.ts        der Eingangskorb: was noch keiner durchgesehen hat, die
                     Vorschläge dazu und die Vorbelegung des Handformulars
                     daraus (getestet)
+    blatt-vorschlag.ts  die Tür für einen Vorschlag zu einem Blatt —
+                    propose_sheet und der Claude-Leser gehen durch dieselbe
+                    (getestet)
+    abschrift-regeln.ts  die Abschreibregeln, einmal für alle: Chat,
+                    Werkzeugbeschreibung und der Leser der App (getestet)
+    claude/
+      client.ts     der Aufruf an Opus: ohne Werkzeuge, mit fester Form der
+                    Antwort und eigener Frist (getestet)
+      ergebnis.ts   jeder Ausgang eines Aufrufs als einer von vier —
+                    Antwort, nichts, Pause, später —, dazu Messung und
+                    Preis (getestet)
+    leser/
+      zuteilung.ts  welche Seite Docling liest und welche Claude — eine
+                    Queue je Prozess, kein Takt
+      regel.ts      die feste Regel dafür (getestet)
+      claude-leser.ts  der Claude-Leser: welches Blatt dran ist, der Aufruf,
+                    die Tür, der Vermerk — eine eigene Queue
+      claude-ablauf.ts  wann er liest und was er sich merkt, reine Rechnung
+                    (getestet)
+      claude-auftrag.ts  was er an einem Blatt tun soll, und die Form seiner
+                    Antwort (getestet)
+      laeufe.ts     sein Gedächtnis: die Tabelle `leser_laeufe`
+    fragenlauf.ts   „Fragen bauen lassen“: eine Klausur, ein Aufruf, ein
+                    Vorschlag im Fragen-Eingang (getestet)
     oauth.ts        der eigene kleine OAuth-Server: Anmeldung eines
                     Programms, Zustimmungs-Codes, Token und die
                     Verbindungen, die in den Einstellungen stehen (getestet)
@@ -355,18 +384,19 @@ src/
     grenzen.test.ts hält genau das fest — kein .tsx im Kern, nur vier erlaubte
                     Importe, kein Schreiben in fremde Tabellen (getestet)
 
-harness/          der Postbote — gehört NICHT zur App, sondern benutzt sie
-  zugang.mts        einmal zustimmen, danach ein eigener Zugang
-  postbote.mts      alle 15 Sekunden nachsehen und Claude ansetzen
-  nachlese.mts      schreibt Blätter nach, die längst eingeordnet sind —
-                    kein zweiter Dienst, sondern ein Lauf auf Zuruf
-  kaefig.mts        der Lauf ohne Bash, ohne Dateien, ohne fremde Server
-  auftrag.mts       was Claude an einem Blatt tun soll
-  mcp.mts           der Draht zur App: ein MCP-Client aus fetch und sonst
-                    nichts, dazu der eigene Zugang in zugang.json
-  sperre.mts        immer nur einer — zwei Läufe auf derselben zugang.json
-                    nehmen einander das Erneuerungs-Token
+  instrumentation.ts  was beim Start der App einmal geschieht: der Anstoß
+                    für beide Leser, das Netz nach einem Neustart
 ```
+
+Daneben liegt `harness/`, der Postbote — ein eigenes Programm, das die App
+von außen benutzte. Seit dem 11.10.2026 ist er **stillgelegt**, nicht
+gelöscht: Die App liest Handschrift selbst, und sein Code bleibt für den Fall
+der Fälle liegen (Notfall-Rückweg unter *Der Postbote — stillgelegt, und der
+Rückweg im Notfall*; nie zugleich mit dem Claude-Leser). Zur App gehört er
+nicht: Die importiert nichts daraus (ein Test wacht darüber), der Typprüfer
+schließt den Ordner aus (`tsconfig.json`), und ins Bild kommt er nicht
+(`.dockerignore`). Geändert wird darin nichts mehr — warum, steht am selben
+Ort.
 
 **Lernen und Verwalten sind getrennt.** Unter *Klausuren* trägt man Termine
 ein und ändert sie; eine Klausur antippen öffnet direkt das Formular. Unter
@@ -418,7 +448,7 @@ aktive. Vorher endete diese Kette bei „dann wähl es selbst", und die Kamera g
 nicht auf, bevor das geschehen war — abends, wenn der Stundenplan schweigt,
 stand also vor jedem Foto ein Auswahlfeld. Jetzt steht die Vermutung sichtbar
 auf dem Kamerabild, ist mit einem Antipper zu ändern, und wenn sie falsch ist,
-schlägt der Postbote das richtige Fach vor, sobald er das Blatt liest. Eine
+bestimmt Jev das richtige Fach, sobald das Blatt gelesen ist. Eine
 Vermutung, die man sieht und die sich später korrigiert, ist besser als ein
 Formular vor der Kamera.
 
@@ -439,7 +469,8 @@ braucht keine Bildbibliothek. Jede der drei Größen steht als eigene Spalte da,
 einen eigenen Leser hat: die Ablage zeigt bis zu zweihundert Vorschauen auf
 einmal (rund 3 MB; als Vollbilder wären es rund 50 MB), die Detailseite ein
 Vollbild, und der Agent bekommt die Lesefassung, weil ein Werkzeug-Ergebnis
-bei rund 150 000 Zeichen endet.
+bei rund 150 000 Zeichen endet. Der Claude-Leser der App bekommt sie auch,
+weil an ihr gemessen ist.
 
 **Der Eingangskorb ist die einzige Tür in den Bestand.** Ein frisch
 aufgenommenes Blatt heißt „Blatt vom 21.8." und trägt kein Thema — es liegt im
@@ -479,6 +510,9 @@ fehlt, steht ein Strich und keine geschätzte.
 Die App bietet ihre Fähigkeiten als Werkzeuge an, und ein Agent in der
 Claude-App benutzt sie. Das ist die vierte Stufe von Phase 5 — der Weg, auf dem
 aus einem abfotografierten Blatt ein Vorschlag wird, ohne dass jemand tippt.
+Handschrift liest seit dem 11.10.2026 die App selbst (*Der Claude-Leser*);
+der Web MCP bleibt der Weg für Fragen im Chat — und für einen Chat, der doch
+einmal ein Blatt abschreibt.
 
 **Verbinden** (einmal, am Rechner):
 
@@ -551,36 +585,375 @@ jemand, der das Token gestohlen hat, und beides beantwortet OAuth gleich.
 **Zum Ausprobieren am eigenen Rechner** braucht es einen Tunnel: Claude verbindet
 sich aus der Cloud, `localhost` erreicht es nie.
 
-## Der Postbote — vom Foto bis zum Vorschlag ohne Handgriff
+## Der Claude-Leser — vom Foto bis zum Vorschlag ohne Handgriff
 
-Wer nicht jedes Mal selbst in der Claude-App fragen will, lässt `harness/`
-laufen: ein kleines Programm auf dem eigenen Rechner, das alle 15 Sekunden in
-den Eingangskorb sieht und Claude auf jedes Blatt ansetzt, das noch keinen
-Vorschlag hat.
+Seit dem 11.10.2026 ruft die App Opus selbst, über die Anthropic-API, und
+schreibt damit jede Seite ab, die Docling nicht sicher liest. Ein Foto, sonst
+nichts: Ist das Blatt zwanzig Sekunden zur Ruhe gekommen, liest Claude die
+Seiten, die ihm gehören, legt einen Vorschlag in den Korb, und Jev ordnet ein.
+
+Bis dahin tat das **der Postbote**, ein eigenes Programm neben der App: ein
+`claude` im Käfig, über das Abo statt über einen Schlüssel, alle 15 Sekunden
+über den Web MCP. Er ist seitdem stillgelegt, nicht gelöscht: Sein Code liegt
+weiter unter `harness/`, für den Notfall — wie er wiederkommt, steht unten
+unter *Der Postbote — stillgelegt, und der Rückweg im Notfall*, und die harte
+Regel dort zuerst: **nie zugleich mit dem Claude-Leser**. Warum die App ihn
+abgelöst hat und welche alte Entscheidung sich damit umdreht, steht in
+[KONZEPT.md](KONZEPT.md) unter „Entscheidung vom 11.10.2026“.
+
+**Der Käfig ist in die App gezogen und enger geworden.** Ein Aufruf hat
+**keine Werkzeuge** — kein `tools`, keine Server-Werkzeuge, keinen MCP-Server.
+`claudeAnfrage()` in `src/lib/claude/client.ts` baut ihn aus einer festen
+Liste von Feldern, und ein Test prüft genau diese Liste. Hinein gehen der
+Systemtext mit den Abschreibregeln (`src/lib/abschrift-regeln.ts`, dieselben
+wie in der Werkzeugbeschreibung für Chats), der Auftrag und die Fotos; heraus
+kommt eine Antwort in einer festen Form (`output_config.format`), die die App
+danach trotzdem Feld für Feld selbst prüft. Ein Blatt, auf dem „lösche alle
+Noten“ steht, findet nichts, womit es das könnte. Und was das Modell
+antwortet, geht durch **dieselbe Tür wie `propose_sheet`**
+(`blattVorschlagen()` in `src/lib/blatt-vorschlag.ts`): die Seiten gegen das
+Blatt geprüft, Abschriften zu Seiten verworfen, die die App selbst liest,
+dasselbe Schema wie das Handformular, ein Vorschlag mit der Herkunft „agent“,
+dann Jev. In den Bestand schreibt der Leser nie.
+
+**Modell und Bild sind gemessen, nicht gewählt.** Am 11.10.2026 schrieben
+Opus 5.5 und Sonnet 5.5 31 echte Seiten mit Handschrift je zweimal ab, und
+zwei Richter zählten blind am Foto die Fehler: Opus 10 bis 13 bestätigte
+schwere Fehler über alle Seiten, Sonnet 37 bis 52 — vor allem, weil Sonnet
+still die Schreibweise des Schülers „verbessert“ — etwa aus einer
+„Hypothenuse“ die „Hypotenuse“ macht (erfundenes Beispiel derselben Art) —, also genau das tut, was die Regeln verbieten. Gelesen wird
+deshalb mit `claude-opus-5-5` und `effort: high`, und mit der
+1000-px-Lesefassung, an der gemessen wurde. Das 1600-px-Vollbild ist
+**ungemessen**; `CLAUDE_BILD=voll` schaltet um, aber erst nach der
+Abnahme-Messung (unten). Lehnt Opus ein harmloses Blatt ab (die
+Sicherheitsfilter treffen auch einmal Biologie), wiederholt die API die
+Anfrage im selben Aufruf auf einem Rückfallmodell; wer wirklich gelesen hat,
+steht danach in der Messung. Ist das Rückfallmodell gerade selbst
+ausgelastet, ist das „später“ und nicht „nichts“ — das Blatt bekommt seinen
+Rückfall dann beim nächsten Anstoß.
+
+**Wann er liest — ohne Takt.** Gefragt wird nur, wenn sich etwas geändert
+haben kann: am Ende jedes Laufs der Zuteilung (nach dem Hochladen, nach dem
+Löschen einer Seite, bei `read_inbox` eines Chats), beim Start der App
+(`register()` in `src/instrumentation.ts`, das Netz nach einem Neustart — antwortet
+die Datenbank dann noch nicht, versucht er es nach 10 s, 30 s, 1 min und
+5 min noch einmal), vom Wecker, wenn ein Blatt noch auf seine Ruhe wartet,
+eine Pause um ist oder eine gescheiterte Zuteilung ihren zweiten Versuch
+bekommt, und vom Knopf am Blatt. Er hat eine eigene Queue, liest ein Blatt
+nach dem anderen, frische Korbblätter vor nachgereichten Seiten, und Docling
+wartet nie auf ihn. Ein Leser je Seite gilt weiter: Claude bekommt nur Seiten
+mit `leser` „claude“ ohne Abschrift, ein Blatt mit einer offenen Seite wartet,
+und Doclings Text sieht er nie. Seiten ohne Leser (leer, von vor dem
+6.10.2026) liest er nur an einem eingeordneten Blatt als nachgereichte Seite,
+im Korb nie von selbst — auch nicht, wenn ein Altblatt „wieder in den Korb“
+gelegt wird; das ist der Knopf.
+
+**Er merkt sich, was er gelesen hat** — in der Tabelle `leser_laeufe`, unter
+dem Stand der jüngsten Seite, und zwar schon BEVOR er ruft (eine Zeile
+„laeuft“, die danach ihr Ergebnis bekommt): auch ein Neustart mitten im
+Aufruf hinterlässt so eine Spur. Ein Lauf mit Ergebnis (Vorschlag, kein
+Vorschlag, nichts) erledigt das Blatt für diesen Stand, gleich ob er
+einordnete, nachlas oder vom Knopf kam; erst eine neue Seite macht es wieder
+zum Fall. Verwerfen, Abhaken, „wieder in den Korb“ oder ein Neustart lösen
+also kein zweites, bezahltes Lesen aus — auch nicht bei einem Vorschlag, der
+nicht vom Leser kam (aus einem Chat, oder einer des Postboten von vor dem
+Wechsel): verwirft ihn ein Mensch, schreibt die App dieselbe Spur, als hätte
+sie ihn selbst gelesen (`verworfenVermerken()` in `src/lib/leser/laeufe.ts`);
+liegen mehrere am selben Stand — zwei Chats, oder ein Chat neben dem Leser —,
+sammelt die eine Spur die Seiten aller, gleich in welcher Reihenfolge sie
+verworfen werden. Mit einer Ausnahme: eine Seite, die weder das Einordnen
+noch ein verworfener Vorschlag abgeschrieben hatte, bekommt am eingeordneten
+Blatt einen zweiten Versuch — nur sie, nicht die Seiten, deren Abschrift
+schon in einem Vorschlag stand. Zwei Ausgänge erledigen nichts: eine **Pause** (Schlüssel
+abgewiesen, Abrechnung, Grenze der API, API gestört — alle Läufe halten an,
+fünf Minuten, bei jeder weiteren Absage verdoppelt, höchstens eine halbe
+Stunde; löst dasselbe Blatt drei Pausen in Folge aus, die an ihm liegen
+können — ein 5xx, ein Strom, der mitten in der Antwort abreißt —, ruht es eine
+Stunde mit einem Wecker danach, und die übrigen gehen vor; Abrechnung,
+Schlüssel, 429 und Netz rechnet er keinem Blatt zu) und **später** (die eigene
+Frist lief ab, die API brach mitten im Strom ab, oder eine Anfrage wurde
+abgewiesen). Bezahlt ist ein Aufruf, sobald das Modell zu schreiben begann.
+Auf die Grenze zählt davon nur, was am Blatt liegen kann: nach **zwei
+bezahlten Abbrüchen** im selben Stand — die eigene Frist, ein Strom, der
+mitten in der Antwort abreißt (auch wenn daraus eine Pause wird), eine
+Ablehnung, deren Rückfall ausgelastet war, eine Antwort, die sich nicht
+speichern ließ, oder ein Neustart mitten im Aufruf — liest es nur noch der
+Knopf. Abbrüche, die sich keinem Blatt sicher zuordnen lassen (der Strom
+reißt ab, der Rückfall ist ausgelastet), verfallen nach einem Tag, damit eine
+Störung kein Blatt für immer stilllegt — höchstens vier solche zählen je
+Stand insgesamt. Ein Blatt, an dem der Strom jedes Mal abreißt, kostet so
+höchstens vier Aufrufe und nicht einen bei jedem Anstoß. Nie zählt ein Ausfall der
+API: eine Überlastung, eine Grenze, das Konto oder der Schlüssel, auch wenn
+die API das erst mitten im Strom meldet und der Versuch bezahlt war — ein
+Ausfall von zwei Stunden legte sonst ein Blatt nach dem anderen still. Ein
+400 oder 429, bevor die API überhaupt antwortete, und eine Verbindung, die
+gar nicht erst zustande kam, kosten ohnehin nichts.
+
+**Frist und Grenze hängen an der Seitenzahl.** Eine Antwort darf 16 000
+Tokens plus 8 000 je Seite haben (höchstens 64 000), und die Frist ist so
+lang, dass diese Tokens auch bei langsamen 25 je Sekunde hineinpassen: gut
+19 Minuten für eine Seite, gut 45 ab sechs. Eine Antwort, die nicht aufhört,
+endet so an `max_tokens` — einmal bezahlt, als „nichts“ gemerkt — und nicht
+an der eigenen Frist, wo sie als „später“ wiederkäme.
+
+**Am Blatt** steht nach jedem Lauf eine Zeile „Zuletzt …“ mit Ergebnis,
+Grund und Preis — bei einem bezahlten Abbruch „bezahlt, Betrag unbekannt“ —,
+und bei mehr als einem Lauf die Summe aller Läufe am Blatt. Gibt es Seiten
+ohne Abschrift, die nicht Docling gehören, und liegt kein Vorschlag am Blatt,
+steht dort der Knopf **„Abschreiben lassen“** — außer, der Leser liest das
+Blatt gerade oder hat es als Nächstes eingeplant. Er fragt das Gedächtnis
+nicht und ist der Weg nach einem „nichts“ (etwa einem Inhaltsfilter) und für
+die fünfzehn Altblätter vom August, die nach dem Willen des Nutzers niemand
+von selbst abschreibt — ihr Vorschlag bleibt dann für einen Menschen im Korb.
+Unmittelbar vor dem Aufruf fragt er aber, ob seit dem Druck (oder seit dem
+Stand, den die Seite zeigte) schon ein anderer Lauf an dem Blatt war; dann
+tut er nichts, und ein Blatt wird nicht zweimal bezahlt. Gefragt wird mit
+einer Zahl und der id des gezeigten Laufs, nicht mit der Uhr — die der
+Datenbank und die des Prozesses gehen nicht auf die Millisekunde gleich. Er ersetzt
+`harness/nachlese.mts` und `postbote --blatt`, die beide nur von Hand im
+Container liefen.
+
+**Fragen bauen lassen.** Auf der Klausurseite im Abruf (`/abruf/klausur`)
+baut ein Knopf aus den Abschriften der Blätter zu den Themen der Klausur
+Abruffragen: ein Aufruf, höchstens zwölf Fragen, ein Vorschlag im
+Fragen-Eingang (`src/lib/fragenlauf.ts`). Von selbst läuft das nie, und
+übernommen wird nur von einem Menschen, durch dieselbe Prüfung wie eine Frage
+von Hand — das Zitat muss wörtlich in der Abschrift stehen. Bis zum 11.10.2026
+war das `harness/fragen.mts`, von Hand im Container des Postboten.
+
+**Im Protokoll der App** steht beim Start einmal `Claude-Leser bereit: …`
+oder `Claude-Leser aus: kein ANTHROPIC_API_KEY …`, und je Lauf eine Messzeile
+mit Dauer, Tokens, Modell und Preis:
 
 ```bash
-npx tsx harness/zugang.mts     # einmal zustimmen
-npx tsx harness/postbote.mts   # laufen lassen
+sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose logs --tail=200 app' | grep -E 'Claude|Leser'
 ```
 
-Es gehört ausdrücklich **nicht zur App**: was Claude abschreibt, schreibt es
-außerhalb ab. Welche Seiten das sind, entscheidet seit dem 6.10.2026 die App —
-sauberen Druck liest sie selbst mit Docling, der Postbote bekommt den Rest
-(siehe [Ein Leser je Seite](#ein-leser-je-seite--die-app-entscheidet)). Er
-benutzt sie von außen, durch dieselbe Tür wie die
-Claude-App, mit eigener Zustimmung und eigenem Trennen-Knopf in den
-Einstellungen. Er läuft über Claude Code und damit über das Abo — kein
-API-Schlüssel, keine Rechnung.
+### Was es kostet
 
-Der Lauf, in den ein fremdes Blatt gerät, ist dabei leer geräumt: `--tools ""`
-nimmt die eingebauten Werkzeuge weg, `--strict-mcp-config` alle anderen Server.
-Übrig bleiben die Werkzeuge dieser App, gemessen und nachgezählt. Warum das
-nötig ist und was sonst noch dahintersteht, steht in
-[harness/README.md](harness/README.md).
+Echtes Geld, vom API-Schlüssel in der `.env` des NAS — anders als der
+Postbote, der über das Abo lief und nur Kontingent kostete.
+
+| Was | Wie viel |
+|---|---|
+| Preis Opus 5.5 | 4 $ je Million Tokens Eingabe, 20 $ Ausgabe, 0,20 $ aus dem Cache (Stand Oktober 2026) |
+| eine Seite Handschrift | 0,15 bis 0,28 $, gemessen am 11.10.2026 in derselben Messung wie oben — außerhalb der App, mit dem Auftrag des Postboten |
+| ein Fragenlauf | über die API ungemessen; im Käfig des Postboten waren es 0,59 $ für zwölf Fragen (12.9.2026) |
+| ein Aufruf höchstens | 16 000 + 8 000 Tokens je Seite Ausgabe, höchstens 64 000 (`max_tokens`): 0,48 $ für eine Seite, 1,28 $ ab sechs |
+| der Monat bisher | unter *Einstellungen → Handschrift abschreiben* und in `nas.sh stand`; was die Läufe an einem Blatt gekostet haben, steht an ihm |
+
+Gespart wird nicht am Modell, sondern daran, was gar nicht erst zu Claude
+geht: Gedrucktes liest Docling, und das Gedächtnis verhindert, dass ein Blatt
+zweimal bezahlt wird. Ein Ausgabelimit gehört trotzdem in die Console des
+Workspaces, zu dem der Schlüssel gehört (am 11.10.2026: 25 $ im Monat).
+Rückfallmodelle nach einer Ablehnung (Opus 5, Opus 4.8) rechnet die App zu
+ihren eigenen Preisen; kennt sie ein Modell nicht, steht der Preis als
+unbekannt da und die Monatssumme als Untergrenze („mindestens …“). Dasselbe
+gilt für bezahlte Abbrüche — die eigene Frist, ein Strom, der abriss, ein
+Neustart mitten im Aufruf —: sie haben Tokens gekostet, aber das SDK reicht
+dann keine Messung heraus. Gab es im Monat einen, steht „mindestens“ vor der
+Summe und dahinter, wie viele fehlen.
+
+### Einrichten
+
+Lokal: `ANTHROPIC_API_KEY` in `.env.local`. Ohne Schlüssel läuft alles wie
+bisher, nur liest niemand Handschrift — das steht dann in den Einstellungen,
+am Blatt und einmal im Protokoll.
+
+Auf dem NAS richtet ihn **`scripts/claude-einrichten.sh`** ein, nach einem
+`hoch` mit diesem Stand (die ganze Reihenfolge steht im nächsten Abschnitt):
+
+```bash
+sudo bash /volume1/docker/schulapp/repo/scripts/claude-einrichten.sh
+```
+
+Es fragt den Schlüssel verdeckt ab und **prüft ihn, bevor es etwas ändert** —
+aus dem App-Container, kostenlos (`scripts/nas-probe-claude.mjs`: das Modell
+abrufen und die Form der Anfrage zählen lassen). Danach, in dieser
+Reihenfolge: die `.env` sichern und den Schlüssel eintragen;
+`ANTHROPIC_API_KEY` und `CLAUDE_BILD` in die Override-Datei, nur ergänzt,
+denn sie gehört vier Skripten; den Postboten mit `docker compose down`
+anhalten und seinen Ordner in `postbote.stillgelegt-<Datum>` umbenennen; die
+Korbblätter von vor dem Wechsel vermerken, wenn man in Schritt 0 Ja gesagt
+hat (siehe unten, Schritt 4 und 6); erst dann die App ohne Bau neu erzeugen
+und nachsehen — kommt der Schlüssel an
+(verglichen über eine Prüfsumme), meldet die App „Claude-Leser bereit“, nimmt
+die API ihn an. Der Schlüssel steht dabei nie im Protokoll, auf dem
+Bildschirm oder in einer Befehlszeile. Ein zweiter Lauf ist harmlos;
+`--neuer-schluessel` ersetzt den Schlüssel.
+
+| Variable | wofür | ohne sie |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | der Claude-Leser und „Fragen bauen lassen“. Nur zur Laufzeit — nie als `NEXT_PUBLIC_` und nie als Build-Argument, sonst stünde er im Bild | Handschrift liest niemand, die beiden Knöpfe stehen nicht da; alles andere läuft |
+| `CLAUDE_BILD` | `voll` schickt das 1600-px-Vollbild statt der Lesefassung — erst nach der Abnahme-Messung | die gemessene Lesefassung (1000 px); jeder andere Wert ebenso |
+
+### Auf das NAS bringen — dieser Stand
+
+Der Wechsel vom Postboten zum Claude-Leser. Drei Dinge machen ihn anders als
+ein gewöhnliches `hoch`: Die Datenbank braucht die Tabelle `leser_laeufe`,
+und zwar **vor** dem Bau. `~/nas.sh` ist noch die alte Kopie, die weder diese
+Tabelle kennt noch prüft, ob danach zwei läsen. Und
+Postbote und Claude-Leser dürfen **nie zugleich** lesen — sonst liegen zwei
+Vorschläge am selben Blatt, und einer davon ist bezahlt. Der Postbote liest
+deshalb weiter, bis `claude-einrichten.sh` ihn ablöst: Ohne Schlüssel liest
+die neue App keine Handschrift, und so gibt es keine Stunde ohne Leser.
+Vorher muss der Stand auf GitHub in `main` liegen.
+
+1. **Sichern** — ein Abzug der Datenbank neben die Compose-Datei:
+   ```bash
+   sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose exec -T db sh -c "exec pg_dump -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" --format=custom" > abzug-$(date +%Y%m%d)-vor-claude.dump && ls -l abzug-*-vor-claude.dump'
+   ```
+2. **Die neue `nas.sh` zuerst.** `fetch` holt nur und ändert weder den Klon
+   noch die App. Die alte Kopie kennt die neue Tabelle nicht — sie baute ohne
+   sie, und jeder Lauf des Lesers scheiterte — und sie prüft nicht, ob danach
+   zwei Leser läsen. (Ihr Angleichen der Postboten-Kopie bliebe harmlos:
+   `harness/` ist in diesem Stand unverändert.)
+   ```bash
+   sudo git -C /volume1/docker/schulapp/repo fetch origin main
+   sudo git -C /volume1/docker/schulapp/repo show origin/main:scripts/nas.sh > /tmp/nas.sh.neu && sudo cp /tmp/nas.sh.neu ~/nas.sh
+   ```
+3. **`sudo ~/nas.sh hoch`** — holt den Stand und hält vor dem Bau an:
+   „HALT: Der Datenbank fehlt leser_laeufe.frist_bis“, darunter die Zeile
+   zum Einspielen. Gebaut ist nichts; App und Postbote laufen weiter wie
+   bisher.
+4. **Zählen, einspielen, nachsehen.** psql öffnen:
+   ```bash
+   sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose exec db sh -c "exec psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\""'
+   ```
+   darin die Zähl-Abfrage aus dem Kopf von `scripts/leser-laeufe-tabelle.sql`
+   und `\q`. So viele Korbblätter ohne Vorschlag liest der neue Leser beim
+   ersten Anstoß, jedes bezahlt — auch solche, die der Postbote schon einmal
+   mit „nichts“ abgeschlossen hat, und solche, deren Vorschlag ein Mensch
+   verworfen hat (Jev ordnete sie danach womöglich selbst ein), denn die
+   Merkliste des Postboten `gesehen.json` wandert nicht mit. Ob sie gelesen
+   werden, entscheidest du in Schritt 6: `claude-einrichten.sh` zählt sie noch
+   einmal und **fragt**, ob sie als „vor dem Wechsel gesehen“ vermerkt werden
+   (Vorgabe: ja — dann liest sie der Leser nicht von selbst, auch nicht,
+   wenn du sie danach abhakst, und am Blatt bleibt „Abschreiben lassen“).
+   Korbblätter, an denen beim Wechsel noch ein Vorschlag des Postboten liegt,
+   zählen hier nicht und brauchen keinen Vermerk: verwirfst du ihn später,
+   merkt sich die App das selbst (`verworfenVermerken()` in
+   `src/lib/leser/laeufe.ts`) — ebenso bei einem verworfenen Vorschlag aus
+   einem Chat. Dann die Zeile, die `hoch` genannt hat, und
+   in psql `\d leser_laeufe`.
+5. **Noch einmal `sudo ~/nas.sh hoch`** — baut, wartet auf die App und sagt:
+   Der Postbote läuft noch, die neue App hat keinen Schlüssel. Das ist so
+   gewollt; bis zum nächsten Schritt liest weiter er. Ob die App einen
+   Schlüssel hat, fragt `hoch` die laufende App selbst und nicht die `.env`:
+   steht er nur dort, aber nicht in der Override-Datei, sagt es das und rät
+   zu `claude-einrichten.sh`, nicht dazu, den Postboten anzuhalten. Ebenso,
+   wenn `claude-einrichten.sh` vor Schritt 5 anhielt und ein `hoch` nichts
+   Neues findet: dann sagt es, dass die App noch nicht neu erzeugt ist.
+6. **`claude-einrichten.sh`** (Befehl unter *Einrichten*) — Schlüssel, Probe,
+   `.env`, Override-Datei, Postbote anhalten und stilllegen, die Korbblätter
+   von vor dem Wechsel vermerken, App neu erzeugen, nachsehen. Erst „Fertig“
+   heißt: Es liest nur noch die App. Schon in seinem ersten Schritt sagt es
+   noch einmal, wie viele Blätter dabei bezahlt gelesen würden, und fragt, ob
+   die Korbblätter darunter vermerkt werden sollen. Es braucht dafür ein
+   Terminal: ohne eines hält es an, statt still durchzulaufen.
+7. **Probe** mit einem Blatt Handschrift. Erwartet im Protokoll der App
+   (Befehl oben) **genau ein** Lauf zu diesem Blatt, am Blatt die Zeile
+   „Zuletzt …“ mit Preis und unter *Einstellungen* die Summe des Monats. Ein
+   Leser, der von außen gar nicht ausgelöst wurde, gilt als ungeprüft — ob er
+   läuft, zeigt erst ein echtes Blatt.
+8. **Erst danach die Zugänge des Postboten zurückziehen:** in der App unter
+   *Einstellungen → Verbundene Programme* den Postboten trennen (und jede
+   weitere Postboten-Zeile von Laptop oder Pi), die Abo-Anmeldung in seinem
+   `claude-home` abmelden oder löschen. Läuft irgendwo sonst noch ein
+   Postbote — Laptop, Raspberry Pi —, ihn anhalten; das sieht kein Skript.
+   Sein Code bleibt dabei liegen; ein Rückweg braucht danach nur eine neue
+   Zustimmung (`npx tsx harness/zugang.mts`) und eine neue Anmeldung.
+
+### Der Postbote — stillgelegt, und der Rückweg im Notfall
+
+> **Stillgelegt seit dem 11.10.2026 — nicht gelöscht.**
+>
+> **Warum.** Seit diesem Tag liest die App Handschrift selbst (oben, *Der
+> Claude-Leser*; warum, steht in [KONZEPT.md](KONZEPT.md) unter „Entscheidung
+> vom 11.10.2026“). Den Postboten braucht es dafür nicht mehr. Sein Code
+> bleibt trotzdem unter `harness/`, für den Fall der Fälle (Entscheidung des
+> Nutzers vom selben Tag) — etwa wenn der API-Schlüssel gesperrt oder das
+> Ausgabelimit erreicht ist und Handschrift bis dahin über das Abo gelesen
+> werden soll. Sein Ordner auf dem NAS liegt angehalten und umbenannt als
+> `/volume1/docker/postbote.stillgelegt-<Datum>` (`claude-einrichten.sh`,
+> Schritt 4). **Den Ordner nicht löschen: Er ist der Rückweg.**
+>
+> **NIE ZUGLEICH MIT DEM API-LESER.** Lesen beide, liegen zwei Vorschläge am
+> selben Blatt, und einer davon ist bezahlt. Deshalb gilt die Reihenfolge,
+> und zwar genau so:
+>
+> 1. **Erst der App den Schlüssel nehmen.** `ANTHROPIC_API_KEY` aus
+>    `/volume1/docker/schulapp/.env` löschen (oder auskommentieren), dann die
+>    App neu erzeugen — ohne Bau:
+>    `sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose up -d app'`.
+>    Nachsehen statt glauben: `sudo ~/nas.sh stand` muss „Schlüssel: FEHLT“
+>    sagen. Ohne Schlüssel läuft die App wie bisher, nur liest sie keine
+>    Handschrift.
+> 2. **Den Ordner zurückbenennen:**
+>    `sudo mv /volume1/docker/postbote.stillgelegt-<Datum> /volume1/docker/postbote`.
+> 3. **Die Sperre löschen:** `sudo rm -f /volume1/docker/postbote/harness/lauf.lock`.
+>    `docker compose down` hat ihn beim Stilllegen mit SIGTERM beendet, und
+>    dabei bleibt sie liegen; mit ihr startet er nicht. Löschen darf man sie
+>    nur, weil er nicht läuft (am 16.9.2026 teuer gelernt).
+> 4. **Starten:** `sudo sh -c 'cd /volume1/docker/postbote && /usr/local/bin/docker compose up -d'`.
+>
+> `sudo ~/nas.sh postbote` druckt genau diese Schritte mit den echten Pfaden.
+> Wurde der Postbote nach dem Wechsel unter *Einstellungen → Verbundene
+> Programme* getrennt oder seine Abo-Anmeldung gelöscht (Schritt 8 oben),
+> braucht er vorher eine neue Zustimmung (`npx tsx harness/zugang.mts`) und
+> eine neue Anmeldung — wie, steht unter „Einrichten“ in `harness/README.md`.
+> Zurück zum API-Leser in der umgekehrten Reihenfolge: Postbote anhalten
+> (`… docker compose down` in seinem Ordner), Ordner wieder umbenennen, dann
+> `sudo bash /volume1/docker/schulapp/repo/scripts/claude-einrichten.sh` — es
+> trägt den Schlüssel ein und erzeugt die App erst danach neu. Läuft noch ein
+> Postbote, während die App einen Schlüssel hat, hält `nas.sh hoch` an.
+
+Ein `sudo ~/nas.sh zurueck` auf einen Stand vor dem 11.10.2026 bringt eine
+App zurück, die Handschrift nicht selbst liest; dann entfällt Schritt 1.
+`zurueck` schaltet den Postboten nicht von selbst an, sondern sagt, wie er
+wiederkommt — die Schritte 2 bis 4. Den Schlüssel in der `.env` stört der
+alte Stand nicht, er liest ihn nicht; die Tabelle `leser_laeufe` auch nicht.
+Vor dem nächsten `hoch` muss der Postbote wieder aus — sonst hält `hoch` vor
+dem Bau an, damit nicht zwei lesen.
+
+**Warum dieser Kasten hier steht und nicht in `harness/README.md`.** Dort
+stand er zuerst, und damit war `harness/` nicht mehr derselbe wie auf `main`.
+Eine alte Kopie von `nas.sh` auf dem NAS — bis Schritt 2 oben ist es genau
+die — vergleicht bei jedem `hoch` die Prüfsummen von `harness/*.mts` und
+`harness/README.md` mit der Kopie beim Postboten; weichen sie ab, hält sie
+ihn an, kopiert und **startet ihn neu**, auch wenn er vorher gar nicht lief
+(nachgestellt am 11.10.2026: `docker compose stop`, dann `up -d`). Deshalb
+bleibt `harness/` in diesem Stand Byte für Byte, wie es war: Der Postbote
+ist stillgelegt, nicht geändert, und alles darin beschreibt ihn, wie er bis
+zum 11.10.2026 lief. Ob das stimmt, prüft `bash scripts/probe-nas.sh`
+(Abschnitt 6) mit genau dieser alten Kopie.
+
+### Die Abnahme-Messung
+
+Zwei Fragen beantwortet nur ein Lauf über den Aufruf, den die App jetzt
+selbst macht. Liest der Abschreiber der App so gut wie die Messung vom
+11.10.2026? Derselbe Text sagt es nicht von selbst — Systemtext, Auftrag und
+Form der Antwort sind neu geschrieben. Und liest das Vollbild besser, oder
+kostet es nur mehr Bild-Tokens?
+
+Dafür liest `scripts/abschrift-messen.mts` echte Seiten über genau diesen
+Aufruf, **ohne Vorschlag und ohne Vermerk**, je Seite in beiden Fassungen,
+und schreibt eine JSON-Zeile je Aufruf: den Text des Modells, Notiz und
+Grund, die Abschrift, die heute an der Seite steht, zum Vergleich, und die
+Messung samt Preis. Gebündelt wird es auf dem Rechner, zu einer einzigen
+`abschrift-messen.mjs` mit dem esbuild aus `node_modules` (also aus dem
+Lockfile), und auf dem NAS läuft nur `node` darauf, in einem Container aus dem
+Bild der App — die Pakete kommen aus dessen `node_modules`, im Container wird
+nichts installiert. Bis zur Abnahme vom 11.10.2026 holte die Zeile `tsx` per
+`npx` aus der Registry in einen Container, der Schlüssel und Datenbank in
+seiner Umgebung trägt. Beide Zeilen stehen im Kopf von
+`scripts/abschrift-messen.mts`. Jeder Aufruf ist bezahlt, höchstens 40 Seiten
+je Lauf, und eine Pause bricht ab. Erst danach ist `CLAUDE_BILD=voll` eine
+Entscheidung und kein Raten.
 
 ### Jev ordnet ein — seit dem 4.10.2026 ohne Eingangskorb
 
-Ziel: ein Foto machen, sonst nichts. Legt der Postbote seinen Vorschlag an,
+Ziel: ein Foto machen, sonst nichts. Legt der Claude-Leser seinen Vorschlag an,
 entscheidet die App gleich danach mit **Jev** (TypeSafe, ein Entscheidungsmodell,
 das keinen Text schreibt) über Fach und Themen und übernimmt den Vorschlag
 samt Titel, Notiz und Abschrift — durch dieselbe Tür wie der Knopf
@@ -593,11 +966,12 @@ reine Skizze). Und ein Blatt, das schon abgelegt ist, fasst Jev nie an — die
 Nachlese schickt Abschriften durch dieselbe Tür.
 
 **Nachgereichte Seiten.** Hängt jemand an ein schon eingeordnetes Blatt eine
-Seite an — oder kommt eine Seite dazu, während der Postbote das Blatt gerade
+Seite an — oder kommt eine Seite dazu, während Claude das Blatt gerade
 liest —, entscheidet die App auch für sie, wer liest. Liest Docling, steht die
-Abschrift gleich da. Liest Claude, holt der Postbote sie von selbst nach, und
-die App übernimmt die reine Abschrift ohne Jev und ohne Rückfrage. Welche Seite
-als nachgereicht gilt, bestimmt die App (`nachgereichtUngelesen()` in
+Abschrift gleich da. Liest Claude, holt der Claude-Leser sie von selbst nach
+(nur diese Seiten, nur die Abschrift), und die App übernimmt sie ohne Jev und
+ohne Rückfrage. Welche Seite als nachgereicht gilt, bestimmt die App
+(`nachgereichtUngelesen()` in
 `src/lib/materials.ts`): ungelesen an einem eingeordneten Blatt, und dann nach
 `leser` — „claude" immer, „offen" und „docling" nie (die liest die App selbst),
 und eine Seite von vor dem 6.10.2026 (`leser` leer) wie bis dahin: nach dem
@@ -606,15 +980,14 @@ Blattes. Die fünfzehn Altblätter vom August haben keine abgeschriebene Seite,
 ihre Seiten sind alle älter als das Einordnen, und sie bleiben damit außen vor —
 und schreibt ein Lauf ihre alten Seiten trotzdem mit ab, bleibt der Vorschlag
 für einen Menschen im Korb (`onlyTranscribesAttachedPages()` in `src/lib/auto-file.ts`).
-Dasselbe gilt für eine von Hand gestartete Nachlese.
+Dasselbe gilt für den Knopf „Abschreiben lassen“ am Blatt.
 
-**Reihenfolge auf dem NAS.** Der neue Auftrag des Postboten lässt das Fach
-weg, weil Jev es bestimmt. Deshalb kommt `harness/` erst aufs NAS, wenn dort
-`TYPESAFE_API_KEY` in der App ankommt und Jev antwortet — sonst bekäme ein
-Blatt gar keinen Fachvorschlag. `scripts/jev-und-docling.sh` hält diese
-Reihenfolge ein: Es fragt Jev aus dem App-Container heraus
-(`scripts/nas-probe-jev.mjs`) und stellt den Postboten nur um, wenn die
-Antwort stimmt.
+**Das Fach kommt nur von Jev.** Der Claude-Leser schlägt keines vor — seine
+Antwortform hat dafür gar kein Feld. Ein Fach mit falscher Schreibweise ließe
+sonst den ganzen Vorschlag samt bezahlter Abschrift scheitern. Fehlt Jev,
+bleibt der Vorschlag mit der Abschrift im Korb, und das Fach wählt ein
+Mensch. Auf dem NAS richtet `scripts/jev-und-docling.sh` Jev ein und fragt
+ihn zur Probe aus dem App-Container heraus (`scripts/nas-probe-jev.mjs`).
 
 Gemessen vor dem Einbau an 20 abgelegten Blättern: 19 Mal dasselbe Fach wie
 der Mensch, und das zwanzigste war falsch abgelegt. Den Ausschlag gaben die
@@ -638,7 +1011,8 @@ Entscheidung lag dort, wo sie niemand prüfen kann.
   Rohtext bleibt in `material_pages.docling_text` und wird nie neu gerechnet.
 - Ist das **sauberer Druck**, wird er die Abschrift der Seite — gekennzeichnet,
   und Claude sieht diese Seite nie.
-- **Alles andere liest Claude**, über den Postboten, vom Foto und ohne Vorlage:
+- **Alles andere liest Claude**, vom Foto und ohne Vorlage — seit dem
+  11.10.2026 ruft die App dafür selbst Opus, bis dahin war es der Postbote:
   Handschrift, Formeln, Seiten mit wenig Text und jede Seite, über die die App
   nicht entscheiden kann.
 
@@ -669,7 +1043,9 @@ Fehlschlag von Docling oder Jev; eine Seite, die Claude bekommen hat, bleibt
 bei Claude. Die eine Ausnahme ist ein Fehler der Zuteilung selbst, nach dem die
 Seite nicht einmal für Claude festgehalten werden konnte — meist war die
 Datenbank kurz weg: die Seite ruht dann zehn Minuten und bekommt einen neuen
-Versuch, statt bis zum nächsten Neustart auf `offen` zu hängen.
+Versuch, statt bis zum nächsten Neustart auf `offen` zu hängen. Den Versuch
+stößt ein Wecker an, wenn die Ruhe um ist (seit dem 11.10.2026; bis dahin tat
+das das `read_inbox` des Postboten alle fünfzehn Sekunden).
 
 Zwei Gründe stehen nur in Randfällen da: `schon-gelesen` — die Seite hatte
 eine Abschrift von Hand oder von Claude, bevor die App entschied, also fragt
@@ -709,9 +1085,11 @@ Abnahme reichen Jevs Werte aus der Messung; neu gefragt wird Jev dafür nicht.
 
 Die App schreibt eine Docling-Abschrift nur in eine Seite ohne Abschrift. Und
 was zu einer Seite mit `leser` „docling" oder „offen" oder zu einer schon
-gelesenen Seite hereinkommt — von einem älteren Postboten oder aus einem Chat
-in der Claude-App —, verwirft `propose_sheet` und nennt es in der Antwort
-(`verworfen`), statt zu scheitern; die übrigen Seiten bleiben im Vorschlag.
+gelesenen Seite hereinkommt — aus einem Chat in der Claude-App, oder vom
+Claude-Leser, wenn sich eine Seite während seines Laufs geändert hat —,
+verwirft die Tür (`blattVorschlagen()`, dieselbe für `propose_sheet`) und
+nennt es (`verworfen`), statt zu scheitern; die übrigen Seiten bleiben im
+Vorschlag.
 
 **Gekennzeichnet** ist eine maschinell gelesene Seite überall, wo ihre Abschrift
 erscheint: an der Blattseite („maschinell gelesen (Docling)", am Abschriftfeld
@@ -726,31 +1104,34 @@ Seite stammt, und im Web MCP (`leser` und `maschinell` in `read_sheet`,
 maschinell gelesene Seite hat **keine ⟨spitzen Klammern⟩** — Docling weiß
 nicht, wo es unsicher war.
 
-**Ein Blatt, das Docling ganz gelesen hat, braucht keinen Postboten.** Sind alle
+**Ein Blatt, das Docling ganz gelesen hat, braucht Claude nicht.** Sind alle
 Seiten entschieden und gelesen und ist die letzte mindestens 20 Sekunden alt —
-dieselbe Ruhe wie beim Postboten, denn die Rückseite kommt erst nach der
-Vorderseite —, legt die App **einmal** selbst einen Vorschlag an, mit der
+dieselbe Ruhe, die auch der Claude-Leser abwartet, denn die Rückseite kommt
+erst nach der Vorderseite —, legt die App **einmal** selbst einen Vorschlag an, mit der
 Herkunft „von der App": als Titel die erste Überschrift der ersten Seite,
 wörtlich und gekürzt (sonst bleibt der Platzhalter), keine Abschriften, denn die
-stehen schon am Blatt. Danach ordnet Jev ein wie nach einem Postboten-Lauf.
+stehen schon am Blatt. Danach ordnet Jev ein wie nach einem Lauf des Claude-Lesers.
 Scheitert Jev, bleibt der Vorschlag im Korb für einen Menschen; einen zweiten
 Versuch gibt es nicht. Geprüft wird das nur nach einem Ereignis — eine Seite ist
 entschieden, die Ruhe ist um, oder ein Mensch hat eine Seite gelöscht (dann kann
-das Blatt gerade ganz von Docling gelesen sein). Ein gemischtes Blatt geht wie
-bisher an den Postboten, der aber nur noch die Claude-Seiten bekommt. Kann
-Claude keine davon lesen, legt er trotzdem einen Vorschlag an, nur mit der
-Notiz, welche Seite es war. Jev ordnet danach mit allen Abschriften ein, und
+das Blatt gerade ganz von Docling gelesen sein). Ein gemischtes Blatt geht an
+den Claude-Leser, der nur die Claude-Seiten bekommt. Kann er keine davon
+lesen, legt er trotzdem einen Vorschlag an, nur mit der Notiz, welche Seite
+es war. Jev ordnet danach mit allen Abschriften ein, und
 übernommen wird immer nur Ungelesenes — eine Docling-Abschrift ersetzt dabei
 nichts still, auch nicht beim Übernehmen von Hand im Korb: schreibt die App
 zwischen Anzeigen und Übernehmen eine Abschrift, bleibt die Seite unberührt,
 und der Korb sagt es.
 
 **Angestoßen** wird das nach jedem Hochladen (`after()` in
-`src/app/(app)/material/actions.ts`, läuft nach der Antwort an den Browser) und
-bei jedem `read_inbox` des Postboten. Das Zweite ist das Netz nach einem
-Neustart: Seiten, die noch auf `offen` stehen, nimmt der nächste Anstoß mit.
+`src/app/(app)/material/actions.ts`, läuft nach der Antwort an den Browser),
+nach dem Löschen einer Seite, bei jedem `read_inbox` eines Chats und beim
+Start der App (`register()` in `src/instrumentation.ts`). Der Start ist das
+Netz nach einem Neustart: Seiten, die noch auf `offen` stehen, nimmt er mit —
+bis zum 11.10.2026 tat das das `read_inbox` des Postboten, alle 15 Sekunden.
 Einen Takt gibt es nicht. Eine Queue je Prozess sorgt dafür, dass Docling eine
-Seite nach der anderen rechnet und keine zweimal.
+Seite nach der anderen rechnet und keine zweimal, und am Ende jedes Laufs
+kommt der Claude-Leser dran.
 
 **Im Protokoll der App** steht je Seite eine Zeile, und eine je Vorschlag der
 App (die ids hier ausgedacht):
@@ -768,13 +1149,12 @@ sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose logs --
 **Die Notbremse.** `LESER_REGEL=aus` schaltet Docling als Leser ab, ohne Bau:
 Jede neue Seite bekommt beim Anlegen `leser` „claude", Seiten, die noch offen
 stehen, gehen ohne Docling an Claude (`aus`) — der Stand vor Docling.
-Abschriften, die Docling schon geschrieben hat, bleiben, gekennzeichnet. Eine
+Abschriften, die Docling schon geschrieben hat, bleiben, gekennzeichnet. Was
+Claude bekommt, liest der Claude-Leser wie jede andere Claude-Seite. Eine
 Zeile unter `services.app.environment` der `docker-compose.override.yml`
-(`sudo vi` — die Datei gehört `jev-und-docling.sh` und
-`kalender-einrichten.sh`, und keines der beiden trägt die Zeile ein). Vorsicht:
-Scheitert ein erneuter Lauf von `jev-und-docling.sh`, löscht es die Datei (siehe
-unten), und der nächste Lauf legt sie frisch an — ohne die Notbremse. Nach
-jedem Lauf dieses Skripts also mit dem `printenv` unten nachsehen.
+(`sudo vi` — die Datei gehört vier Skripten, und keines trägt die Zeile ein;
+siehe unten). Nach einem Lauf eines dieser Skripte schadet ein Blick mit dem
+`printenv` unten nicht.
 
 ```yaml
       LESER_REGEL: "aus"
@@ -794,6 +1174,7 @@ Zurück: die Zeile löschen, dieselben zwei Befehle.
 | `DOCLING_URL` | wo Docling antwortet (`http://docling:5001`, gesetzt von `jev-und-docling.sh`) | jede neue Seite liest Claude (`docling-fehlt`) |
 | `TYPESAFE_API_KEY` | Jev: die Einstufung der Docling-Seiten und das Einordnen | jede neue Seite liest Claude (`jev-fehlt`), und eingeordnet wird von Hand |
 | `LESER_REGEL` | `aus` ist die Notbremse; Groß- und Kleinschreibung egal | die Regel gilt |
+| `ANTHROPIC_API_KEY` | der Claude-Leser (siehe dort) | Claude-Seiten liest niemand; sie bleiben ohne Abschrift |
 
 #### Docling auf dem NAS
 
@@ -816,20 +1197,23 @@ sudo bash /volume1/docker/schulapp/repo/scripts/jev-und-docling.sh
 
 Es legt eine `docker-compose.override.yml` neben die Compose-Datei (Docling
 nur im inneren Netz, kein `ports:`; die App bekommt `DOCLING_URL` und
-`TYPESAFE_API_KEY`), prüft aus dem App-Container heraus, ob Jev antwortet und
-Docling rechnet, und gleicht den Postboten erst an, wenn Jev richtig
-geantwortet hat. Was es vorher nachsieht und wie es sich rückgängig machen
+`TYPESAFE_API_KEY`) und prüft aus dem App-Container heraus, ob Jev antwortet
+und Docling rechnet. Was es vorher nachsieht und wie es sich rückgängig machen
 lässt, steht im Kopf des Skripts.
 
-> **Die Override-Datei gehört seit dem Google Kalender zweien.**
-> `kalender-einrichten.sh` trägt dort die drei `GOOGLE_*`-Namen ein (siehe
-> *Google Kalender*). Wer die Datei löscht, schaltet den Kalender mit ab — und
-> das tut nicht nur der Rückweg oben im Skript (`rm docker-compose.override.yml`),
-> sondern auch `jev-und-docling.sh` selbst, wenn ein erneuter Lauf am Bild, am
-> Formelmodell oder an Compose scheitert. Danach `kalender-einrichten.sh` noch
-> einmal; es sieht dann die fehlende Datei samt Jev-Schlüssel in der `.env`, hält
-> an und sagt, dass zuerst `jev-und-docling.sh` laufen muss — legte es die Datei
-> selbst an, trüge sie seine Marke, und `jev-und-docling.sh` fasste sie nie wieder an.
+> **Die Override-Datei gehört vier Skripten.** `jev-und-docling.sh` legt sie
+> an; `kalender-einrichten.sh` trägt die drei `GOOGLE_*`-Namen ein (siehe
+> *Google Kalender*), `iserv-einrichten.sh` die `ISERV_*`-Namen und
+> `claude-einrichten.sh` `ANTHROPIC_API_KEY` und `CLAUDE_BILD`. Wer die Datei
+> löscht, schaltet all das mit ab — den Claude-Leser still: die App läuft
+> weiter, nur liest niemand mehr Handschrift. Der Rückweg im Skript sagt
+> deshalb, welche Zeilen für Docling herauszunehmen sind, sobald auch andere
+> darin stehen, und `jev-und-docling.sh` entfernt die Datei nach einem
+> gescheiterten Lauf seit dem 11.10.2026 nur noch, wenn derselbe Lauf sie
+> angelegt hat. Ist sie doch weg: erst `jev-und-docling.sh`, dann die drei
+> anderen noch einmal. Ist Jev eingerichtet, halten sie an, solange die Datei
+> fehlt, und sagen das — legte eines sie selbst an, trüge sie nicht die Marke
+> von `jev-und-docling.sh`, und das fasste sie nie wieder an.
 
 **Das Bild allein reicht nicht.** `docling-serve-cpu` bringt das Formelmodell
 nicht mit (seine Modellliste: layout, tableformer, picture_classifier,
@@ -848,91 +1232,32 @@ es für zehn Minuten — ein Fehler an einer einzelnen Seite reicht dafür nicht
 Jede Seite in der Pause liest Claude (`docling-pause`), nachgeholt wird nichts,
 und im Protokoll steht `Docling pausiert bis …` mit dem Grund.
 
-#### Auf das NAS bringen — dieser Stand
+#### Nachzählen, und ein Rückweg vor den 6.10.2026
 
-Vier Dinge machen diesen Stand anders als ein gewöhnliches `hoch`: Die
-Datenbank braucht vier neue Spalten, und zwar **vor** dem Bau (der neue Code
-scheitert ohne sie an jeder Seite, der alte verträgt sie); die SQL-Datei liegt
-erst nach dem Holen im Klon; App und Postbote müssen zusammen wechseln; und
-`~/nas.sh` ist noch die alte Kopie, die weder die Spalten prüft noch den
-Postboten angleicht. Daraus folgt diese Reihenfolge — vorher muss der Stand auf
-GitHub in `main` liegen:
+Wie dieser Stand am 6.10.2026 aufs NAS kam — die Spalten vor dem Bau, der
+Postbote mit angeglichen —, steht in der Git-Historie dieser Datei. Dasselbe
+Muster gilt seitdem für jede Pflichtspalte (siehe *Vier Wörter*, „Vor dem Bau
+sieht es in die Datenbank“) und zuletzt für den Claude-Leser (*Auf das NAS
+bringen — dieser Stand*, oben).
 
-1. **Sichern** — ein Abzug der Datenbank neben die Compose-Datei:
-   ```bash
-   sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose exec -T db sh -c "exec pg_dump -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" --format=custom" > abzug-$(date +%Y%m%d)-vor-leser.dump && ls -l abzug-*-vor-leser.dump'
-   ```
-2. **Die neue `nas.sh` zuerst.** `fetch` holt nur und ändert weder den Klon
-   noch die App:
-   ```bash
-   sudo git -C /volume1/docker/schulapp/repo fetch origin main
-   sudo git -C /volume1/docker/schulapp/repo show origin/main:scripts/nas.sh > /tmp/nas.sh.neu && sudo cp /tmp/nas.sh.neu ~/nas.sh
-   ```
-3. **Den Postboten anhalten**, damit kein Lauf in den Wechsel fällt — `hoch`
-   startet ihn nach dem Angleichen wieder. Endet ein `hoch` vorher (der HALT in
-   Schritt 4, ein gescheiterter Bau), bleibt er aus; `nas.sh` sagt das dann und
-   nennt `sudo ~/nas.sh postbote` — mit der App, die dann läuft, verträgt er
-   sich:
-   ```bash
-   sudo sh -c 'cd /volume1/docker/postbote && /usr/local/bin/docker compose stop postbote'
-   ```
-4. **`sudo ~/nas.sh hoch`** — holt den Stand und hält vor dem Bau an:
-   „HALT: Der Datenbank fehlt material_pages.leser". Darunter steht die Zeile
-   zum Einspielen, mit Benutzer und Datenbank aus dem db-Container. Gebaut ist
-   nichts, die App läuft weiter wie bisher.
-5. **Zählen, einspielen, nachsehen.** psql öffnen:
-   ```bash
-   sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose exec db sh -c "exec psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\""'
-   ```
-   darin die beiden Zähl-Abfragen aus dem Kopf von `scripts/leser-tabellen.sql`
-   und `\q`. Dann die Zeile, die `hoch` genannt hat. Dann wieder psql:
-   `\d material_pages`, `SELECT leser, count(*) FROM material_pages GROUP BY 1;`
-   (erwartet: nur leer, so viele wie vorher Seiten) und
-   `SELECT count(*) FROM material_pages WHERE maschinell;` (erwartet: 0).
-6. **Noch einmal `sudo ~/nas.sh hoch`** — „Von GitHub kam nichts Neues — aber
-   es läuft noch …", baut nach, wartet auf die App, gleicht die Harness-Kopie
-   an (die alte liegt danach unter `/volume1/docker/postbote/harness-alt-<Zeit>`)
-   und startet den Postboten. Erst „Fertig." heißt: App und Postbote laufen
-   auf dem neuen Stand.
-7. **Probe** mit zwei Blättern: ein gedrucktes Handout und eine Seite mit
-   Handschrift. Erwartet im Protokoll der App (Befehl oben) je Seite eine Zeile
-   `Leser …` — das Handout `docling (sauber, …)`, die Handschrift `claude (…)`
-   — und gut zwanzig Sekunden später zum Handout `Vorschlag der App angelegt,
-   Jev: <Fach>`. Im Protokoll des Postboten
-   (`sudo sh -c 'cd /volume1/docker/postbote && /usr/local/bin/docker compose logs --tail=40 postbote'`)
-   für das Handout kein Lauf, für die Handschrift genau einer mit nur dieser
-   Seite. Am Handout steht „maschinell gelesen (Docling)" an der Blattseite, im
-   Fach-PDF und nach der nächsten Wiki-Übergabe auch dort.
-8. **Nach ein paar Tagen zählen**, in psql wie in Schritt 5:
-   ```sql
-   SELECT leser, leser_grund->>'grund' AS grund, count(*)
-     FROM material_pages WHERE leser IS NOT NULL GROUP BY 1, 2 ORDER BY 1, 2;
-   ```
-   und die ersten rund zwanzig Seiten, die Docling allein gelesen hat, neben
-   ihrem Foto durchsehen.
+**Nach ein paar Tagen zählen**, in psql (geöffnet wie dort in Schritt 4):
 
-Wurde Schritt 2 übersprungen, baut die alte `~/nas.sh` in Schritt 4 sofort.
-Dann muss das Einspielen vorher gelaufen sein, mit der Datei aus `origin/main`
-— im Klon liegt sie da noch nicht:
-
-```bash
-sudo sh -c 'cd /volume1/docker/schulapp && git -C repo show origin/main:scripts/leser-tabellen.sql | /usr/local/bin/docker compose exec -T db sh -c "exec psql -X -v ON_ERROR_STOP=1 --single-transaction -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -f -"'
+```sql
+SELECT leser, leser_grund->>'grund' AS grund, count(*)
+  FROM material_pages WHERE leser IS NOT NULL GROUP BY 1, 2 ORDER BY 1, 2;
 ```
 
-Den Postboten holt danach
-`sudo cp /volume1/docker/schulapp/repo/scripts/nas.sh ~/nas.sh && sudo ~/nas.sh hoch`
-nach: Es baut nichts, gleicht aber an.
+und die ersten rund zwanzig Seiten, die Docling allein gelesen hat, neben
+ihrem Foto durchsehen.
 
-**Rückweg:** `sudo ~/nas.sh zurueck`, ohne SQL — der alte Code sieht die
-Spalten nicht. Der Postbote geht dabei mit zurück: `zurueck` gleicht seine
-Kopie an den alten Stand an, sobald die alte App antwortet. Ohne das liefe der
-neue Postbote gegen die alte App, die `read_docling` anbietet, das sein Käfig
-verbietet — und jeder Lauf, der danach greift, endete als „nichts“. Eine
-Nebenwirkung bleibt: Der alte Code kennt `maschinell` nicht. Ändert in der
-Zwischenzeit jemand die Abschrift einer Docling-Seite (Formular, Korb, ein
-Vorschlag aus einem Chat), behält sie die Kennzeichnung und steht nach dem
-nächsten `hoch` als „maschinell gelesen" da, obwohl ein Mensch sie geschrieben
-hat. Nach einem längeren Rückweg deshalb vor dem nächsten `hoch` nachsehen:
+**Ein Rückweg auf einen Stand vor dem 6.10.2026** braucht kein SQL — der alte
+Code sieht die Spalten nicht. Er liegt zugleich vor dem 11.10.2026, braucht
+also den stillgelegten Postboten (`zurueck` sagt, wie). Eine Nebenwirkung
+bleibt: Der alte Code kennt `maschinell` nicht. Ändert in der Zwischenzeit
+jemand die Abschrift einer Docling-Seite (Formular, Korb, ein Vorschlag),
+behält sie die Kennzeichnung und steht nach dem nächsten `hoch` als
+„maschinell gelesen" da, obwohl ein Mensch sie geschrieben hat. Nach einem
+längeren Rückweg deshalb vor dem nächsten `hoch` nachsehen:
 `SELECT id FROM material_pages WHERE maschinell;` und diese Seiten am Foto
 prüfen. Meist reicht ohnehin die Notbremse.
 
@@ -1005,6 +1330,9 @@ Weg:** drizzle-kit legt `leser` gleich mit der Vorgabe „offen" an, und Postgre
 setzte damit jede vorhandene Seite auf „offen" — die App schickte den ganzen
 Altbestand durch Docling und an Claude, die fünfzehn Altblätter eingeschlossen.
 Die SQL-Datei legt die Spalte erst leer an und setzt die Vorgabe danach.
+Mit dem Claude-Leser (11.10.2026) kam die Tabelle `leser_laeufe` dazu, sein
+Gedächtnis (`scripts/leser-laeufe-tabelle.sql`, ebenfalls VOR dem Neubau —
+ohne sie scheitert jeder Lauf).
 **Ohne Push bleibt nicht nur
 der Materialbereich stehen, sondern die ganze Startseite** — sie lädt die
 letzten Blätter mit.
@@ -1801,7 +2129,7 @@ seine Termine aus Google.
 |---|---|---|
 | `ISERV_URL` | ja | nur der Server der Schule, z.B. `https://iserv.example.de` — ohne Pfad |
 | `ISERV_USER` | ja | der Account des Schülers |
-| `ISERV_PASSWORD` | ja | sein Passwort. In der `.env` in **einfachen Anführungszeichen**, ohne `'`, ohne Zeilenumbruch, ohne Leerzeichen am Rand — `erinnerungen.sh` liest die `.env` per `.` ein. Steht **nur** hier: nie in der Datenbank, im Protokoll, in der Karte, in der Cron-Antwort, und nie bei einem KI-Agenten (der Web MCP und der Postbote lesen nichts aus IServ). |
+| `ISERV_PASSWORD` | ja | sein Passwort. In der `.env` in **einfachen Anführungszeichen**, ohne `'`, ohne Zeilenumbruch, ohne Leerzeichen am Rand — `erinnerungen.sh` liest die `.env` per `.` ein. Steht **nur** hier: nie in der Datenbank, im Protokoll, in der Karte, in der Cron-Antwort, und nie bei einem KI-Agenten (weder der Web MCP noch der Claude-Leser bekommen etwas aus IServ). |
 | `ISERV_KLASSE` | ja | 1–13. **Zum Schuljahr anheben** (`iserv-einrichten.sh --neue-klasse`); es gibt bewusst keinen Standardwert. Findet die App keinen Kalender der Klasse, aber einen für die nächste, meldet sie es laut (Push, Cron 500, Karte) und nimmt bis zur Korrektur keinen Termin mit der alten Klasse. |
 | `ISERV_AUCH` | nein | Titelteile, die immer hineinkommen, mit `;` getrennt |
 | `ISERV_NIE` | nein | Titelteile, die nie hineinkommen — schlägt `ISERV_AUCH` |
@@ -1924,14 +2252,23 @@ bleibt dabei zu, es gibt keine Portfreigabe.
   erinnerungen.log     <- ebenso; beide beschneidet ihr Skript auf 500 Zeilen
   kalender.sh          <- dasselbe, stündlich um :15, für den Google Kalender
   kalender.log         <- ebenso, auch auf 500 Zeilen beschnitten
+  claude-einrichten.log  <- was claude-einrichten.sh getan hat, ohne den Schlüssel
 
 /volume1/@docker/volumes/schulapp_pgdata/_data   <- die Datenbank selbst,
                           bewusst AUSSERHALB der Freigabe; warum, steht unten
+
+/volume1/docker/postbote.stillgelegt-<Datum>/    <- der Postbote, seit dem
+                          11.10.2026 angehalten und nicht gelöscht: der
+                          Rückweg für den Notfall (oben, „Der Postbote —
+                          stillgelegt, und der Rückweg im Notfall“)
+                          und für ein `zurueck` auf einen Stand davor
 ```
 
 **Nur `repo/` kommt aus Git**, alles andere gehört zu dieser einen Maschine. Die
 Compose-Datei beschreibt sie, und die `.env` trägt die Geheimnisse — darunter
-die VAPID-Schlüssel und das `CRON_SECRET`, die beim Umzug **neu erzeugt wurden**.
+die VAPID-Schlüssel und das `CRON_SECRET`, die beim Umzug **neu erzeugt wurden**,
+und seit dem 11.10.2026 `ANTHROPIC_API_KEY`, einen Schlüssel, der Geld ausgeben
+kann.
 Die Werte in der lokalen `.env.local` sind seitdem nicht mehr die gültigen. Die
 Skripte und ihre Protokolle hängen genauso an diesem NAS: Sie kennen
 seine Pfade, seinen Vault und die Crontab-Zeilen, die sie rufen. Im Repo wären
@@ -1976,12 +2313,13 @@ leer ankommt.
 > (`Dockerfile-vom-NAS-20260905-214552`), im Repo-Ordner liegt das eingecheckte,
 > und der Pull läuft durch — am 11.9.2026 zuletzt, drei Commits auf einmal.
 
-Der Postbote läuft ebenfalls auf dem NAS, unter `/volume1/docker/postbote` mit
-einer eigenen `zugang.json`. Ein zweiter darf nirgendwo sonst laufen; warum,
-steht in [harness/README.md](harness/README.md). Und weil ein Zugang immer für
-die Adresse gilt, unter der zugestimmt wurde, braucht er nach dem Umzug eine
-**neue** Zustimmung gegen die NAS-Adresse — die alte zeigt auf Vercel und wird
-nirgends automatisch nachgezogen.
+Bis zum 11.10.2026 lief daneben der Postbote, unter `/volume1/docker/postbote`
+mit einer eigenen `zugang.json` und einer Kopie von `harness/`. Seitdem liest
+die App Handschrift selbst (*Der Claude-Leser*); sein Ordner heißt
+`postbote.stillgelegt-<Datum>` und bleibt als Rückweg liegen, sein Code unter
+`harness/` im Repo ebenso. Ein Postbote und
+eine App mit Schlüssel dürfen nie zugleich lesen — sonst liegen zwei
+Vorschläge am selben Blatt.
 
 ### Vier Wörter vom Handy aus
 
@@ -1997,12 +2335,12 @@ lesbar — man käme sonst an das Skript nicht heran, mit dem man ihn aktualisie
 
 | Wort | Was es tut |
 |---|---|
-| `stand` | Welcher Commit ist live, laufen die Container, antwortet die App, wann hat der Postbote zuletzt gearbeitet. Ändert nichts. |
-| `hoch` | Pull, Bau, Start — und danach warten, bis die App wirklich antwortet, und die Harness-Kopie des Postboten angleichen. Ging der Bau schief, baut das nächste `hoch` nach. Fehlt der Datenbank eine Spalte, die der neue Stand braucht, hält es vor dem Bau an. |
-| `zurueck` | Auf den Stand vor dem letzten `hoch` — mit dem Rückfallbild in Sekunden, sonst per Neubau. |
-| `postbote` | Postbote anschalten, und vorher die liegengebliebene `lauf.lock` wegräumen. |
+| `stand` | Welcher Commit ist live, laufen die Container, antwortet die App — und vom Claude-Leser: ob er einen Schlüssel hat (nie welchen), welche Bildfassung, ob noch ein Postbote läuft, die letzten fünf Läufe und die Summe des Monats. Ändert nichts. |
+| `hoch` | Pull, Bau, Start — und danach warten, bis die App wirklich antwortet. Ging der Bau schief, baut das nächste `hoch` nach. Fehlt der Datenbank eine Spalte, die der neue Stand braucht, hält es vor dem Bau an; ebenso, wenn danach zwei läsen. |
+| `zurueck` | Auf den Stand vor dem letzten `hoch` — mit dem Rückfallbild in Sekunden, sonst per Neubau. Führt der Weg vor den 11.10.2026, sagt es, wie der stillgelegte Postbote wiederkommt. |
+| `postbote` | Stillgelegt seit dem 11.10.2026 — schaltet ihn nicht mehr an. Sagt das, statt still zu verschwinden, wo der stillgelegte Ordner liegt und wie er im Notfall wiederkommt — dieselben Schritte wie oben unter *Der Postbote — stillgelegt, und der Rückweg im Notfall*. |
 
-Fünf Dinge darin sind keine Abkürzung, sondern eine Richtigstellung:
+Sieben Dinge darin sind keine Abkürzung, sondern eine Richtigstellung:
 
 **Der Rückweg wird vor dem Pull gemerkt, nicht danach.** `HEAD@{1}` taugt dafür
 nicht — nach einem Pull, der nichts geholt hat, gibt es den Eintrag gar nicht.
@@ -2040,37 +2378,44 @@ verschwand die Funktion, der Aufruf blieb, und `hoch` meldete
 vergleicht sie am Ende mit `scripts/nas.sh` im Klon und druckt den
 `sudo cp`-Befehl, wenn die beiden auseinanderliegen.
 
-**App und Postbote wechseln zusammen.** Unter `/volume1/docker/postbote/harness`
-liegt ebenfalls eine Kopie, und seit dem 6.10.2026 entscheidet die App, welche
-Seiten der Postbote bekommt — ein Postbote vom alten Stand liest Seiten, die
-die App längst gelesen hat. `hoch` gleicht die Kopie deshalb selbst an, sobald
-die neue App antwortet: Prüfsummen von `*.mts` und `README.md` vergleichen
-(über die Dateien, die der Klon hat — eine Datei, die aus dem Repo
-verschwindet, ließe sonst jedes `hoch` scheitern), bei einem Unterschied die
-alte Fassung nach `harness-alt-<Zeit>` sichern, den Postboten anhalten, kopieren,
-nachrechnen und über `postbote` wieder starten. `zugang.json`, `gesehen.json`
-und `lauf.lock` kopiert es nie. Geht das Kopieren schief, legt es die alte
-Fassung zurück und startet den Postboten mit ihr. Und weil die erste Fassung
-mit diesem Abgleich von einer älteren `~/nas.sh` gebaut werden kann, holt ein
-`hoch` ohne Neues den Abgleich nach, wenn die App antwortet — nach einem Blick
-in die Datenbank, denn dort läuft die neue App schon. `zurueck` gleicht die
-Kopie genauso an den alten Stand an, sobald der wieder antwortet: ein neuer
-Postbote gegen eine alte App liefe sonst in ein Werkzeug, das sein Käfig nicht
-erlaubt, und jeder Lauf endete als „nichts“. Scheitert `hoch` vorher (Spalte
-fehlt, Bau schief, App antwortet nicht) und ist der Postbote aus, sagt es das
-und nennt `sudo ~/nas.sh postbote`.
+**Nie zwei Leser.** Vom 6. bis zum 11.10.2026 lag unter
+`/volume1/docker/postbote/harness` eine Kopie des Postboten, und `hoch` und
+`zurueck` glichen sie an den Stand der App an — App und Postbote wechselten
+zusammen. Mit dem Claude-Leser ist das weg. Geblieben ist die Gefahr, dass
+beide lesen und zwei Vorschläge am selben Blatt liegen, einer davon bezahlt.
+`hoch` hält deshalb vor dem Bau an, wenn der neue Stand den Claude-Leser hat,
+die App danach selbst läse und ein Postbote läuft — erkannt an Docker
+(`label=com.docker.compose.service=postbote`), gleich aus welchem Ordner, und
+nicht an `ps`, das auf dem Synology keine Container sieht. „Selbst läse“ heißt:
+die laufende App hat den Schlüssel in ihrer Umgebung (gefragt wird sie selbst,
+nie mit dem Wert), oder ein neu erzeugter Container bekäme ihn (`.env` UND
+Override-Datei). Im Zweig „Nichts Neues“ wird nichts neu erzeugt, dort zählt
+nur die laufende App: Hielt `claude-einrichten.sh` zwischen Schritt 3 und 5
+an, stehen Schlüssel und Override-Zeile schon da, die App ist aber die alte —
+dann hält `hoch` nicht an, sondern sagt, dass sie noch nicht neu erzeugt ist
+(Nachprüfung vom 11.10.2026; bis dahin hielt es mit dem Rat `docker stop` an,
+und danach las niemand). Ohne Schlüssel darf der Postbote weiterlaufen, und
+`hoch` sagt, dass `claude-einrichten.sh` ihn ablöst. Geprüft wird das an
+einem nachgemachten NAS: `bash scripts/probe-nas.sh`. `zurueck` auf einen
+Stand vor dem 11.10.2026 schaltet ihn nicht von selbst an, sondern sagt, wie
+er wiederkommt: Wer zurückgeht, steckt in einer Störung, und ein Dienst, der
+von selbst anspringt, wäre dort eine Überraschung mehr — zumal er beim
+nächsten `hoch` wieder aus muss. Dasselbe sagt `postbote`, auch ohne
+`zurueck`: für den Notfall, erst nachdem die App den Schlüssel nicht mehr
+hat.
 
 **Vor dem Bau sieht es in die Datenbank.** Additive Spalten verträgt der alte
 Code; der neue scheitert ohne sie an jeder Seite. Liegt im neuen Stand eine
-SQL-Datei, die in `PFLICHTSPALTEN` steht (bisher nur
-`scripts/leser-tabellen.sql` für `material_pages.leser`), und fehlt die Spalte,
+SQL-Datei, die in `PFLICHTSPALTEN` steht (`scripts/leser-tabellen.sql` für
+`material_pages.leser` und seit dem 11.10.2026 `scripts/leser-laeufe-tabelle.sql`
+für `leser_laeufe`), und fehlt die Spalte,
 hält `hoch` vor dem Bau an, druckt die Zeile zum Einspielen mit Benutzer und
 Datenbank aus dem db-Container, und das nächste `hoch` baut nach. Antwortet die
 Datenbank nicht, sagt es das und baut trotzdem — eine Prüfung, die selbst
 klemmt, soll nicht jeden `hoch` sperren.
 
-> **Wie weit gelaufen.** `stand`, `hoch` und `postbote` laufen auf dem NAS
-> seit dem 16.9.2026. Die Fassung vom 5.10.2026 — Nachbauen nach gescheitertem
+> **Wie weit gelaufen.** `stand` und `hoch` laufen auf dem NAS seit dem
+> 16.9.2026, `postbote` lief dort bis zum 11.10.2026. Die Fassung vom 5.10.2026 — Nachbauen nach gescheitertem
 > Bau, Rückfallbild, `zurueck` ohne Neubau — ist am nachgebauten NAS geprüft
 > (Git echt, Docker und curl als Attrappe, 22 Abläufe mit 57 Prüfungen, dazu
 > zwei Runden Gegenlesen), auf dem echten noch nicht. Ebenso die Fassung vom
@@ -2081,7 +2426,10 @@ klemmt, soll nicht jeden `hoch` sperren.
 > nachholen, eine liegengebliebene alte Datei beim Postboten, `zurueck` samt
 > Postbote, der Hinweis auf einen ausgeschalteten Postboten), dazu fünf
 > absichtlich beschädigte Fassungen, die alle auffielen. Auf dem echten NAS
-> noch nicht.
+> noch nicht. Die Fassung vom 11.10.2026 — ohne den Abgleich des Postboten,
+> mit dem neuen `stand`, `zwei_leser_pruefen` vor dem Bau und dem Hinweis bei
+> `zurueck` — ist ebenso nur am nachgebauten NAS gelaufen (Docker und curl als
+> Attrappe), auf dem echten noch nicht.
 
 ### Der Ausfall vom 11.9.2026 — die Freigabe entzieht der Datenbank die Rechte
 
@@ -2130,8 +2478,9 @@ Die verräterische Messung dauert zehn Sekunden:
 Dass sogar die nackte Anmeldeseite fällt, ist der Fingerzeig: Ohne Postgres
 kommt sie keinen Schritt weit.
 
-**Warum es den Postboten nicht traf.** Er läuft als uid 1000 und schreibt nach
-`/volume1/docker/postbote/claude-home`. Dieser Ordner ist Linux-Modus geblieben,
+**Warum es den Postboten nicht traf.** Er lief (bis zum 11.10.2026) als uid 1000
+und schrieb nach `/volume1/docker/postbote/claude-home`. Dieser Ordner ist
+Linux-Modus geblieben,
 und die ACL des Elternordners lässt `everyone` wenigstens durchlaufen. Postgres
 dagegen musste durch drei Ebenen, die ihm genau das verwehrten.
 
@@ -2259,15 +2608,19 @@ den Eingangskorb. Verbunden wird über die Zustimmungsseite `/verbinden`,
 getrennt unter *Einstellungen*. Wie das im Einzelnen läuft, steht oben unter
 *Der Web MCP*.
 
-**Der Postbote** — dasselbe ohne Handgriff. Ein Programm auf dem eigenen
-Rechner sieht alle 15 Sekunden in den Korb und setzt Claude auf jedes Blatt an,
-das noch keinen Vorschlag hat; es gehört nicht zur App, sondern benutzt sie von
-außen durch dieselbe Tür. Es steht in [`harness/`](harness/README.md) und läuft
-nur, wenn man es startet.
+**Der Claude-Leser** — dasselbe ohne Handgriff, seit dem 11.10.2026 in der
+App: Sie ruft Opus selbst, ohne Werkzeuge, und legt das Ergebnis durch
+dieselbe Tür wie `propose_sheet` in den Korb; jeder Lauf steht mit Preis am
+Blatt, und „Abschreiben lassen“ liest ein Blatt auf Zuruf. Dazu „Fragen bauen
+lassen“ an jeder Klausur im Abruf. Ohne API-Schlüssel liest niemand
+Handschrift, alles andere läuft wie bisher. Bis zu diesem Tag tat das der
+Postbote, ein eigenes Programm neben der App (`harness/`, seitdem
+stillgelegt, der Code bleibt für den Notfall liegen). Wie es läuft, steht oben
+unter *Der Claude-Leser*.
 
 **Ein Leser je Seite** — seit dem 6.10.2026 liest die App sauberen Druck selbst
-(Docling) und schreibt ihn gekennzeichnet als Abschrift; der Postbote bekommt
-nur noch Handschrift, Formeln und alles Unsichere. Ein Blatt, das ganz gedruckt
+(Docling) und schreibt ihn gekennzeichnet als Abschrift; Claude bekommt nur
+noch Handschrift, Formeln und alles Unsichere. Ein Blatt, das ganz gedruckt
 ist, ordnet die App mit Jev ein, ohne dass Claude es je sieht. Wie sie
 entscheidet und was sie dabei festhält, steht oben unter *Ein Leser je Seite*.
 
@@ -2290,4 +2643,6 @@ Alles steht auch auf der Startseite: als Kachel, in der Tagesspur, auf der
 Kameraseite und im Dashboard. Damit sind die vier geplanten Ausbaustufen aus
 KONZEPT.md gebaut und die fünfte dazu — Themen-Vokabular, Ablage, Eingangskorb
 und der Weg für einen Agenten. Was jetzt aussteht, ist keine Stufe mehr,
-sondern eine Messung: ob die Erkennung auch bei Formeln taugt.
+sondern zwei Messungen: ob die Erkennung auch bei Formeln taugt, und die
+Abnahme des Claude-Lesers — liest er in der App so gut wie in der Messung vom
+11.10.2026, und lohnt das Vollbild (*Die Abnahme-Messung*).

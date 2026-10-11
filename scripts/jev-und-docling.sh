@@ -26,11 +26,23 @@
 #   4. Starten — die App wird dabei mit den neuen Variablen neu erzeugt,
 #      gebaut wird nichts.
 #   5. Prüfen, aus dem App-Container heraus: antwortet Jev, rechnet Docling?
-#   6. Erst wenn Jev richtig geantwortet hat: den Postboten auf den neuen
-#      Auftrag umstellen. Der lässt das Fach weg, weil Jev es bestimmt — ohne
-#      Jev bekäme ein Blatt also gar keins.
+#
+# Bis zum 11.10.2026 gab es einen sechsten Schritt: den Postboten auf einen
+# Auftrag ohne Fach umstellen, weil Jev das Fach bestimmt. Der Postbote ist
+# seitdem stillgelegt, nicht gelöscht — sein Code liegt weiter unter
+# harness/, sein Ordner auf dem NAS angehalten (README, „Der Postbote —
+# stillgelegt, und der Rückweg im Notfall“). Handschrift liest die App
+# selbst (scripts/claude-einrichten.sh), und ihr Auftrag nennt von sich aus
+# kein Fach.
 #
 # Ein zweiter Lauf ist harmlos: Was schon erledigt ist, wird übersprungen.
+#
+# Die Override-Datei, die Schritt 2 anlegt, gehört nicht diesem Skript allein:
+# kalender-einrichten.sh, iserv-einrichten.sh und claude-einrichten.sh
+# ergänzen sie. Weggenommen wird sie deshalb nur, wenn DIESER Lauf sie gerade
+# angelegt hat — sonst nähme ein abgebrochener zweiter Lauf Kalender, IServ
+# und den Claude-Schlüssel mit, und niemand läse mehr Handschrift, ohne dass
+# es irgendwo auffiele.
 #
 # Alles, was hier steht, landet auch in $APP/jev-und-docling.log — der
 # Schlüssel nicht.
@@ -38,13 +50,12 @@
 set -u
 
 APP=/volume1/docker/schulapp
-POST=/volume1/docker/postbote
 OVERRIDE="$APP/docker-compose.override.yml"
 MARKE="# angelegt von scripts/jev-und-docling.sh"
 MODELLE=/opt/app-root/src/.cache/docling/models
 FORMELMODELL=docling-project--CodeFormulaV2
 BILD=quay.io/docling-project/docling-serve-cpu:v1.36.0
-# Ab diesem Commit kennen App und Postbote Jev, Docling und die Proben.
+# Ab diesem Commit kennt die App Jev, Docling und die Proben.
 STAND=ba35d06
 JETZT=$(date +%Y%m%d-%H%M%S)
 LOG="$APP/jev-und-docling.log"
@@ -70,7 +81,6 @@ done
 "$DOCKER" compose version >/dev/null 2>&1 || { echo "FEHLER: \"docker compose\" fehlt." >&2; exit 1; }
 
 dc()  { ( cd "$APP"  && "$DOCKER" compose "$@" ); }
-dcp() { ( cd "$POST" && "$DOCKER" compose "$@" ); }
 
 # Befehle, die dieses Skript zum Abtippen ausgibt. Auf dem NAS geht weder
 # `cd` in den Ordner (er gehört root) noch `sudo docker` (sudo kennt
@@ -102,8 +112,8 @@ echo "Stand:     $(git -C "$APP/repo" log -1 --format='%h %s')"
 grep -q '^COMPOSE_FILE=' "$APP/.env" && halt "In der .env steht COMPOSE_FILE — die Override-Datei würde übergangen."
 
 # Speicher. Docling hielt am Mac nach zwei Seiten 2,2 GB mit einem Arbeiter
-# und 3,4 GB mit zweien (gemessen 5.10.2026); dazu kommen DSM, Postgres, die
-# App und der Postbote. Unter 7 GB wird es eng,
+# und 3,4 GB mit zweien (gemessen 5.10.2026); dazu kommen DSM, Postgres und
+# die App. Unter 7 GB wird es eng,
 # und eng heißt hier: Das NAS lagert aus, und die App wird für alle langsam.
 kb=$(awk '/^MemTotal:/{print $2}' /proc/meminfo)
 gb=$(awk -v kb="$kb" 'BEGIN{printf "%.1f", kb/1048576}')
@@ -129,25 +139,20 @@ case " $netze " in
 esac
 
 # Läuft auch der neue Stand? Ein `hoch`, dessen Bau scheiterte, lässt den
-# alten Container weiterlaufen, der Klon ist aber schon neu. Dann stellte
-# Schritt 6 den Postboten auf einen Auftrag um, den die laufende App nicht
-# versteht — Blätter ohne Fach im Korb. Gesucht wird ein Name, den es erst
-# seit $STAND im gebauten Server gibt.
+# alten Container weiterlaufen, der Klon ist aber schon neu. Dann richtete
+# dieses Skript Jev und Docling für eine App ein, die beide nicht kennt.
+# Gesucht wird ein Name, den es erst seit $STAND im gebauten Server gibt.
 #
-# Seit „ein Leser je Seite“ (6.10.2026) gehört ein zweiter dazu: Schritt 6
-# kopiert seitdem einen Postboten, der nur zu einer App mit `leser` passt.
-# `unreadAttachedPageIds` gibt es aber schon seit $STAND, auch in der App
-# davor — er allein unterschiede „Bau gelungen“ nicht mehr von „Bau
-# gescheitert, die Docling-App läuft noch“. `leser_grund` ist ein
-# Spaltenname, steht also als Zeichenkette im Bündel und übersteht das
-# Verkleinern. Der erste Name bleibt trotzdem stehen: er ist der Grund,
-# warum es diese Zeile gibt.
+# Dazu ein zweiter, jüngerer: `leser_grund` (6.10.2026, „ein Leser je
+# Seite“), seit dem die App selbst entscheidet, welche Seite Docling liest.
+# `unreadAttachedPageIds` gibt es schon seit $STAND und unterschiede allein
+# „Bau gelungen“ nicht von „Bau gescheitert, eine ältere Docling-App läuft
+# noch“. `leser_grund` ist ein Spaltenname, steht also als Zeichenkette im
+# Bündel und übersteht das Verkleinern.
 dc exec -T app grep -rqs unreadAttachedPageIds .next/server \
   && dc exec -T app grep -rqs leser_grund .next/server \
   || halt "Die laufende App ist noch die alte — der Bau beim letzten hoch ist wohl gescheitert. Erst:  sudo ~/nas.sh hoch  (und auf „Fertig.“ achten)"
 echo "App:       neuer Stand läuft"
-
-[ -d "$POST/harness" ] || halt "Kein $POST/harness — wo läuft der Postbote?"
 
 if [ -e "$OVERRIDE" ] && ! grep -qF "$MARKE" "$OVERRIDE"; then
   halt "Es gibt schon eine $OVERRIDE, und nicht von mir. Die überschreibe ich nicht. Geändert ist noch nichts."
@@ -180,9 +185,11 @@ fi
 # ================================================================ 2
 schritt "2  Override-Datei"
 
+override_neu=nein
 if [ -e "$OVERRIDE" ]; then
   echo "Steht schon da (von mir) — übersprungen."
 else
+  override_neu=ja
   {
     echo "$MARKE am $(date '+%d.%m.%Y %H:%M')"
     cat <<'YAML'
@@ -219,19 +226,35 @@ YAML
   echo "Angelegt: $OVERRIDE"
 fi
 
-dienste=$(dc config --services 2>&1) || { rm -f "$OVERRIDE"; halt "Compose mag die Datei nicht — wieder entfernt: $dienste"; }
+# Weggenommen wird nur, was dieser Lauf angelegt hat (Kopf dieser Datei).
+nur_eigene_weg() {
+  if [ "$override_neu" = ja ]; then
+    rm -f "$OVERRIDE"; echo "wieder entfernt"
+  else
+    echo "die Datei war schon da und bleibt, wie sie ist"
+  fi
+}
+dienste=$(dc config --services 2>&1) || halt "Compose mag die Dateien nicht — $(nur_eigene_weg): $dienste"
 echo "Dienste:   $(echo $dienste)"
 case " $(echo $dienste) " in
   *" docling "*) ;;
-  *) rm -f "$OVERRIDE"; halt "Compose lädt die Override-Datei nicht dazu (kein „docling“ in: $dienste) — wieder entfernt." ;;
+  *) halt "Compose lädt die Override-Datei nicht dazu (kein „docling“ in: $dienste) — $(nur_eigene_weg)." ;;
 esac
 
 # ================================================================ 3
 schritt "3  Docling-Bild und Formelmodell (dauert)"
 
-# Bricht hier etwas ab, kommt die Override-Datei wieder weg: Sonst versuchte
-# der nächste `hoch`, ein Docling ohne Bild oder Modell zu starten.
-zurueckbauen() { rm -f "$OVERRIDE"; echo "Override-Datei wieder entfernt; die App läuft wie vorher."; }
+# Bricht hier etwas ab, kommt eine Override-Datei, die dieser Lauf angelegt
+# hat, wieder weg: Sonst versuchte der nächste `hoch`, ein Docling ohne Bild
+# oder Modell zu starten. Eine, die schon da war, bleibt — sie trägt womöglich
+# Kalender, IServ und den Claude-Schlüssel (Kopf dieser Datei).
+zurueckbauen() {
+  if [ "$override_neu" = ja ]; then
+    rm -f "$OVERRIDE"; echo "Override-Datei wieder entfernt; die App läuft wie vorher."
+  else
+    echo "Die Override-Datei war schon da und bleibt, wie sie ist."
+  fi
+}
 
 echo "Hole $BILD ..."
 dc pull docling || { zurueckbauen; halt "Das Bild kam nicht an."; }
@@ -253,7 +276,11 @@ echo "Modelle:   $(dc run --rm --no-deps -T docling ls "$MODELLE" 2>/dev/null | 
 # ================================================================ 4
 schritt "4  Starten"
 
-dc up -d || halt "Start ging schief. Zurück:  sudo rm $OVERRIDE  und  $(zum_abtippen "$APP" "up -d --remove-orphans")"
+if [ "$override_neu" = ja ]; then
+  dc up -d || halt "Start ging schief. Zurück:  sudo rm $OVERRIDE  und  $(zum_abtippen "$APP" "up -d --remove-orphans")"
+else
+  dc up -d || halt "Start ging schief. Protokoll:  $(zum_abtippen "$APP" "logs --tail=50 app")"
+fi
 
 printf "Warte auf die App "
 for i in $(seq 1 20); do
@@ -294,57 +321,23 @@ docling_cid=$(dc ps -q docling 2>/dev/null | head -1)
 
 # Ein falscher Schlüssel bliebe beim nächsten Lauf stehen (Schritt 1 sieht
 # nur, dass einer da ist) — daher der Hinweis, wie er wieder herauskommt.
-[ "$jev_ok" = ja ] || halt "Jev antwortet nicht richtig — der Postbote bleibt deshalb beim alten Auftrag. Docling: $docling_ok. War der Schlüssel falsch:  sudo sed -i '/^TYPESAFE_API_KEY=/d' $APP/.env  und das Skript noch einmal."
-
-# ================================================================ 6
-schritt "6  Postbote auf den neuen Auftrag"
-
-summen() { ( cd "$1" && md5sum *.mts README.md 2>/dev/null | sort ); }
-alt=""
-
-if [ "$(summen "$APP/repo/harness")" = "$(summen "$POST/harness")" ]; then
-  echo "Die Kopie unter $POST/harness ist schon aktuell — übersprungen."
-else
-  alt="$POST/harness-alt-$JETZT"
-  mkdir -p "$alt"
-  cp -p "$POST"/harness/*.mts "$POST"/harness/README.md "$alt"/ 2>/dev/null
-  echo "Sicherung: $alt"
-  # Auf vorhandene Dateien kopiert, behalten sie Eigentümer und Rechte — der
-  # Postbote läuft nicht als root und muss sie lesen können.
-  cp "$APP"/repo/harness/*.mts "$APP/repo/harness/README.md" "$POST/harness/" || halt "Kopieren ging schief. Zurück: cp -p $alt/* $POST/harness/"
-  [ "$(summen "$APP/repo/harness")" = "$(summen "$POST/harness")" ] || halt "Nach dem Kopieren weichen die Dateien noch ab."
-  echo "Kopiert und verglichen."
-fi
-
-# Steht in seiner Compose-Datei ein eigenes --intervall, sieht er nicht alle
-# 15 Sekunden nach, sondern so oft, wie dort steht.
-if grep -nE -- '--(intervall|ruhe)' "$POST"/docker-compose.y*ml 2>/dev/null; then
-  echo "ACHTUNG: Oben steht ein eigenes --intervall/--ruhe für den Postboten — schick mir die Zeile."
-fi
-
-# Erst anhalten, dann über nas.sh starten: Nach `docker stop` bleibt
-# lauf.lock liegen, und nas.sh räumt sie nur weg, wenn er nicht läuft. Ein
-# Blatt, das er gerade liest, kommt in der nächsten Runde noch einmal dran.
-if [ -n "$alt" ]; then
-  dcp stop postbote
-  bash "$APP/repo/scripts/nas.sh" postbote
-else
-  echo "Nichts kopiert — er läuft ungestört weiter."
-fi
-echo "claude im Postboten: $(dcp exec -T postbote claude --version 2>&1 | head -1)"
+[ "$jev_ok" = ja ] || halt "Jev antwortet nicht richtig. Docling: $docling_ok. War der Schlüssel falsch:  sudo sed -i '/^TYPESAFE_API_KEY=/d' $APP/.env  und das Skript noch einmal."
 
 # ================================================================ fertig
 schritt "Fertig"
 echo "Jev:       $jev_ok"
 echo "Docling:   $docling_ok"
 echo
-echo "Jetzt ein Foto hochladen. Nach ein bis drei Minuten liegt es im Fach, nicht im Eingangskorb."
-echo "Zusehen:   $(zum_abtippen "$POST" "logs -f --tail=20 postbote")"
-echo "Docling:   $(zum_abtippen "$APP" "logs --tail=200 app") | grep -E 'Leser|Docling|Jev'"
+echo "Jetzt ein gedrucktes Blatt hochladen. Nach ein bis drei Minuten liegt es im Fach, nicht im Eingangskorb."
+echo "Zusehen:   $(zum_abtippen "$APP" "logs --tail=200 app") | grep -E 'Leser|Docling|Jev'"
 echo
 echo "Rückweg, falls nötig:"
-if [ -n "$alt" ]; then
-  echo "  Postbote:  $(zum_abtippen "$POST" "stop postbote")"
-  echo "             sudo sh -c 'cp -p $alt/* $POST/harness/'   und   sudo ~/nas.sh postbote"
+# Die ganze Datei zu löschen ist nur dann der Rückweg, wenn nichts anderes
+# darin steht.
+if grep -qE '^[[:space:]]+(-[[:space:]]*)?(GOOGLE_|ISERV_|ANTHROPIC_API_KEY|CLAUDE_BILD|LESER_REGEL)' "$OVERRIDE" 2>/dev/null; then
+  echo "  Docling:   aus $OVERRIDE nur den Dienst docling, das Volume doclingmodelle und die Zeilen"
+  echo "             TYPESAFE_API_KEY und DOCLING_URL nehmen — die Datei trägt auch Kalender, IServ"
+  echo "             oder den Claude-Schlüssel. Dann  $(zum_abtippen "$APP" "up -d --remove-orphans")"
+else
+  echo "  Docling:   sudo rm $OVERRIDE   und   $(zum_abtippen "$APP" "up -d --remove-orphans")"
 fi
-echo "  Docling:   sudo rm $OVERRIDE   und   $(zum_abtippen "$APP" "up -d --remove-orphans")"

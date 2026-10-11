@@ -21,6 +21,7 @@ import { z } from "zod";
 
 import { db } from "@/db";
 import {
+  leserLaeufe,
   materialPages,
   materialProposals,
   materialTopics,
@@ -39,6 +40,7 @@ import {
   type BlaetterStand,
   type StandZahlen,
 } from "@/lib/blaetter-stand";
+import { claudeConfigured } from "@/lib/claude/client";
 import { germanShortParts, isCalendarDate, todayInBerlin } from "@/lib/dates";
 import {
   MAX_PAGES,
@@ -47,6 +49,7 @@ import {
   MAX_THUMB_BYTES,
   isAllowedMime,
 } from "@/lib/images";
+import { claudeBeschaeftigt, claudePausiert } from "@/lib/leser/claude-zustand";
 import { leserBeimAnlegen } from "@/lib/leser/regel";
 import { ensureTopics, resolveTopic } from "@/lib/subject-topics";
 import { normalizeTopics, topicKey } from "@/lib/topics";
@@ -178,8 +181,8 @@ function optionalText(maxLength: number, tooLong: string) {
  * **`.trim()`, aber ausdrücklich kein `optionalText()`.** Der leere String ist
  * hier ein gültiger Wert und bedeutet etwas: „gelesen, und es stand nichts
  * darauf". Machte diese Prüfung daraus `null`, fiele er mit „diese Seite hat
- * noch niemand gelesen" zusammen, und der Postbote legte dieselbe leere Seite
- * bei jedem Lauf wieder vor. Der Rand fällt trotzdem weg — eine Seite, auf der
+ * noch niemand gelesen" zusammen, und der Claude-Leser läse dieselbe leere
+ * Seite noch einmal, bezahlt. Der Rand fällt trotzdem weg — eine Seite, auf der
  * nur Leerzeichen und Zeilenumbrüche stehen, ist eine leere Seite —, was
  * zwischen den Zeilen steht, bleibt unangetastet.
  *
@@ -370,9 +373,9 @@ export type MaterialPageInfo = {
    * Unterschied verlöre, um den es bei dieser Spalte geht: `null` heißt „noch
    * niemand hat hier gelesen", `0` heißt „gelesen, und es stand nichts darauf".
    * Beides zusammen kostet dieselbe eine Zahl je Zeile, und nur damit kann die
-   * Detailseite den Unterschied hinschreiben, statt ihn zu glätten. Für den
-   * Postboten ist es dieselbe Frage von der anderen Seite: er soll eine Seite
-   * nicht zweimal lesen, und „schon gelesen, war leer" ist eine Antwort darauf.
+   * Detailseite den Unterschied hinschreiben, statt ihn zu glätten. Für die
+   * Leser ist es dieselbe Frage von der anderen Seite: keiner soll eine Seite
+   * zweimal lesen, und „schon gelesen, war leer" ist eine Antwort darauf.
    *
    * Gezählt wird in Postgres mit `length()`, also in Zeichen. Für Zeichen
    * außerhalb der Grundebene zählt JavaScript anders (`"𝄞".length` ist 2); die
@@ -383,8 +386,9 @@ export type MaterialPageInfo = {
   /**
    * Wer diese Seite liest (`material_pages.leser`, seit dem 6.10.2026):
    * `'offen'` heißt, die App entscheidet gerade — die Blattseite schreibt
-   * „wird gerade gelesen“, `read_sheet` sagt dem Postboten, dass er das
-   * Blatt in dieser Runde lässt. `null` ist eine Seite von vorher.
+   * „wird gerade gelesen“, und der Claude-Leser lässt das Blatt liegen, bis
+   * sie entschieden ist (`read_sheet` sagt es einem Chat ebenso). `null` ist
+   * eine Seite von vorher.
    */
   leser: Leser | null;
   /**
@@ -491,8 +495,10 @@ type ListOptions = {
    * Claude lesen soll, und von den Seiten davor die nach der alten Regel;
    * nie eine, über die die App noch entscheidet oder die Docling liest.
    *
-   * Für den Postboten, seit dem 4.10.2026 (`read_material` mit
-   * `nachgereicht: true`). Gefiltert wird in der Abfrage und VOR dem `limit`:
+   * Gebaut am 4.10.2026 für den Postboten (`read_material` mit
+   * `nachgereicht: true`); seit dem 11.10.2026 fragt so nur noch ein Chat —
+   * der Claude-Leser der App nimmt dieselbe Regel über `listPageActivity()`.
+   * Gefiltert wird in der Abfrage und VOR dem `limit`:
    * hinterher aus den zweihundert neuesten Blättern auszusieben hieße, dass
    * ein älteres Blatt mit nachgereichter Rückseite hinter der Grenze läge und
    * nie an die Reihe käme. Sortierung und übrige Filter bleiben dieselben.
@@ -1104,8 +1110,8 @@ export type NewPageTranscript = {
  *
  * **Der leere String ist ein Wert und wird geschrieben.** Er heißt „gelesen, und
  * es stand nichts darauf" und ist damit das Gegenteil von NULL. Wer ihn
- * unterwegs zu NULL glättet, sorgt dafür, dass der Postbote dieselbe leere Seite
- * bei jedem Lauf wieder vorlegt.
+ * unterwegs zu NULL glättet, sorgt dafür, dass der Claude-Leser dieselbe leere
+ * Seite noch einmal liest, bezahlt.
  *
  * Angefasst wird ausschließlich, was diesem Nutzer und diesem Blatt gehört, und
  * beides wird nicht geglaubt, sondern nachgesehen: die Seiten werden in der
@@ -1339,8 +1345,8 @@ export async function listMaterialTranscripts(
  *
  * - die Seite hat keine Abschrift (`transcript is null` — `""` heißt
  *   gelesen),
- * - das Blatt ist eingeordnet (`filed_at` gesetzt; im Korb liest der Postbote
- *   ohnehin das Blatt),
+ * - das Blatt ist eingeordnet (`filed_at` gesetzt; im Korb liest der
+ *   Claude-Leser ohnehin das ganze Blatt),
  * - UND entweder liest Claude sie (`leser = 'claude'`) — dann immer, ohne
  *   jede Rechnung über Zeitpunkte —, ODER sie ist eine Seite von vor dem
  *   6.10.2026 (`leser is null`), und für sie gilt die Regel vom 4.10.2026
@@ -1355,7 +1361,7 @@ export async function listMaterialTranscripts(
  * in @/lib/auto-file.
  *
  * **Warum die alte Rechnung nur noch für NULL gilt.** Ihr zweiter Zweig fing
- * die Rückseite, die angehängt wurde, WÄHREND der Postbote die Vorderseite
+ * die Rückseite, die angehängt wurde, WÄHREND ein Leser die Vorderseite
  * abschrieb: sie entsteht vor dem Einordnen, `created_at < filed_at`, ist aber
  * jünger als eine gelesene Seite. Eine Seite, die beim Abschreiben ungelesen
  * blieb, obwohl eine ältere gelesen wurde, fiel in denselben Zweig — die
@@ -1363,8 +1369,9 @@ export async function listMaterialTranscripts(
  * unlesbar und wurde Seite 2 gelesen, galt Seite 1 als Altblatt. Für eine
  * neue Seite weiß die App jetzt, dass Claude sie lesen soll; an einem
  * eingeordneten Blatt ist sie damit nachgereicht, gleich wann sie entstand.
- * Wie oft der Postbote es versucht, begrenzt sein Gedächtnis
- * (`nachlese:<id>:<lastPageAt>` in gesehen.json), nicht diese Regel.
+ * Wie oft der Claude-Leser es versucht, begrenzt sein Gedächtnis
+ * (`leser_laeufe`, Art „nachlese“ unter dem Stand `lastPageAt`), nicht diese
+ * Regel.
  *
  * **Die Altblätter bleiben draußen, und das ist die Absicht des NULL-Zweigs.**
  * Die fünfzehn Blätter von vor der Abschrift wurden im August eingeordnet,
@@ -1373,7 +1380,9 @@ export async function listMaterialTranscripts(
  * nie, und der erste nur für eine Seite, die nach dem Einordnen dazukam —
  * und die ist seit dem 6.10.2026 nie NULL, zieht also keine alte mit. Ihre
  * alten Seiten schreibt nach dem Willen des Nutzers niemand von selbst ab —
- * wer sie will, ruft harness/nachlese.mts von Hand.
+ * wer sie will, drückt am Blatt „Abschreiben lassen“ (seit dem 11.10.2026;
+ * bis dahin harness/nachlese.mts), und der Vorschlag bleibt für einen
+ * Menschen im Korb.
  *
  * „Vor ihr" heißt nach `created_at` und nicht nach `sort_order`. Gefragt ist,
  * was beim Abschreiben schon da war, und nicht, wo die Seite im Blatt steht.
@@ -1460,18 +1469,20 @@ function nachgereichteSeiten() {
  * Seiten noch niemand gelesen hat, und wie viele Seiten die App gerade liest
  * oder maschinell gelesen hat.
  *
- * Für den Postboten, seit dem 4.10.2026, und seit dem 6.10.2026 auch für den
- * Eingangskorb. `read_inbox` und `read_material` tragen die ersten drei je
- * Zeile:
+ * Gebaut am 4.10.2026 für den Postboten, seit dem 6.10.2026 auch für den
+ * Eingangskorb und seit dem 11.10.2026 für den Claude-Leser der App, der
+ * daraus seine Arbeit nimmt (@/lib/leser/laeufe). `read_inbox` und
+ * `read_material` tragen die ersten drei je Zeile, für einen Chat:
  *
- * - `lastPageAt` ist die jüngste Seite des Blattes. Daran sieht der Postbote,
+ * - `lastPageAt` ist die jüngste Seite des Blattes. Daran sieht der Leser,
  *   ob ein Blatt noch wächst — die Rückseite kommt über „Seite hinzufügen“
  *   erst nach der Vorderseite —, und wartet, bis es zur Ruhe gekommen ist.
+ *   Er ist zugleich der Schlüssel seines Gedächtnisses (`leser_laeufe`).
  * - `unreadAttachedPageIds` sind die nachgereichten Seiten ohne Abschrift, in
  *   der Reihenfolge des Blattes; was das genau heißt und warum die Altblätter
  *   dabei leer ausgehen, steht an `nachgereichtUngelesen()`. Ein eingeordnetes
  *   Blatt liegt nicht mehr im Korb, und eine nachgereichte Rückseite käme sonst
- *   nie an die Reihe. Die ids und nicht nur die Zahl: der Postbote schreibt
+ *   nie an die Reihe. Die ids und nicht nur die Zahl: der Leser schreibt
  *   GENAU diese Seiten ab und keine andere ungelesene daneben — sonst nähme die
  *   Nachlese einer Rückseite die alten Seiten eines Altblattes gleich mit.
  * - `unreadAttachedPages` ist die Länge dieser Liste. Sie bleibt für Leser,
@@ -1578,7 +1589,7 @@ export async function listPageActivity(
  * Die ids aus `string_agg(…, ',')` wieder als Liste.
  *
  * Leer, wenn nichts dasteht — `"".split(",")` gäbe `[""]`, also eine Seite
- * ohne id, und der Postbote suchte nach ihr. Exportiert für den Test.
+ * ohne id, und ein Leser suchte nach ihr. Exportiert für den Test.
  */
 export function seitenIds(text: string | null | undefined): string[] {
   if (!text) return [];
@@ -2233,9 +2244,10 @@ export async function korbblattStand(
  * Ansichten fragen ihn beim Rendern und danach im Takt über
  * `/api/material/stand`; ändert er sich, laden sie nach.
  *
- * **Eine Anweisung, ein Rundweg.** Drei Aggregate — Blätter, Seiten,
- * Vorschläge —, jedes ohne GROUP BY und damit immer genau eine Zeile, auch bei
- * null Blättern, per Kreuzprodukt nebeneinander. Jede Tabelle wird einmal
+ * **Eine Anweisung, ein Rundweg.** Vier Aggregate — Blätter, Seiten,
+ * Vorschläge und die Läufe des Claude-Lesers —, jedes ohne GROUP BY und damit
+ * immer genau eine Zeile, auch bei null Blättern, per Kreuzprodukt
+ * nebeneinander. Jede Tabelle wird einmal
  * gelesen, über die Indizes auf `user_id` und `material_id`. Kein bytea, kein
  * Volltext: von der Abschrift zählt nur `octet_length()`, und das liest die
  * Größe aus dem Kopf des Wertes, ohne ihn zu entpacken. Zahlen mit `::int`,
@@ -2255,7 +2267,8 @@ export async function korbblattStand(
  *   Leser entschieden (`leserFestlegen()`)    offen −1, docling oder claude +1
  *   Doclings Abschrift geschrieben            gelesen, maschinell,
  *                                             abschriftBytes
- *   Vorschlag angelegt (Postbote, App, Hand)  vorschlaege, neuesterVorschlag
+ *   Vorschlag angelegt (Claude, App, Hand)    vorschlaege, neuesterVorschlag
+ *   Lauf des Claude-Lesers beginnt / endet    neuesterLauf
  *   Vorschlag übernommen (Knopf, Formular,    vorschlaege fällt, eingeordnet/
  *     Jev über `applyProposal()`)             zuletztEingeordnet, gelesen/
  *                                             abschriftBytes, angaben
@@ -2276,7 +2289,12 @@ export async function korbblattStand(
  * damit Abhaken und Zurücklegen zweier Blätter im selben Takt nicht
  * verschwinden. Und das ablaufende Fenster zählt mit, damit die Zeile „wird
  * gelesen“ mit einem Nachladen verschwindet und nicht bis zum nächsten Schritt
- * stehen bleibt.
+ * stehen bleibt. `neuesterLauf` (seit dem 11.10.2026) bewegt auch ein Lauf,
+ * der nichts anlegt — „kein Vorschlag“, „nichts“, eine Pause —, damit die
+ * Zeile „Zuletzt …“ am Blatt nach dem Knopf „Abschreiben lassen“ von selbst
+ * erscheint. Gezählt werden dabei nur Läufe an einem Blatt: ein Fragenlauf
+ * an einer Klausur (@/lib/fragenlauf) steht in derselben Tabelle, ändert
+ * aber an keinem Blatt etwas.
  *
  * Bewusst NICHT erkannt, weil zu teuer für zu selten: eine reine
  * Themenänderung, ein geänderter Vorschlag und eine Abschrift gleicher Länge
@@ -2287,27 +2305,41 @@ export async function korbblattStand(
  *
  * - eine Seite mit `leser = 'offen'`, jünger als `IN_ARBEIT_MINUTEN` — die
  *   App entscheidet gerade. Hängt eine (Neustart mitten im Lesen), löst sie
- *   der nächste Anstoß der Zuteilung: das nächste Hochladen oder das
- *   `read_inbox` des Postboten, der das alle 15 s tut, solange er läuft. Ist
- *   er aus, endet der schnelle Takt mit dem Fenster;
+ *   der nächste Anstoß der Zuteilung: der Start der App selbst
+ *   (src/instrumentation.ts), das nächste Hochladen, ein `read_inbox` aus
+ *   einem Chat;
  * - eine Claude-Seite ohne Abschrift, jünger als `IN_ARBEIT_MINUTEN`, an deren
- *   Blatt noch kein Vorschlag liegt. Liegt einer, hat Claude geliefert (die
- *   Abschrift steckt im Vorschlag), und gewartet wird nur noch auf einen
- *   Menschen — dafür braucht es keinen 5-s-Takt und keine Zeile „wird
- *   gelesen“;
- * - ein Korbblatt ohne Vorschlag, jünger als `KORB_FRISCH_MINUTEN` — meist
- *   steht der Vorschlag der App noch aus.
+ *   Blatt noch kein Vorschlag liegt und für die der Claude-Leser in keinem
+ *   Stand, der diese Seite schon kannte, etwas vermerkt hat, was das Blatt
+ *   erledigt (`leser_laeufe`: Vorschlag, kein Vorschlag, nichts). Liegt ein Vorschlag, hat Claude
+ *   geliefert (die Abschrift steckt darin), und gewartet wird nur noch auf
+ *   einen Menschen; steht ein erledigender Lauf da, kommt niemand mehr — für
+ *   beides braucht es keinen 5-s-Takt und keine Zeile „wird gelesen“. Ohne
+ *   API-Schlüssel zählt diese Bedingung gar nicht: dann liest niemand;
+ * - ein Korbblatt ohne Vorschlag und ohne einen Lauf, der es in seinem
+ *   jetzigen Stand erledigt hat (also mit seiner jüngsten Seite), jünger als
+ *   `KORB_FRISCH_MINUTEN` — meist steht der Vorschlag der App noch aus, oder
+ *   eine Seite kam während eines Laufs dazu, und der nächste steht an. Ohne
+ *   Schlüssel oder während einer Pause des Lesers zählt ein solches Blatt
+ *   nicht, wenn es ungelesene Claude- oder Altseiten hat: daran arbeitet dann
+ *   niemand;
+ * - und, nur im Speicher dieses Prozesses, solange der Claude-Leser gerade ein
+ *   Blatt dieses Nutzers liest oder ein Knopfdruck darauf wartet
+ *   (`claudeBeschaeftigt()` in @/lib/leser/claude-zustand) — auch an einem
+ *   alten Blatt, das keine der Bedingungen oben trifft. Das steht auch im
+ *   Fingerabdruck (`:liest`): ein Lauf, der in Millisekunden endet, bewegt
+ *   `neuesterLauf` womöglich, bevor die Seite gerendert ist, und die Seite
+ *   sähe sonst nie, dass er vorbei ist.
  *
- * „Meist“, weil die Datenbank nicht weiß, ob noch jemand kommt. Ein
- * verworfener Vorschlag, ein Blatt, das „wieder in den Korb“ gelegt wurde, ein
- * Lauf des Postboten ohne Vorschlag oder eine Claude-Seite, die er nicht lesen
- * konnte, sehen genauso aus wie ein Blatt, das gerade gelesen wird — und der
- * Postbote nimmt keines davon wieder auf (er merkt sich ein Blatt mit dem
- * Stand seiner jüngsten Seite). Dann stehen der schnelle Takt und die Zeile
- * „wird gelesen“ bis zum Ende des Fensters da. Das Fenster ist die Grenze
- * dafür, und deshalb ist es kurz: eine halbe Stunde für Seiten, zehn Minuten
- * für das Korbblatt. Einen Zustand des Postboten in der Datenbank gibt es
- * nicht.
+ * „Meist“, weil die Datenbank nicht alles weiß. Ein Vorschlag aus einem Chat,
+ * den jemand verworfen hat, ein Blatt, das „wieder in den Korb“ gelegt wurde,
+ * ein Lauf, der in der Frist hängt, sehen aus wie ein Blatt,
+ * das gerade gelesen wird. Dann stehen der schnelle Takt und die Zeile „wird
+ * gelesen“ bis zum Ende des Fensters da; das Fenster ist die Grenze dafür, und
+ * deshalb ist es kurz (`IN_ARBEIT_MINUTEN` in @/lib/blaetter-stand, dort die
+ * Begründung der Zahl). Bis zum 11.10.2026 sah so auch jedes Blatt aus, an dem
+ * der Postbote mit „nichts“ fertig war — von ihm gab es keinen Zustand in der
+ * Datenbank. Seit der Leser in der App jeden Lauf vermerkt, gibt es ihn.
  *
  * Der Altbestand (`leser` NULL) kommt in keiner Bedingung vor. Sonst fragten
  * die Seiten wegen der alten Blätter ohne Abschrift für immer alle fünf
@@ -2325,6 +2357,56 @@ export async function blaetterStand(userId: string): Promise<BlaetterStand> {
         .from(materialProposals)
         .where(eq(materialProposals.materialId, materialId)),
     );
+  // Hat er das Blatt in einem STAND erledigt, der diese Seite schon kannte?
+  // Für eine Seite zählt der Stand des Laufs (`schluessel`, die jüngste Seite
+  // beim Start) und nicht der Zeitpunkt seiner Zeile (Abnahme vom
+  // 11.10.2026): eine Seite, die während eines Laufs dazukam, ist jünger als
+  // sein Stand und für die Auswahl ein neuer Fall; nach dem Zeitpunkt der
+  // Zeile zählte sie als erledigt, und „wird gelesen“ fehlte, obwohl der
+  // nächste Lauf schon anstand. `schluessel` hat Millisekunden, `created_at`
+  // Mikrosekunden — die Seite wird deshalb auf Millisekunden gekürzt, sonst
+  // wäre die jüngste Seite jünger als der Stand, den sie selbst gesetzt hat.
+  const erledigtMitSeite = (materialId: AnyColumn, seiteSeit: AnyColumn | SQL) =>
+    exists(
+      db
+        .select({ vorhanden: sql`1` })
+        .from(leserLaeufe)
+        .where(
+          and(
+            eq(leserLaeufe.materialId, materialId),
+            inArray(leserLaeufe.ergebnis, ["vorschlag", "kein-vorschlag", "nichts"]),
+            sql`nullif(${leserLaeufe.schluessel}, '')::timestamptz >= date_trunc('milliseconds', ${seiteSeit})`,
+          ),
+        ),
+    );
+  // Für das frische Korbblatt dieselbe Frage, über ALLE seine Seiten: hat er
+  // es in dem Stand erledigt, den es jetzt hat — mit seiner jüngsten Seite?
+  // Bis zur Nachprüfung vom 11.10.2026 hieß das „irgendein Lauf nach dem
+  // Anlegen des Blattes“ (`created_at` der Zeile). Kam während eines Laufs
+  // eine Seite dazu, die Docling las, galt das Blatt danach als erledigt: die
+  // Docling-Seite wartet auf niemanden, die alte Claude-Seite kannte der Lauf
+  // schon, und das Blatt verschwand aus „wird gelesen“ — obwohl die neue Seite
+  // einen neuen Stand machte und der nächste bezahlte Lauf nach der Ruhe schon
+  // feststand (`auswaehlen()` in @/lib/leser/claude-ablauf).
+  const juengsteSeite = (materialId: AnyColumn) =>
+    sql`(select max(${materialPages.createdAt}) from ${materialPages} where ${materialPages.materialId} = ${materialId})`;
+  // Ohne Schlüssel liest niemand, und eine Claude-Seite wartet auf nichts —
+  // ebenso während einer Pause des Lesers (`claudePausiert()`).
+  const claudeLiest = claudeConfigured() && !claudePausiert();
+  const claudeWartet = claudeLiest
+    ? sql`(${materialPages.leser} = 'claude' and ${materialPages.transcript} is null and not ${vorschlagAm(materialPages.materialId)} and not ${erledigtMitSeite(materialPages.materialId, materialPages.createdAt)})`
+    : sql`false`;
+
+  // Ein frisches Korbblatt wartet nur, wenn noch jemand daran arbeiten kann.
+  // Ohne Schlüssel liest niemand seine ungelesenen Claude- oder Altseiten —
+  // dann stünde „Ein Blatt wird gerade gelesen …“ neben „Diese Seiten liest
+  // niemand“ (im Browser gefunden am 11.10.2026); während einer Pause gilt
+  // dasselbe. Mit Schlüssel und ohne Pause bleibt es, wie es war: der Lauf
+  // nach der Ruhe steht fest.
+  const korbWartet = (materialId: AnyColumn) =>
+    claudeLiest
+      ? sql`true`
+      : sql`not exists (select 1 from ${materialPages} where ${materialPages.materialId} = ${materialId} and ${materialPages.transcript} is null and (${materialPages.leser} = 'claude' or ${materialPages.leser} is null))`;
 
   const blaetter = db
     .select({
@@ -2337,7 +2419,7 @@ export async function blaetterStand(userId: string): Promise<BlaetterStand> {
       // ist wie „a“ + „bc“; geordnet nach id, damit dieselben Blätter immer
       // denselben Text ergeben.
       angaben: sql<string>`md5(coalesce(string_agg(concat_ws(chr(31), ${materials.id}, ${materials.subjectId}, ${materials.title}, ${materials.capturedOn}, ${materials.note}), chr(30) order by ${materials.id}), ''))`.as("stand_angaben"),
-      frischImKorb: sql<number>`(count(*) filter (where ${materials.filedAt} is null and ${materials.createdAt} > ${korbFrischSeit} and not ${vorschlagAm(materials.id)}))::int`.as("stand_frisch_im_korb"),
+      frischImKorb: sql<number>`(count(*) filter (where ${materials.filedAt} is null and ${materials.createdAt} > ${korbFrischSeit} and not ${vorschlagAm(materials.id)} and not ${erledigtMitSeite(materials.id, juengsteSeite(materials.id))} and ${korbWartet(materials.id)}))::int`.as("stand_frisch_im_korb"),
     })
     .from(materials)
     .where(eq(materials.userId, userId))
@@ -2353,7 +2435,7 @@ export async function blaetterStand(userId: string): Promise<BlaetterStand> {
       maschinell: sql<number>`(count(*) filter (where ${materialPages.maschinell}))::int`.as("stand_maschinell"),
       abschriftBytes: sql<number>`coalesce(sum(octet_length(${materialPages.transcript})), 0)::int`.as("stand_abschrift_bytes"),
       neueste: sql<string | null>`to_char(max(${materialPages.createdAt}) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`.as("stand_neueste_seite"),
-      inArbeit: sql<number>`(count(*) filter (where ${materialPages.createdAt} > ${seiteFrischSeit} and (${materialPages.leser} = 'offen' or (${materialPages.leser} = 'claude' and ${materialPages.transcript} is null and not ${vorschlagAm(materialPages.materialId)}))))::int`.as("stand_seiten_in_arbeit"),
+      inArbeit: sql<number>`(count(*) filter (where ${materialPages.createdAt} > ${seiteFrischSeit} and (${materialPages.leser} = 'offen' or ${claudeWartet})))::int`.as("stand_seiten_in_arbeit"),
     })
     .from(materialPages)
     .innerJoin(
@@ -2380,6 +2462,19 @@ export async function blaetterStand(userId: string): Promise<BlaetterStand> {
     )
     .as("stand_vorschlaege_q");
 
+  // Der jüngste Lauf, und wie viele gerade laufen: seit der Abnahme vom
+  // 11.10.2026 steht die Zeile eines Laufs schon VOR dem Aufruf da (`laeuft`)
+  // und bekommt ihr Ergebnis erst danach — ihr `created_at` bewegt sich dabei
+  // nicht. Ohne die Zahl der laufenden bliebe das Ende eines Laufs ohne
+  // Vorschlag unsichtbar, und „Zuletzt …“ erschiene nicht von selbst.
+  const laeufe = db
+    .select({
+      neuester: sql<string | null>`case when count(*) = 0 then null else concat(to_char(max(${leserLaeufe.createdAt}) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'), '/', count(*) filter (where ${leserLaeufe.ergebnis} = 'laeuft')) end`.as("stand_neuester_lauf"),
+    })
+    .from(leserLaeufe)
+    .where(and(eq(leserLaeufe.userId, userId), isNotNull(leserLaeufe.materialId)))
+    .as("stand_laeufe_q");
+
   const [zeile] = await db
     .select({
       blaetter: blaetter.anzahl,
@@ -2399,16 +2494,27 @@ export async function blaetterStand(userId: string): Promise<BlaetterStand> {
       seitenInArbeit: seiten.inArbeit,
       vorschlaege: vorschlaege.anzahl,
       neuesterVorschlag: vorschlaege.neuester,
+      neuesterLauf: laeufe.neuester,
     })
     .from(blaetter)
     .crossJoin(seiten)
-    .crossJoin(vorschlaege);
+    .crossJoin(vorschlaege)
+    .crossJoin(laeufe);
 
   // Aggregate ohne GROUP BY liefern immer eine Zeile; der Rückfall ist nur für
   // den Typ da.
   const zahlen: StandZahlen = zeile ?? LEERER_STAND;
 
-  return { stand: fingerabdruck(zahlen), inArbeit: inArbeitAus(zahlen) };
+  // „Liest Claude gerade?“ gehört in den Fingerabdruck und nicht nur in
+  // `inArbeit`: endet ein Lauf, bevor seine Zeile die Zahlen ändert — ein
+  // Schlüssel, der in Millisekunden abgewiesen wird —, sah die Seite sonst
+  // denselben Stand und zeigte „Claude liest dieses Blatt gerade“ weiter, bis
+  // jemand neu lud (im Browser gefunden am 11.10.2026).
+  const beschaeftigt = claudeBeschaeftigt(userId);
+  return {
+    stand: `${fingerabdruck(zahlen)}${beschaeftigt ? ":liest" : ""}`,
+    inArbeit: inArbeitAus(zahlen) || beschaeftigt,
+  };
 }
 
 /**

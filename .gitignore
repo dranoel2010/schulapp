@@ -80,3 +80,7 @@ rueckblick.html
 # man nicht zurück. Gelöscht wird er nicht von hier aus; das ist deine
 # Entscheidung, und bis dahin ist er wenigstens außer Reichweite.
 install.sh
+
+# Die gebündelte Abnahme-Messung (scripts/abschrift-messen.mts, Kopf): sie
+# entsteht im Klon und geht per scp aufs NAS. Ein Bauergebnis, kein Quelltext.
+/abschrift-messen.mjs

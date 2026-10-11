@@ -11,11 +11,14 @@ import {
 } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth";
 import { loadCalendarStatus } from "@/lib/calendar/sync";
+import { CLAUDE_MODELL, claudeConfigured } from "@/lib/claude/client";
 import { formatGerman, todayInBerlin } from "@/lib/dates";
 import { freeLabel, listFreePeriods } from "@/lib/free-days";
 import { iservConfigured } from "@/lib/iserv/config";
 import { loadIservStatus } from "@/lib/iserv/status";
 import { jevConfigured } from "@/lib/jev";
+import { kostenSatz } from "@/lib/leser/claude-ablauf";
+import { laufKostenSeit } from "@/lib/leser/laeufe";
 import { listConnections } from "@/lib/oauth";
 import { readThemePreference, THEME_OPTIONS } from "@/lib/theme";
 
@@ -55,11 +58,18 @@ export default async function SettingsPage({
   const theme = await readThemePreference();
   const today = todayInBerlin();
   const { kalender } = await searchParams;
-  const [connections, freePeriods, calendar, iserv] = await Promise.all([
+  // Seit wann der Claude-Leser für „diesen Monat“ zählt: der Erste des
+  // Berliner Monats, um Mitternacht UTC. Die ein, zwei Stunden Abstand zu
+  // Berlin sind für eine Summe zum Ansehen ohne Belang — abgerechnet wird bei
+  // Anthropic, nicht hier.
+  const monatsanfang = new Date(`${today.slice(0, 8)}01T00:00:00Z`);
+  const claude = claudeConfigured();
+  const [connections, freePeriods, calendar, iserv, kosten] = await Promise.all([
     listConnections(user.id),
     listFreePeriods(user.id, today),
     loadCalendarStatus(user.id),
     loadIservStatus(user.id),
+    laufKostenSeit(user.id, monatsanfang),
   ]);
 
   const since = tag(user.createdAt);
@@ -84,6 +94,12 @@ export default async function SettingsPage({
       : null,
     jevConfigured()
       ? "die Abschrift eines Blattes geht zum Einordnen an Jev (TypeSafe)"
+      : null,
+    claude
+      ? "Fotos von Seiten, die Docling nicht sicher liest, gehen zum Abschreiben an Claude (Anthropic) — nur die Fotos, nie etwas aus IServ"
+      : null,
+    claude
+      ? "drückst du an einer Klausur „Fragen bauen lassen“, geht ihr Stoff — die Abschriften der Blätter zu ihren Themen — an Claude (Anthropic)"
       : null,
     connections.length > 0
       ? "verbundene Programme lesen über den Web MCP mit, auch Fotos und Abschriften deiner Blätter"
@@ -173,6 +189,44 @@ export default async function SettingsPage({
       <section id="iserv" className="scroll-mt-6">
         <IservCard status={iserv} />
       </section>
+
+      {/* Der Claude-Leser (seit dem 11.10.2026): an derselben Stelle sichtbar
+          wie Jev — in „Wo deine Daten liegen“ —, und hier mit dem, was nur er
+          hat: ein Zustand ohne Schlüssel, der nicht still bleiben darf, und
+          Kosten in echtem Geld. Ohne Schlüssel läuft die App wie bisher, nur
+          Handschrift liest niemand; das soll hier stehen und nicht erst im
+          Protokoll auffallen. Die Summe des Monats zählt jeden Lauf in
+          `leser_laeufe` mit Antwort, also auch die Fragenläufe an den
+          Klausuren — es ist derselbe Schlüssel, und abgerechnet wird beides
+          zusammen. Bezahlte Abbrüche (eigene Frist, Strom abgerissen, Neustart
+          mitten im Aufruf) haben keine Messung; gab es im Monat einen, steht
+          „mindestens“ vor der Summe und dahinter, wie viele fehlen
+          (`kostenSatz()`, seit der Abnahme vom 11.10.2026 — bis dahin fehlten
+          sie still). */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Handschrift abschreiben</CardTitle>
+          <CardDescription>
+            Seiten, die Docling nicht sicher liest — Handschrift, Formeln —,
+            schreibt Claude vom Foto ab. Daraus wird ein Vorschlag im
+            Eingangskorb, und Jev ordnet ein; ändern kann Claude dabei nichts.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {claude ? (
+            <p className="text-sm text-muted">
+              {`Eingerichtet: ${CLAUDE_MODELL} über den API-Schlüssel dieses Servers. Jeder Lauf kostet Geld; diesen Monat bisher ${kostenSatz(kosten)}, Abschreiben und Fragen bauen zusammen. Was die Läufe an einem Blatt gekostet haben, steht an ihm, was ein Fragenlauf gekostet hat, an seiner Klausur.`}
+            </p>
+          ) : (
+            <p className="text-sm text-muted">
+              Auf diesem Server ist Claude nicht eingerichtet — es fehlt{" "}
+              <code>ANTHROPIC_API_KEY</code>. Gedrucktes liest Docling weiter;
+              Handschrift liest niemand, sie bleibt ohne Abschrift, bis du sie
+              am Blatt abtippst.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

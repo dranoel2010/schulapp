@@ -42,8 +42,9 @@ import { listSubjects } from "@/lib/subjects";
  * entscheidet, welchen (@/lib/leser/zuteilung). Daraus folgen zwei Wege in
  * diese Funktion, und beide gehen durch dieselbe Tür:
  *
- * - **Ein Vorschlag des Postboten** (origin „agent“). Er bringt die
- *   Abschrift der Claude-Seiten; die Docling-Seiten desselben Blattes stehen
+ * - **Ein Vorschlag eines Agenten** (origin „agent“): des Claude-Lesers der
+ *   App (seit dem 11.10.2026; bis dahin des Postboten) oder eines Chats. Er
+ *   bringt die Abschrift der Claude-Seiten; die Docling-Seiten desselben Blattes stehen
  *   schon im Bestand. Jev liest beides zusammen, und übernommen wird nur auf
  *   Seiten ohne Abschrift (`nurUngelesene`) — eine Docling-Abschrift ersetzt
  *   hier nichts still.
@@ -195,9 +196,11 @@ export function onlyTranscribesUnreadPages(
  * so, wie die App sie selbst bestimmt (`nachgereichtUngelesen()` in
  * @/lib/materials, ausgeliefert als `unreadAttachedPageIds`).
  *
- * Dass der Postbote nur diese Seiten nennt, ist eine Bitte an ein Modell.
- * Ein Lauf, der zur Orientierung `read_sheet` ruft, sieht auch die alten,
- * nie gelesenen Seiten eines Altblatts — und schriebe er sie mit ab, legte
+ * Dass ein Leser nur diese Seiten nennt, ist eine Bitte an ein Modell oder,
+ * beim Claude-Leser der App, eine Frage der Fotos, die er bekommt. Ein Chat,
+ * der zur Orientierung `read_sheet` ruft, sieht auch die alten, nie gelesenen
+ * Seiten eines Altblatts, und der Knopf „Abschreiben lassen“ schickt sie mit
+ * Absicht mit — schriebe einer von beiden sie ab, legte
  * `onlyTranscribesUnreadPages()` allein sie ohne Menschen ab. Das widerspräche
  * der Entscheidung, die fünfzehn Altblätter nicht von selbst abzuschreiben.
  * Hier steht deshalb die Regel der App und nicht die des Auftrags: was nicht

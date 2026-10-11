@@ -298,18 +298,22 @@ Formular, ohne dass an ihnen eine Zeile geändert werden musste.
 
 ## Wie die KI angeschlossen wird
 
-Nicht in die App hinein, sondern außen herum. Die App ist ohne sie vollständig:
-fotografieren, zuordnen, wiederfinden, Vorschlag von Hand anlegen, bestätigen.
+Zuerst nicht in die App hinein, sondern außen herum — und seit dem 11.10.2026
+auch hinein, für das Abschreiben (Entscheidung vom 11.10.2026, unten). Die App
+ist ohne KI vollständig: fotografieren, zuordnen, wiederfinden, Vorschlag von
+Hand anlegen, bestätigen. Das gilt weiter: Ohne API-Schlüssel läuft sie wie
+zuvor, nur liest niemand Handschrift.
 
-Der Agent läuft in Claude und ruft die App — nicht umgekehrt. Ein MCP-Server
-ruft nie ein Modell auf, er wird gerufen; deshalb kostet dieser Weg kein
-API-Guthaben, sondern läuft über das Abo. Die Tools sitzen dabei **neben** den
+Auf dem Weg über den Web MCP läuft der Agent in Claude und ruft die App — nicht
+umgekehrt. Ein MCP-Server ruft nie ein Modell auf, er wird gerufen; deshalb
+kostet dieser Weg kein API-Guthaben, sondern läuft über das Abo. Die Tools sitzen dabei **neben** den
 Server Actions auf derselben `src/lib` und nicht darüber: eine Server Action
 endet mit `redirect()`, und das wirft intern — ein Tool bekäme nie ein Ergebnis.
 
-**Angestoßen wird der Agent von Hand, in der Claude-App.** Das ist entschieden,
-und zwar aus drei Gründen, von denen keiner der Preis ist. Ein Blatt kostet als
-Bild rund 1 900 Tokens — so viel wiegt die Lesefassung mit 1000 Pixeln, die der
+**Angestoßen wird der Agent von Hand, in der Claude-App.** Das war am 24.8.2026
+entschieden, und zwar aus drei Gründen, von denen keiner der Preis war; seit dem
+11.10.2026 gilt es nur noch für Chats (unten). Ein Blatt kostet als Bild rund
+1 900 Tokens — so viel wiegt die Lesefassung mit 1000 Pixeln, die der
 Agent bekommt; bei zweihundert Blättern im Schuljahr ist das gut ein Euro, je
 nach Modell. Über einen Euro entscheidet man nicht.
 
@@ -326,7 +330,8 @@ gelaufen ist. Ob die Erkennung bei einer Handschrift taugt, weiß man erst,
 wenn man fünf Blätter durchgeschickt hat — und das kostet auf diesem Weg
 nichts. Taugt sie nicht, wäre ein Aufruf nach jeder Aufnahme das Gegenteil
 einer Erleichterung: er füllte den Korb mit Vorschlägen, die ohnehin von Hand
-nachgetippt werden.
+nachgetippt werden. (Für Handschrift ist es seit dem 11.10.2026 gemessen, an
+31 Seiten — und das Ergebnis trägt den Aufruf, siehe unten.)
 
 Drittens stimmt „sicherheitsseitig sind alle Wege gleich" nur für die
 Schreibrichtung. Dort gilt er ohne Abstriche: kein Vorschlag kommt ohne
@@ -335,7 +340,9 @@ gilt er nicht. Fragt die App selbst ein Modell, bekommt sie einen Schlüssel,
 der Geld ausgeben kann, und eine ausgehende Verbindung zu einem Dritten — und
 sie wird selbst zu der Stelle, die ein nicht vertrauenswürdiges Blatt einem
 Modell vorlegt. In der Claude-App ist der Schadensradius einer verunglückten
-Anweisung auf einem Blatt ein Chatverlauf.
+Anweisung auf einem Blatt ein Chatverlauf. (Seit dem 11.10.2026 ist die App
+genau diese Stelle. Wie sie das trägt — ohne ein einziges Werkzeug im Aufruf —,
+steht in der Entscheidung vom 11.10.2026.)
 
 Seit dem 24.8.2026 ist dieser Weg gebaut und gelaufen: die Anmeldung eines
 Programms, die Zustimmung, der Tausch, die Werkzeuge, ein Blatt als Bild und
@@ -346,24 +353,27 @@ Grund verlangt, steht damit offen: fünf Blätter durchschicken und hinsehen.
 25.8.2026, einen Tag nach Stufe 4, kam der Wunsch: vom Foto bis zum Vorschlag
 ohne Handgriff. Gebaut wurde dafür weder der Knopf am Korb noch der Aufruf aus
 der App, sondern ein Dritter: **der Postbote** (`harness/`), ein kleines
-Programm auf dem eigenen Rechner. Es sieht alle paar Minuten in den Korb und
-setzt Claude auf jedes Blatt an, das noch keinen Vorschlag hat. (Seit dem
-4.10.2026 alle 15 Sekunden — mehr dazu am Ende dieses Abschnitts.)
+Programm auf dem eigenen Rechner, später auf dem NAS. Es sah alle paar Minuten
+in den Korb und setzte Claude auf jedes Blatt an, das noch keinen Vorschlag
+hatte. (Ab dem 4.10.2026 alle 15 Sekunden; stillgelegt am 11.10.2026 — beides
+weiter unten.)
 
-Das hält alles, was oben steht. Die App bekommt keinen Schlüssel und ruft nie
-ein Modell — der Postbote tut es, von außen, durch dieselbe Tür wie die
-Claude-App. Er meldet sich als eigener Client an und holt sich eine eigene
-Zustimmung; damit steht er in den Einstellungen als eigene Zeile und lässt sich
-einzeln trennen. Und weil er über Claude Code läuft, kostet er kein
+Das hielt alles, was oben steht. Die App bekam keinen Schlüssel und rief nie
+ein Modell — der Postbote tat es, von außen, durch dieselbe Tür wie die
+Claude-App. Er meldete sich als eigener Client an und holte sich eine eigene
+Zustimmung; damit stand er in den Einstellungen als eigene Zeile und ließ sich
+einzeln trennen. Und weil er über Claude Code lief, kostete er kein
 API-Guthaben, sondern Kontingent.
 
-**Was ausdrücklich weiter nicht kommt, ist der Aufruf nach jeder Aufnahme.** Er
-feuerte im Unterricht, auf einer Verbindung, die es im Schulnetz oft nicht gibt,
-und bräuchte eine Warteschlange und einen Fehlerzustand je Blatt. Der Postbote
-braucht beides nicht, denn **der Eingangskorb IST die Warteschlange**: ein Blatt
-ohne Vorschlag ist die offene Aufgabe, und wer eine Runde verpasst, holt sie in
-der nächsten nach. Angestupst wird dabei nichts — die App weiß von ihm nichts,
-und sie soll nichts von ihm wissen.
+**Was damals ausdrücklich nicht kommen sollte, war der Aufruf nach jeder
+Aufnahme.** Er feuerte im Unterricht, auf einer Verbindung, die es im
+Schulnetz oft nicht gibt, und bräuchte eine Warteschlange und einen
+Fehlerzustand je Blatt. Der Postbote brauchte beides nicht, denn **der
+Eingangskorb war die Warteschlange**: ein Blatt ohne Vorschlag war die offene
+Aufgabe, und wer eine Runde verpasste, holte sie in der nächsten nach.
+Angestupst wurde dabei nichts — die App wusste von ihm nichts, und sie sollte
+nichts von ihm wissen. Seit dem 11.10.2026 gibt es den Aufruf doch, mit
+beidem, was ihm fehlte; der Anlass steht unten.
 
 **Nachtrag vom 4.10.2026: das Foto ist der einzige Handgriff.** Auf Wunsch
 ordnet seitdem die App selbst ein: nach dem Vorschlag des Postboten
@@ -373,11 +383,13 @@ und die App übernimmt — durch dieselbe Tür wie der Knopf im Korb. Und
 seit dem 6.10.2026 nicht mehr dem Postboten vor, sondern für die App selbst
 (siehe unten). Damit ruft die App selbst zwei Dienste, und der Satz oben („Die
 App bekommt keinen Schlüssel und ruft nie ein Modell") gilt nicht mehr; der
-Agent darf aber weiterhin nur vorschlagen. Der Postbote sieht alle 15 Sekunden
-nach, wartet bei einem leeren Kontingent bis zu 30 Minuten, und Seiten, die an
-ein schon eingeordnetes Blatt angehängt werden, liest er von selbst nach — die
-fünfzehn Altblätter vom August ausdrücklich nicht. Den Agenten ruft die App
-weiter nicht: angestupst wird er nicht, der Korb bleibt seine Warteschlange.
+Agent darf aber weiterhin nur vorschlagen. Der Postbote sah ab da alle 15
+Sekunden nach, wartete bei einem leeren Kontingent bis zu 30 Minuten, und
+Seiten, die an ein schon eingeordnetes Blatt angehängt wurden, las er von
+selbst nach — die fünfzehn Altblätter vom August ausdrücklich nicht. Den
+Agenten rief die App weiter nicht: angestupst wurde er nicht, der Korb blieb
+seine Warteschlange. Das galt bis zum 11.10.2026; die Regeln — Ruhe, Pause,
+Nachlese, die Altblätter — hat der Leser der App übernommen.
 
 **Entscheidung vom 6.10.2026: ein Leser je Seite, und die App entscheidet.**
 Bis dahin las jede Seite zweimal. Docling rechnete sie für den Postboten vor,
@@ -397,7 +409,9 @@ Gemeint war dort der Agent, ausgelöst vom Handy im Unterricht, ohne
 Warteschlange und ohne Zustand je Blatt. Dieser hier ruft keinen Agenten, läuft
 auf dem NAS nach der Antwort an das Handy, und beides, was ihm fehlte, hat er:
 eine Queue je Prozess, die Docling eine Seite nach der anderen rechnen lässt,
-und an jeder Seite `leser` und `leser_grund` — wer liest, und warum.
+und an jeder Seite `leser` und `leser_grund` — wer liest, und warum. Fünf Tage
+später kam auch der Agent selbst in die App, auf demselben Muster
+(Entscheidung vom 11.10.2026, unten).
 
 Und dabei **schreibt die App die Abschrift direkt, ohne Vorschlag.** Das ist
 der erste Weg in den Bestand, an dem kein Mensch und kein Vorschlag steht, und
@@ -420,18 +434,133 @@ ist, dass das Foto der einzige Handgriff bleibt.
 
 Was die Entscheidung **nicht** ändert: Agenten schreiben weiter nur über
 `propose_sheet` und `propose_questions`, und `src/lib/mcp/tools.test.ts` prüft
-das unverändert. Die Zuteilung ist App-Code und kein Werkzeug; ein Agent kann
+das unverändert. Die Zuteilung ist App-Code und kein Werkzeug; ein Chat kann
 sie höchstens anstoßen (`read_inbox` nimmt Seiten mit, die noch auf eine
 Entscheidung warten), aber weder auslösen, was gelesen wird, noch das Ergebnis
 bestimmen. Und `propose_sheet` verwirft Abschriften zu Seiten, die die App
 liest oder gelesen hat, statt sie anzunehmen — so kann auch ein Chat in der
 Claude-App keine Docling-Abschrift überschreiben.
 
+**Entscheidung vom 11.10.2026: die App ruft das Modell selbst.** Der Anlass
+ist eine Messung und ein Satz. Gemessen wurde an diesem Tag, ob Sonnet 5.5
+für die Abschrift reicht: 31 echte Seiten mit Handschrift, je zweimal
+abgeschrieben von Opus 5.5 und von Sonnet 5.5, nur vom Foto, und zwei Richter
+zählten blind am Foto die Fehler. Opus kam je Durchgang über alle Seiten auf
+10 bis 13 bestätigte schwere Fehler, Sonnet auf 37 bis 52. Und Sonnets
+häufigster Fehler ist der, den diese App am wenigsten verträgt: es verbessert still die
+Schreibweise des Schülers — aus einer „Hypothenuse“ wird die „Hypotenuse“, ohne Klammer (ein erfundenes Beispiel derselben Art). Eine
+Abschrift, deren Fehler nicht markiert sind, nimmt den ⟨Klammern⟩ ihren Sinn,
+und auf den Klammern steht das ganze Vertrauen in eine Abschrift, die niemand
+gegenliest. Daneben fiel auf, dass die Abschriften, die bis dahin im Betrieb
+gespeichert worden waren, so schlecht abschnitten wie Sonnet; woran das lag —
+ein älteres Modell, die Vorgaben des Programms, Doclings Vorlage bis zum
+6.10. —, ist nicht untersucht. Danach hat der Nutzer entschieden, alles auf die API
+umzuziehen.
+
+Damit drehen sich drei Sätze weiter oben um, und sie werden hier beantwortet
+statt überklebt:
+
+- **„Die App bekommt keinen Schlüssel und ruft nie ein Modell“** (Postbote,
+  25.8.2026) und **„Den Agenten ruft die App weiter nicht“** (4.10.2026): Sie
+  ruft ihn jetzt, mit einem Schlüssel, der Geld ausgeben kann. Der Postbote
+  ist stillgelegt, nicht gelöscht: Sein Code liegt weiter unter `harness/`
+  (der Nutzer am 11.10.2026: „für den Fall der Fälle“), sein Ordner
+  stillgelegt auf dem NAS — beides der Rückweg, falls der API-Leser ausfällt.
+  Mit einer harten Regel, die schon vorher galt: nie zugleich mit dem
+  API-Leser, sonst liegen zwei Vorschläge am selben Blatt, einer bezahlt. Zur
+  App gehört er damit so wenig wie vorher: kein Import aus `harness/`, nicht
+  im Typprüfer der App, nicht im Bild.
+- **„Was ausdrücklich weiter nicht kommt, ist der Aufruf nach jeder
+  Aufnahme“**: Er kommt — aber nicht so, wie er dort abgelehnt wurde. Er
+  feuert nicht im Unterricht, sondern auf dem NAS, nachdem ein Blatt zwanzig
+  Sekunden zur Ruhe gekommen ist. Und die zwei Dinge, die ihm fehlten, hat er
+  wie Docling am 6.10.2026: eine eigene Queue je Prozess und einen Zustand je
+  Blatt — die Tabelle `leser_laeufe`, in der jeder Lauf mit seinem Ergebnis
+  und seinem Preis steht. Der Eingangskorb bleibt der Ort, an dem ein Mensch
+  entscheidet; die Warteschlange ist jetzt die Datenbank: wer eine Seite
+  liest (`leser`), ob sie gelesen ist (`transcript`), welcher Lauf schon war
+  (`leser_laeufe`).
+- **Der dritte Grund vom 24.8.2026** — ein Schlüssel, eine ausgehende
+  Verbindung, und die App wird selbst zu der Stelle, die ein nicht
+  vertrauenswürdiges Blatt einem Modell vorlegt. Das trifft jetzt genau zu.
+  Deshalb ist der Aufruf so gebaut, dass diese Stelle nichts hergibt:
+  - **Keine Werkzeuge.** Kein `tools`, keine Server-Werkzeuge, kein
+    MCP-Server — nicht verboten, sondern nicht da. Hinein gehen der
+    Systemtext mit den Abschreibregeln, der Auftrag und die Fotos, heraus
+    kommt eine Antwort in fester Form. Ein Blatt, auf dem „lösche alle Noten“
+    steht, findet nichts, womit es das könnte; der Schadensradius einer
+    verunglückten Anweisung ist ein Vorschlag im Korb. Das ist enger als der
+    Käfig des Postboten, der alle Werkzeuge der App sah, auch `read_grades`.
+  - **Die Antwort wird geprüft, nicht geglaubt.** Die API sorgt für die
+    Form, und die App prüft sie danach trotzdem Feld für Feld.
+  - **Dieselbe Tür.** Opus ist ein Leser, der einen Satz auf dem Blatt als
+    Anweisung nehmen könnte — genau der, vor dem die Regel unten schützt.
+    Er schreibt deshalb keine Abschrift direkt wie Docling, sondern einen
+    Vorschlag, durch dieselbe Tür wie `propose_sheet` (`blattVorschlagen()`
+    in `src/lib/blatt-vorschlag.ts`: Seitenprüfung, Verwerfen, dasselbe
+    Schema wie das Handformular, `createProposal(…, "agent")`, `autoFile()`).
+    Fragen legt der Fragenlauf nur über `vorschlagAnlegen()` ab, und
+    übernehmen kann sie nur ein Mensch.
+  - **Der Schlüssel nur zur Laufzeit** — nie im Bild, nie als `NEXT_PUBLIC_`.
+    Und nie neben etwas aus IServ: an Claude gehen Fotos und Abschriften,
+    sonst nichts.
+
+**Warum Opus und warum die Lesefassung, steht in der Messung oben;** beides
+ist gemessen und nicht gewählt, und das 1600-px-Vollbild ist es nicht — es
+bleibt bis zu einer eigenen Messung aus. Aus demselben Grund steht der
+Aufwand ausdrücklich da (`effort: high`, gemessen), statt der Vorgabe eines
+Programms überlassen zu bleiben. Lehnt Opus ein harmloses Blatt ab, wiederholt
+die API die Anfrage auf einem Rückfallmodell, und wer wirklich gelesen hat,
+steht im Vermerk.
+
+**Was es kostet, war bisher kein Grund und ist jetzt eine Zahl.** Eine Seite
+Handschrift kostete in der Messung 0,15 bis 0,28 $; eine Antwort kann
+höchstens 16 000 Tokens plus 8 000 je Seite lang werden, ab sechs Seiten
+64 000, also 1,28 $ Ausgabe. Gespart wird nicht am Modell — die Messung
+schließt Sonnet aus —, sondern an dem, was gar nicht erst zu Claude geht:
+Gedrucktes liest Docling, und das Gedächtnis sorgt dafür, dass ein Blatt im
+selben Stand nur einmal bezahlt wird. Verwerfen, Abhaken, „wieder in den
+Korb“ und ein Neustart lösen kein zweites Lesen aus, und die Zeile eines
+Laufs steht schon vor dem Aufruf da, sodass auch ein Neustart mitten im Strom
+gezählt wird. Was trotzdem bezahlt abbricht und am Blatt liegen kann — die
+eigene Frist, ein Strom, der mitten in der Antwort abreißt, eine Ablehnung
+mit ausgelastetem Rückfall —, zählt je Stand höchstens zweimal, danach liest
+es nur noch der Knopf. Ein abgerissener Strom und ein ausgelasteter Rückfall
+verfallen nach einem Tag (sie lassen sich keinem Blatt sicher zuordnen, und
+kein Ausfall soll ein Blatt für immer stilllegen), höchstens vier zählen
+insgesamt; Frist, Ablage und ein Neustart mitten im Aufruf verfallen nicht; was nichts gekostet hat, wie ein 400 vor dem Strom,
+zählt nie, und ein Ausfall der API — Überlastung, Grenzen, Konto, auch mitten
+im Strom gemeldet — auch nicht: der trifft jedes Blatt, und er legte sonst
+eines nach dem anderen still (zwei Nachprüfungen vom 11.10.2026: erst
+zählte jede Pause, dann gar kein Abbruch im Strom, und ein Blatt, an dem der
+Strom jedes Mal abriss, kostete jeden Anstoß aufs Neue). Ein verworfener Vorschlag von außen — aus einem
+Chat, oder einer des Postboten — hinterlässt dieselbe Spur wie ein eigener
+Lauf. Die Frist ist aus `max_tokens` gerechnet und
+nicht umgekehrt: eine Antwort, die nicht aufhört, endet an der Grenze der
+Tokens, einmal bezahlt, und nicht an der Frist, wo sie wiederkäme. Der
+Workspace des Schlüssels hat ein Ausgabelimit, und was die Läufe gekostet
+haben, steht am Blatt und in den Einstellungen — mit „mindestens“, sobald ein
+bezahlter Abbruch ohne Messung dabei war. Ohne Schlüssel läuft die App wie
+zuvor, nur liest niemand Handschrift — und das sagt sie, statt still zu
+warten. (Zahlen und Regeln dieses Absatzes nach der Abnahme vom 11.10.2026.)
+
+**Kein Takt, auch jetzt nicht.** Angestoßen wird der Leser vom Ende jeder
+Zuteilung, vom Start der App (`register()` in `src/instrumentation.ts` — das
+Netz nach einem Neustart, das bis dahin das `read_inbox` des Postboten war;
+antwortet die Datenbank beim Start noch nicht, mit vier Wiederholungen über
+gut sechs Minuten), von Weckern im Speicher für Ruhe, Pause und den zweiten
+Versuch einer gescheiterten Zuteilung, und von Hand: „Abschreiben lassen“ am
+Blatt, „Fragen bauen lassen“ an einer Klausur. Fragen baut die App nie von
+selbst.
+
 Zwei Regeln stehen darüber:
 
 **Alles, was die KI kann, muss ich auch können.** Jede Fähigkeit des Agenten
 braucht einen Weg in der Oberfläche. Umgekehrt gilt es nicht — der Agent bekommt
-nur `read_*` und `propose_*`, kein Anlegen, kein Ändern, kein Löschen.
+nur `read_*` und `propose_*`, kein Anlegen, kein Ändern, kein Löschen. Seit die
+App den Agenten selbst ruft, heißt das auch: auslösen können. Was er von selbst
+liest, liest er auf Knopfdruck auch („Abschreiben lassen“), und den Fragenlauf
+gibt es nur auf Knopfdruck.
 
 **Der Agent schreibt nie in den Bestand.** Er legt Vorschläge an; erst ein
 Mensch übernimmt sie, durch dieselbe Tür wie ein Formular — oder seit dem
@@ -439,7 +568,12 @@ Mensch übernimmt sie, durch dieselbe Tür wie ein Formular — oder seit dem
 die Bedingung: Wer nicht vertrauenswürdige Blätter liest und gleichzeitig
 schreiben darf, ist angreifbar über das Blatt selbst. Die eine Abschrift, die
 ohne Vorschlag in den Bestand kommt — Doclings, seit dem 6.10.2026 —, ist
-keine Ausnahme davon: Docling ist kein Agent, der Anlass steht oben.
+keine Ausnahme davon: Docling ist kein Agent, der Anlass steht oben. Der Leser,
+den die App seit dem 11.10.2026 selbst ruft, ist dagegen einer, und für ihn
+gilt die Regel ohne Abstriche: Er schreibt nur über die Tür von
+`propose_sheet`, und `src/lib/blatt-vorschlag.test.ts` und
+`src/lib/leser/claude-leser.test.ts` prüfen an ihrem Quelltext, dass nichts
+anderes schreibt.
 
 Daraus folgte lange ein zweiter Satz: Zettel gehörten nie in eine
 Claude-Code-Sitzung, sondern in die Claude-App — „dort steht kein Bash und kein
@@ -448,18 +582,27 @@ mehr.** Am 25.8.2026 nachgemessen: entscheidend ist nicht, welches Programm
 das Blatt liest, sondern was in der Sitzung daneben steht. Und das lässt sich
 leeren.
 
-Drei Schalter nehmen einem Lauf die Fähigkeiten, statt sie ihm nur zu
-verbieten: `--tools ""` entfernt die eingebauten Werkzeuge, `--strict-mcp-config`
-lässt nur den mitgegebenen Server gelten, `--mcp-config` gibt genau einen mit.
-Ein so gestarteter Lauf, nach seinen Werkzeugen gefragt, zählt elf auf — alle
-aus dieser App; nach Bash gefragt, sagt er, er habe keines. Ohne den ersten
-Schalter führt derselbe Lauf `echo` aus, obwohl Bash nicht in der
-Erlaubnisliste steht: eine Erlaubnisregel können die Einstellungen des Rechners
-weiten, eine fehlende Fähigkeit nicht.
+Drei Schalter nahmen einem Lauf des Postboten die Fähigkeiten, statt sie ihm
+nur zu verbieten: `--tools ""` entfernte die eingebauten Werkzeuge,
+`--strict-mcp-config` ließ nur den mitgegebenen Server gelten, `--mcp-config`
+gab genau einen mit. Ein so gestarteter Lauf, nach seinen Werkzeugen gefragt,
+zählte elf auf — alle aus dieser App; nach Bash gefragt, sagte er, er habe
+keines. Ohne den ersten Schalter führte derselbe Lauf `echo` aus, obwohl Bash
+nicht in der Erlaubnisliste stand: eine Erlaubnisregel können die
+Einstellungen des Rechners weiten, eine fehlende Fähigkeit nicht.
 
-Die Regel heißt deshalb ab jetzt: **ein Blatt gehört in keine Sitzung, in der
+Die Regel hieß deshalb ab da: **ein Blatt gehört in keine Sitzung, in der
 mehr steht als die Werkzeuge dieser App** — und wer das behauptet, muss es
-zeigen können.
+zeigen können. Für einen Chat in der Claude-App gilt sie so weiter.
+
+Seit dem 11.10.2026 gilt sie in der App in ihrer engsten Form: **ein Blatt
+gehört in keinen Aufruf, in dem überhaupt ein Werkzeug steht.** Gezeigt wird
+das nicht mehr, indem man einen Lauf nach seinen Werkzeugen fragt, sondern am
+Code: `claudeAnfrage()` in `src/lib/claude/client.ts` baut die Anfrage aus
+einer festen Liste von Feldern, und `client.test.ts` prüft, dass es genau
+diese sind — kein `tools`, kein `tool_choice`, kein MCP-Server. Eine
+Erlaubnisliste gibt es dort nicht mehr, weil es nichts gibt, was erlaubt
+werden könnte.
 
 ### Wie der Zugang abgesichert ist
 
@@ -525,7 +668,9 @@ durch (gemessen: 165 KB, also rund 225 000 Zeichen), die Vorschau mit 320
 Pixeln käme durch und wäre unlesbar. Deshalb liegt neben beiden eine dritte
 Fassung mit 1000 Pixeln, gerechnet im Browser wie die anderen auch (gemessen: 69 und 89 KB, also
 94 000 bis 121 000 Zeichen). Der Server bleibt damit ohne Bildbibliothek —
-das war der Punkt.
+das war der Punkt. Der Leser der App bekommt seit dem 11.10.2026 dieselbe
+Fassung, und zwar nicht, weil eine Grenze es verlangte — die API nähme das
+Vollbild —, sondern weil an ihr gemessen ist.
 
 Und wenn ein Blatt sich partout nicht kleinrechnen lässt — ein Tafelbild im
 Halbdunkel —, sagt `read_page` das geradeheraus, statt ein Ergebnis zu
@@ -566,12 +711,13 @@ kein Tagesplaner werden.
   Fließtext ist es das: ein abfotografierter Aufsatz kam am 23.8.2026 wörtlich
   richtig zurück, mit einem einzigen als unsicher markierten Wort — und die
   Vermutung stimmte. Mathematik ist ein anderes Problem und wird das Fach mit
-  den meisten Blättern: Brüche, Indizes, Exponenten, beschriftete Skizzen. Der
-  Weg dorthin kostet jetzt gar nichts mehr — ein Mathe-Blatt aufnehmen und den
-  Agenten `read_page` rufen lassen. Erst danach lässt sich sagen, ob ein Knopf
-  „Vorschläge holen" an der App überhaupt lohnt (siehe oben): bei schlechter
-  Erkennung wird ohnehin jeder Vorschlag nachgetippt, und dann füllt ein
-  automatischer Aufruf den Korb mit Arbeit, statt sie abzunehmen.
+  den meisten Blättern: Brüche, Indizes, Exponenten, beschriftete Skizzen.
+  Handschrift ist seit dem 11.10.2026 gemessen (31 Seiten, siehe die
+  Entscheidung dieses Tages); Formeln sind darin nicht eigens ausgewertet. Der
+  automatische Aufruf ist inzwischen da — taugt die Erkennung bei Formeln
+  nicht, füllt er den Korb mit Vorschlägen, die nachgetippt werden, und
+  kostet dafür. Messen lässt es sich mit `scripts/abschrift-messen.mts` an
+  ein paar Mathe-Seiten.
 - **Ein Leser je Seite — was die 37 Seiten nicht beantworten.** Die Regel ist
   an genau den Seiten gewählt, an denen sie gemessen ist, und zwei davon sind
   dasselbe Handout. Was sie im Betrieb taugt, zeigt `leser_grund`; die ersten
@@ -592,29 +738,76 @@ kein Tagesplaner werden.
     die Docling liest, bleibt der Aufnahmetag.
   - **Ein Vorschlag der App, den Jev nicht einordnen konnte,** sagt im Korb
     nicht, warum — das steht nur im Protokoll der App.
-  - **Kein Takt, mit Absicht — und zwei Lücken daraus.** Startet die App in den
+  - **Kein Takt, mit Absicht — und eine Lücke daraus.** Startet die App in den
     zwanzig Sekunden vor dem Vorschlag der App neu, bekommt ein reines
-    Docling-Blatt keinen; es bleibt für einen Menschen im Korb. Und läuft der
-    Postbote nicht, warten Seiten, die ein Neustart auf „offen" stehen ließ, bis
-    zum nächsten Hochladen. Ein `after()` auf der Korbseite wäre ein billiger
-    dritter Anstoß.
+    Docling-Blatt keinen; es bleibt für einen Menschen im Korb. Der Anstoß
+    beim Start (`register()` in `src/instrumentation.ts`) hilft dort nicht: Er
+    lässt die Zuteilung laufen, und die prüft nur Blätter, deren Seiten offen
+    sind oder die vorgemerkt waren. Die zweite Lücke von damals — ohne den
+    Postboten warteten Seiten, die ein Neustart auf „offen" stehen ließ, bis
+    zum nächsten Hochladen — ist seit dem 11.10.2026 zu: Diesen Anstoß gibt
+    der Start der App, und zwar auch dann, wenn die Datenbank beim Start noch
+    nicht antwortet (vier Wiederholungen über gut sechs Minuten); und eine
+    Seite, deren Zuteilung scheiterte, stößt nach ihren zehn Minuten Ruhe ein
+    Wecker wieder an. Beides kam erst mit der Abnahme vom selben Tag — davor
+    war es ein einziger Versuch, und nach der Ruhe kam niemand mehr.
   - **Doclings Rohtext bleibt gespeichert,** auch der von Handschriftseiten, in
     der Datenbank auf dem NAS. An ein Modell (Jev) geht er nur, wenn er die
     Regel bis zur Länge bestanden hat.
   - **Der Vermerk fehlt noch beim Baustein-Bau im Abruf** (`/abruf/bausteine/neu`)
     — im Fragen-Eingang und in `read_exam_material` steht er.
-  - **`MCP_TOOL_TIMEOUT` ist mit `read_docling` gegangen.** `propose_sheet`
-    fragt danach Jev, im ungünstigsten Fall zweimal fünfzehn Sekunden. Zeigt
-    das Protokoll des Postboten dort Zeitabläufe, gehört der Wert mit dieser
-    Begründung wieder hinein.
+  - **`MCP_TOOL_TIMEOUT` ist mit `read_docling` gegangen, und mit dem
+    Postboten gibt es niemanden mehr, der ihn setzen könnte.** Der Wert war
+    eine Einstellung von Claude Code. Der Leser der App ruft die Tür ohne MCP;
+    ein Chat in der Claude-App wartet nach `propose_sheet` auf Jev, im
+    ungünstigsten Fall zweimal fünfzehn Sekunden, und dort lässt sich keine
+    Frist einstellen. Zeigt ein Chat dort Zeitabläufe, muss die Wartezeit auf
+    Jev aus der Antwort heraus.
   - **Die Notbremse `LESER_REGEL=aus`** trägt kein Skript ein; sie ist eine
-    Zeile von Hand in der Override-Datei, die zwei Skripten gehört.
+    Zeile von Hand in der Override-Datei, die vier Skripten gehört.
   - **Nach einem Rückweg (`nas.sh zurueck`) kennt der alte Code `maschinell`
     nicht.** Ändert in der Zeit jemand eine Docling-Abschrift, behält sie die
     Kennzeichnung. Ein Trigger in der Datenbank finge das ab, wäre aber die
     erste Regel dort, die eine Sitzung der App von einer anderen unterscheiden
     müsste; bis dahin steht im README, wonach nach einem längeren Rückweg zu
     sehen ist.
+- **Der Claude-Leser — was die Proben nicht beantworten.** Gebaut und gegen
+  eine echte Datenbank mit nachgemachter API geprüft; offen ist:
+  - **Die Abnahme-Messung steht aus.** Systemtext, Auftrag und Antwortform
+    sind für den Aufruf ohne Werkzeuge neu geschrieben; ob sie so gut lesen
+    wie die Messung vom 11.10.2026, zeigt erst `scripts/abschrift-messen.mts`
+    an echten Seiten. Dasselbe Skript entscheidet, ob das Vollbild
+    (`CLAUDE_BILD=voll`) besser liest oder nur mehr kostet.
+  - **Wie die API ein erschöpftes Ausgabelimit meldet, ist nicht
+    nachgeprüft.** Deshalb ist kein 400 mehr ein „nichts“ (11.10.2026, in
+    `src/lib/claude/ergebnis.ts`): klingt die Meldung nach Guthaben oder
+    Limit, ist es eine Pause, sonst „später“ — nicht gemerkt, und eine
+    abgewiesene Anfrage kostet nichts. Seit der Abnahme vom selben Tag zählt
+    ein solcher 400 auch nicht mehr auf die Grenze je Blatt: dort zählen nur
+    bezahlte Abbrüche, die am Blatt liegen können — ein 400 erst, wenn er
+    mitten im Strom kommt, nachdem das Modell schrieb. Ebenso ungeprüft: ob die
+    Probe beim Einrichten (`scripts/nas-probe-claude.mjs`) mit der
+    Beta-Kennung des Rückfalls durchkommt.
+  - **Das Rückfallmodell ist an Handschrift ungemessen.** Lehnt Opus ab,
+    liest ein anderes Modell; der Vermerk sagt, welches. Lehnt auch das ab,
+    ist das Blatt „nichts“ und wartet auf den Knopf oder auf Abtippen. War das
+    Rückfallmodell nur gerade ausgelastet (die API nennt es dann in
+    `stop_details.recommended_model`), ist es „später“ — einmal bezahlt, und
+    höchstens zweimal je Stand.
+  - **Die Frist ist aus einer angenommenen Schreibrate gerechnet** (25 Tokens
+    je Sekunde, `CLAUDE_LANGSAM_TOK_S`), nicht gemessen. Schreibt die API
+    langsamer, bricht die Frist eine ausufernde Antwort doch ab; die Messzeile
+    „Wand … s“ im Protokoll zeigt, wie viel Luft bleibt.
+  - **Was ein bezahlter Abbruch gekostet hat, weiß niemand.** Das SDK reicht
+    bei einem Abbruch keine `usage` heraus; die Summe steht dann als
+    „mindestens“ da. Die Teilmessung aus dem Strom zu sichern
+    (`currentMessage.usage`), wäre der nächste Schritt.
+  - **Was ein Fragenlauf über die API dauert und kostet, ist ungemessen** —
+    die 130 Sekunden und 0,59 $ stammen aus dem Käfig des Postboten
+    (12.9.2026).
+  - **Mit dem Vollbild können zwölf Seiten die Grenze einer Anfrage
+    reißen** (je Seite bis 3 MB); das Blatt endete dann als „nichts“. Eine
+    Sperre davor gibt es nicht, solange das Vollbild ohnehin aus ist.
 - **Was ein Vorschlag vom Agenten am Blatt ändern würde, steht nur beim
   Übernehmen.** Der Korb zeigt, dass einer da ist, und wer wissen will, was
   drinsteht, tippt ihn an. Bei einem Vorschlag von Hand war das richtig — man

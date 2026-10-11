@@ -20,8 +20,9 @@ import { ItemForm } from "../item-form";
  * Ohne `?blatt=` steht hier die Auswahl: welche Blätter haben überhaupt eine
  * Abschrift? Das ist die ehrlichste Stelle, um die Grenze des ganzen Vorhabens
  * zu zeigen — aus einer Seite ohne Abschrift lässt sich keine Frage bauen, und
- * kein Knopf hier ändert daran etwas. Der Weg dahin führt über den Postboten,
- * nicht über dieses Formular.
+ * kein Knopf hier ändert daran etwas. Der Weg dahin führt über die Leser der
+ * App — Docling für Druck, Claude für Handschrift, oder „Abschreiben lassen“
+ * am Blatt —, nicht über dieses Formular.
  *
  * Mit `?blatt=` steht das Formular da, mit dem Wortlaut der Seite daneben.
  */

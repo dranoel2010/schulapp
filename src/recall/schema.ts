@@ -443,7 +443,7 @@ export const recallAttempts = pgTable(
  * Zielwert 0,3 — bei drei dokumentierten Halluzinationstypen. Eine erfundene
  * Musterlösung fällt nicht auf, sobald sie als Prüfstoff dasteht.
  *
- * Dasselbe Muster benutzt der Postbote seit dem 5.9.2026 für Abschriften:
+ * Dasselbe Muster gilt seit dem 5.9.2026 für Abschriften:
  * `material_proposals` liegt im Eingangskorb, und erst das Übernehmen im
  * Formular schreibt in den Bestand. Der Unterschied ist die Prüfbarkeit — eine
  * Abschrift kann man gegen das Foto halten, eine Musterlösung nicht. Deshalb

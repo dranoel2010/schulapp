@@ -127,7 +127,9 @@ COPY . .
 #
 # Ein Geheimnis ist er nicht — er steht im gebauten JavaScript und damit in
 # jedem Browser, der die App öffnet. Der private Gegenpart (VAPID_PRIVATE_KEY)
-# gehört dagegen ausschließlich in die Laufzeitumgebung und niemals hierher.
+# gehört dagegen ausschließlich in die Laufzeitumgebung und niemals hierher —
+# ebenso ANTHROPIC_API_KEY (seit dem 11.10.2026): als ARG stünde er in der
+# Geschichte des Bildes, und mit ihm lässt sich Geld ausgeben.
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY=""
 ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
 
@@ -205,8 +207,10 @@ COPY --from=bauen --chown=node:node /app/next.config.ts ./next.config.ts
 
 # Der Server läuft nicht als root. Das Bild steht zwar hinter Tailscale Funnel
 # und nicht an einem offenen Port, aber es rendert fremden Text: Auf den
-# Blättern in der Ablage steht, was der Postbote gelesen hat, und die
-# Antworten des Web MCP kommen von außen.
+# Blättern in der Ablage steht, was Claude von fremdem Papier abgeschrieben
+# hat, und die Antworten des Web MCP und der API kommen von außen. Seit dem
+# 11.10.2026 trägt der Prozess dazu einen Schlüssel, der Geld ausgeben kann
+# (ANTHROPIC_API_KEY).
 USER node
 
 EXPOSE 3000

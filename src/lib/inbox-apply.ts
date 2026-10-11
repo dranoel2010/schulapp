@@ -179,7 +179,7 @@ export async function applyProposal(
 
   const entfernt =
     options?.nurVorschlag !== undefined
-      ? (await deleteProposal(userId, options.nurVorschlag))
+      ? (await deleteProposal(userId, options.nurVorschlag, "uebernommen"))
         ? 1
         : 0
       : await clearProposals(userId, materialId);

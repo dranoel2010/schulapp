@@ -15,23 +15,45 @@
 #
 # Die vier Wörter:
 #
-#   stand      Was ist gerade live? Ändert nichts. Das meistgebrauchte.
-#   hoch       Neuen Stand von GitHub holen, bauen, starten, nachsehen —
-#              und danach die Harness-Kopie des Postboten angleichen, denn
-#              App und Postbote wechseln zusammen. Ging der Bau schief, baut
-#              das nächste `hoch` nach. Fehlt der Datenbank eine Spalte, die
-#              der neue Stand braucht, hält es VOR dem Bau an und nennt die
-#              Zeile, die sie anlegt.
+#   stand      Was ist gerade live? Ändert nichts. Das meistgebrauchte. Sagt
+#              auch, ob der Claude-Leser einen Schlüssel hat (nie welchen)
+#              und was er zuletzt gelesen hat.
+#   hoch       Neuen Stand von GitHub holen, bauen, starten, nachsehen. Ging
+#              der Bau schief, baut das nächste `hoch` nach. Fehlt der
+#              Datenbank eine Spalte, die der neue Stand braucht, hält es VOR
+#              dem Bau an und nennt die Zeile, die sie anlegt. Ebenso, wenn
+#              danach zwei Leser läsen: die App mit Schlüssel und ein
+#              Postbote, der noch läuft.
 #   zurueck    Auf den Stand vor dem letzten `hoch` zurück — mit dem
-#              Rückfallbild in Sekunden, ohne es per Neubau. Der Postbote
-#              geht mit zurück (seine Kopie wird an den alten Stand
-#              angeglichen).
-#   postbote   Den Postboten anschalten (räumt die Sperre vorher weg).
+#              Rückfallbild in Sekunden, ohne es per Neubau. Führt der Weg vor
+#              den Claude-Leser (11.10.2026), sagt es, wie der stillgelegte
+#              Postbote wiederkommt; jener Stand liest Handschrift nicht selbst.
+#   postbote   Stillgelegt seit dem 11.10.2026: die App liest Handschrift
+#              selbst (scripts/claude-einrichten.sh). Schaltet ihn nicht mehr
+#              an, sondern sagt, wo er liegt und wie er im Notfall
+#              wiederkommt — nie zugleich mit einer App, die selbst liest.
+#
+# Bis zum 11.10.2026 stand hier noch mehr: `hoch` und `zurueck` glichen die
+# Kopie von harness/ beim Postboten an, und `postbote` schaltete ihn an. Mit
+# dem Claude-Leser ist das weg — der Postbote ist stillgelegt, nicht
+# gelöscht: sein Code liegt weiter im Klon unter harness/, sein Ordner auf dem
+# NAS umbenannt (der Notfall-Rückweg: README, „Der Postbote — stillgelegt,
+# und der Rückweg im Notfall“). Eine alte Kopie dieses Skripts (~/nas.sh)
+# muss trotzdem VOR dem ersten `hoch` mit dem neuen Stand ersetzt werden
+# (README): sie kennt die Tabelle leser_laeufe nicht und fragt nicht, ob
+# danach zwei läsen. Läuft sie doch, gleicht sie harness/ noch ab — und
+# startet den Postboten neu, sobald eine Datei darin anders ist als seine
+# Kopie. Deshalb bleibt harness/ Byte für Byte, wie es war
+# (scripts/probe-nas.sh, Abschnitt 6, prüft es mit genau dieser alten Kopie).
 #
 set -u
 
 APP=/volume1/docker/schulapp
-POST=/volume1/docker/postbote
+# Wo der Postbote lag — nur noch für Hinweise. claude-einrichten.sh hat den
+# Ordner beim Wechsel in postbote.stillgelegt-<Datum> umbenannt und nicht
+# gelöscht: Er ist der Rückweg für den Notfall und für `zurueck` auf einen
+# Stand davor.
+POSTBOTE=/volume1/docker/postbote
 ADRESSE=https://treskownas.tail3a40b0.ts.net
 
 # Drei Merkzettel, alle von diesem Skript geschrieben, jeder eine Zeile:
@@ -340,31 +362,10 @@ stand() {
   echo
   echo "=== Container ==="
   ( cd "$APP" 2>/dev/null && $DC ps 2>/dev/null ) || echo "(nicht lesbar)"
-  echo
-  ( cd "$POST" 2>/dev/null && $DC ps 2>/dev/null ) || echo "(Postbote nicht lesbar)"
 
   echo
-  echo "=== Postbote ==="
-  local pcid plaeuft
-  pcid=$( cd "$POST" && $DC ps -q postbote 2>/dev/null | head -1 )
-  plaeuft="nein"
-  [ -n "$pcid" ] && [ "$("$DOCKER" inspect -f '{{.State.Running}}' "$pcid" 2>/dev/null)" = "true" ] && plaeuft="ja"
-
-  # Eine Sperre ist nur dann ein Fund, wenn NIEMAND läuft. Läuft der Dienst,
-  # hält er sie die ganze Zeit — das ist der Normalfall und kein Fehler.
-  if [ -f "$POST/harness/lauf.lock" ]; then
-    if [ "$plaeuft" = "ja" ]; then
-      echo "Sperre:  gehört dem laufenden Dienst (Nummer $(cat "$POST/harness/lauf.lock" 2>/dev/null)) — in Ordnung"
-    else
-      echo "Sperre:  LIEGENGEBLIEBEN (Nummer $(cat "$POST/harness/lauf.lock" 2>/dev/null)) — \"postbote\" räumt sie weg"
-    fi
-  else
-    echo "Sperre:  keine"
-  fi
-  echo "Läuft:   $plaeuft"
-  if [ -f "$POST/harness/gesehen.json" ]; then
-    echo "Zuletzt gearbeitet: $(date -r "$POST/harness/gesehen.json" '+%d.%m.%Y %H:%M' 2>/dev/null)"
-  fi
+  echo "=== Claude-Leser ==="
+  claude_stand
 
   echo
   echo "=== Erreichbar ==="
@@ -387,7 +388,17 @@ stand() {
 # nicht ab. Der neue Code ohne sie scheitert an jeder Seite mit „column does
 # not exist“ — Ablage, Korb, Hochladen. Deshalb kommt die SQL-Datei VOR den
 # Bau, und dieses Skript sieht nach, statt es zu glauben.
-PFLICHTSPALTEN="material_pages leser scripts/leser-tabellen.sql"
+#
+# Eine ganz neue Tabelle steht hier mit einer ihrer Spalten: „gibt es
+# leser_laeufe.frist_bis?“ ist dieselbe Frage wie „gibt es die Tabelle?“,
+# nur dass db_spalte sie schon stellen kann. Ohne leser_laeufe (11.10.2026)
+# scheitert jeder Lauf des Claude-Lesers — und mit ihm das Gedächtnis, das
+# verhindert, dass ein Blatt zweimal bezahlt gelesen wird. Gefragt wird nach
+# `frist_bis` und nicht nach `schluessel`: die kam erst mit der Abnahme vom
+# 11.10.2026 in die Datei, und eine Tabelle aus einer Fassung davor hielte
+# sonst als „da“ — und jeder Lauf schiene an einer fehlenden Spalte.
+PFLICHTSPALTEN="material_pages leser scripts/leser-tabellen.sql
+leser_laeufe frist_bis scripts/leser-laeufe-tabelle.sql"
 
 # Postgres im db-Container, Benutzer und Datenbank aus SEINER Umgebung — wie
 # psql_db() in scripts/kalender-einrichten.sh; "schulapp" nur als Rückfall.
@@ -398,6 +409,13 @@ db_spalte() {
   ( cd "$APP" && $DC exec -T db sh -c 'exec psql -X -tA -U "${POSTGRES_USER:-schulapp}" -d "${POSTGRES_DB:-${POSTGRES_USER:-schulapp}}" -c "$1"' psql \
       "select count(*) from information_schema.columns where table_schema = current_schema() and table_name = '$1' and column_name = '$2'" \
   ) < /dev/null 2>/dev/null | tr -d '[:space:]'
+}
+
+# Eine Abfrage, Zeilen mit zwei Leerzeichen zwischen den Spalten. Nur lesend
+# benutzt (`stand`).
+db_abfrage() {
+  # shellcheck disable=SC2016  # die $-Ausdrücke wertet die Shell IM Container aus
+  ( cd "$APP" && $DC exec -T db sh -c 'exec psql -X -tA -F "  " -U "${POSTGRES_USER:-schulapp}" -d "${POSTGRES_DB:-${POSTGRES_USER:-schulapp}}" -c "$1"' psql "$1" ) < /dev/null 2>/dev/null
 }
 
 # Benutzer und Datenbank, wie sie im db-Container stehen — damit die Zeile
@@ -419,8 +437,7 @@ db_namen() {
 # laufende App IST schon der Stand — fehlt ihr die Spalte, scheitert sie jetzt
 # schon an jeder Seite. Das passiert, wenn eine alte Kopie dieses Skripts ohne
 # Prüfung gebaut hat und das SQL vergessen war. Ohne diesen Blick meldete der
-# zweite `hoch` Erfolg, gliche den Postboten an, und der scheiterte danach in
-# jeder Runde an read_inbox.
+# zweite `hoch` Erfolg, und die App scheiterte weiter an jeder Seite.
 spalten_pruefen() {
   local tabelle spalte datei antwort benutzer datenbank
   while read -r tabelle spalte datei; do
@@ -435,7 +452,7 @@ spalten_pruefen() {
         echo >&2
         if [ "${2:-}" = "laeuft" ]; then
           echo "HALT: Der Datenbank fehlt $tabelle.$spalte — und die App, die läuft, braucht sie schon." >&2
-          echo "Gebaut wird nichts; bis die Spalte da ist, scheitert jede Seite. Den Postboten gleiche ich nicht an." >&2
+          echo "Gebaut wird nichts; bis die Spalte da ist, scheitert jede Seite." >&2
         else
           echo "HALT: Der Datenbank fehlt $tabelle.$spalte — der neue Stand braucht sie." >&2
           echo "Gebaut ist nichts, die App läuft weiter wie bisher." >&2
@@ -446,11 +463,10 @@ spalten_pruefen() {
         echo "Abbruch beim ersten Fehler und mit Benutzer und Datenbank aus dem db-Container:" >&2
         echo "  sudo sh -c 'cd $APP && $DC exec -T db psql -X -v ON_ERROR_STOP=1 --single-transaction -U $benutzer -d $datenbank -f - < repo/$datei'" >&2
         if [ "${2:-}" = "laeuft" ]; then
-          echo "Danach noch einmal:  sudo $0 hoch   — es gleicht dann den Postboten an." >&2
+          echo "Danach noch einmal:  sudo $0 hoch   — es sieht dann noch einmal nach." >&2
         else
           echo "Danach noch einmal:  sudo $0 hoch   — es baut dann nach." >&2
         fi
-        postbote_aus_hinweis
         return 1 ;;
       *)
         echo "(Ob $tabelle.$spalte da ist, ließ sich nicht nachsehen — die Datenbank antwortet nicht."
@@ -460,133 +476,216 @@ spalten_pruefen() {
   return 0
 }
 
-# Ist der Postbote aus, ein Satz dazu. README „Auf das NAS bringen“ hält ihn
-# vor dem Wechsel an, und erst ein `hoch`, das durchgeht, startet ihn wieder —
-# scheitert es vorher (HALT, Bau, App antwortet nicht), stünde sonst nirgends,
-# dass neue Fotos bis auf Weiteres niemand liest. Seine Kopie ist dann nicht
-# angeglichen, passt also zur App, die vorher lief.
-postbote_aus_hinweis() {
-  [ -d "$POST" ] || return 0
-  postbote_laeuft && return 0
-  echo >&2
-  echo "Der Postbote ist aus. Seine Kopie passt zur App von vorher — wieder an, solange die läuft:" >&2
-  echo "  sudo $0 postbote      (ein hoch, das durchgeht, startet ihn ohnehin)" >&2
+# ------------------------------------------------------- Claude-Leser
+#
+# Seit dem 11.10.2026 ruft die App Opus selbst und schreibt Handschrift ab
+# (src/lib/claude/client.ts). Bis dahin tat das der Postbote, ein eigener
+# Container mit einer Kopie von harness/, die dieses Skript nach jedem `hoch`
+# angleichen musste. Das ist vorbei; geblieben sind drei Fragen, und alle drei
+# stellt dieses Skript an Docker oder an die Datenbank, nie an `ps` — das `ps`
+# des Synology-Hosts sieht Container-Prozesse nicht:
+#
+#   - Hat die App einen Schlüssel? Ohne ihn liest niemand Handschrift, und
+#     nichts im Betrieb fällt dabei auf — die App läuft sonst wie bisher.
+#   - Läuft trotzdem noch ein Postbote? Dann lesen zwei, und zwei Vorschläge
+#     liegen am selben Blatt — einer davon bezahlt.
+#   - Was hat der Leser zuletzt getan, und was hat es diesen Monat gekostet?
+
+# Hat der Stand <Commit> den Claude-Leser? An der Datei, die ihn ausmacht.
+claude_im_stand() {
+  git -C "$APP/repo" cat-file -e "$1:src/lib/claude/client.ts" 2>/dev/null
 }
 
-# ------------------------------------------------- Postbote angleichen
-#
-# Wo der Postbote läuft, liegt eine KOPIE von harness/ und kein Klon
-# ($POST/harness, siehe harness/README.md) — `git pull` rührt sie nicht an.
-# Bis zum 6.10.2026 war das ein Handgriff nach jedem Commit, und vergessen
-# kostete schon einmal sieben Tage. Seit „ein Leser je Seite“ müssen App und
-# Postbote zusammen wechseln: die App entscheidet, welche Seiten Claude liest,
-# und der Auftrag des Postboten muss es wissen. Deshalb gleicht `hoch` die
-# Kopie selbst an, sobald die neue App antwortet — und `zurueck` ebenso an
-# den alten Stand, sobald der wieder antwortet.
-#
-# Verglichen und kopiert wird, was scripts/jev-und-docling.sh in Schritt 6
-# kopiert: *.mts und README.md aus dem Klon. zugang.json, gesehen.json und
-# lauf.lock liegen im selben Ordner und werden beim Kopieren nie angefasst —
-# der Zugang ist neunzig Tage lang der Schlüssel zur App, die Merkliste das
-# Gedächtnis des Postboten.
-#
-# Erst anhalten, dann kopieren, dann starten: ein Postbote, der während des
-# Kopierens einen Lauf beginnt, liefe mit halb alten, halb neuen Dateien. Ein
-# Blatt, das er beim Anhalten gerade las, kommt in der nächsten Runde wieder
-# dran. Gestartet wird über `postbote`, das die nach `docker stop`
-# liegengebliebene Sperre wegräumt.
-#
-# Geht das Kopieren schief, kommt die alte Fassung aus der Sicherung zurück,
-# und der Postbote läuft mit ihr weiter — der alte Postbote verträgt die neue
-# App. Die App bleibt in jedem Fall, wie sie ist.
-
-# harness_summen <ordner> — md5sum, sortiert, über die Dateien, die der KLON
-# hat (*.mts und README.md), jede in <ordner> gelesen; fehlt dort eine, steht
-# „fehlt“ da. Über die Liste des Klons und nicht über das, was im Ordner
-# liegt: Verschwindet eine Datei aus dem Repo, bliebe ihre alte Kopie beim
-# Postboten liegen, die Summen wären nie gleich, und jedes `hoch` endete mit
-# einem Fehler. Der Postbote lädt nur, was sein Code importiert — eine
-# liegengebliebene Datei stört ihn nicht.
-harness_summen() {
-  local f
-  ( cd "$APP/repo/harness" 2>/dev/null && ls *.mts README.md 2>/dev/null ) | while read -r f; do
-    if [ -f "$1/$f" ]; then ( cd "$1" && md5sum "$f" ); else echo "fehlt  $f"; fi
-  done | sort
+# Steht ein Schlüssel in der .env? Nur ob, nie welcher. Das allein heißt
+# NICHT, dass die App liest: in den Container kommt er nur über die
+# Override-Datei (services → app → environment), siehe die beiden darunter.
+schluessel_in_env() {
+  grep -q '^ANTHROPIC_API_KEY=[^[:space:]]' "$APP/.env" 2>/dev/null
 }
 
-# Läuft der Postbote-Container? Gefragt wird Docker — `ps` auf dem Synology
-# sieht Container-Prozesse nicht (siehe postbote() unten).
-postbote_laeuft() {
-  local cid
-  cid=$( cd "$POST" 2>/dev/null && $DC ps -q postbote 2>/dev/null | head -1 )
-  [ -n "$cid" ] && [ "$("$DOCKER" inspect -f '{{.State.Running}}' "$cid" 2>/dev/null)" = "true" ]
+# Hat die LAUFENDE App den Schlüssel in ihrer Umgebung? "ja", "nein", oder
+# leer (nicht nachzusehen — läuft sie?). Nur ob, nie welcher: node im
+# Container schreibt "ja" oder "nein", der Wert verlässt ihn nicht.
+schluessel_im_container() {
+  # shellcheck disable=SC2016  # die $-Ausdrücke wertet node IM Container aus
+  ( cd "$APP" && $DC exec -T app node -e 'process.stdout.write((process.env.ANTHROPIC_API_KEY || "").trim() ? "ja" : "nein")' ) < /dev/null 2>/dev/null
 }
 
-harness_abgleichen() {
-  local quelle="$APP/repo/harness" ziel="$POST/harness"
+# Bekäme ein NEU erzeugter App-Container ihn? Er steht in der .env, UND die
+# Override-Datei reicht ihn durch — dasselbe grep wie im_override in
+# claude-einrichten.sh. Fehlt die Zeile dort (Schritt 3 hielt an, oder die
+# Datei wurde neu angelegt), liest auch der neue Stand nicht.
+schluessel_fuer_neue_app() {
+  schluessel_in_env \
+    && grep -qE '^[[:space:]]+(-[[:space:]]*)?ANTHROPIC_API_KEY[[:space:]]*[:=]' "$APP/docker-compose.override.yml" 2>/dev/null
+}
+
+# Nach dem Bau, und wenn es nichts zu bauen gab: Liest dieser Stand
+# Handschrift? Gefragt wird die laufende App, nicht die .env — sonst sagte
+# `hoch` nichts, obwohl niemand liest, weil der Schlüssel nur in der .env
+# steht (Abnahme vom 11.10.2026).
+#
+# Drei Gründe, warum der Container ihn nicht hat, und jeder bekommt seinen
+# Satz: kein Schlüssel; einer in der .env, den die Override-Datei nicht
+# durchreicht; oder beides ist da, aber die App lief schon vorher und wurde
+# danach nicht neu erzeugt — claude-einrichten.sh hielt zwischen Schritt 3 und
+# 5 an. Bis zur Nachprüfung vom 11.10.2026 hieß der dritte Fall auch „reicht
+# nicht durch“, und das stimmte nicht.
+schluessel_hinweis() {
+  claude_im_stand "$1" || return 0
+  case "$(schluessel_im_container)" in
+    ja) return 0 ;;
+    nein) ;;
+    *) echo; echo "(Ob die App einen Schlüssel hat, ließ sich nicht nachsehen:  sudo $0 stand)"; return 0 ;;
+  esac
   echo
-  echo "Postbote: vergleiche $ziel mit dem Klon ..."
-
-  if [ ! -d "$ziel" ]; then
-    echo "Kein $ziel — der Postbote läuft nicht auf diesem NAS. Nichts anzugleichen."
-    return 0
-  fi
-  # Ohne md5sum wären beide Summen leer und damit „gleich“ — ein stilles Ja.
-  if ! command -v md5sum >/dev/null 2>&1; then
-    echo "FEHLER: md5sum fehlt — ohne Prüfsummen gleiche ich nicht ab." >&2
-    echo "Von Hand, wie unter „Der Handgriff nach jedem Commit“ in harness/README.md." >&2
-    return 1
-  fi
-
-  local soll
-  soll=$(harness_summen "$quelle")
-  if [ -z "$soll" ]; then
-    echo "FEHLER: Im Klon unter $quelle liegt kein Harness." >&2
-    return 1
-  fi
-  if [ "$soll" = "$(harness_summen "$ziel")" ]; then
-    echo "Die Kopie ist schon aktuell."
-    postbote_laeuft || echo "Er läuft allerdings nicht. Anschalten:  sudo $0 postbote"
-    return 0
-  fi
-
-  local alt
-  alt="$POST/harness-alt-$(date +%Y%m%d-%H%M%S)"
-  mkdir -p "$alt" && cp -p "$ziel"/*.mts "$ziel"/README.md "$alt"/ 2>/dev/null
-  if ! ls "$alt"/*.mts >/dev/null 2>&1; then
-    echo "FEHLER: Die Sicherung nach $alt ging nicht — ich kopiere nichts." >&2
-    return 1
-  fi
-  echo "Sicherung: $alt"
-
-  echo "Halte den Postboten an ..."
-  if ! ( cd "$POST" && $DC stop postbote ); then
-    echo "FEHLER: Er ließ sich nicht anhalten — kopiert ist nichts, er läuft wie vorher." >&2
-    return 1
-  fi
-
-  # Auf vorhandene Dateien kopiert, behalten sie Eigentümer und Rechte — der
-  # Postbote läuft nicht als root und muss sie lesen können.
-  if cp "$quelle"/*.mts "$quelle"/README.md "$ziel"/ \
-     && [ "$soll" = "$(harness_summen "$ziel")" ]; then
-    echo "Kopiert und verglichen: $(printf '%s\n' "$soll" | wc -l | tr -d ' ') Dateien gleich mit dem Klon."
-    postbote
-    echo
-    echo "Rückweg nur für den Postboten, falls nötig:"
-    echo "  $(zum_abtippen "$POST" "stop postbote")"
-    echo "  sudo sh -c 'cp -p $alt/* $ziel/'   und   sudo $0 postbote"
-    return 0
-  fi
-
-  echo >&2
-  echo "FEHLER: Kopieren ging schief, oder die Prüfsummen weichen danach ab." >&2
-  if cp -p "$alt"/* "$ziel"/; then
-    echo "Die alte Fassung liegt wieder dort; der Postbote startet mit ihr." >&2
+  if schluessel_fuer_neue_app; then
+    echo "Handschrift liest die App NICHT: der Schlüssel steht in der .env und in der Override-Datei, aber die"
+    echo "laufende App wurde danach nicht neu erzeugt (claude-einrichten.sh hielt vor Schritt 5 an)."
+    echo "Noch einmal einrichten — es setzt fort, hält den Postboten an und erzeugt erst dann die App neu:"
+  elif schluessel_in_env; then
+    echo "Handschrift liest die App NICHT: der Schlüssel steht in der .env, kommt aber nicht in den Container"
+    echo "(die Override-Datei reicht ANTHROPIC_API_KEY nicht durch). Einrichten — das ergänzt sie und löst den Postboten ab:"
   else
-    echo "Auch das Zurücklegen ging nicht. Von Hand:  sudo sh -c 'cp -p $alt/* $ziel/'" >&2
+    echo "Handschrift liest die App erst mit einem Schlüssel — einrichten (löst den Postboten ab):"
   fi
-  postbote
-  return 1
+  echo "  sudo bash $APP/repo/scripts/claude-einrichten.sh"
+}
+
+# Laufende Container eines Dienstes namens postbote, gleich aus welchem Ordner
+# — auch aus einem umbenannten.
+postbote_container() {
+  "$DOCKER" ps -q --filter "label=com.docker.compose.service=postbote" 2>/dev/null | tr '\n' ' ' | sed 's/ $//'
+}
+
+# Der zuletzt stillgelegte Ordner des Postboten, leer, wenn es keinen gibt.
+postbote_stillgelegt() {
+  # shellcheck disable=SC2012  # Namen mit Datum, ohne Leerzeichen
+  ls -d "$POSTBOTE".stillgelegt-* 2>/dev/null | tail -n 1
+}
+
+# Für `stand`: Schlüssel (ja/nein), Bildfassung, ein Postbote, der noch läuft,
+# die letzten fünf Läufe und die Summe des Monats.
+#
+# Der `grund` eines Laufs steht hier NICHT: Er kann Text enthalten, den das
+# Modell von einem Blatt hat, und ein Blatt soll keine Steuerzeichen in ein
+# root-Terminal schreiben können. Was ein Lauf gesagt hat, steht am Blatt.
+claude_stand() {
+  local antwort schluessel bild laeufer
+  # shellcheck disable=SC2016  # die $-Ausdrücke wertet node IM Container aus
+  antwort=$( cd "$APP" && $DC exec -T app node -e 'const e = process.env; process.stdout.write(((e.ANTHROPIC_API_KEY || "").trim() ? "ja" : "nein") + " " + ((e.CLAUDE_BILD || "").trim() === "voll" ? "voll" : "lesefassung"))' < /dev/null 2>/dev/null )
+  read -r schluessel bild <<< "$antwort"
+  case "$schluessel" in
+    ja)   echo "Schlüssel: gesetzt (der Wert bleibt verborgen) — Bild: $bild" ;;
+    nein) echo "Schlüssel: FEHLT — Handschrift liest niemand. Einrichten:  sudo bash $APP/repo/scripts/claude-einrichten.sh" ;;
+    *)    echo "Schlüssel: (nicht nachzusehen — läuft die App?)" ;;
+  esac
+
+  laeufer=$(postbote_container)
+  if [ -n "$laeufer" ]; then
+    if [ "$schluessel" = ja ]; then
+      echo "ACHTUNG:   Ein Postbote läuft noch ($laeufer) — mit dem Schlüssel der App lesen ZWEI."
+      echo "           Anhalten:  sudo $DOCKER stop $laeufer"
+    else
+      echo "Postbote:  läuft noch ($laeufer) — er liest, bis claude-einrichten.sh ihn ablöst."
+    fi
+  fi
+
+  # Erst nachsehen, ob es die Tabelle gibt: ein Stand vor dem 11.10.2026 hat
+  # sie nicht, und psql meldete sonst einen Fehler, wo nur „noch nichts“ ist.
+  case "$(db_spalte leser_laeufe frist_bis)" in
+    1) ;;
+    0) echo "Läufe:     (keine Tabelle leser_laeufe in dieser Fassung — ein Stand vor dem Claude-Leser, oder eine ältere scripts/leser-laeufe-tabelle.sql)"; return 0 ;;
+    *) echo "Läufe:     (nicht nachzusehen — die Datenbank antwortet nicht)"; return 0 ;;
+  esac
+  local letzte monat
+  letzte="select to_char(created_at at time zone 'Europe/Berlin', 'DD.MM. HH24:MI'), rpad(art, 9), rpad(ergebnis, 14), coalesce(to_char(kosten_usd, 'FM990.000') || ' \$', '?'), left(coalesce(material_id, exam_id)::text, 8), regexp_replace(coalesce(modell, ''), '[^a-z0-9.-]', '', 'g') from leser_laeufe order by created_at desc limit 5"
+  # Der Monat wie auf der Seite Einstellungen: ab dem Ersten des Berliner
+  # Monats, Mitternacht UTC. Die vierte Zahl sind die bezahlten Abbrüche ohne
+  # Messung (laufKosten() in src/lib/leser/laeufe.ts) — gibt es einen, ist die
+  # Summe eine Untergrenze, und das steht dabei.
+  monat="select count(*) filter (where messung is not null), to_char(coalesce(sum(kosten_usd), 0), 'FM9990.00'), count(*) filter (where messung is not null and kosten_usd is null), count(*) filter (where messung is null and (abbruch is not null or (ergebnis = 'laeuft' and frist_bis < now()))) from leser_laeufe where created_at >= (to_char(now() at time zone 'Europe/Berlin', 'YYYY-MM') || '-01T00:00:00Z')::timestamptz"
+
+  echo "Zuletzt:"
+  db_abfrage "$letzte" | LC_ALL=C tr -d '\000-\010\013-\037\177' | sed 's/^/  /'
+  antwort=$(db_abfrage "$monat")
+  local anzahl usd unbekannt abgebrochen
+  read -r anzahl usd unbekannt abgebrochen <<< "$antwort"
+  if [ -n "${anzahl:-}" ]; then
+    local zusatz="" mindestens=""
+    [ -n "${unbekannt:-}" ] && [ "$unbekannt" != 0 ] && zusatz="$zusatz; $unbekannt davon ohne bekannten Preis"
+    [ -n "${abgebrochen:-}" ] && [ "$abgebrochen" != 0 ] && zusatz="$zusatz; dazu $abgebrochen abgebrochene, deren Kosten nicht bekannt sind"
+    [ -n "$zusatz" ] && { mindestens="mindestens "; zusatz=" (${zusatz#; })"; }
+    echo "Diesen Monat: $anzahl Läufe mit Antwort, zusammen $mindestens$usd \$$zusatz"
+  fi
+  return 0
+}
+
+# Vor dem Bau: Läse der neue Stand selbst, während ein Postbote läuft, lägen
+# danach zwei Vorschläge am selben Blatt. Dann hier anhalten — gebaut ist
+# nichts, und es liest weiter nur, wer bisher las. Ohne Schlüssel liest die
+# neue App keine Handschrift; dann darf der Postbote weiterlaufen, bis
+# claude-einrichten.sh ihn ablöst.
+#
+# „Liest selbst“ heißt drei Dinge zugleich: der neue Stand hat den Leser
+# (claude_im_stand), und die App HAT den Schlüssel — die laufende in ihrer
+# Umgebung, oder ein neu erzeugter Container bekäme ihn über die
+# Override-Datei. Bis zur Abnahme vom 11.10.2026 genügte hier „steht in der
+# .env“. Stand er nur dort (Schritt 3 von claude-einrichten.sh hielt an, oder
+# jev-und-docling.sh legte die Override-Datei neu an), hielt `hoch` mit dem
+# Rat `docker stop` an — und danach las niemand mehr Handschrift, ohne dass
+# es irgendwo stand.
+#
+# Das trifft vor allem den Weg zurück nach vorn: `zurueck` auf einen Stand vor
+# dem 11.10.2026 braucht den Postboten wieder, und das nächste `hoch` darf
+# nicht mit ihm zusammen hochkommen.
+#
+# zwei_leser_pruefen <Commit> [laeuft] — mit „laeuft“ ist es der Zweig
+# „Nichts Neues“ (wie bei spalten_pruefen): gebaut und neu erzeugt wird dort
+# nichts, also zählt NUR, was der laufende Container hat. Was ein neu
+# erzeugter bekäme, ist dort keine Frage — bis zur Nachprüfung vom 11.10.2026
+# zählte es trotzdem, und nach einem claude-einrichten.sh, das zwischen
+# Schritt 3 und 5 anhielt (Schlüssel in .env und Override, App noch die alte,
+# Postbote liest), hielt `hoch` mit dem Rat `docker stop` an. Wer ihm folgte,
+# hatte danach niemanden mehr, der Handschrift liest.
+zwei_leser_pruefen() {
+  claude_im_stand "$1" || return 0
+  local laeufer im_container neue_app=nein
+  laeufer=$(postbote_container)
+  [ -n "$laeufer" ] || return 0
+  im_container=$(schluessel_im_container)
+  [ "${2:-}" != laeuft ] && schluessel_fuer_neue_app && neue_app=ja
+  if [ "$im_container" = ja ] || [ "$neue_app" = ja ]; then
+    echo >&2
+    if [ "$im_container" = ja ]; then
+      echo "HALT: Ein Postbote läuft ($laeufer), und die App hat den Schlüssel in ihrer Umgebung — der neue Stand liest selbst." >&2
+    else
+      echo "HALT: Ein Postbote läuft ($laeufer), und die neue App bekäme den Schlüssel (.env und Override-Datei) — sie läse selbst." >&2
+    fi
+    echo "Zusammen lägen danach zwei Vorschläge am selben Blatt. Gebaut ist nichts." >&2
+    echo "Erst den Postboten anhalten, dann noch einmal:" >&2
+    echo "  sudo $DOCKER stop $laeufer" >&2
+    echo "  sudo $0 hoch" >&2
+    return 1
+  fi
+  if [ "${2:-}" = laeuft ] && [ -z "$im_container" ]; then
+    echo "Der Postbote läuft noch ($laeufer). Ob die laufende App einen Schlüssel hat, ließ sich nicht nachsehen:"
+    echo "  sudo $0 stand"
+    return 0
+  elif [ "${2:-}" = laeuft ] && schluessel_fuer_neue_app; then
+    echo "Der Postbote läuft noch ($laeufer). Der Schlüssel steht in der .env und in der Override-Datei, aber die"
+    echo "laufende App wurde danach nicht neu erzeugt und hat ihn nicht — also liest nur der Postbote. NICHT anhalten."
+    echo "Ablösen — claude-einrichten.sh setzt fort, hält ihn an und erzeugt erst dann die App neu:"
+  elif schluessel_in_env; then
+    echo "Der Postbote läuft noch ($laeufer). Der Schlüssel steht zwar in der .env, aber die App bekommt ihn nicht"
+    echo "(die Override-Datei reicht ANTHROPIC_API_KEY nicht durch) — also liest weiter nur der Postbote. NICHT anhalten."
+    echo "Ablösen danach — das ergänzt die Override-Datei und hält ihn erst dann an:"
+  else
+    echo "Der Postbote läuft noch ($laeufer); die neue App hat keinen Schlüssel und liest keine Handschrift."
+    echo "Ablösen danach:"
+  fi
+  echo "  sudo bash $APP/repo/scripts/claude-einrichten.sh"
+  return 0
 }
 
 # ----------------------------------------------------------------- hoch
@@ -651,18 +750,19 @@ hoch() {
       echo "Ob er auch gebaut ist, weiß ich nicht. Ging der letzte Bau schief, so von Hand:"
       echo "  $(zum_abtippen "$APP" "up -d --build")"
     fi
-    # Der Postbote kann trotzdem hinterherhinken: Kam der neue Stand mit einer
-    # älteren Kopie dieses Skripts aufs NAS, die den Abgleich noch nicht
-    # kannte, holt das nächste `hoch` ihn hier nach. Nur bei einer App, die
-    # antwortet — der neue Postbote gehört zur neuen App, nicht zu einer, die
-    # gerade nicht läuft. Und erst nach einem Blick in die Datenbank: `/`
-    # antwortet ohne Anmeldung auch dann, wenn jede Seite an einer fehlenden
-    # Spalte scheitert (spalten_pruefen, „laeuft“).
+    # Gebaut wird nichts, nachgesehen schon: Kam der laufende Stand mit einer
+    # älteren Kopie dieses Skripts aufs NAS, hat sie vielleicht ohne Blick in
+    # die Datenbank gebaut. `/` antwortet ohne Anmeldung auch dann, wenn jede
+    # Seite an einer fehlenden Spalte scheitert (spalten_pruefen, „laeuft“).
+    # Und läuft neben einer App, die selbst liest, noch ein Postbote, steht
+    # es hier — anhalten kann es nichts mehr, gebaut ist ja schon.
     if gut "$(erreichbar_innen)"; then
       spalten_pruefen "$nachher" laeuft || exit 1
-      harness_abgleichen || exit 1
+      zwei_leser_pruefen "$nachher" laeuft || exit 1
+      schluessel_hinweis "$nachher"
     else
-      echo "Die App antwortet gerade nicht — den Postboten gleiche ich erst an, wenn sie läuft."
+      echo "Die App antwortet gerade nicht — erst ins Protokoll sehen:"
+      echo "  $(zum_abtippen "$APP" "logs --tail=50 app")"
     fi
     exit 0
   fi
@@ -699,6 +799,7 @@ hoch() {
   # — vor dem Bau und vor dem Rückweg, es ändert sich also nichts. Weil eben
   # notiert ist, was läuft, baut das nächste `hoch` nach, sobald sie da ist.
   spalten_pruefen "$nachher" || exit 1
+  zwei_leser_pruefen "$nachher" || exit 1
 
   # Der Rückweg ist der Stand, der jetzt läuft — aber nur, wenn er auch
   # antwortet. War die App schon kaputt, bleibt der alte Rückweg stehen: Er
@@ -735,7 +836,6 @@ hoch() {
       echo "Und die App antwortet nicht (HTTP ${jetzt:-000})." >&2
       rueckweg_hinweis >&2
     fi
-    postbote_aus_hinweis
     exit 1
   fi
 
@@ -744,11 +844,10 @@ hoch() {
   local code
   if code=$(warte_bis_wach); then
     echo "Da ist sie: HTTP $code unter $ADRESSE"
-    if ! harness_abgleichen; then
-      echo >&2
-      echo "Die App läuft auf dem neuen Stand — nur der Postbote ist nicht angeglichen (siehe oben)." >&2
-      exit 1
-    fi
+    # Der Claude-Leser im Stand, aber kein Schlüssel IN DER APP: Sie läuft, nur
+    # liest niemand Handschrift — still, ohne einen Fehler irgendwo. Einmal
+    # sagen, und gefragt wird der Container, nicht die .env.
+    schluessel_hinweis "$nachher"
     echo
     echo "Fertig."
   else
@@ -758,7 +857,6 @@ hoch() {
     echo "  $(zum_abtippen "$APP" "logs --tail=50 app")" >&2
     echo "Und wenn es nicht offensichtlich ist:" >&2
     rueckweg_hinweis >&2
-    postbote_aus_hinweis
     exit 1
   fi
 }
@@ -791,18 +889,13 @@ zurueck() {
   local code
   if code=$(warte_bis_wach); then
     echo "Wieder da: HTTP $code"
-    # App und Postbote wechseln zusammen — auch zurück. Der Klon steht jetzt
-    # auf dem alten Stand, also gleicht derselbe Abgleich wie bei `hoch` die
-    # Harness-Kopie an dessen harness/ an (die neue liegt danach als
-    # harness-alt-<Zeit> daneben). Ohne das liefe der neue Postbote gegen die
-    # alte App: deren Verzeichnis bietet ein Werkzeug an, das sein Käfig nicht
-    # erlaubt, und ein verweigerter Aufruf macht den ganzen Lauf zu „nichts“ —
-    # das Blatt wäre gemerkt und bliebe ungelesen im Korb.
-    if ! harness_abgleichen; then
-      echo >&2
-      echo "Die App läuft wieder auf dem alten Stand — nur der Postbote ist nicht angeglichen (siehe oben)." >&2
-      exit 1
-    fi
+    # Führt der Weg vor den Claude-Leser, liest jener Stand Handschrift nicht
+    # selbst. Das tat bis dahin der Postbote, und der liegt stillgelegt
+    # daneben. Angeschaltet wird er hier nicht, nur beschrieben: Wer
+    # zurückgeht, ist mitten in einer Störung, und ein zweiter Dienst, der von
+    # selbst anspringt, ist dort eine Überraschung mehr — zumal er beim
+    # nächsten `hoch` wieder aus muss.
+    claude_im_stand "$ziel" || postbote_rueckweg_hinweis
     echo
     echo "Du stehst jetzt auf einem abgekoppelten HEAD. Das ist Absicht."
     echo "Der nächste \"hoch\" holt dich von selbst auf main zurück."
@@ -812,57 +905,58 @@ zurueck() {
   fi
 }
 
+# Für `zurueck` auf einen Stand vor dem 11.10.2026: wie der stillgelegte
+# Postbote wiederkommt. Die Sperre muss vorher weg — `docker compose down`
+# beendet ihn mit SIGTERM, und dabei bleibt lauf.lock liegen; mit ihr startete
+# er nicht. Sie zu löschen ist nur richtig, weil er nicht läuft (am 16.9.2026
+# teuer gelernt: einem laufenden die Sperre zu nehmen, erlaubt einen zweiten).
+postbote_rueckweg_hinweis() {
+  local alt
+  alt=$(postbote_stillgelegt)
+  echo
+  echo "ACHTUNG: Dieser Stand ist älter als der Claude-Leser (11.10.2026) und liest Handschrift nicht selbst."
+  echo "Das tat der Postbote; bis er wieder läuft, liest neue Handschrift niemand. Zurückholen:"
+  if [ -n "$alt" ]; then
+    echo "  sudo mv $alt $POSTBOTE"
+  else
+    echo "  (keinen Ordner $POSTBOTE.stillgelegt-* gefunden — liegt er woanders, dorthin zurück: $POSTBOTE)"
+  fi
+  echo "  sudo rm -f $POSTBOTE/harness/lauf.lock"
+  echo "  $(zum_abtippen "$POSTBOTE" "up -d")"
+  echo "Seine Kopie von harness/ ist die vom Tag des Wechsels und passt zu den Ständen davor (der Code steht auch im Klon unter harness/)."
+  echo "Vor dem nächsten \"hoch\" wieder anhalten — sonst hält \"hoch\" an, damit nicht zwei lesen:"
+  echo "  $(zum_abtippen "$POSTBOTE" "down")"
+}
+
 # ------------------------------------------------------------- postbote
 #
-# WICHTIG, und am 16.9.2026 teuer gelernt: `lauf.lock` ist NICHT immer Müll.
-# Läuft der Postbote als Dienst, dann hält er sie die ganze Zeit — genau so
-# steht es in harness/README.md. Sie zu entfernen, während er läuft, erlaubt
-# einen zweiten Postboten, und dann liegen zwei Vorschläge am selben Blatt.
-#
-# Container-Prozesse tauchen im `ps` des Synology-Hosts nicht auf. Ein Blick
-# dorthin sagt also NICHT, ob er läuft — gefragt wird Docker, sonst niemand.
+# Stillgelegt am 11.10.2026, nicht gelöscht (Entscheidung des Nutzers: „für
+# den Fall der Fälle“). Das Wort bleibt, damit ein Finger, der es noch tippt,
+# eine Antwort bekommt statt der Hilfe — und weil die Antwort etwas zu sagen
+# hat: wo der Postbote liegt und wie er wiederkommt. Angeschaltet wird er hier
+# nicht: wer ihn braucht, ist mitten in einer Störung, und der erste Schritt
+# des Rückwegs — der App den Schlüssel nehmen — ist einer, den ein Skript
+# nicht nebenbei tun soll.
 postbote() {
+  local alt
   finde_dc
-
-  local cid laeuft
-  cid=$( cd "$POST" && $DC ps -q postbote 2>/dev/null | head -1 )
-  laeuft="nein"
-  if [ -n "$cid" ] && [ "$("$DOCKER" inspect -f '{{.State.Running}}' "$cid" 2>/dev/null)" = "true" ]; then
-    laeuft="ja"
-  fi
-
-  if [ "$laeuft" = "ja" ]; then
-    echo "Der Postbote läuft bereits — seit $("$DOCKER" inspect -f '{{.State.StartedAt}}' "$cid" 2>/dev/null | cut -c1-16)."
-    echo "Die Sperre gehört ihm; ich fasse sie nicht an."
-    echo
-    ( cd "$POST" && $DC ps )
-    echo
-    echo "--- letzte Zeilen ---"
-    ( cd "$POST" && $DC logs --tail=15 postbote 2>&1 ) || true
-    echo
-    echo "Leere Runden schreiben nichts. Kein Eintrag heißt: nichts zu tun."
-    return 0
-  fi
-
-  # Er läuft NICHT. Erst jetzt ist eine liegengebliebene Sperre wirklich Müll:
-  # `docker stop` schickt SIGTERM, Node führt keine exit-Handler mehr aus.
-  if [ -f "$POST/harness/lauf.lock" ]; then
-    echo "Er läuft nicht, aber eine Sperre liegt da (Nummer $(cat "$POST/harness/lauf.lock" 2>/dev/null)) — entfernt."
-    rm -f "$POST/harness/lauf.lock"
+  alt=$(postbote_stillgelegt)
+  echo "Der Postbote ist seit dem 11.10.2026 stillgelegt — die App liest Handschrift selbst."
+  echo "Ob sie es kann und was sie zuletzt gelesen hat:  sudo $0 stand"
+  echo
+  echo "Sein Code liegt im Klon unter harness/, der Notfall-Rückweg im README unter „Der Postbote — stillgelegt, und der Rückweg im Notfall“."
+  echo "NIE ZUGLEICH MIT DEM API-LESER — erst die App ohne Schlüssel, dann der Postbote:"
+  echo "  1. ANTHROPIC_API_KEY aus $APP/.env nehmen (Zeile löschen), dann  $(zum_abtippen "$APP" "up -d app")"
+  echo "     und mit  sudo $0 stand  nachsehen: „Schlüssel: FEHLT“."
+  if [ -n "$alt" ]; then
+    echo "  2. sudo mv $alt $POSTBOTE"
   else
-    echo "Er läuft nicht, und es liegt keine Sperre herum."
+    echo "  2. (keinen Ordner $POSTBOTE.stillgelegt-* gefunden — liegt er woanders, dorthin zurück: $POSTBOTE)"
   fi
-
-  ( cd "$POST" && $DC up -d ) || exit 1
-  sleep 8
-  echo
-  ( cd "$POST" && $DC ps )
-  echo
-  echo "--- letzte Zeilen ---"
-  ( cd "$POST" && $DC logs --tail=25 postbote 2>&1 ) || true
-  echo
-  echo "Gut ist es, wenn oben \"Postbote wach.\" steht."
-  echo "Steht da \"Not logged in\":  $(zum_abtippen "$POST" "run --rm -it postbote claude")   (darin: /login)"
+  echo "  3. sudo rm -f $POSTBOTE/harness/lauf.lock"
+  echo "  4. $(zum_abtippen "$POSTBOTE" "up -d")"
+  echo "Nach einem \"zurueck\" auf einen Stand vor dem 11.10.2026 entfällt Schritt 1: jener Stand liest nicht selbst."
+  exit 1
 }
 
 case "${1:-}" in
@@ -873,9 +967,9 @@ case "${1:-}" in
   *)
     echo "Die Schulapp vom Handy aus bedienen."
     echo
-    echo "  sudo $0 stand      Was ist live? Ändert nichts."
-    echo "  sudo $0 hoch       Neuen Stand holen, bauen, starten, Postbote angleichen."
-    echo "  sudo $0 zurueck    Auf den Stand vor dem letzten \"hoch\", Postbote mit."
-    echo "  sudo $0 postbote   Postbote anschalten (Sperre wird weggeräumt)."
+    echo "  sudo $0 stand      Was ist live? Ändert nichts. Auch: Schlüssel und Läufe des Claude-Lesers."
+    echo "  sudo $0 hoch       Neuen Stand holen, bauen, starten, nachsehen."
+    echo "  sudo $0 zurueck    Auf den Stand vor dem letzten \"hoch\"."
+    echo "  sudo $0 postbote   Stillgelegt (11.10.2026) — sagt, wo er liegt und wie er im Notfall wiederkommt."
     exit 1 ;;
 esac

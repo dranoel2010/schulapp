@@ -14,6 +14,12 @@ import {
   MAX_THUMB_BYTES,
   isAllowedMime,
 } from "@/lib/images";
+import { claudeConfigured } from "@/lib/claude/client";
+import {
+  claudeKnopfMoeglich,
+  claudeVonHandAnstossen,
+  claudeVonHandVormerken,
+} from "@/lib/leser/claude-leser";
 import {
   korbblattAnstossen,
   zuteilungAnstossen,
@@ -278,8 +284,9 @@ export async function captureMaterialAction(
     // voll unterstützt (node_modules/next/dist/docs: after.md,
     // self-hosting.md). Der Callback stößt nur an und kehrt sofort zurück:
     // ein Herunterfahren wartet auf offene `after()`-Callbacks, und auf
-    // Docling soll es nicht warten. Geht der Anstoß verloren, holt ihn der
-    // nächste Upload oder das nächste `read_inbox` des Postboten nach.
+    // Docling soll es nicht warten — auf Opus erst recht nicht. Geht der
+    // Anstoß verloren, holt ihn der nächste Upload nach, ein `read_inbox` aus
+    // einem Chat oder der nächste Start der App (src/instrumentation.ts).
     after(() => zuteilungAnstossen(user.id));
 
     revalidateMaterial(id);
@@ -436,8 +443,9 @@ export async function updateMaterialAction(
      *
      * **`baseline` ist seit dem 5.9.2026 dabei, und ohne es verschwinden
      * Abschriften.** Ein Bildschirm, der gerendert wurde, als die Seite noch
-     * NULL trug, zeigt ein leeres, zugeklapptes Feld. Schreibt der Postbote
-     * inzwischen 1240 Zeichen hinein und drückt derselbe alte Bildschirm danach
+     * NULL trug, zeigt ein leeres, zugeklapptes Feld. Schreibt ein Leser
+     * inzwischen 1240 Zeichen hinein — Docling, oder Claude über einen
+     * Vorschlag, den Jev übernimmt — und drückt derselbe alte Bildschirm danach
      * auf „Speichern", ist `known` hier `true`, das leere Feld kommt trotzdem
      * mit — und aus den 1240 Zeichen wird "", also „gelesen, es stand nichts
      * darauf". Kein Versionsvergleich fängt das ab: `setMaterialTranscripts()`
@@ -576,6 +584,56 @@ export async function deletePageAction(
   // nicht diesem Nutzer, findet die Prüfung es nicht (`korbblattStand()`).
   if (ergebnis === "geloescht") {
     after(() => korbblattAnstossen(user.id, materialId));
+  }
+
+  revalidateMaterial(materialId);
+}
+
+/**
+ * „Abschreiben lassen“: Claude liest die ungelesenen Seiten dieses Blattes,
+ * die nicht Docling gehören — jetzt, ohne das Gedächtnis zu fragen
+ * (`claudeVonHand()` in @/lib/leser/claude-leser).
+ *
+ * Der Weg nach einem „nichts“ — einem Inhaltsfilter, einem Blatt, das
+ * zweimal bezahlt abbrach (`SPAETER_HOECHSTENS`) — und für die Altblätter,
+ * deren Seiten nach dem Willen des Nutzers niemand von selbst abschreibt,
+ * auch nicht nach „wieder in den Korb“. Bis zum 11.10.2026 war das
+ * harness/nachlese.mts oder `postbote --blatt`, beides von Hand im Container;
+ * jetzt steht der Weg dort, wo das Blatt steht. Alles, was die KI kann, muss
+ * ich auch können — und auslösen können.
+ *
+ * Gelesen wird nach der Antwort (`after()`), wie beim Hochladen: ein Aufruf
+ * dauert Minuten, und der Knopf soll nicht so lange drehen. Der Callback
+ * stößt nur an; ein Herunterfahren wartet auf ihn, nicht auf Opus. Vorher
+ * wird der Druck vorgemerkt, damit die Seite, die gleich neu gezeichnet wird,
+ * schon „Claude liest dieses Blatt gerade“ zeigt statt wieder den Knopf. Das
+ * Ergebnis steht danach am Blatt („Zuletzt …“), und `AutoRefresh` lädt nach,
+ * sobald der Lauf vermerkt ist.
+ *
+ * `materialId` steht als Parameter und nicht im Formular, wie bei
+ * `markFiledAction()`, ebenso `gesehen`: die id des letzten Laufs, den die
+ * Seite beim Zeichnen zeigte (`null`: keinen). Ob das Blatt dem Nutzer
+ * gehört, prüft der Lauf selbst (`listPageActivity()` und `getMaterial()`
+ * fragen nur nach seinen). Ohne Schlüssel bietet die Seite den Knopf gar
+ * nicht an; kommt der Druck trotzdem, geschieht nichts.
+ *
+ * **Kein zweites Mal bezahlt** (seit der Abnahme vom 11.10.2026). Liest der
+ * Leser das Blatt gerade, wartet schon ein Druck darauf oder nimmt es der
+ * laufende Lauf als Nächstes, merkt die Action nichts vor
+ * (`claudeKnopfMoeglich()`) — die Seite zeigt den Knopf dann auch nicht, aber
+ * ein zweiter Tab kann älter sein als der Lauf. Und der Lauf von Hand fragt
+ * unmittelbar vor dem Aufruf noch einmal, ob seit dem Druck oder seit dem
+ * gezeigten Stand schon ein anderer an dem Blatt war (`claudeVonHand()`).
+ */
+export async function abschreibenLassenAction(
+  materialId: string,
+  gesehen: string | null,
+): Promise<void> {
+  const user = await requireUser();
+
+  if (claudeConfigured() && claudeKnopfMoeglich(materialId)) {
+    claudeVonHandVormerken(user.id, materialId);
+    after(() => claudeVonHandAnstossen(user.id, materialId, gesehen));
   }
 
   revalidateMaterial(materialId);

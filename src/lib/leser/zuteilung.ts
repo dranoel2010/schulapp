@@ -18,6 +18,8 @@ import {
   readNoul,
 } from "@/lib/jev";
 import { titelAusErsterSeite } from "@/lib/leser/abschrift";
+import { claudeAnstossen, claudeZustandMelden } from "@/lib/leser/claude-leser";
+import { nutzerMitLeserArbeit } from "@/lib/leser/laeufe";
 import {
   JEV_SCHWELLE,
   REGEL_VERSION,
@@ -72,7 +74,7 @@ import {
  * die feste Regel plus Jevs Einstufung. Geschrieben wird nur in eine Seite
  * ohne Abschrift (`nurUngelesene`), und gekennzeichnet (`maschinell`). Kein
  * Agent kann diesen Weg auslösen oder sein Ergebnis bestimmen: `read_inbox`
- * stößt höchstens die Arbeit an schon hochgeladenen Seiten an.
+ * eines Chats stößt höchstens die Arbeit an schon hochgeladenen Seiten an.
  *
  * ── Der Prozess ─────────────────────────────────────────────────────────────
  *
@@ -85,14 +87,23 @@ import {
  * beim Start und nimmt jede neue mit. Und es läuft nur einer zur Zeit, also
  * rechnet Docling seitenweise und nie zwei Seiten nebeneinander auf dem NAS.
  *
- * Angestoßen wird an vier Stellen, keine davon ist ein Takt: nach dem
+ * Angestoßen wird an sechs Stellen, keine davon ist ein Takt: nach dem
  * Hochladen (`after()` in src/app/(app)/material/actions.ts), nach dem
  * Löschen einer Seite (dort ebenso — ein Blatt kann dadurch ganz von Docling
- * gelesen sein), bei jedem `read_inbox` des Postboten (das Netz nach einem
- * Neustart, wenn noch Seiten offen sind) und vom Wecker für die Ruhe vor
- * einem App-Vorschlag. Nur Seiten mit `leser = 'offen'` werden angefasst;
- * Fehlschläge von Docling und Jev entscheiden sofort für Claude und werden
- * nie wiederholt.
+ * gelesen sein), bei jedem `read_inbox` eines Chats in der Claude-App, beim
+ * Start der App (`leserBeimStart()`, aus src/instrumentation.ts, mit
+ * Wiederholung, solange die Datenbank noch nicht antwortet), vom Wecker für
+ * die Ruhe vor einem App-Vorschlag und vom Wecker für den zweiten Versuch
+ * nach einer gescheiterten Zuteilung (`ZWEITER_VERSUCH_MS`). Nur Seiten mit
+ * `leser = 'offen'` werden angefasst; Fehlschläge von Docling und Jev
+ * entscheiden sofort für Claude und werden nie wiederholt.
+ *
+ * **Am Ende jedes Laufs kommt der Claude-Leser dran** (@/lib/leser/claude-leser,
+ * seit dem 11.10.2026) — immer, auch wenn keine Seite offen war, und auch
+ * nach einem Fehler. Was die Zuteilung Claude zugeteilt hat, liest er; und
+ * eine Seite, die mit gezogener Notbremse gleich auf `claude` entstand, war
+ * nie offen und käme sonst an keinem Lauf vorbei. Der Anstoß kehrt sofort
+ * zurück: der Leser hat seine eigene Queue, und Docling wartet nie auf ihn.
  *
  * Eine offene Seite, die schon eine Abschrift trägt, liest Docling nicht noch
  * einmal: stammt sie von Docling selbst (ein Abbruch zwischen Schreiben und
@@ -235,11 +246,17 @@ async function jevFragen(state: string): Promise<number | null> {
  * Realistisch ist das ein Datenbankfehler — Postgres startet gerade neu
  * (DSM-Update, `compose up -d`), während Docling rechnet. Für immer sperren
  * hieße: die Seite stünde bis zum nächsten Neustart der App auf „offen“, und
- * der Postbote ließe ihr Blatt Runde für Runde liegen. Gar nicht sperren
- * hieße: jeder `read_inbox` alle 15 Sekunden liefe in denselben Fehler und
- * rechnete Docling von vorn. Zehn Minuten liegen dazwischen — genug, dass
+ * der Claude-Leser ließe ihr Blatt so lange liegen. Gar nicht sperren hieße:
+ * jeder Anstoß — jedes Hochladen, jedes `read_inbox` eines Chats — liefe in
+ * denselben Fehler und rechnete Docling von vorn. Zehn Minuten liegen dazwischen — genug, dass
  * eine Datenbank wieder da ist, und ein deterministischer Fehler kostet
  * höchstens sechs Versuche in der Stunde.
+ *
+ * Den Versuch danach stößt ein Wecker an (`zweitenVersuchStellen()`), seit
+ * der Abnahme vom 11.10.2026. Bis zum Claude-Leser in der App tat das jedes
+ * `read_inbox` des Postboten, alle fünfzehn Sekunden; ohne ihn kam nach der
+ * Sperre niemand mehr vorbei, und die Seite — samt ihrem Blatt, denn eine
+ * offene Seite hält den Claude-Leser an — blieb bis zum nächsten Foto liegen.
  */
 export const ZWEITER_VERSUCH_MS = 10 * 60_000;
 
@@ -252,7 +269,11 @@ type Prozess = {
   queue: Queue<void>;
   /** Blätter, die beim nächsten Lauf auf einen App-Vorschlag geprüft werden. */
   pruefen: Map<string, Set<string>>;
-  /** Der Wecker für die Ruhe vor dem App-Vorschlag, je Blatt höchstens einer. */
+  /**
+   * Der Wecker für die Ruhe vor dem App-Vorschlag, je Blatt höchstens einer
+   * (unter der id des Blattes), und der für den zweiten Versuch nach einer
+   * gescheiterten Zuteilung, je Nutzer einer (unter `nochmal:<Nutzer>`).
+   */
   timer: Map<string, ReturnType<typeof setTimeout>>;
   /**
    * Seiten, deren Zuteilung mit einem unerwarteten Fehler abbrach und die
@@ -260,6 +281,33 @@ type Prozess = {
    * Nur im Speicher; nach einem Neustart bekommen sie gleich einen Versuch.
    */
   gescheitert: Map<string, number>;
+};
+
+/**
+ * Wie oft und in welchen Abständen der Anstoß beim Start es noch einmal
+ * versucht, wenn die Datenbank noch nicht antwortet: nach 10 s, 30 s, 1 min
+ * und 5 min — gut sechs Minuten, dann gibt er auf.
+ *
+ * Nach einem Neustart des NAS startet Docker App und Datenbank zugleich, ohne
+ * auf `depends_on` zu warten, und `register()` läuft in der ersten Sekunde —
+ * oft bevor Postgres Verbindungen annimmt (ECONNREFUSED, „the database
+ * system is starting up“, nach einem unsauberen Herunterfahren auch länger).
+ * Bis zur Abnahme vom 11.10.2026 gab es genau einen Versuch, und was der
+ * Neustart unterbrochen hatte, blieb liegen, bis jemand fotografierte — in
+ * einem System ohne Takt womöglich Tage. Sechs Minuten decken eine
+ * Wiederherstellung nach einem Absturz; was länger braucht, ist kein Start
+ * mehr, sondern eine Störung, und die sieht man im Protokoll.
+ */
+export const START_WIEDERHOLUNGEN_MS: readonly number[] = [10_000, 30_000, 60_000, 300_000];
+
+/** Was der Anstoß beim Start von außen braucht — für den Test ersetzbar. */
+export type StartDeps = {
+  /** Die Nutzer mit Arbeit für einen Leser. */
+  nutzer(): Promise<string[]>;
+  /** Die Zuteilung für einen Nutzer anstoßen. */
+  anstossen(userId: string): void;
+  /** `aktion` nach `ms` ausführen, ohne den Prozess festzuhalten. */
+  spaeter(ms: number, aktion: () => void): void;
 };
 
 const globalForLeser = globalThis as unknown as { __schulappLeser?: Prozess };
@@ -275,12 +323,76 @@ function prozess(): Prozess {
 }
 
 /**
+ * Der Anstoß beim Start der App, aus `register()` in src/instrumentation.ts —
+ * das Netz nach einem Neustart.
+ *
+ * Bis zum 11.10.2026 war dieses Netz das `read_inbox` des Postboten, alle
+ * fünfzehn Sekunden: was ein Neustart mitten im Lesen liegen ließ, stieß er
+ * von selbst wieder an. Ohne ihn sähe nach einem `nas.sh hoch` oder dem
+ * DSM-Update am Donnerstag niemand mehr nach einer Seite, die auf `offen`
+ * stehen blieb, oder nach einem Blatt, das Claude noch lesen sollte — bis
+ * jemand das nächste Foto macht. Jetzt fragt die App beim Start, bei welchen
+ * Nutzern ein Leser etwas zu tun haben könnte, und stößt für jeden die
+ * Zuteilung an; an deren Ende kommt der Claude-Leser von selbst dran. Antwortet
+ * die Datenbank noch nicht, fragt sie nach `START_WIEDERHOLUNGEN_MS` noch
+ * einmal.
+ *
+ * Kehrt sofort zurück und wirft nie. `register()` muss fertig sein, bevor der
+ * Server die erste Anfrage annimmt — wer hier auf die Datenbank oder gar auf
+ * einen Aufruf an Opus wartete, hielte den Start der App auf. Auch die
+ * Wiederholungen warten nicht: sie hängen an Weckern mit `unref()`.
+ */
+export function leserBeimStart(deps: Partial<StartDeps> = {}): void {
+  const d: StartDeps = {
+    nutzer: deps.nutzer ?? nutzerMitLeserArbeit,
+    anstossen: deps.anstossen ?? zuteilungAnstossen,
+    spaeter:
+      deps.spaeter ??
+      ((ms, aktion) => {
+        setTimeout(aktion, ms).unref?.();
+      }),
+  };
+
+  const versuch = (nummer: number): void => {
+    try {
+      void d
+        .nutzer()
+        .then((nutzer) => {
+          for (const userId of nutzer) d.anstossen(userId);
+        })
+        .catch((error: unknown) => {
+          const warten = START_WIEDERHOLUNGEN_MS[nummer];
+          if (warten === undefined) {
+            console.error(
+              `Leser: Anstoß beim Start gescheitert, auch nach ${START_WIEDERHOLUNGEN_MS.length} Wiederholungen — ${meldung(error)}. Den nächsten Anstoß gibt das nächste Foto oder ein read_inbox.`,
+            );
+            return;
+          }
+          console.error(
+            `Leser: Anstoß beim Start gescheitert — ${meldung(error)}; neuer Versuch in ${Math.round(warten / 1000)} s.`,
+          );
+          d.spaeter(warten, () => versuch(nummer + 1));
+        });
+    } catch (error) {
+      console.error(`Leser: Anstoß beim Start nicht möglich — ${meldung(error)}`);
+    }
+  };
+
+  try {
+    claudeZustandMelden();
+  } catch (error) {
+    console.error(`Leser: Zustand des Claude-Lesers nicht gemeldet — ${meldung(error)}`);
+  }
+  versuch(0);
+}
+
+/**
  * Merkt ein Blatt für die Prüfung auf einen App-Vorschlag vor, ohne dass
  * eine Seite entschieden wurde, und stößt an. Für das Löschen einer Seite:
  * fällt die einzige Claude-Seite eines Blattes weg (ein verwackeltes Foto),
  * ist es danach ganz von Docling gelesen — und ohne diesen Anstoß fragte
- * niemand, denn der Postbote hat es mit „einordnen tut die App“ schon
- * gemerkt. Wirft nie.
+ * niemand: Löschen entscheidet keine Seite, und der Claude-Leser hat an dem
+ * Blatt nichts mehr zu lesen. Wirft nie.
  */
 export function korbblattAnstossen(userId: string, materialId: string): void {
   try {
@@ -332,6 +444,15 @@ export function zuteilungLaufen(
 }
 
 async function lauf(userId: string, deps: Partial<ZuteilungDeps>): Promise<void> {
+  try {
+    await zuteilen(userId, deps);
+  } finally {
+    // Immer, auch nach einem Fehler oder ohne offene Seite — warum, steht im Kopf.
+    claudeAnstossen(userId);
+  }
+}
+
+async function zuteilen(userId: string, deps: Partial<ZuteilungDeps>): Promise<void> {
   const p = prozess();
   // Erst beim Start ausgewertet, nicht beim Anstoßen: ein Lauf, der hinter
   // einem anderen gewartet hat, sieht so den Stand, mit dem er arbeitet.
@@ -343,8 +464,19 @@ async function lauf(userId: string, deps: Partial<ZuteilungDeps>): Promise<void>
   };
 
   const jetzt = Date.now();
+  // Wann die früheste Sperre endet — dann stößt ein Wecker diesen Nutzer an.
+  let naechsterVersuch: number | null = null;
+  const sperreBis = (seit: number) => {
+    const bis = seit + ZWEITER_VERSUCH_MS;
+    naechsterVersuch = naechsterVersuch === null ? bis : Math.min(naechsterVersuch, bis);
+  };
+
   const seiten = (await offeneSeiten(userId)).filter((seite) => {
-    if (nochGesperrt(p.gescheitert.get(seite.pageId), jetzt)) return false;
+    const seit = p.gescheitert.get(seite.pageId);
+    if (seit !== undefined && nochGesperrt(seit, jetzt)) {
+      sperreBis(seit);
+      return false;
+    }
     p.gescheitert.delete(seite.pageId);
     return true;
   });
@@ -364,7 +496,7 @@ async function lauf(userId: string, deps: Partial<ZuteilungDeps>): Promise<void>
       // So gut es geht festhalten, mit dem, was bis zum Fehler schon da war:
       // steht Doclings Abschrift schon an der Seite, ist sie eine
       // Docling-Seite; sonst liest Claude, und Doclings Rohtext geht nicht
-      // verloren, wenn es ihn gab. Ist die Seite danach beim Postboten oder
+      // verloren, wenn es ihn gab. Ist die Seite danach beim Claude-Leser oder
       // entschieden, ist nichts verloren.
       const rueckfall =
         spur.geschrieben && spur.wahl
@@ -383,8 +515,13 @@ async function lauf(userId: string, deps: Partial<ZuteilungDeps>): Promise<void>
       );
 
       // Scheitert auch das, bleibt sie offen — und ruht, statt bei jedem
-      // `read_inbox` von vorn zu beginnen (`ZWEITER_VERSUCH_MS`).
-      if (!festgehalten) p.gescheitert.set(seite.pageId, Date.now());
+      // `read_inbox` von vorn zu beginnen (`ZWEITER_VERSUCH_MS`). Nach der
+      // Ruhe stößt sie ein Wecker wieder an (unten).
+      if (!festgehalten) {
+        const seit = Date.now();
+        p.gescheitert.set(seite.pageId, seit);
+        sperreBis(seit);
+      }
 
       console.error(
         `Leser ${kurz(seite.pageId)}: Zuteilung gescheitert, ${
@@ -396,6 +533,10 @@ async function lauf(userId: string, deps: Partial<ZuteilungDeps>): Promise<void>
         } — ${meldung(error)}`,
       );
     }
+  }
+
+  if (naechsterVersuch !== null) {
+    zweitenVersuchStellen(userId, naechsterVersuch - Date.now() + 500);
   }
 
   const vorgemerkt = p.pruefen.get(userId);
@@ -605,6 +746,28 @@ function weckerStellen(userId: string, materialId: string, ms: number): void {
   }, ms);
   wecker.unref?.();
   p.timer.set(materialId, wecker);
+}
+
+/**
+ * Stößt die Zuteilung dieses Nutzers wieder an, wenn die früheste Sperre einer
+ * gescheiterten Seite endet (`ZWEITER_VERSUCH_MS`). Einer je Nutzer genügt —
+ * der Lauf nimmt alle offenen Seiten mit, und eine, die dann noch ruht, stellt
+ * ihn neu. Ein neuer ersetzt den alten; `unref()` wie bei der Ruhe, und nach
+ * einem Neustart ist er weg, das ist gewollt: dann ist auch die Sperre weg,
+ * und der Start selbst stößt an.
+ */
+function zweitenVersuchStellen(userId: string, ms: number): void {
+  const p = prozess();
+  const schluessel = `nochmal:${userId}`;
+  const alt = p.timer.get(schluessel);
+  if (alt) clearTimeout(alt);
+
+  const wecker = setTimeout(() => {
+    p.timer.delete(schluessel);
+    zuteilungAnstossen(userId);
+  }, Math.max(0, ms));
+  wecker.unref?.();
+  p.timer.set(schluessel, wecker);
 }
 
 /** Die ersten acht Zeichen einer id — genug, um sie im Protokoll wiederzufinden. */

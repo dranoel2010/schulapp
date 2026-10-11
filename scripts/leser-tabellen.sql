@@ -37,8 +37,9 @@
 -- VOR dem Bau einspielen. Der alte Code verträgt die Spalten: er fragt sie
 -- nicht ab, und eine Seite, die er in der Zwischenzeit anlegt, bekommt
 -- 'offen' und wird vom neuen Code beim ersten Anstoß nachgeholt — hat der
--- alte Postbote sie inzwischen schon abgeschrieben, hält der neue Code nur
--- fest, dass sie gelesen ist (`schon-gelesen`), ohne Docling. Andersherum
+-- Postbote (es gab ihn bis zum 11.10.2026) sie inzwischen schon
+-- abgeschrieben, hält der neue Code nur fest, dass sie gelesen ist
+-- (`schon-gelesen`), ohne Docling. Andersherum
 -- (neuer Code vor der Spalte) scheitert jede Seite des Blattes mit „column
 -- does not exist“. Ein Rückbau braucht kein SQL: `nas.sh zurueck` läuft mit
 -- den Spalten weiter, der alte Code sieht sie nicht.
@@ -47,9 +48,10 @@
 -- macht `nas.sh hoch`. Deshalb sieht `hoch` seit dem 6.10.2026 vor dem Bau
 -- nach, ob `material_pages.leser` da ist, hält sonst an und druckt die Zeile
 -- zum Einspielen mit Benutzer und Datenbank aus dem db-Container; das nächste
--- `hoch` baut nach. Die ganze Reihenfolge (sichern, neue nas.sh, zählen,
--- einspielen, bauen, Postbote angleichen, Probe) steht im README unter „Ein
--- Leser je Seite“ → „Auf das NAS bringen“.
+-- `hoch` baut nach. Die ganze Reihenfolge von damals (sichern, neue nas.sh,
+-- zählen, einspielen, bauen, Postbote angleichen, Probe) steht in der
+-- Git-Historie des README; dieselben Schritte ohne den Postboten beschreibt
+-- dort heute „Auf das NAS bringen — dieser Stand“.
 --
 -- ── Vorher zählen (ändert nichts) ───────────────────────────────────────────
 --

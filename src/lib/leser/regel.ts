@@ -43,10 +43,12 @@ export const JEV_SCHWELLE = 0.5;
 
 /**
  * So lange muss die jüngste Seite eines Blattes alt sein, bevor die App aus
- * einem reinen Docling-Blatt einen Vorschlag macht. Der Spiegel von
- * `RUHE_SEKUNDEN` in harness/postbote.mts: die Rückseite kommt über „Seite
- * hinzufügen“ erst nach der Vorderseite, und ein Vorschlag dazwischen ordnete
- * ein halbes Blatt ein.
+ * einem reinen Docling-Blatt einen Vorschlag macht — und seit dem 11.10.2026
+ * auch, bevor der Claude-Leser es abschreibt (@/lib/leser/claude-ablauf). Die
+ * Rückseite kommt über „Seite hinzufügen“ erst nach der Vorderseite, und ein
+ * Vorschlag dazwischen ordnete ein halbes Blatt ein; ein Lauf dazwischen
+ * bezahlte es zweimal. Bis zu diesem Tag war die Zahl der Spiegel von
+ * `RUHE_SEKUNDEN` im Postboten; jetzt gibt es nur noch sie.
  */
 export const RUHE_MS = 20_000;
 
@@ -79,8 +81,10 @@ export function grundOhneMessung(grund: LeserGrundCode): LeserGrund {
  *
  * Steht im Anlegen selbst und nicht erst in der Zuteilung, damit die
  * Notbremse auch dann wirkt, wenn die Zuteilung klemmt: eine Seite, die mit
- * `'claude'` entsteht, ist sofort beim Postboten, ohne dass irgendein Lauf
- * sie anfassen muss.
+ * `'claude'` entsteht, ist sofort beim Claude-Leser, ohne dass die Zuteilung
+ * über sie entscheiden muss. Angestoßen wird er trotzdem von ihrem Ende
+ * (@/lib/leser/zuteilung) — das läuft nach jedem Hochladen, auch ohne
+ * offene Seite.
  */
 export function leserBeimAnlegen(
   env: Readonly<Record<string, string | undefined>> = process.env,
@@ -251,8 +255,12 @@ export type VorschlagFaellig =
  * „jetzt“ nur für ein Blatt im Korb, an dem kein Vorschlag liegt, jede Seite
  * entschieden und gelesen ist und mindestens eine davon Docling geschrieben
  * hat — ein Blatt also, zu dem kein Agent mehr kommt. Eine offene
- * Claude-Seite heißt: der Postbote kommt, und sein Vorschlag nimmt den
- * Bestand mit. „warten“, solange die jüngste Seite jünger ist als die Ruhe;
+ * Claude-Seite heißt: der Claude-Leser kommt (@/lib/leser/claude-leser), und
+ * sein Vorschlag nimmt den Bestand mit — Jev ordnet mit den Docling-Seiten
+ * und seiner Abschrift zusammen ein. Findet er keine Seite lesbar, schlägt er
+ * an einem gemischten Blatt trotzdem vor, nur mit einer Notiz
+ * (`einordnenAuftrag()`); kommt gar nichts, bleibt das Blatt für einen
+ * Menschen im Korb. „warten“, solange die jüngste Seite jünger ist als die Ruhe;
  * die halbe Sekunde obendrauf sorgt dafür, dass der Wecker nicht eine
  * Millisekunde zu früh klingelt und gleich noch einmal warten muss.
  */

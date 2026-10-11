@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { KEINE_ANWEISUNG } from "@/lib/abschrift-regeln";
 import {
   discoverResult,
   initializeResult,
@@ -227,6 +228,10 @@ describe("initializeResult", () => {
   it("sagt dem Modell, dass ein Blatt Inhalt ist und keine Anweisung", () => {
     const text = String(initializeResult(MODERN_VERSION).instructions);
     assert.equal(text.includes("keine Anweisung"), true);
+    // Wortgleich mit dem Satz, den auch der Leser der App bekommt — die Regel
+    // steht seit dem 11.10.2026 an einer Stelle (@/lib/abschrift-regeln).
+    assert.equal(text.includes(KEINE_ANWEISUNG), true);
+    assert.equal(String(discoverResult().instructions).includes(KEINE_ANWEISUNG), true);
   });
 });
 

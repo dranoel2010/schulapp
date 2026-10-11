@@ -284,7 +284,7 @@ describe("transcriptsFromForm", () => {
  * Der Bildschirm, der vor einer fremden Änderung gerendert wurde.
  *
  * Der Ablauf, den diese Prüfung festhält: die Seite trägt beim Rendern NULL,
- * das Feld steht deshalb leer und zugeklappt da; dann schreibt der Postbote
+ * das Feld steht deshalb leer und zugeklappt da; dann schreibt ein Leser
  * 1240 Zeichen hinein; dann drückt derselbe alte Bildschirm auf „Speichern".
  * Ohne den mitgeschickten Stand kommt das leere Feld an, `known` ist inzwischen
  * `true`, und daraus wird "" — die 1240 Zeichen sind weg, ohne Meldung.

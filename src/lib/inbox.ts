@@ -26,6 +26,7 @@ import {
 } from "@/db/schema";
 import { germanShortParts, isCalendarDate, todayInBerlin } from "@/lib/dates";
 import { MAX_PAGES } from "@/lib/images";
+import { verworfenVermerken } from "@/lib/leser/laeufe";
 import {
   MATERIAL_NOTE_MAX,
   MATERIAL_TITLE_MAX,
@@ -216,7 +217,7 @@ function optionalText(maxLength: number, tooLong: string) {
  * `material_pages.transcript`, heißt es NULL. Der Unterschied ist der Grund,
  * warum `normalizeTranscripts()` leere Texte behält, obwohl
  * `normalizeTopics()` leere Titel wegwirft. Fielen beide zusammen, käme jede
- * leere Rückseite bei jedem Lauf des Postboten wieder an die Reihe; die
+ * leere Rückseite beim Claude-Leser noch einmal an die Reihe, bezahlt; die
  * ausführliche Begründung steht an der Spalte in src/db/schema.ts.
  *
  * Unsicheres markiert der Agent im Text mit ⟨spitzen Klammern⟩. Das ist reiner
@@ -312,8 +313,8 @@ const transcriptInputSchema = z.object({
  * über dem Formular (`ProposalFormState.message`) und nicht unter einem Feld,
  * an dem sie niemand erwartet.
  *
- * **Eine Abschrift allein ist Inhalt** — und seit dem Postboten sogar der
- * häufigste. Fach, Titel und Tag stehen nach dem Auslösen der Kamera schon
+ * **Eine Abschrift allein ist Inhalt** — und seit die Blätter von selbst
+ * gelesen werden, sogar der häufigste. Fach, Titel und Tag stehen nach dem Auslösen der Kamera schon
  * richtig da; das einzig Neue, was ein Agent beizutragen hat, ist dann, was auf
  * der Seite steht. Zählte die Abschrift hier nicht mit, wiese das Schema
  * ausgerechnet diesen Vorschlag als „schlägt nichts vor" ab, und der eine
@@ -991,6 +992,12 @@ export async function updateProposal(
  * @/lib/inbox-apply): dort fällt genau der übernommene weg, und jeder andere
  * Vorschlag am Blatt bleibt stehen.
  *
+ * `anlass` sagt, welcher der beiden Wege es ist. Nur ein VERWORFENER
+ * Vorschlag eines Agenten hinterlässt eine Spur im Gedächtnis des
+ * Claude-Lesers (seit der Nachprüfung vom 11.10.2026, siehe unten); ein
+ * übernommener hat sein Ziel erreicht, seine Seiten tragen jetzt die
+ * Abschrift.
+ *
  * Gesucht wird über den Verbund, gelöscht über die geprüfte id. Ein DELETE
  * kennt keinen Verbund; die Frage nach dem Besitzer steht deshalb eine
  * Anweisung früher. Dass die id zwischen beiden Anweisungen den Besitzer
@@ -1000,11 +1007,28 @@ export async function updateProposal(
 export async function deleteProposal(
   userId: string,
   id: string,
+  anlass: "verworfen" | "uebernommen" = "verworfen",
 ): Promise<boolean> {
   if (!isId(id)) return false;
 
   const existing = await findProposal(userId, id);
   if (!existing) return false;
+
+  // Verworfen, nicht übernommen: ein Vorschlag von außen hinterlässt eine
+  // Spur im Gedächtnis des Claude-Lesers, sonst läse der das Blatt gleich
+  // noch einmal — bezahlt, und womöglich übernähme danach die App, was der
+  // Mensch eben abgelehnt hat (`verworfenVermerken()` in @/lib/leser/laeufe,
+  // seit der Nachprüfung vom 11.10.2026). VOR dem Löschen: danach weiß
+  // niemand mehr, welche Seiten er abgeschrieben hatte. Scheitert die Spur,
+  // wird trotzdem verworfen — die Entscheidung des Menschen geht vor, und
+  // schlimmstenfalls liest der Leser das Blatt ein zweites Mal.
+  if (anlass === "verworfen") {
+    await verworfenVermerken(userId, id).catch((error: unknown) => {
+      console.error(
+        `Verwerfen: Spur für den Claude-Leser nicht geschrieben — ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
+      );
+    });
+  }
 
   const removed = await db
     .delete(materialProposals)
@@ -1041,6 +1065,38 @@ export async function clearProposals(
 ): Promise<number> {
   if (!isId(materialId)) return 0;
   if (!(await ownsMaterial(userId, materialId))) return 0;
+
+  // Was hier wegfällt, ohne übernommen zu sein, ist für den Claude-Leser
+  // dasselbe wie verworfen: der Mensch hat sich für einen anderen Vorschlag
+  // entschieden (Nachprüfung vom 11.10.2026). Ohne Spur läse die Nachlese die
+  // Seiten eines weggeräumten Vorschlags bezahlt nach und übernähme sie ohne
+  // Menschen. Der übernommene Vorschlag hinterlässt dabei nichts Falsches:
+  // seine Seiten tragen jetzt eine Abschrift, und die Spur nennt nur Seiten,
+  // die ungelesen sind. Wie bei `deleteProposal()` geht das Wegräumen vor,
+  // wenn die Spur scheitert.
+  //
+  // Nur Vorschläge, die eine noch UNGELESENE Seite abgeschrieben hatten. Der
+  // eben übernommene hat seine Seiten gerade beschrieben und ist kein
+  // verworfener — ohne diese Bedingung stand am Blatt „Ein Vorschlag von
+  // außen wurde verworfen“, obwohl Jev den eigenen Vorschlag des Lesers
+  // übernommen hatte, und dessen eigene Zeile endete als „doppelt“
+  // (Nachprüfung vom 11.10.2026).
+  const offene = await db
+    .select({ id: materialProposals.id })
+    .from(materialProposals)
+    .where(
+      and(
+        eq(materialProposals.materialId, materialId),
+        sql`exists (select 1 from ${materialProposalTranscripts} inner join ${materialPages} on ${materialPages.id} = ${materialProposalTranscripts.pageId} where ${materialProposalTranscripts.proposalId} = ${materialProposals.id} and ${materialPages.transcript} is null)`,
+      ),
+    );
+  for (const { id } of offene) {
+    await verworfenVermerken(userId, id).catch((error: unknown) => {
+      console.error(
+        `Wegräumen: Spur für den Claude-Leser nicht geschrieben — ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
+      );
+    });
+  }
 
   const removed = await db
     .delete(materialProposals)
@@ -1965,7 +2021,7 @@ function topicLabel(titles: string[]): string {
  * die Spalte NULL zulässt: „noch nicht gelesen" ist ein offener Posten, „nichts
  * darauf" ist eine erledigte Seite. Ein Zeichen für beide machte aus der einen
  * Auskunft, für die diese ganze Stufe gebaut ist, wieder ein Achselzucken —
- * und der Postbote liefe bei jedem Lauf gegen dieselbe leere Rückseite.
+ * und der Claude-Leser liefe bei jedem Anstoß gegen dieselbe leere Rückseite.
  *
  * Die Zahl deutsch geschrieben, also „1.240 Zeichen". Vierstellig wird sie
  * regelmäßig, und „1240" liest sich in einer Zeile neben einer zweiten Zahl

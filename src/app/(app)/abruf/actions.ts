@@ -1,11 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 
 import { requireUser } from "@/lib/auth";
+import { claudeConfigured } from "@/lib/claude/client";
 import { todayInBerlin } from "@/lib/dates";
 import { formErrors, type FieldErrors } from "@/lib/form-errors";
+import { fragenAnstossen, fragenVormerken } from "@/lib/fragenlauf";
 import {
   createItem,
   neuPlanen,
@@ -38,7 +41,10 @@ import {
  * Die Aktionen des Abrufbereichs.
  *
  * Hier stehen nur Anmeldung, „heute" und das Auffrischen der betroffenen
- * Seiten; gerechnet und gespeichert wird in @/recall. „Heute" kommt immer aus
+ * Seiten; gerechnet und gespeichert wird in @/recall. Die eine Ausnahme ist
+ * der Knopf „Fragen bauen lassen“ (seit dem 11.10.2026): sein Lauf steht in
+ * @/lib/fragenlauf, weil er Opus ruft, und ein Modellaufruf gehört nicht in
+ * den Kern (src/recall/grenzen.test.ts). „Heute" kommt immer aus
  * todayInBerlin() — der Server läuft in UTC, und um 23 Uhr wäre sonst schon
  * morgen, was einen Abend in zwei zerschnitte.
  *
@@ -411,4 +417,37 @@ export async function vorschlagVerwerfenAction(
 
   await vorschlagVerwerfen(user.id, proposalId);
   revalidateAbruf();
+}
+
+/**
+ * „Fragen bauen lassen“: Opus baut aus dem Stoff dieser Klausur Abruffragen,
+ * und sie landen als EIN Vorschlag im Eingang (`fragenLaufen()` in
+ * @/lib/fragenlauf).
+ *
+ * Bis zum 11.10.2026 war das harness/fragen.mts, von Hand im Container
+ * gestartet; jetzt steht der Weg dort, wo der Stoff steht. Von selbst läuft
+ * nichts — dieser Knopf ist der einzige Auslöser.
+ *
+ * Gebaut wird nach der Antwort (`after()`), wie beim Abschreiben am Blatt:
+ * ein Lauf dauert Minuten, und der Knopf soll nicht so lange drehen. Der
+ * Callback stößt nur an und kehrt sofort zurück; ein Herunterfahren wartet auf
+ * ihn, nicht auf Opus. Vorher wird der Druck vorgemerkt, damit die Seite, die
+ * gleich neu gezeichnet wird, schon „baut gerade“ zeigt statt wieder den
+ * Knopf.
+ *
+ * `examId` steht als Parameter und nicht im Formular. Ob die Klausur dem
+ * Nutzer gehört, prüft der Lauf selbst (`stoffZuKlausur()` fragt nur nach
+ * seinen), ebenso, ob sie jetzt Fragen braucht — dieselbe Rechnung, nach der
+ * die Seite den Knopf zeigt. Ohne Schlüssel bietet sie ihn gar nicht an;
+ * kommt der Druck trotzdem, geschieht nichts.
+ */
+export async function fragenBauenLassenAction(examId: string): Promise<void> {
+  const user = await requireUser();
+
+  if (claudeConfigured()) {
+    fragenVormerken(user.id, examId);
+    after(() => fragenAnstossen(user.id, examId));
+  }
+
+  revalidatePath("/abruf/klausur");
 }

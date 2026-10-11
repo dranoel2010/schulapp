@@ -1,16 +1,18 @@
 import type { Leser } from "@/db/schema";
 
 /**
- * Die Tür `propose_sheet` und ein Leser je Seite (seit dem 6.10.2026,
- * Entscheidung 7 des Umbaus) — als reine Rechnung, damit `npm test` sie
- * prüfen kann. Der Aufrufer ist der Handler in ./run.ts; dort steht, warum
- * VERWORFEN wird und nicht abgewiesen.
+ * Die Tür für Vorschläge zu einem Blatt und ein Leser je Seite (seit dem
+ * 6.10.2026, Entscheidung 7 des Umbaus) — als reine Rechnung, damit
+ * `npm test` sie prüfen kann. Der Aufrufer ist seit dem 11.10.2026
+ * `blattVorschlagen()` in @/lib/blatt-vorschlag, die eine Tür für
+ * `propose_sheet` im Chat und für den Leser, mit dem die App Opus selbst ruft;
+ * dort steht, warum VERWORFEN wird und nicht abgewiesen.
  *
  * Kurz: Eine Abschrift zu einer Seite, die die App selbst liest oder schon
  * gelesen hat, oder die schon eine Abschrift trägt, kommt nicht in den
  * Vorschlag. Sonst ersetzte ein Mensch beim Übernehmen im Formular die
  * Docling-Abschrift oder die schon bestätigte, ohne es zu merken — ob der
- * Vorschlag vom Postboten kommt oder aus einem Chat in der Claude-App.
+ * Vorschlag vom Leser der App kommt oder aus einem Chat in der Claude-App.
  */
 
 /**
@@ -75,9 +77,12 @@ export function abschriftenSieben<T extends { page: string }>(
 
 /**
  * Ist der Vorschlag NUR deshalb leer, weil alles verworfen wurde? Dann
- * antwortet propose_sheet mit Daten statt mit einem Fehler — ein alter
- * Postbote merkte sich ein `isError` als „kein Vorschlag" und verlöre die
- * Claude-Seiten des Blattes.
+ * antwortet propose_sheet mit Daten statt mit einem Fehler, und die Tür
+ * (@/lib/blatt-vorschlag) meldet `leer` statt `abgewiesen`: Der Leser hat
+ * nichts falsch gemacht, die App hatte die Seiten nur schon. Ein Fehler hieße
+ * für einen Chat „versuch es anders“, und bis zum 11.10.2026 merkte sich der
+ * Postbote ein `isError` als „kein Vorschlag“ und verlor die Claude-Seiten
+ * des Blattes.
  *
  * Erkannt wird der leere Vorschlag an Meldungen ohne Feld: das ist die eine
  * Regel des Schemas, die am Ganzen hängt („Ein Vorschlag, der nichts

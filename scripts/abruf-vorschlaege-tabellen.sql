@@ -13,7 +13,7 @@
 -- Halluzinationstypen; eine erfundene Musterlösung fällt nicht auf, sobald sie
 -- als Prüfstoff dasteht. Der Vorschlag liegt deshalb hier, und erst das
 -- Übernehmen schickt jede Frage durch dieselbe Quellbindungsprüfung wie eine
--- von Hand angelegte. Dasselbe Muster benutzt der Postbote für Abschriften.
+-- von Hand angelegte. Dasselbe Muster gilt für Abschriften (material_proposals).
 --
 -- ── ⚠ WIE SIE IN DIE LAUFENDE DATENBANK KOMMT ────────────────────────────────
 --

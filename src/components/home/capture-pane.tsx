@@ -29,8 +29,8 @@ import { captureSubject, type HomeData } from "@/lib/home";
  * nicht auf, bevor das geschehen war. Das war die Bremse: abends, wenn der
  * Stundenplan schweigt, stand vor jedem Foto ein Auswahlfeld. Jetzt gibt es
  * immer eine Vorbelegung — und sie steht sichtbar auf dem Kamerabild, ist mit
- * einem Antipper zu ändern, und wenn sie falsch ist, schlägt der Postbote das
- * richtige Fach vor, sobald er das Blatt liest. Eine Vermutung, die man sieht
+ * einem Antipper zu ändern, und wenn sie falsch ist, bestimmt Jev das richtige
+ * Fach, sobald das Blatt gelesen ist. Eine Vermutung, die man sieht
  * und die sich später korrigiert, ist besser als ein Formular vor der Kamera.
  *
  * Ein abgewähltes Fach wird auf keiner Stufe vorgeschlagen. Der Stundenplan

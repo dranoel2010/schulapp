@@ -48,11 +48,17 @@
 .env
 .env.*
 
-# harness/zugang.json trägt die Zugangsdaten des Postboten zum Web MCP. Der
-# Postbote läuft nicht in diesem Container, sondern eigenständig unter
-# /volume1/docker/postbote — im Bild hat sein ganzer Ordner nichts zu suchen.
-# Der Typprüfer vermisst ihn nicht: harness steht in der exclude-Liste der
-# tsconfig.json.
+# harness/ ist der Postbote, seit dem 11.10.2026 stillgelegt: die App liest
+# Handschrift selbst (src/lib/claude/), der Code liegt nur für den Notfall
+# noch hier (README, „Der Postbote — stillgelegt, und der Rückweg im
+# Notfall“). Im Bild hatte er nie etwas zu suchen,
+# und jetzt erst recht nicht — wo er einmal lief, liegt neben dem Code
+# harness/zugang.json, das Erneuerungs-Token zum Web MCP, neunzig Tage lang
+# der Schlüssel zu allem, was die App weiß; Git kennt es nicht
+# (harness/.gitignore), ein Bau aus einem solchen Verzeichnis nähme es aber in
+# eine Schicht mit. Der Typprüfer vermisst den Ordner nicht: harness steht in
+# der exclude-Liste der tsconfig.json, und die App importiert nichts daraus
+# (Wächter in client.test.ts, claude-leser.test.ts und fragenlauf.test.ts).
 harness/
 
 

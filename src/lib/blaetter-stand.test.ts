@@ -47,6 +47,7 @@ const VORLAGE: StandZahlen = {
   seitenInArbeit: 0,
   vorschlaege: 1,
   neuesterVorschlag: null,
+  neuesterLauf: "2026-03-01T08:05:00.000Z",
 };
 
 /** Ein Feld anders: Zahl +1, Text mit Zusatz, null wird ein Zeitpunkt. */
