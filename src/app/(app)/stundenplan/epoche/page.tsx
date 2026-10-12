@@ -4,6 +4,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { listSubjects } from "@/lib/subjects";
 import {
+  guessEpochSubject,
   loadWeek,
   periodLabel,
   periodTimes,
@@ -28,35 +29,6 @@ import { EpochForm, type EpochLesson } from "./epoch-form";
 export const metadata: Metadata = {
   title: "Epoche wechseln",
 };
-
-/**
- * Welches Fach die App für den laufenden Hauptunterricht hält.
- *
- * Geraten wird über die erste Stunde: das Fach, das dort an den meisten Tagen
- * steht. Das ist nur eine Vorbelegung der Auswahl — trifft sie nicht zu, stellt
- * man sie in einem Griff um, und die Liste darunter füllt sich neu.
- */
-function guessEpochSubject(lessons: EpochLesson[]): string | null {
-  const zaehler = new Map<string, number>();
-
-  for (const lesson of lessons) {
-    // Die erste Stunde ist an einer Waldorfschule der Hauptunterricht.
-    if (!lesson.period.startsWith("1.")) continue;
-    zaehler.set(lesson.subjectId, (zaehler.get(lesson.subjectId) ?? 0) + 1);
-  }
-
-  let bestes: string | null = null;
-  let meiste = 0;
-
-  for (const [subjectId, anzahl] of zaehler) {
-    if (anzahl > meiste) {
-      meiste = anzahl;
-      bestes = subjectId;
-    }
-  }
-
-  return bestes;
-}
 
 export default async function EpochPage() {
   const user = await requireUser();
@@ -121,7 +93,11 @@ export default async function EpochPage() {
             archived: subject.archived,
           }))}
           lessons={lessons}
-          defaultFromSubjectId={guessEpochSubject(lessons)}
+          defaultFromSubjectId={guessEpochSubject(
+            week.days.flatMap((day) =>
+              day.lessons.map((lesson) => ({ period: lesson.period, subjectId: lesson.subject.id })),
+            ),
+          )}
         />
       )}
     </div>

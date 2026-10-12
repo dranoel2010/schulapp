@@ -124,9 +124,13 @@ type BlockCounts = { total: number; open: number; done: number };
 
 export async function listExams(
   userId: string,
-  options?: { includePast?: boolean },
+  options?: {
+    includePast?: boolean;
+    /** Der heutige Tag — Vorgabe der Kalendertag in Berlin; die Startseite reicht den App-Tag (Testuhr) durch. */
+    heute?: string;
+  },
 ): Promise<ExamListItem[]> {
-  const today = todayInBerlin();
+  const today = options?.heute ?? todayInBerlin();
 
   const rows = await db
     .select({ exam: exams, subject: subjects })

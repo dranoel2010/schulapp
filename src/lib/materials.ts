@@ -3011,3 +3011,35 @@ export async function ownsSubject(
 
   return Boolean(subject);
 }
+
+/**
+ * Das Thema des jüngsten Blatts eines Fachs, ohne Ortsangabe — für die
+ * Morgenansicht: „Hauptunterricht · Industrialisierung“ (Modell 23, Plan B;
+ * Prototyp `epochenThema`, Z. 1483). Aus „Industrialisierung in England“ wird
+ * „Industrialisierung“. Nur eingeordnete Blätter zählen; ohne Thema leer.
+ */
+export async function juengstesThema(
+  userId: string,
+  subjectId: string,
+): Promise<string> {
+  const [zeile] = await db
+    .select({ title: subjectTopics.title })
+    .from(materials)
+    .innerJoin(materialTopics, eq(materialTopics.materialId, materials.id))
+    .innerJoin(subjectTopics, eq(subjectTopics.id, materialTopics.subjectTopicId))
+    .where(
+      and(
+        eq(materials.userId, userId),
+        eq(materials.subjectId, subjectId),
+        isNotNull(materials.filedAt),
+      ),
+    )
+    .orderBy(desc(materials.capturedOn), desc(materials.createdAt), asc(subjectTopics.title))
+    .limit(1);
+  return zeile ? themaOhneOrt(zeile.title) : "";
+}
+
+/** „Industrialisierung in England“ → „Industrialisierung“ (Prototyp Z. 1485). */
+export function themaOhneOrt(titel: string): string {
+  return titel.replace(/\s+in\s+\p{Lu}.*$/u, "");
+}
