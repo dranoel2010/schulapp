@@ -86,12 +86,12 @@ try {
   console.log("1. Abhaken auf der Stapelseite");
   await zuHause();
   await page.evaluate(() => window.__kombi.openPage("probe"));
-  await page.waitForSelector(`.task:has-text("${text}")`);
+  await page.waitForSelector(`#pages .task:has-text("${text}")`);
   await ruhe(page);
   const anfragen = [];
   const merken = (r) => anfragen.push({ url: r.url(), method: r.method(), rsc: r.headers()["rsc"] ?? null, action: r.headers()["next-action"] ?? null });
   page.on("request", merken);
-  await page.click(`.task:has-text("${text}") .check`);
+  await page.click(`#pages .task:has-text("${text}") .check`);
   await page.waitForSelector(".toast.on");
   const toastText = await page.textContent("#toastText");
   p.ok(/abgehakt/.test(toastText ?? ""), `Toast: „${toastText}“`);
@@ -103,27 +103,30 @@ try {
   p.ok(action.length === 1, `genau eine Server Action (${action.length})`);
   p.ok(rsc.length === 0, `kein Server-Render nachgeladen (${rsc.map((r) => r.url).join(", ") || "keins"})`);
   p.ok(anfragen.some((a) => a.url.includes("/api/seite/probe")), "die Seite lädt gezielt über /api/seite nach");
-  p.ok(await page.isVisible("#whenrow"), "Startseite darunter steht");
+  // darunter die Ansicht des Tages: Startseite oder, nach Schulschluss, der Ablauf (C)
+  p.ok((await page.isVisible("#whenrow")) || (await page.isVisible("#flow.on")), "Startseite darunter steht");
   p.ok((await obersteSeite(page)) === "Probe", "die Seite bleibt");
-  p.ok(await page.locator(`.task.done:has-text("${text}")`).count() === 1, "die Zeile ist abgehakt");
+  p.ok(await page.locator(`#pages .task.done:has-text("${text}")`).count() === 1, "die Zeile ist abgehakt");
   // Rückgängig
   await page.click("#toastAct");
-  await page.waitForSelector(`.task:not(.done):has-text("${text}")`);
+  await page.waitForSelector(`#pages .task:not(.done):has-text("${text}")`);
   p.ok(true, "Rückgängig öffnet die Aufgabe wieder");
 
   // Fehler-Toast: künstlich scheiternde Action
   console.log("   Fehler-Toast");
   await ruhe(page, 600);
+  // Erledigte von früheren Läufen zählen nicht mit
+  const vorher = await page.locator("#pages .task.done").count();
   await page.click("#pages > .page:last-child >> text=Abhaken scheitern lassen");
-  const sofort = await page.locator(".task.done").count();
+  const sofort = await page.locator("#pages .task.done").count();
   await page.waitForSelector('.toast.on:has-text("Nicht gespeichert")');
   const knopf = await page.textContent("#toastAct");
-  p.ok(sofort >= 1, "optimistisch sofort abgehakt");
+  p.ok(sofort >= vorher + 1, "optimistisch sofort abgehakt");
   p.ok(knopf === "Erneut", `Fehler-Toast mit „${knopf}“`);
-  const nochAbgehakt = await page.locator(".task.done").count();
+  const nochAbgehakt = await page.locator("#pages .task.done").count();
   await ruhe(page, 600);
-  const danach = await page.locator(".task.done").count();
-  p.ok(nochAbgehakt >= 1 && danach === 0, `springt erst nach dem Toast zurück (beim Toast ${nochAbgehakt}, danach ${danach})`);
+  const danach = await page.locator("#pages .task.done").count();
+  p.ok(nochAbgehakt >= vorher + 1 && danach === vorher, `springt erst nach dem Toast zurück (beim Toast ${nochAbgehakt}, danach ${danach})`);
 
   // ── 3. Neuladen ──────────────────────────────────────────────────────────
   console.log("3. Neuladen");
