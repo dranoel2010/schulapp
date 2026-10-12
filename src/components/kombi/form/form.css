@@ -1,0 +1,63 @@
+/* Formular-Bausteine der Unterseiten (Plan 2.3): genau die Maße der Zeile —
+   Höhe 52, Radius 12, Fläche --raise, Schrift 17/450, Label 15/560 in
+   --ink-2. Der Fokus kommt aus den Grundwerten (outline 2px var(--accent)). */
+
+.kf-feld{display:flex;flex-direction:column;gap:6px}
+.kf-label{font-size:15px;line-height:1.3;font-weight:560;color:var(--ink-2)}
+.kf-opt{font-weight:450;color:var(--ink-3)}
+.kf-input{display:block;width:100%;height:52px;border-radius:12px;border:1px solid transparent;background:var(--raise);
+  padding:0 14px;font-size:17px;line-height:1.3;font-weight:450;color:var(--ink);-webkit-appearance:none;appearance:none}
+.kf-input::placeholder{color:var(--ink-3);opacity:1}
+.kf-input[aria-invalid="true"]{border-color:var(--error)}
+.kf-input:disabled{opacity:.6}
+/* Datum und Uhrzeit ohne tabular-nums: Schibsted setzt sonst Punkt und Doppelpunkt auf Ziffernbreite („08 : 00“), und in ein Eingabefeld reicht kein <Tn>. */
+input.kf-input[type="number"]{font-variant-numeric:tabular-nums}
+.kf-area{height:auto;min-height:104px;padding:13px 14px;line-height:1.45;resize:vertical}
+.kf-select{position:relative;display:block}
+.kf-select select{padding-right:42px;cursor:pointer}
+.kf-select svg{position:absolute;right:14px;top:50%;width:18px;height:18px;transform:translateY(-50%);pointer-events:none;
+  fill:none;stroke:var(--ink-3);stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.kf-hint{font-size:15px;line-height:1.35;color:var(--ink-2)}
+.kf-fehler{font-size:15px;line-height:1.35;color:var(--error)}
+.kf-btn{text-decoration:none}
+/* Außerhalb einer Knopfzeile nimmt ein Knopf nur seinen Platz (.btn.primary hat sonst flex:1) */
+.btn.kf-btn{flex:0 0 auto}
+.foot .btn.kf-btn{flex:1 1 0;min-width:0}
+.kf-btn:disabled,.kf-btn[aria-disabled="true"]{opacity:.55;pointer-events:none}
+.kf-danger{flex:1;background:var(--error);color:var(--bg)}
+.kf-abschnitt{margin-top:4px}
+.kf-kopf{display:flex;align-items:flex-end;justify-content:space-between;gap:0 12px;flex-wrap:wrap}
+.kf-kopf > p,.kf-kopf > .p-title{flex-basis:100%}
+.kf-kopf .p-lab{margin-bottom:4px}
+.kf-inhalt > * + *{margin-top:12px}
+.kf-leer{padding:4px 0}
+.kf-leer .empty{padding-bottom:4px}
+.kf-leer-akt{display:flex;gap:10px;margin-top:8px}
+.kf-gefahr{margin-top:8px}
+.kf-gefahr > * + *{margin-top:12px}
+.kf-seite > * + *{margin-top:20px}
+.kf-seite > header + *{margin-top:16px}
+/* Formular-Abstände: Felder untereinander mit 16px, Knopfzeile wie .foot */
+.kf-form > * + *{margin-top:16px}
+.kf-form .foot{margin-top:28px}
+.kf-form .foot .btn,.kf-seite .foot .btn,.kf-gefahr .foot .btn{flex:1 1 0;min-width:0;padding:0 16px}
+/* Ein Link mitten im Satz: die Tippfläche reicht 12px über und unter die Zeile (44px) */
+.kf-inline{display:inline-block;padding:12px 0;margin:-12px 0}
+/* Kleine Auswahlknöpfe (Chips) der alten Formulare in der Gestalt .fp */
+.kf-chip{flex:none;display:inline-flex;align-items:center;height:44px;padding:0 14px;border-radius:999px;background:var(--raise);
+  font-size:15px;font-weight:560;color:var(--ink);transition:transform 140ms var(--ease-out)}
+.kf-chip:active{transform:scale(.96)}
+.kf-chip[aria-pressed="true"],.kf-chip[aria-current="true"],.kf-chip[aria-checked="true"]{background:var(--ink);color:var(--bg)}
+/* Kästchen und Optionsfelder in der Farbe der Schrift */
+.kf-form input[type="checkbox"],.kf-form input[type="radio"],.kf-seite input[type="checkbox"]{accent-color:var(--ink);width:22px;height:22px}
+.kf-check{display:flex;align-items:center;gap:12px;min-height:44px;font-size:17px}
+.kf-check input{width:22px;height:22px;accent-color:var(--ink);flex:none}
+/* Seiten ohne Shell: Anmeldung, Einrichtung, Offline, Datenschutz, 404 (Plan 2.2) */
+.solo{min-height:100dvh;background:var(--bg);color:var(--ink);padding:calc(var(--top) + 56px) var(--pad) calc(var(--safe-b) + 28px)}
+.solo-in{max-width:var(--col,680px);margin:0 auto}
+.solo h1.hl{display:block;min-height:0;font-size:28px;line-height:1.12;font-weight:650;letter-spacing:-.03em;margin-bottom:8px;text-wrap:balance}
+.solo .q-sub{margin:0 0 24px}
+.solo .btn{width:100%}
+.solo .btn.primary.solo-btn,.solo .btn.primary{background:var(--accent-fill);color:var(--on-accent-fill)}
+.solo .btn.quiet{background:var(--raise);color:var(--ink)}
+.solo p + p{margin-top:12px}

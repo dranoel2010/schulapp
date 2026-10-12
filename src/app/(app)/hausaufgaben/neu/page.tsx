@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
-import { ButtonLink } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
+import { ButtonLink } from "@/components/kombi/form";
+import { EmptyState } from "@/components/kombi/form";
 import { requireUser } from "@/lib/auth";
 import { addDays, todayInBerlin } from "@/lib/dates";
 import { freeDatesFrom } from "@/lib/free-days";
@@ -78,11 +78,11 @@ export default async function NewHomeworkPage() {
   // speichern.
   if (subjects.length === 0) {
     return (
-      <div className="space-y-6 md:max-w-3xl">
+      <div className="kf-seite">
         <header className="space-y-1">
-          <h1 className="text-xl font-semibold text-foreground">
+          <h2 className="p-title">
             Neue Aufgabe
-          </h1>
+          </h2>
         </header>
 
         <EmptyState
@@ -95,10 +95,10 @@ export default async function NewHomeworkPage() {
   }
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="kf-seite">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Neue Aufgabe</h1>
-        <p className="text-sm text-muted">
+        <h2 className="p-title">Neue Aufgabe</h2>
+        <p className="text-[15px] text-ink-2">
           Fällig ist sie vorgeschlagen zur nächsten Stunde in dem Fach — ändern
           kannst du das jederzeit.
         </p>
@@ -110,7 +110,6 @@ export default async function NewHomeworkPage() {
         dueSuggestions={nextLessonPerSubject(lessons, today, new Set(freeDays))}
         fallbackDueDate={addDays(today, 1)}
         submitLabel="Aufgabe eintragen"
-        cancelHref="/hausaufgaben"
       />
     </div>
   );

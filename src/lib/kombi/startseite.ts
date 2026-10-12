@@ -111,8 +111,6 @@ export type TagDaten = {
   klausurBlock: LernblockUeberblick | null;
   /** Block „Wiederholen“ auf dem Überblick (Abschnitt E, V2 4.5) */
   wiederholen: WhStand;
-  /** Fragen in den offenen KI-Vorschlägen (`/abruf/eingang`) */
-  abrufEingang: number;
 };
 
 /** Ist der Tag ein Schultag? Aus den Daten: der App-Tag selbst oder der nächste. */

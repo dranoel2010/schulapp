@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
@@ -44,37 +43,11 @@ export default async function HomeworkPage({
   const today = todayInBerlin();
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
-      <Link
-        href="/hausaufgaben"
-        className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className="size-4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m15 6-6 6 6 6" />
-        </svg>
-        Alle Aufgaben
-      </Link>
-
-      <header className="rounded-card border border-border bg-surface p-5 sm:p-6">
-        <p className="text-sm text-muted">{item.subject.name}</p>
-
-        <h1 className="mt-1.5 text-xl font-semibold text-foreground">
-          {item.title}
-        </h1>
-
-        <p className="mt-1 text-muted">
-          {item.done
-            ? `Erledigt · fällig war ${formatGerman(item.dueDate)}`
-            : `Fällig ${formatGerman(item.dueDate)}`}
+    <div className="kf-seite">
+      <header className="">
+        <h2 className="p-title">{item.title}</h2>
+        <p className="p-sub">
+          {`${item.subject.name} · ${item.done ? `erledigt, fällig war ${formatGerman(item.dueDate)}` : `fällig ${formatGerman(item.dueDate)}`}`}
         </p>
       </header>
 
@@ -83,8 +56,7 @@ export default async function HomeworkPage({
         subjects={subjects}
         fallbackDueDate={addDays(today, 1)}
         item={item}
-        submitLabel="Änderungen speichern"
-        cancelHref="/hausaufgaben"
+        submitLabel="Speichern"
       />
 
       <HomeworkDangerZone

@@ -3,10 +3,10 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 
-import { Button, ButtonLink } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
-import { Input, Select, Textarea } from "@/components/ui/input";
-import { subjectColor } from "@/lib/colors";
+import { Button } from "@/components/kombi/form";
+import { AbbrechenKnopf, FertigBeiErfolg, useNachAktion } from "@/components/kombi/form/fertig";
+import { Field } from "@/components/kombi/form";
+import { Input, Select, Textarea } from "@/components/kombi/form";
 
 /**
  * Ein Feld im Wochenraster bearbeiten: welches Fach, welcher Raum, welche
@@ -43,6 +43,8 @@ export type LessonFormState = {
   /** Hinweis über dem Formular, wenn es nicht an einem einzelnen Feld liegt. */
   message?: string;
   errors?: LessonFieldErrors;
+  /** Gesetzt nach erfolgreichem Speichern: die Formularseite geht zurück (Plan 2.4). */
+  fertig?: number;
 };
 
 const EMPTY_STATE: LessonFormState = {};
@@ -67,6 +69,7 @@ export function LessonForm({
   removeAction,
 }: LessonFormProps) {
   const [state, formAction, pending] = useActionState(action, EMPTY_STATE);
+  const { zurueck } = useNachAktion();
 
   const [subjectId, setSubjectId] = useState(
     lesson?.subjectId ?? subjects[0]?.id ?? "",
@@ -75,15 +78,15 @@ export function LessonForm({
   const [note, setNote] = useState(lesson?.note ?? "");
 
   const subject = subjects.find((item) => item.id === subjectId);
-  const color = subjectColor(subject?.color);
 
   return (
     <div className="space-y-6">
-      <form action={formAction} className="space-y-6" noValidate>
+      <form action={formAction} className="kf-form" noValidate>
+      <FertigBeiErfolg marke={state.fertig} toast="Gespeichert" />
         {state.message ? (
           <p
             role="alert"
-            className="rounded-control border border-danger/40 bg-danger-soft px-3.5 py-3 text-sm text-danger"
+            className="kf-fehler"
           >
             {state.message}
           </p>
@@ -93,11 +96,6 @@ export function LessonForm({
           <Field id="subjectId" label="Fach" error={state.errors?.subjectId}>
             {(control) => (
               <span className="flex items-center gap-2.5">
-                <span
-                  aria-hidden="true"
-                  style={{ backgroundColor: color.hex }}
-                  className="size-3 shrink-0 rounded-full"
-                />
                 <span className="min-w-0 flex-1">
                   <Select
                     {...control}
@@ -155,13 +153,11 @@ export function LessonForm({
           )}
         </Field>
 
-        <div className="flex gap-3 pt-2">
-          <Button type="submit" loading={pending} className="flex-1">
+        <div className="foot">
+          <Button type="submit" loading={pending}>
             Speichern
           </Button>
-          <ButtonLink href="/stundenplan" variant="secondary">
-            Abbrechen
-          </ButtonLink>
+          <AbbrechenKnopf />
         </div>
       </form>
 
@@ -169,7 +165,12 @@ export function LessonForm({
           steht nicht davor: hier geht ein Feld verloren, kein Fach mit allem,
           was daran hängt — und wieder eintragen ist ein Antippen. */}
       {removeAction ? (
-        <form action={removeAction} className="border-t border-border pt-4">
+        <form
+          action={async () => {
+            await removeAction();
+            zurueck("Stunde entfernt");
+          }}
+        >
           <RemoveButton />
         </form>
       ) : null}
@@ -186,7 +187,7 @@ function RemoveButton() {
       type="submit"
       variant="ghost"
       loading={pending}
-      className="text-danger hover:bg-danger-soft hover:text-danger"
+      style={{ color: "var(--error)" }}
     >
       Stunde entfernen
     </Button>

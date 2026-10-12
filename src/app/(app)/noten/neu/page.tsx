@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
-import { ButtonLink } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
+import { ButtonLink } from "@/components/kombi/form";
+import { EmptyState } from "@/components/kombi/form";
 import { requireUser } from "@/lib/auth";
 import { todayInBerlin } from "@/lib/dates";
 import { listSubjects } from "@/lib/subjects";
@@ -49,9 +49,9 @@ export default async function NewGradePage({
   // speichern.
   if (subjects.length === 0) {
     return (
-      <div className="space-y-6 md:max-w-3xl">
+      <div className="kf-seite">
         <header className="space-y-1">
-          <h1 className="text-xl font-semibold text-foreground">Neue Note</h1>
+          <h2 className="p-title">Neue Note</h2>
         </header>
 
         <EmptyState
@@ -64,10 +64,10 @@ export default async function NewGradePage({
   }
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="kf-seite">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Neue Note</h1>
-        <p className="text-sm text-muted">
+        <h2 className="p-title">Neue Note</h2>
+        <p className="text-[15px] text-ink-2">
           Eingetragen ist sie für heute — das Datum kannst du ändern, wenn du
           sie nachträgst.
         </p>
@@ -79,7 +79,6 @@ export default async function NewGradePage({
         defaultDate={todayInBerlin()}
         defaultSubjectId={wanted?.id}
         submitLabel="Note eintragen"
-        cancelHref="/noten"
       />
     </div>
   );

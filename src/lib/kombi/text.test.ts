@@ -1,7 +1,26 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { dm, fx, fxTeile, kurz, lang, tn, uhrzeit, voll, wd, weekdayOrDate } from "@/lib/kombi/text";
+import { dm, fliesstext, fx, fxTeile, kurz, lang, tn, uhrzeit, voll, wd, weekdayOrDate } from "@/lib/kombi/text";
+
+describe("fliesstext", () => {
+  it("setzt einfache Umbrüche im Absatz als Leerzeichen", () => {
+    assert.equal(
+      fliesstext("Man setzt die innere ein und\nmultipliziert mit der\näußeren Ableitung."),
+      "Man setzt die innere ein und multipliziert mit der äußeren Ableitung.",
+    );
+  });
+  it("lässt Listenpunkte und Formelzeilen auf eigener Zeile", () => {
+    assert.equal(
+      fliesstext("Kettenregel:\nf(x) = g(h(x))\nf'(x) = g'(h(x)) · h'(x)\ndabei ist h die innere\nFunktion."),
+      "Kettenregel:\nf(x) = g(h(x))\nf'(x) = g'(h(x)) · h'(x)\ndabei ist h die innere Funktion.",
+    );
+    assert.equal(fliesstext("Gründe:\n- Kohle\n- Eisen und\nStahl\n2. Bahn"), "Gründe:\n- Kohle\n- Eisen und Stahl\n2. Bahn");
+  });
+  it("setzt getrennte Wörter wieder zusammen", () => {
+    assert.equal(fliesstext("die Ablei-\ntung der Funktion"), "die Ableitung der Funktion");
+  });
+});
 
 function inZone<T>(tz: string, f: () => T): T {
   const vorher = process.env.TZ;

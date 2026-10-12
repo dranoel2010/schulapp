@@ -202,6 +202,7 @@ function countdownMessage(exams: UpcomingExam[], today: string): PushPayload {
   };
 }
 
+
 /** "Klausur in Mathe" */
 function examLabel(exam: UpcomingExam): string {
   const kind = EXAM_KIND_LABELS[exam.kind] ?? "Prüfung";

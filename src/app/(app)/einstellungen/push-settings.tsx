@@ -2,9 +2,9 @@
 
 import { useActionState, useEffect, useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
-import { Select } from "@/components/ui/input";
+import { Button } from "@/components/kombi/form";
+import { Field } from "@/components/kombi/form";
+import { Select } from "@/components/kombi/form";
 
 import type { ReminderTimeState } from "./actions";
 
@@ -329,20 +329,20 @@ export function PushSettings({ vapidPublicKey }: PushSettingsProps) {
   return (
     <div className="space-y-3">
       {status === "checking" ? (
-        <p className="text-sm text-muted">
+        <p className="text-[15px] text-ink-2">
           Einen Moment, der Browser wird gefragt.
         </p>
       ) : null}
 
       {status === "unsupported" ? (
-        <p className="text-sm text-muted">
+        <p className="text-[15px] text-ink-2">
           Dieser Browser kann keine Erinnerungen empfangen. Auf dem Handy klappt
           es mit Chrome auf Android.
         </p>
       ) : null}
 
       {status === "unconfigured" ? (
-        <p className="text-sm text-muted">
+        <p className="text-[15px] text-ink-2">
           Auf diesem Server fehlen die Schlüssel für Push-Nachrichten. Bis sie
           eingetragen sind, kann die App nichts schicken.
         </p>
@@ -350,7 +350,7 @@ export function PushSettings({ vapidPublicKey }: PushSettingsProps) {
 
       {status === "off" ? (
         <>
-          <p className="text-sm text-muted">
+          <p className="text-[15px] text-ink-2">
             Du bekommst eine tägliche Erinnerung zur eingestellten Zeit und eine
             Meldung, wenn eine Prüfung näher rückt.
           </p>
@@ -361,7 +361,7 @@ export function PushSettings({ vapidPublicKey }: PushSettingsProps) {
       ) : null}
 
       {status === "denied" ? (
-        <div className="space-y-2 text-sm text-muted">
+        <div className="space-y-2 text-[15px] text-ink-2">
           <p>
             Du hast Benachrichtigungen für diese Seite abgelehnt. Von hier aus
             lässt sich das nicht zurücknehmen — das geht nur in den
@@ -377,10 +377,10 @@ export function PushSettings({ vapidPublicKey }: PushSettingsProps) {
 
       {status === "on" ? (
         <>
-          <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <p className="flex items-center gap-2 text-[15px] font-[560] text-ink">
             <span
               aria-hidden="true"
-              className="size-2 shrink-0 rounded-full bg-success"
+              className="size-2 shrink-0 rounded-full bg-ink"
             />
             Erinnerungen sind auf diesem Gerät an
           </p>
@@ -406,19 +406,19 @@ export function PushSettings({ vapidPublicKey }: PushSettingsProps) {
       ) : null}
 
       {error ? (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-[15px] text-error">
           {error}
         </p>
       ) : null}
 
       {note ? (
-        <p role="status" className="text-sm text-success">
+        <p role="status" className="text-[15px] text-ink-2">
           {note}
         </p>
       ) : null}
 
       {status !== "unsupported" && status !== "checking" ? (
-        <div className="rounded-control bg-surface-muted p-3 text-sm text-muted">
+        <div className="rounded-[12px] bg-raise p-3 text-[15px] text-ink-2">
           Erinnerungen kommen nur in der gebauten App an: in der Entwicklung
           läuft der Dienst im Hintergrund absichtlich nicht. Am zuverlässigsten
           ist es, wenn du die Schulapp über Chrome installiert hast.
@@ -460,7 +460,7 @@ export function ReminderTime({ action, hour }: ReminderTimeProps) {
   const saved = state.savedHour !== undefined && state.savedHour === selected;
 
   return (
-    <form action={formAction} className="space-y-3">
+    <form action={formAction} className="kf-form">
       <Field
         id="reminderHour"
         label="Tägliche Erinnerung um"
@@ -496,7 +496,7 @@ export function ReminderTime({ action, hour }: ReminderTimeProps) {
       </Field>
 
       {saved ? (
-        <p role="status" className="text-sm text-success">
+        <p role="status" className="text-[15px] text-ink-2">
           Gespeichert. Die Erinnerung kommt jetzt um {hourLabel(selected)}.
         </p>
       ) : null}

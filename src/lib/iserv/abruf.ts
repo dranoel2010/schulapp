@@ -107,7 +107,7 @@ export function sperrPush(grund: IservFehlerArt): PushPayload {
   return {
     title: SPERR_PUSH_TITEL[grund as BlockGrund] ?? SPERR_PUSH_TITEL.abgelehnt,
     body: "Die Schulapp kommt nicht mehr in IServ und versucht es nicht noch einmal. In den Einstellungen steht, was zu tun ist.",
-    url: "/einstellungen#iserv",
+    url: "/einstellungen/iserv",
     tag: "schulapp-iserv",
   };
 }
@@ -115,7 +115,7 @@ export function sperrPush(grund: IservFehlerArt): PushPayload {
 export const VERALTET_PUSH: PushPayload = {
   title: "IServ seit einem Tag nicht gelesen",
   body: "Die IServ-Termine im Kalender „Schule“ sind womöglich nicht aktuell. Details in den Einstellungen.",
-  url: "/einstellungen#iserv",
+  url: "/einstellungen/iserv",
   tag: "schulapp-iserv",
 };
 
@@ -127,7 +127,7 @@ export const VERALTET_PUSH: PushPayload = {
 export const KLASSE_PUSH: PushPayload = {
   title: "IServ: Klasse prüfen",
   body: "Die Schulapp erkennt den Kalender deiner Klasse in IServ nicht mehr eindeutig (neues Schuljahr?). Bis das geklärt ist, nimmt sie keine neuen Klassentermine auf. In den Einstellungen steht, was zu tun ist.",
-  url: "/einstellungen#iserv",
+  url: "/einstellungen/iserv",
   tag: "schulapp-iserv",
 };
 

@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
-import { subjectColor } from "@/lib/colors";
 import { formatGerman, todayInBerlin } from "@/lib/dates";
 import { getExam } from "@/lib/exams";
 import { listSubjects } from "@/lib/subjects";
@@ -14,11 +12,9 @@ import { deleteExamAction, updateExamAction } from "../../actions";
 import { ExamDangerZone, ExamForm } from "../../exam-form";
 
 /**
- * Eine Prüfung bearbeiten (Formular-Unterseite, Modell 23 Plan 2.2): ihre
- * Daten — Fach, Art, Titel, Datum, Themen, Lernplanung, Notizen — und ganz
- * unten das Löschen. Erreichbar über „Bearbeiten“ auf der Klausurseite
- * `/klausuren/[id]`, wo auch der Lernplan steht. Den neuen Stil bekommt das
- * Formular in Abschnitt G.
+ * Eine Prüfung antippen heißt: sie bearbeiten. Hier stehen ihre Daten —
+ * Fach, Art, Titel, Datum, Themen, Lernplanung, Notizen — und ganz unten das
+ * Löschen. Der Lernplan selbst steht auf der Klausurseite `/klausuren/[id]`.
  */
 
 export const metadata: Metadata = {
@@ -75,79 +71,18 @@ export default async function ExamPage({
     ),
   );
 
-  const color = subjectColor(subject.color).hex;
   const kindLabel = EXAM_KIND_LABELS[exam.kind] ?? "Prüfung";
   const label = exam.title ? `${subject.name} · ${exam.title}` : subject.name;
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
-      <Link
-        href={`/klausuren/${exam.id}`}
-        className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className="size-4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m15 6-6 6 6 6" />
-        </svg>
-        Zur Klausur
-      </Link>
+    <div className="kf-seite">
 
-      <header
-        style={{
-          backgroundColor: `color-mix(in oklab, ${color} 8%, var(--surface))`,
-        }}
-        className="rounded-card border border-border p-5 sm:p-6"
-      >
-        <p className="flex items-center gap-2 text-sm text-muted">
-          <span
-            aria-hidden="true"
-            style={{ backgroundColor: color }}
-            className="size-2.5 shrink-0 rounded-full"
-          />
-          {subject.name}
+      <header>
+        <h2 className="p-title">{`${subject.name} bearbeiten`}</h2>
+        <p className="p-sub">
+          {[exam.title ?? kindLabel, formatGerman(exam.date)].join(" · ")}. Änderungen an Datum, Themen oder Lernplanung
+          verteilen den Lernplan neu; was du schon abgehakt hast, bleibt erledigt.
         </p>
-
-        <h1 className="mt-1.5 text-xl font-semibold text-foreground">
-          {exam.title ?? kindLabel}
-        </h1>
-
-        <p className="mt-1 text-muted">
-          {[exam.title ? kindLabel : null, formatGerman(exam.date)]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
-
-        <p className="mt-4 text-sm text-muted">
-          Änderungen an Datum, Themen oder Lernplanung verteilen den Lernplan
-          neu. Was du schon abgehakt hast, bleibt erledigt.
-        </p>
-
-        <Link
-          href={`/klausuren/${exam.id}`}
-          className="-ml-1 mt-1 inline-flex min-h-11 items-center gap-1 px-1 text-sm text-accent transition-colors hover:text-accent-hover"
-        >
-          Lernplan ansehen
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            className="size-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="m9 6 6 6-6 6" />
-          </svg>
-        </Link>
       </header>
 
       <ExamForm
@@ -157,8 +92,7 @@ export default async function ExamPage({
         topicSuggestions={topicSuggestions}
         exam={exam}
         topics={topics.map((topic) => topic.title)}
-        submitLabel="Änderungen speichern"
-        cancelHref={`/klausuren/${exam.id}`}
+        submitLabel="Speichern"
       />
 
       <ExamDangerZone

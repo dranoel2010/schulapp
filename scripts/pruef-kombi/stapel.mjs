@@ -40,6 +40,19 @@ try {
     await page.waitForFunction(() => !!window.__kombi);
   };
 
+  // Falle beim Prüfen (README, „Das echte App-Gefühl“): Ohne dieselbe
+  // NEXT_DEPLOYMENT_ID bei Bau und Start wird jeder Link zur harten
+  // Navigation, und diese Prüfung schlüge aus dem falschen Grund fehl.
+  await zuHause();
+  const ohneDpl = await page.evaluate(() =>
+    [...document.querySelectorAll('script[src*="/_next/"]')].some((s) => !s.src.includes("dpl=")),
+  );
+  if (ohneDpl) {
+    console.warn(
+      "Warnung: /_next-Dateien ohne ?dpl= — Bau und Start mit derselben NEXT_DEPLOYMENT_ID? (export NEXT_DEPLOYMENT_ID=$(git rev-parse HEAD))",
+    );
+  }
+
   // ── 2. Zurück über ein Formular (legt zugleich die Aufgabe für 1 an) ──────
   console.log("2. Stapel → Formular → speichern → Zurück zweimal");
   await zuHause();

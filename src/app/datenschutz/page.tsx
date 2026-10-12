@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import "@/components/kombi/form/form.css";
+
 export const metadata: Metadata = {
   title: "Datenschutz",
 };
@@ -21,24 +23,25 @@ export const metadata: Metadata = {
  */
 export default function DatenschutzPage() {
   return (
-    <main className="seite mx-auto max-w-2xl space-y-6 py-12">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Datenschutz</h1>
-        <p className="text-sm text-muted">Stand: 5. Oktober 2026</p>
+    <main className="solo">
+      <div className="solo-in abschrift">
+      <header>
+        <h1 className="hl">Datenschutz</h1>
+        <p className="q-sub">Stand: 5. Oktober 2026</p>
       </header>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Was diese App ist</h2>
-        <p className="text-muted">
+      <section>
+        <h3>Was diese App ist</h3>
+        <p>
           Eine private Schulapp für genau einen Schüler. Sie läuft auf einem
           eigenen Server zu Hause, hat kein zweites Konto und ist kein
           öffentlicher Dienst.
         </p>
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Was mit deinem Google-Konto passiert</h2>
-        <p className="text-muted">
+      <section>
+        <h3>Was mit deinem Google-Konto passiert</h3>
+        <p>
           Erst wenn du in den Einstellungen „Mit Google verbinden“ wählst und
           bei Google zustimmst, legt die App in deinem Google Kalender einen
           eigenen Kalender „Schule“ an. Dorthin schreibt sie Termine aus der
@@ -46,7 +49,7 @@ export default function DatenschutzPage() {
           Termin in der App, ändert sie ihn auch dort. Löschst du einen Termin
           in Google, merkt sie sich das und trägt ihn nicht wieder ein.
         </p>
-        <p className="text-muted">
+        <p>
           Ist auf dem Server IServ eingerichtet, schreibt sie außerdem Termine
           aus dem IServ der Schule dorthin, die deine Klasse betreffen: aus dem
           Kalender deiner Klasse, deine Aufgaben und die Termine des
@@ -55,9 +58,9 @@ export default function DatenschutzPage() {
           IServ stehen (darin können Kürzel von Lehrkräften vorkommen).
           Ersteller und Teilnehmer eines Termins übernimmt sie nicht.
         </p>
-        <p className="text-muted">
+        <p>
           Die App fragt dafür nur nach der Berechtigung{" "}
-          <code className="text-sm">calendar.app.created</code>. Damit sieht
+          <code className="text-[15px]">calendar.app.created</code>. Damit sieht
           sie ausschließlich den Kalender, den sie selbst angelegt hat — keine
           anderen Kalender, keine Termine darin und keine anderen Daten deines
           Google-Kontos. Aus dem Kalender „Schule“ liest sie nur, ob ihre
@@ -65,9 +68,9 @@ export default function DatenschutzPage() {
         </p>
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Was mit deinem IServ-Konto passiert</h2>
-        <p className="text-muted">
+      <section>
+        <h3>Was mit deinem IServ-Konto passiert</h3>
+        <p>
           Nur wenn es auf dem Server eingerichtet ist: Die App meldet sich mit
           deinem IServ-Benutzernamen und Passwort bei IServ an — in der Regel
           höchstens alle drei Stunden zwischen 6 und 21 Uhr — und liest dort
@@ -80,9 +83,9 @@ export default function DatenschutzPage() {
         </p>
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Was gespeichert wird</h2>
-        <p className="text-muted">
+      <section>
+        <h3>Was gespeichert wird</h3>
+        <p>
           Der Zugang zu Google (ein Refresh Token) liegt verschlüsselt in der
           Datenbank auf dem Server dieser App, dazu die Kennung des Kalenders
           und welche Termine schon übertragen sind. Aus IServ liegt dort der
@@ -94,7 +97,7 @@ export default function DatenschutzPage() {
           lesen dürfen. Es gibt keine Werbung, kein Tracking und keine
           Auswertung.
         </p>
-        <p className="text-muted">
+        <p>
           Der Umgang mit Daten aus Google-APIs folgt der{" "}
           <a
             className="underline"
@@ -107,24 +110,25 @@ export default function DatenschutzPage() {
         </p>
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Verbindung trennen</h2>
-        <p className="text-muted">
+      <section>
+        <h3>Verbindung trennen</h3>
+        <p>
           In den Einstellungen unter „Google Kalender“ mit „Trennen“, oder bei
           Google unter{" "}
-          <a className="underline" href="https://myaccount.google.com/permissions">
+          <a className="kf-inline underline" href="https://myaccount.google.com/permissions">
             myaccount.google.com/permissions
           </a>
           . Danach vergisst die App den gespeicherten Zugang. Der Kalender
           „Schule“ bleibt in deinem Google-Konto, bis du ihn dort selbst
           löschst.
         </p>
-        <p className="text-muted">
+        <p>
           IServ schaltet ab, wer die IServ-Einträge aus der Konfiguration des
           Servers nimmt. Danach meldet sich die App nicht mehr an; schon
           eingetragene Termine bleiben in „Schule“, bis du sie dort löschst.
         </p>
       </section>
+      </div>
     </main>
   );
 }

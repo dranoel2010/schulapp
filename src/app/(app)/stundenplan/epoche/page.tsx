@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
 import { requireUser } from "@/lib/auth";
 import { listSubjects } from "@/lib/subjects";
@@ -61,25 +60,19 @@ export default async function EpochPage() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-xl space-y-6 px-4 py-6">
+    <div className="kf-seite">
       <div className="space-y-1">
-        <Link
-          href="/stundenplan"
-          className="text-sm text-muted hover:text-foreground"
-        >
-          ← Stundenplan
-        </Link>
-        <h1 className="text-xl font-semibold text-foreground">
+        <h2 className="p-title">
           Epoche wechseln
-        </h1>
-        <p className="text-sm text-muted">
+        </h2>
+        <p className="text-[15px] text-ink-2">
           Trägt den Hauptunterricht in einem Zug auf ein anderes Fach um, statt
           jedes Feld einzeln anzutippen.
         </p>
       </div>
 
       {lessons.length === 0 ? (
-        <p className="rounded-control border border-border bg-surface-muted px-3.5 py-3 text-sm text-muted">
+        <p className="p-sub">
           Im Wochenraster steht noch keine Stunde. Trag zuerst deinen
           Stundenplan ein.
         </p>

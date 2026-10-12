@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { after } from "next/server";
 
 import { requireUser } from "@/lib/auth";
@@ -444,7 +443,6 @@ export async function deleteMaterialAction(id: string): Promise<void> {
   await deleteMaterial(user.id, id);
 
   revalidateMaterial(id);
-  redirect("/material");
 }
 
 /**

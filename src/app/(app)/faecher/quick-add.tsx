@@ -2,7 +2,8 @@
 
 import { Fragment, useActionState, useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/kombi/form";
+import { FertigBeiErfolg } from "@/components/kombi/form/fertig";
 import { SUBJECT_COLORS } from "@/lib/colors";
 import type { SubjectFormState } from "@/lib/subjects";
 
@@ -36,9 +37,6 @@ const QUICK_SUBJECTS = [
   { name: "Spanisch", short: "Spa" },
 ] as const;
 
-function cn(...parts: Array<string | false | null | undefined>) {
-  return parts.filter(Boolean).join(" ");
-}
 
 function buttonLabel(count: number): string {
   if (count === 0) return "Fächer anlegen";
@@ -67,60 +65,23 @@ export function QuickAdd({ action }: QuickAddProps) {
   }
 
   return (
-    <form
-      action={formAction}
-      className="space-y-4 rounded-card border border-border bg-surface p-4 sm:p-5"
-    >
-      <div className="space-y-1">
-        <h2 className="text-base font-semibold text-foreground">
-          Oder such dir raus, was du hast
-        </h2>
-        <p className="text-sm text-muted">
-          Antippen, fertig. Kürzel und Farbe legt die App vor, ändern kannst du
-          später alles.
-        </p>
-      </div>
+    <form action={formAction}>
+      <FertigBeiErfolg marke={state.fertig} toast="Fächer angelegt" />
+      <h3 className="p-lab">Oder such dir raus, was du hast</h3>
+      <p className="p-sub">Antippen, fertig. Kürzel und Farbe legt die App vor, ändern kannst du später alles.</p>
 
-      <div className="flex flex-wrap gap-2">
-        {QUICK_SUBJECTS.map((preset) => {
-          const position = selected.indexOf(preset.name);
-          const isSelected = position >= 0;
-          const color = isSelected
-            ? SUBJECT_COLORS[position % SUBJECT_COLORS.length]
-            : null;
-
-          return (
-            <button
-              key={preset.name}
-              type="button"
-              aria-pressed={isSelected}
-              onClick={() => toggle(preset.name)}
-              style={
-                color
-                  ? {
-                      borderColor: color.hex,
-                      backgroundColor: `color-mix(in oklab, ${color.hex} 12%, var(--surface))`,
-                    }
-                  : undefined
-              }
-              className={cn(
-                "inline-flex min-h-11 items-center gap-2 rounded-pill border px-3.5 text-sm transition-colors",
-                isSelected
-                  ? "font-medium text-foreground"
-                  : "border-border text-muted hover:border-border-strong hover:text-foreground",
-              )}
-            >
-              {color ? (
-                <span
-                  aria-hidden="true"
-                  style={{ backgroundColor: color.hex }}
-                  className="size-2.5 shrink-0 rounded-full"
-                />
-              ) : null}
-              {preset.name}
-            </button>
-          );
-        })}
+      <div className="refile">
+        {QUICK_SUBJECTS.map((preset) => (
+          <button
+            key={preset.name}
+            className="fp"
+            type="button"
+            aria-pressed={selected.includes(preset.name)}
+            onClick={() => toggle(preset.name)}
+          >
+            {preset.name}
+          </button>
+        ))}
       </div>
 
       {selected.map((name, index) => {
@@ -139,19 +100,16 @@ export function QuickAdd({ action }: QuickAddProps) {
       })}
 
       {state.message ? (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="kf-fehler">
           {state.message}
         </p>
       ) : null}
 
-      <Button
-        type="submit"
-        loading={pending}
-        disabled={selected.length === 0}
-        className="w-full sm:w-auto"
-      >
-        {buttonLabel(selected.length)}
-      </Button>
+      <div className="foot">
+        <Button type="submit" loading={pending} disabled={selected.length === 0}>
+          {buttonLabel(selected.length)}
+        </Button>
+      </div>
     </form>
   );
 }

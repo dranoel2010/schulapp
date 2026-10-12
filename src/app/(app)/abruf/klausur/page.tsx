@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { SubmitButton } from "@/app/(app)/material/eingang/proposal-form";
-import { ButtonLink } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
+import { ButtonLink } from "@/components/kombi/form";
+import { Card, CardContent } from "@/components/kombi/form";
+import { EmptyState } from "@/components/kombi/form";
+import { Icon } from "@/components/kombi/icon";
 import { requireUser } from "@/lib/auth";
 import { claudeConfigured } from "@/lib/claude/client";
-import { subjectColor } from "@/lib/colors";
 import {
   daysBetween,
   formatCountdown,
@@ -59,7 +59,9 @@ export default async function KlausurStoffPage({
 }: PageProps<"/abruf/klausur">) {
   const user = await requireUser();
   const heute = todayInBerlin();
-  const { klausur } = await searchParams;
+  const { klausur: gewuenscht, id } = await searchParams;
+  // `?id=` ist der Weg von der Klausurseite (Plan 2.2), `?klausur=` der alte.
+  const klausur = gewuenscht ?? id;
 
   // MIT den geschriebenen. Ohne sie war diese Seite genau dann unerreichbar,
   // wenn man sie braucht: Am 12.9.2026 lagen alle drei Prüfungen der App in der
@@ -78,7 +80,6 @@ export default async function KlausurStoffPage({
     typeof klausur === "string" ? await stoffZuKlausur(user.id, klausur) : null;
 
   if (gewaehlt) {
-    const farbe = subjectColor(gewaehlt.subjectColor);
     const ohneVerknuepfung = gewaehlt.themen.filter((t) => !t.verknuepft);
     const ohneSeiten = gewaehlt.themen.filter(
       (t) => t.verknuepft && t.seiten.length === 0,
@@ -108,18 +109,18 @@ export default async function KlausurStoffPage({
     const zeigeFragen = gewaehlt.seitenGesamt.length > 0 || letzter !== null || baut;
 
     return (
-      <div className="space-y-6 md:max-w-3xl">
+      <div className="kf-seite">
         <header className="space-y-1">
-          <h1 className="text-xl font-semibold text-foreground">
+          <h2 className="p-title">
             Stoff der Klausur
-          </h1>
-          <p className="text-sm text-muted">
-            <span style={{ color: farbe.hex }}>{gewaehlt.subjectName}</span> ·{" "}
+          </h2>
+          <p className="text-[15px] text-ink-2">
+            <span>{gewaehlt.subjectName}</span> ·{" "}
             {formatGerman(gewaehlt.klausurtag, "lang")} ·{" "}
             {formatCountdown(heute, gewaehlt.klausurtag)} ·{" "}
             <Link
               href="/abruf/klausur"
-              className="underline underline-offset-2"
+              className="kf-inline underline underline-offset-2"
             >
               andere Klausur
             </Link>
@@ -127,12 +128,9 @@ export default async function KlausurStoffPage({
         </header>
 
         <Card
-          style={{
-            backgroundColor: `color-mix(in oklab, ${farbe.hex} 7%, var(--surface))`,
-          }}
         >
           <CardContent className="space-y-1">
-            <p className="text-foreground">
+            <p className="text-ink">
               {/* Drei Fälle und nicht zwei. „Kein Stoff erreichbar" stimmt
                   auch bei einer Klausur ohne jedes Thema — es ist nur die
                   falsche Auskunft: Dort fehlt nicht das Blatt, sondern der
@@ -145,14 +143,14 @@ export default async function KlausurStoffPage({
                   ? "Zu dieser Klausur ist kein abgeschriebener Stoff erreichbar."
                   : `${gewaehlt.seitenGesamt.length} ${gewaehlt.seitenGesamt.length === 1 ? "Seite" : "Seiten"} mit Abschrift, ${gewaehlt.zeichenGesamt.toLocaleString("de-DE")} Zeichen.`}
             </p>
-            <p className="text-sm text-muted">
+            <p className="text-[15px] text-ink-2">
               {gewaehlt.themen.length === 0 ? (
                 <>
                   Die Themen sind der Schlüssel zum Stoff: Sie sagen, welche
                   Blätter dazugehören. Häng sie unter{" "}
                   <Link
                     href={`/klausuren/${gewaehlt.examId}`}
-                    className="underline underline-offset-2"
+                    className="kf-inline underline underline-offset-2"
                   >
                     Klausuren
                   </Link>{" "}
@@ -168,22 +166,22 @@ export default async function KlausurStoffPage({
         {zeigeFragen ? (
           <Card>
             <CardContent className="space-y-3">
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-[15px] font-[560] text-ink">
                 Fragen bauen lassen
               </p>
 
               {letzter ? (
-                <p className="text-sm text-muted">{laufAnzeige(letzter)}</p>
+                <p className="text-[15px] text-ink-2">{laufAnzeige(letzter)}</p>
               ) : null}
 
               {baut ? (
                 <>
-                  <p className="text-sm">
+                  <p className="text-[15px]">
                     Claude baut gerade Fragen aus diesem Stoff … das dauert
                     ein, zwei Minuten. Sie landen als Vorschlag im{" "}
                     <Link
                       href="/abruf/eingang"
-                      className="underline underline-offset-2"
+                      className="kf-inline underline underline-offset-2"
                     >
                       Eingang
                     </Link>
@@ -192,14 +190,14 @@ export default async function KlausurStoffPage({
                   <NeuLadenWaehrendFragen />
                 </>
               ) : !konfiguriert ? (
-                <p className="text-sm text-muted">
+                <p className="text-[15px] text-ink-2">
                   Auf diesem Server ist kein API-Schlüssel eingerichtet — es
                   fehlt <code>ANTHROPIC_API_KEY</code>. Fragen lassen sich
                   deshalb nur von Hand anlegen.
                 </p>
               ) : "wieviele" in stand.was ? (
                 <>
-                  <p className="text-sm text-muted">
+                  <p className="text-[15px] text-ink-2">
                     {`Claude kann aus diesem Stoff ${stand.was.wieviele} ${stand.was.wieviele === 1 ? "Frage" : "Fragen"} bauen, über alle Themen verteilt. Sie landen als ein Vorschlag im Eingang; übernommen wird nur, was du auswählst, und jedes Zitat wird dabei gegen die Abschrift geprüft. Ein Lauf kostet Geld vom API-Schlüssel, und was er gekostet hat, steht danach hier.`}
                   </p>
                   <form
@@ -209,14 +207,14 @@ export default async function KlausurStoffPage({
                   </form>
                 </>
               ) : (
-                <p className="text-sm text-muted">
+                <p className="text-[15px] text-ink-2">
                   {`Gerade keine neuen Fragen: ${stand.was.nichts}.`}
                   {stand.auskunft.daten.stock.openQuestions > 0 ? (
                     <>
                       {" "}
                       <Link
                         href="/abruf/eingang"
-                        className="underline underline-offset-2"
+                        className="kf-inline underline underline-offset-2"
                       >
                         Zum Eingang
                       </Link>
@@ -229,20 +227,20 @@ export default async function KlausurStoffPage({
         ) : null}
 
         {ohneVerknuepfung.length > 0 ? (
-          <Card className="border-warning/40">
+          <Card className="border-line">
             <CardContent className="space-y-1">
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-[15px] font-[560] text-ink">
                 {ohneVerknuepfung.length}{" "}
                 {ohneVerknuepfung.length === 1 ? "Thema ist" : "Themen sind"}{" "}
                 mit keinem Blatt verbunden
               </p>
-              <p className="text-sm text-muted">
+              <p className="text-[15px] text-ink-2">
                 {ohneVerknuepfung.map((t) => t.title).join(", ")} — auf der
                 Klausur steht nur der Text, nicht die Vokabel des Fachs. Von
                 dort führt kein Weg zu Blättern. Das lässt sich unter{" "}
                 <Link
                   href={`/klausuren/${gewaehlt.examId}`}
-                  className="underline underline-offset-2"
+                  className="kf-inline underline underline-offset-2"
                 >
                   Klausuren
                 </Link>{" "}
@@ -253,14 +251,14 @@ export default async function KlausurStoffPage({
         ) : null}
 
         {ohneSeiten.length > 0 ? (
-          <Card className="border-warning/40">
+          <Card className="border-line">
             <CardContent className="space-y-1">
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-[15px] font-[560] text-ink">
                 {ohneSeiten.length}{" "}
                 {ohneSeiten.length === 1 ? "Thema hat" : "Themen haben"} kein
                 abgeschriebenes Blatt
               </p>
-              <p className="text-sm text-muted">
+              <p className="text-[15px] text-ink-2">
                 {ohneSeiten.map((t) => t.title).join(", ")} — entweder ist noch
                 kein Blatt dazu abfotografiert, oder es ist noch nicht
                 abgeschrieben. Prüf auch, ob das Thema im richtigen Fach hängt;
@@ -272,20 +270,20 @@ export default async function KlausurStoffPage({
 
         {gewaehlt.themen.length > 0 ? (
           <section className="space-y-3">
-            <h2 className="text-sm font-medium text-muted">
+            <h2 className="p-lab">
               Themen und ihre Seiten
             </h2>
 
-            <ul className="space-y-3">
+            <ul>
               {gewaehlt.themen.map((thema) => (
                 <li key={thema.examTopicId}>
                   <Card>
                     <CardContent className="space-y-2">
                       <div className="flex flex-wrap items-baseline gap-2">
-                        <p className="font-medium text-foreground">
+                        <p className="font-[560] text-ink">
                           {thema.title}
                         </p>
-                        <span className="text-xs text-subtle">
+                        <span className="text-[13px] text-ink-3">
                           {!thema.verknuepft
                             ? "nicht verbunden"
                             : thema.seiten.length === 0
@@ -299,7 +297,7 @@ export default async function KlausurStoffPage({
                           {thema.seiten.map((seite) => (
                             <li
                               key={seite.pageId}
-                              className="text-sm text-muted"
+                              className="text-[15px] text-ink-2"
                             >
                               {transcriptPreview(seite.transcript, 90)}
                             </li>
@@ -324,12 +322,12 @@ export default async function KlausurStoffPage({
   }
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="kf-seite">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">
+        <h2 className="p-title">
           Stoff einer Klausur
-        </h1>
-        <p className="text-sm text-muted">
+        </h2>
+        <p className="text-[15px] text-ink-2">
           Für welche Klausur? Ihre Themen sagen, welche Blätter dazugehören.
         </p>
       </header>
@@ -345,7 +343,7 @@ export default async function KlausurStoffPage({
       ) : (
         <>
           {kommende.length > 0 ? (
-            <ul className="space-y-3">
+            <ul>
               {kommende.map((k) => (
                 <KlausurZeile key={k.id} klausur={k} heute={heute} />
               ))}
@@ -353,13 +351,13 @@ export default async function KlausurStoffPage({
           ) : (
             <Card>
               <CardContent className="space-y-1">
-                <p className="text-foreground">Keine Klausur steht an.</p>
-                <p className="text-sm text-muted">
+                <p className="text-ink">Keine Klausur steht an.</p>
+                <p className="text-[15px] text-ink-2">
                   Der Stoff der geschriebenen bleibt trotzdem erreichbar — die
                   Themen sind dieselben, und die Blätter auch.{" "}
                   <Link
                     href="/klausuren/neu"
-                    className="underline underline-offset-2"
+                    className="kf-inline underline underline-offset-2"
                   >
                     Nächste Klausur eintragen
                   </Link>
@@ -371,10 +369,10 @@ export default async function KlausurStoffPage({
 
           {geschrieben.length > 0 ? (
             <section className="space-y-3">
-              <h2 className="text-sm font-medium text-muted">
+              <h2 className="p-lab">
                 Schon geschrieben
               </h2>
-              <ul className="space-y-3">
+              <ul>
                 {geschrieben.map((k) => (
                   <KlausurZeile key={k.id} klausur={k} heute={heute} />
                 ))}
@@ -402,38 +400,24 @@ function KlausurZeile({
   klausur: ExamListItem;
   heute: string;
 }) {
-  const farbe = subjectColor(klausur.subject.color);
   const vorbei = klausur.date < heute;
 
   return (
     <li>
-      <Link href={`/abruf/klausur?klausur=${klausur.id}`} className="block">
-        <Card
-          className="transition-shadow hover:shadow-lift"
-          style={{
-            backgroundColor: vorbei
-              ? undefined
-              : `color-mix(in oklab, ${farbe.hex} 7%, var(--surface))`,
-          }}
-        >
-          <CardContent className="space-y-1">
-            <p className="font-medium text-foreground">
-              {klausur.title ?? klausur.subject.name}
-            </p>
-            <p className="text-xs" style={{ color: farbe.hex }}>
-              {klausur.subject.name} · {formatGerman(klausur.date, "kurz")} ·{" "}
-              {/* „vor 3 Tagen" statt „in -3 Tagen": formatCountdown() rechnet
-                  nach vorn. Bei einer geschriebenen Klausur ist der Abstand
-                  kein Countdown mehr, sondern eine Angabe darüber, wie alt der
-                  Stoff ist. */}
-              {vorbei
-                ? `geschrieben${daysBetween(klausur.date, heute) > 0 ? ` vor ${daysBetween(klausur.date, heute)} ${daysBetween(klausur.date, heute) === 1 ? "Tag" : "Tagen"}` : " heute"}`
-                : formatCountdown(heute, klausur.date)}{" "}
-              · {klausur.topicCount}{" "}
-              {klausur.topicCount === 1 ? "Thema" : "Themen"}
-            </p>
-          </CardContent>
-        </Card>
+      <Link href={`/abruf/klausur?klausur=${klausur.id}`} className="lrow plain">
+        <span>
+          <b>{klausur.title ?? klausur.subject.name}</b>
+          <span className="s">
+            {klausur.subject.name} · {formatGerman(klausur.date, "kurz")} ·{" "}
+            {/* „vor 3 Tagen" statt „in -3 Tagen": bei einer geschriebenen
+                Klausur ist der Abstand kein Countdown mehr. */}
+            {vorbei
+              ? `geschrieben${daysBetween(klausur.date, heute) > 0 ? ` vor ${daysBetween(klausur.date, heute)} ${daysBetween(klausur.date, heute) === 1 ? "Tag" : "Tagen"}` : " heute"}`
+              : formatCountdown(heute, klausur.date)}{" "}
+            · {klausur.topicCount} {klausur.topicCount === 1 ? "Thema" : "Themen"}
+          </span>
+        </span>
+        <Icon name="chevron_right" />
       </Link>
     </li>
   );

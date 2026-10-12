@@ -2,8 +2,10 @@
 
 import { useActionState, useState } from "react";
 
-import { Button, ButtonLink } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/kombi/form";
+import { AbbrechenKnopf, FertigBeiErfolg } from "@/components/kombi/form/fertig";
+import { Input } from "@/components/kombi/form";
+import { Tn } from "@/components/kombi/tn";
 
 /**
  * Das Stundenraster als Liste: eine Zeile je Stunde, Beginn und Ende
@@ -31,6 +33,8 @@ export type PeriodFormState = {
   /** Hinweis über dem Formular, wenn es nicht an einer einzelnen Zeile liegt. */
   message?: string;
   errors?: PeriodFieldErrors;
+  /** Gesetzt nach erfolgreichem Speichern: die Formularseite geht zurück (Plan 2.4). */
+  fertig?: number;
 };
 
 const EMPTY_STATE: PeriodFormState = {};
@@ -92,18 +96,19 @@ export function PeriodForm({ action, rows: saved }: PeriodFormProps) {
   }
 
   return (
-    <form action={formAction} className="space-y-6" noValidate>
+    <form action={formAction} className="kf-form" noValidate>
+      <FertigBeiErfolg marke={state.fertig} toast="Stundenzeiten gespeichert" />
       {state.message ? (
         <p
           role="alert"
-          className="rounded-control border border-danger/40 bg-danger-soft px-3.5 py-3 text-sm text-danger"
+          className="kf-fehler"
         >
           {state.message}
         </p>
       ) : null}
 
-      <ul className="divide-y divide-border overflow-hidden rounded-card border border-border bg-surface">
-        <li className="grid grid-cols-[2rem_1fr_1fr] items-center gap-3 px-4 py-2 text-sm text-subtle">
+      <ul className="divide-y divide-line">
+        <li className="grid grid-cols-[2rem_1fr_1fr] items-center gap-3 px-4 py-2 text-[15px] text-ink-3">
           <span>Std</span>
           <span>Beginn</span>
           <span>Ende</span>
@@ -118,8 +123,8 @@ export function PeriodForm({ action, rows: saved }: PeriodFormProps) {
           return (
             <li key={number} className="px-4 py-3">
               <div className="grid grid-cols-[2rem_1fr_1fr] items-center gap-3">
-                <span className="font-mono text-sm tabular-nums text-subtle">
-                  {number}.
+                <span className="whitespace-nowrap text-[15px] tabular-nums text-ink-3">
+                  <Tn s={`${number}.`} />
                 </span>
 
                 <Input
@@ -146,7 +151,7 @@ export function PeriodForm({ action, rows: saved }: PeriodFormProps) {
               </div>
 
               {error ? (
-                <p role="alert" className="mt-1.5 text-sm text-danger">
+                <p role="alert" className="mt-1.5 text-[15px] text-error">
                   {error}
                 </p>
               ) : null}
@@ -178,20 +183,18 @@ export function PeriodForm({ action, rows: saved }: PeriodFormProps) {
           </Button>
         </div>
 
-        <p className="text-sm text-muted">
+        <p className="text-[15px] text-ink-2">
           Eine entfernte Stunde verschwindet aus dem Wochenraster. Was du dort
           eingetragen hast, bleibt gespeichert und ist wieder da, sobald die
           Stunde zurückkommt.
         </p>
       </div>
 
-      <div className="flex gap-3 pt-2">
-        <Button type="submit" loading={pending} className="flex-1">
+      <div className="foot">
+        <Button type="submit" loading={pending}>
           Zeiten speichern
         </Button>
-        <ButtonLink href="/stundenplan" variant="secondary">
-          Abbrechen
-        </ButtonLink>
+        <AbbrechenKnopf />
       </div>
     </form>
   );

@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/kombi/form";
 import { MATERIALARTEN, MATERIALART_NAMEN } from "@/recall/arten";
-import { Field } from "@/components/ui/field";
-import { Input, Select, Textarea } from "@/components/ui/input";
+import { Field } from "@/components/kombi/form";
+import { Input, Select, Textarea } from "@/components/kombi/form";
 import { splitTranscript } from "@/lib/transcripts";
 
 import type { BausteinFormState } from "../actions";
@@ -129,14 +129,14 @@ export function ItemForm({
   const teile = seite ? splitTranscript(seite.transcript) : [];
 
   return (
-    <form action={formAction} className="space-y-6" noValidate>
+    <form action={formAction} className="kf-form" noValidate>
       {state.message ? (
         <p
           role="alert"
           className={
             state.angelegt
-              ? "rounded-control border border-success/40 bg-surface-muted px-3.5 py-3 text-sm text-success"
-              : "rounded-control border border-danger/40 bg-danger-soft px-3.5 py-3 text-sm text-danger"
+              ? "rounded-[12px] border border-line bg-raise px-3.5 py-3 text-[15px] text-ink-2"
+              : "rounded-[12px] border border-error bg-raise px-3.5 py-3 text-[15px] text-error"
           }
         >
           {state.message}
@@ -169,13 +169,13 @@ export function ItemForm({
 
       {seite ? (
         <div className="space-y-1.5">
-          <p className="text-sm font-medium text-foreground">Was dasteht</p>
-          <div className="max-h-64 overflow-y-auto rounded-control border border-border bg-surface-muted px-3.5 py-3 text-sm whitespace-pre-wrap text-foreground">
+          <p className="text-[15px] font-[560] text-ink">Was dasteht</p>
+          <div className="p-sub">
             {teile.map((teil, i) =>
               teil.uncertain ? (
                 <mark
                   key={i}
-                  className="rounded-sm bg-warning/20 px-0.5 text-foreground"
+                  className="rounded-sm bg-raise px-0.5 text-ink"
                   title="Beim Abschreiben unsicher — darauf lässt sich keine Frage bauen"
                 >
                   {teil.text}
@@ -185,7 +185,7 @@ export function ItemForm({
               ),
             )}
           </div>
-          <p className="text-xs text-subtle">
+          <p className="text-[13px] text-ink-3">
             Hervorgehobenes war schon beim Abschreiben unsicher. Ein Zitat aus
             einer dieser Stellen wird abgewiesen — auch dann, wenn du die
             Klammern nicht mitkopierst.
@@ -309,7 +309,7 @@ export function ItemForm({
         </Button>
         <Link
           href={zurueckHref}
-          className="text-sm text-muted underline underline-offset-2"
+          className="text-[15px] text-ink-2 underline underline-offset-2"
         >
           Zurück
         </Link>

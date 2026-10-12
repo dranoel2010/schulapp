@@ -32,7 +32,6 @@ function daten(teil: Partial<TagDaten> & Pick<TagDaten, "tag" | "naechsterSchult
     blaetter: [],
     eingangskorb: 0,
     wiederholen: { kind: "leer" } as TagDaten["wiederholen"],
-    abrufEingang: 0,
     klausurBlock: null,
     ...teil,
   };

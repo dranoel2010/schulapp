@@ -4,10 +4,10 @@ import Link from "next/link";
 import { useActionState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
-import { Button, type ButtonProps } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Field } from "@/components/ui/field";
-import { Input, Select } from "@/components/ui/input";
+import { Button, type ButtonProps } from "@/components/kombi/form";
+import { EmptyState } from "@/components/kombi/form";
+import { Field } from "@/components/kombi/form";
+import { Input, Select } from "@/components/kombi/form";
 import { TOPIC_MAX_LENGTH } from "@/lib/topics";
 
 /**
@@ -142,12 +142,12 @@ function UsageLabel({
 }) {
   if (examCount === 0 && materialCount === 0) {
     return (
-      <span className="shrink-0 text-sm text-muted">noch nirgends benutzt</span>
+      <span className="shrink-0 text-[15px] text-ink-2">noch nirgends benutzt</span>
     );
   }
 
   return (
-    <span className="flex shrink-0 items-center gap-1.5 text-sm text-muted">
+    <span className="flex shrink-0 items-center gap-1.5 text-[15px] text-ink-2">
       {examCount > 0 ? (
         <span>{examCount === 1 ? "1 Klausur" : `${examCount} Klausuren`}</span>
       ) : null}
@@ -160,7 +160,7 @@ function UsageLabel({
         // groß genug, um den Link neben dem Aufklappen zu treffen.
         <Link
           href={`/material?thema=${topicId}`}
-          className="inline-flex min-h-11 items-center text-accent underline-offset-2 transition-colors hover:text-accent-hover hover:underline"
+          className="inline-flex min-h-11 min-w-11 items-center justify-end text-accent underline-offset-2 hover:underline"
         >
           {materialCount === 1 ? "1 Blatt" : `${materialCount} Blätter`}
         </Link>
@@ -203,7 +203,7 @@ function Message({
       <p
         role="alert"
         className={cn(
-          "rounded-control border border-danger/40 bg-danger-soft px-3.5 py-3 text-sm text-danger",
+          "rounded-[12px] border border-error bg-raise px-3.5 py-3 text-[15px] text-error",
           className,
         )}
       >
@@ -217,7 +217,7 @@ function Message({
       <p
         role="status"
         className={cn(
-          "rounded-control border border-border bg-surface-muted px-3.5 py-3 text-sm text-foreground",
+          "rounded-[12px] border border-line bg-raise px-3.5 py-3 text-[15px] text-ink",
           className,
         )}
       >
@@ -235,7 +235,7 @@ function Chevron() {
     <svg
       viewBox="0 0 24 24"
       aria-hidden="true"
-      className="size-4 shrink-0 text-subtle transition-transform group-open:rotate-90"
+      className="size-4 shrink-0 text-ink-3 transition-transform group-open:rotate-90"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.5"
@@ -249,7 +249,7 @@ function Chevron() {
 
 const SUMMARY =
   "flex min-h-16 cursor-pointer list-none items-center gap-3 py-3 pr-4 " +
-  "transition-colors hover:bg-surface-muted [&::-webkit-details-marker]:hidden";
+  "transition-colors hover:bg-raise [&::-webkit-details-marker]:hidden";
 
 /** Das Feld zum Umbenennen — an der Zeile, die es meint. */
 function RenameForm({
@@ -302,11 +302,11 @@ function TopicItemRow({
   unmergeAction: FormAction;
 }) {
   return (
-    <li className="border-b border-border last:border-b-0">
+    <li className="border-b border-line last:border-b-0">
       <details className="group">
         <summary className={cn(SUMMARY, "pl-4")}>
           <Chevron />
-          <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+          <span className="min-w-0 flex-1 truncate font-[560] text-ink">
             {topic.title}
           </span>
           <UsageLabel
@@ -316,7 +316,7 @@ function TopicItemRow({
           />
         </summary>
 
-        <div className="space-y-5 border-t border-border px-4 py-4">
+        <div className="space-y-5 border-t border-line px-4 py-4">
           <RenameForm
             id={topic.id}
             title={topic.title}
@@ -348,7 +348,7 @@ function TopicItemRow({
                 <SubmitButton>Zusammenlegen</SubmitButton>
               </form>
 
-              <p className="text-sm text-muted">
+              <p className="text-[15px] text-ink-2">
                 „{topic.title}“ wandert unter das Ziel: der Titel bleibt als
                 Schreibweise stehen und löst ab jetzt von selbst auf das Ziel
                 auf. Die Klausuren und die Blätter, die daran hängen, zählen
@@ -356,7 +356,7 @@ function TopicItemRow({
               </p>
             </div>
           ) : (
-            <p className="text-sm text-muted">
+            <p className="text-[15px] text-ink-2">
               Zum Zusammenlegen braucht es ein zweites Thema in diesem Fach —
               noch gibt es keines.
             </p>
@@ -405,20 +405,20 @@ function AliasRow({
   unmergeAction: FormAction;
 }) {
   return (
-    <li className="border-t border-border">
+    <li className="border-t border-line">
       <details className="group">
         <summary className={cn(SUMMARY, "pl-10")}>
           <Chevron />
-          <span className="min-w-0 flex-1 truncate text-muted">
+          <span className="min-w-0 flex-1 truncate text-ink-2">
             {alias.title}
           </span>
-          <span className="shrink-0 rounded-pill bg-surface-muted px-2 py-0.5 text-xs text-muted">
+          <span className="shrink-0 rounded-full bg-raise px-2 py-0.5 text-[13px] text-ink-2">
             Schreibweise
           </span>
         </summary>
 
-        <div className="space-y-5 border-t border-border py-4 pl-10 pr-4">
-          <p className="text-sm text-muted">
+        <div className="space-y-5 border-t border-line py-4 pl-10 pr-4">
+          <p className="text-[15px] text-ink-2">
             Zeigt auf „{parent}“. Die Klausuren und die Blätter, an denen
             diese Schreibweise hängt, zählen dort mit.
           </p>
@@ -435,14 +435,14 @@ function AliasRow({
               <SubmitButton>Trennen</SubmitButton>
             </form>
 
-            <p className="text-sm text-muted">
+            <p className="text-[15px] text-ink-2">
               Trennen macht daraus wieder ein eigenes Thema. Zurückgenommen
               wird dieser eine Schritt — Schreibweisen, die dabei damals
               mitgekommen sind, bleiben bei „{parent}“.
             </p>
           </div>
 
-          <p className="text-sm text-muted">
+          <p className="text-[15px] text-ink-2">
             Zusammenlegen gibt es an dieser Zeile nicht: eine Schreibweise löst
             dabei auf ihr Ziel auf, es zöge also „{parent}“ mit. Trenn sie erst
             ab.
@@ -500,7 +500,7 @@ export function TopicList({
             action={seedBlock}
           />
         ) : (
-          <ul className="overflow-hidden rounded-card border border-border bg-surface">
+          <ul className="">
             {rows.map((topic) => (
               <TopicItemRow
                 key={topic.id}
@@ -515,12 +515,12 @@ export function TopicList({
         )}
       </section>
 
-      <section className="space-y-3 rounded-card border border-border bg-surface p-4 sm:p-5">
+      <section className="space-y-3">
         <div className="space-y-1">
-          <h2 className="text-base font-semibold text-foreground">
+          <h2 className="p-lab">
             Thema von Hand anlegen
           </h2>
-          <p className="text-sm text-muted">
+          <p className="text-[15px] text-ink-2">
             Ein Titel, ein Knopf. Was hier entsteht, unterscheidet sich in
             nichts von dem, was aus einer Klausur oder von einem Blatt kommt.
           </p>
@@ -547,12 +547,12 @@ export function TopicList({
       </section>
 
       {rows.length > 0 ? (
-        <section className="space-y-3 rounded-card border border-border bg-surface p-4 sm:p-5">
+        <section className="space-y-3">
           <div className="space-y-1">
-            <h2 className="text-base font-semibold text-foreground">
+            <h2 className="p-lab">
               Vokabular aus den Klausuren aufbauen
             </h2>
-            <p className="text-sm text-muted">
+            <p className="text-[15px] text-ink-2">
               Liest jede eingetragene Klausur und legt daraus die fehlenden
               Themen an. Der Knopf betrifft <strong>alle Fächer</strong>, nicht
               nur dieses — er geht über den ganzen Bestand. Mehrmals drücken

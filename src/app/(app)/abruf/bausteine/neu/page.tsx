@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { ButtonLink } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
+import { ButtonLink } from "@/components/kombi/form";
+import { Card, CardContent } from "@/components/kombi/form";
+import { EmptyState } from "@/components/kombi/form";
 import { requireUser } from "@/lib/auth";
-import { subjectColor } from "@/lib/colors";
 import { formatGerman } from "@/lib/dates";
 import { transcriptPreview } from "@/lib/transcripts";
 import { blaetterMitAbschrift, blattMitAbschrift } from "@/recall/source";
@@ -41,16 +40,15 @@ export default async function NeuerBausteinPage({
     typeof blatt === "string" ? await blattMitAbschrift(user.id, blatt) : null;
 
   if (gewaehlt) {
-    const farbe = subjectColor(gewaehlt.subjectColor);
 
     return (
-      <div className="space-y-6 md:max-w-3xl">
+      <div className="kf-seite">
         <header className="space-y-1">
-          <h1 className="text-xl font-semibold text-foreground">
+          <h2 className="p-title">
             Baustein anlegen
-          </h1>
-          <p className="text-sm text-muted">
-            <span style={{ color: farbe.hex }}>{gewaehlt.subjectName}</span> ·{" "}
+          </h2>
+          <p className="text-[15px] text-ink-2">
+            <span>{gewaehlt.subjectName}</span> ·{" "}
             {gewaehlt.title} · {formatGerman(gewaehlt.capturedOn, "kurz")} ·{" "}
             <Link
               href="/abruf/bausteine/neu"
@@ -74,12 +72,12 @@ export default async function NeuerBausteinPage({
   const blaetter = await blaetterMitAbschrift(user.id);
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="kf-seite">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">
+        <h2 className="p-title">
           Baustein anlegen
-        </h1>
-        <p className="text-sm text-muted">
+        </h2>
+        <p className="text-[15px] text-ink-2">
           Aus welchem Blatt? Jede Frage stützt sich auf einen Wortlaut, den man
           zitieren kann.
         </p>
@@ -94,7 +92,6 @@ export default async function NeuerBausteinPage({
       ) : (
         <ul className="space-y-3">
           {blaetter.map((b) => {
-            const farbe = subjectColor(b.subjectColor);
             const zeichen = b.seiten.reduce(
               (summe, s) => summe + s.transcript.length,
               0,
@@ -107,22 +104,19 @@ export default async function NeuerBausteinPage({
                   className="block"
                 >
                   <Card
-                    className="transition-shadow hover:shadow-lift"
-                    style={{
-                      backgroundColor: `color-mix(in oklab, ${farbe.hex} 7%, var(--surface))`,
-                    }}
+                    className="transition-shadow hover:shadow-none"
                   >
                     <CardContent className="space-y-1">
-                      <p className="text-sm font-medium text-foreground">
+                      <p className="text-[15px] font-[560] text-ink">
                         {b.title}
                       </p>
-                      <p className="text-xs" style={{ color: farbe.hex }}>
+                      <p className="text-[13px]">
                         {b.subjectName} · {formatGerman(b.capturedOn, "kurz")} ·{" "}
                         {b.seiten.length}{" "}
                         {b.seiten.length === 1 ? "Seite" : "Seiten"} ·{" "}
                         {zeichen} Zeichen
                       </p>
-                      <p className="text-sm text-muted">
+                      <p className="text-[15px] text-ink-2">
                         {transcriptPreview(b.seiten[0].transcript, 120)}
                       </p>
                     </CardContent>

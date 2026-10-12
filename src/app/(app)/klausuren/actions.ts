@@ -1,7 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
 import { requestCalendarSync } from "@/lib/calendar/sync";
@@ -33,9 +31,10 @@ import type { ExamFieldErrors, ExamFormState } from "./exam-form";
  * Prüfung ans Vokabular ihres Fachs — daraus entstehen die Vorschläge, die beim
  * nächsten Mal unter dem Themenfeld stehen.
  *
- * Nach dem Anlegen und Bearbeiten geht es zur Klausurseite mit dem frisch
- * gebauten Lernplan (Modell 23: /lernen gibt es nicht mehr), nach dem Löschen
- * zurück in die Liste.
+ * Verwalten und Lernen sind getrennt: nach dem Anlegen geht es zum frisch
+ * gebauten Lernplan unter /lernen, nach dem Bearbeiten und Löschen zurück in
+ * die Liste. Weil jede Änderung den Plan betrifft, wird /lernen mit
+ * aufgefrischt.
  *
  * Nach jedem erfolgreichen Speichern und Löschen wird der Google Kalender
  * angestoßen (`requestCalendarSync`) — er läuft, nachdem die Antwort draußen
@@ -132,11 +131,8 @@ export async function createExamAction(
   await generatePlan(user.id, exam.id, todayInBerlin());
   requestCalendarSync(user.id);
 
-  revalidatePath("/klausuren");
-  revalidatePath("/");
-  // Genau dafür wurde die Prüfung eingetragen: der Lernplan steht jetzt da —
-  // auf der Klausurseite (Modell 23: /lernen gibt es nicht mehr).
-  redirect(`/klausuren/${exam.id}`);
+  // Genau dafür wurde die Prüfung eingetragen: der Lernplan steht jetzt da.
+  return { fertig: Date.now() };
 }
 
 export async function updateExamAction(
@@ -206,10 +202,7 @@ export async function updateExamAction(
 
   requestCalendarSync(user.id);
 
-  revalidatePath("/klausuren");
-  revalidatePath(`/klausuren/${examId}`);
-  revalidatePath("/");
-  redirect(`/klausuren/${examId}`);
+  return { fertig: Date.now() };
 }
 
 export async function deleteExamAction(examId: string): Promise<void> {
@@ -219,7 +212,4 @@ export async function deleteExamAction(examId: string): Promise<void> {
   await deleteExam(user.id, examId);
   requestCalendarSync(user.id);
 
-  revalidatePath("/klausuren");
-  revalidatePath("/");
-  redirect("/klausuren");
 }

@@ -54,6 +54,8 @@ export type SubjectFormState = {
   /** Hinweis über dem Formular, wenn es nicht an einem einzelnen Feld liegt. */
   message?: string;
   errors?: SubjectFieldErrors;
+  /** Gesetzt nach erfolgreichem Speichern: die Formularseite geht zurück (Plan 2.4). */
+  fertig?: number;
 };
 
 /**

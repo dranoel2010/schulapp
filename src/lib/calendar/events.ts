@@ -414,7 +414,7 @@ export function iservEvents(input: {
         ? `In IServ: ${input.iservOrigin}${item.link}`
         : null
       : `Aus IServ, Kalender „${item.kalender}“`,
-    `In der Schulapp: ${input.appOrigin}/einstellungen#iserv`,
+    `In der Schulapp: ${input.appOrigin}/einstellungen/iserv`,
     ISERV_FOOTER,
   ]);
 

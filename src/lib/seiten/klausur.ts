@@ -26,6 +26,18 @@ export const ART_NAMEN: Record<string, string> = {
   muendlich: "Mündliche Prüfung",
 };
 
+/** Was die Klausur abfragt: ihr Titel, sonst ihre Themen, sonst die Art (Fach- und Woche-Seite). */
+export function klausurThema(
+  exam: { title: string | null; kind: string },
+  themen: readonly string[],
+): string {
+  if (exam.title) return exam.title;
+  if (themen.length) return themen.join(", ");
+  return ART_NAMEN[exam.kind] ?? "Klausur";
+}
+
+export type KlausurZeile = { id: string; fach: string; datum: string; thema: string };
+
 export type KlausurSeite = {
   id: string;
   fach: string;

@@ -184,7 +184,7 @@ describe("iservAuswahl — die Termine für Google", () => {
       assert.ok(w.body.description.startsWith("Titel in IServ: „"), w.body.description);
       assert.ok(!/[<>]/.test(w.body.description), w.body.description);
       assert.ok(w.body.description.endsWith(ISERV_FOOTER));
-      assert.ok(w.body.description.includes(`${APP}/einstellungen#iserv`));
+      assert.ok(w.body.description.includes(`${APP}/einstellungen/iserv`));
     }
     assert.match(nach?.body.description ?? "", /Aus IServ, Kalender „Öffentlich“/);
   });

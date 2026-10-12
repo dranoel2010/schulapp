@@ -7,8 +7,8 @@ import {
   type KeyboardEvent,
 } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/kombi/form";
+import { Input } from "@/components/kombi/form";
 import { TOPIC_MAX_LENGTH, topicKey } from "@/lib/topics";
 
 /**
@@ -93,19 +93,19 @@ export function TopicInput({
   return (
     <div className="space-y-2">
       {topics.length > 0 ? (
-        <ol className="divide-y divide-border overflow-hidden rounded-control border border-border bg-surface">
+        <ol className="divide-y divide-line">
           {topics.map((topic, index) => (
             <li key={topic} className="flex items-center gap-3 py-1 pl-3.5 pr-1">
               <input type="hidden" name={name} value={topic} />
 
               <span
                 aria-hidden="true"
-                className="shrink-0 text-sm tabular-nums text-subtle"
+                className="shrink-0 text-[15px] tabular-nums text-ink-3"
               >
                 {index + 1}.
               </span>
 
-              <span className="min-w-0 flex-1 py-2 text-base text-foreground">
+              <span className="min-w-0 flex-1 py-2 text-[17px] text-ink">
                 {topic}
               </span>
 
@@ -113,7 +113,7 @@ export function TopicInput({
                 type="button"
                 onClick={() => remove(index)}
                 aria-label={`${topic} entfernen`}
-                className="flex size-11 shrink-0 items-center justify-center rounded-control text-subtle transition-colors hover:bg-danger-soft hover:text-danger"
+                className="flex size-11 shrink-0 items-center justify-center rounded-[12px] text-ink-3 transition-colors hover:bg-raise hover:text-error"
               >
                 <svg
                   viewBox="0 0 24 24"

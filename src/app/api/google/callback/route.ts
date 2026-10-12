@@ -47,5 +47,5 @@ export async function GET(request: Request) {
   if (ergebnis === "verbunden") requestCalendarSync(user.id, "verbinden");
 
   // Außerhalb jedes try: redirect() wirft mit Absicht.
-  redirect(`/einstellungen?kalender=${ergebnis}#kalender`);
+  redirect(`/einstellungen/kalender?kalender=${ergebnis}`);
 }

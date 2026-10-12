@@ -1,21 +1,14 @@
 import type { Metadata } from "next";
 
-import { SeitenInhalt } from "@/components/kombi/seite";
-import { requireUser } from "@/lib/auth";
-import { klausurenSeite } from "@/lib/seiten/klausur";
+import { DirekteSeite } from "@/components/kombi/seiten/direkt";
 
 /**
- * Alle Klausuren bei direktem Aufruf — dieselbe Seite wie im Stapel (Plan
- * 2.1): eine sortierte Liste, vergangene eingeschlossen, am Ende „Klausur
- * eintragen“.
+ * Klausuren als Nachschlage-Seite (Plan 2.2): der direkte Aufruf rendert
+ * dieselbe Seite wie der Stapel der Shell.
  */
 
-export const metadata: Metadata = {
-  title: "Klausuren",
-};
+export const metadata: Metadata = { title: "Klausuren" };
 
-export default async function KlausurenPage() {
-  const user = await requireUser();
-  const daten = await klausurenSeite(user.id);
-  return <SeitenInhalt art="klausuren" params={{}} daten={daten} />;
+export default async function Page() {
+  return <DirekteSeite art="klausuren" params={{}} />;
 }

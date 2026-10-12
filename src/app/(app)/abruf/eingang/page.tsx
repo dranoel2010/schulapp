@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
-import { ButtonLink } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
+import { ButtonLink } from "@/components/kombi/form";
+import { Card, CardContent } from "@/components/kombi/form";
+import { EmptyState } from "@/components/kombi/form";
 import { requireUser } from "@/lib/auth";
 import { subjectColor } from "@/lib/colors";
 import { formatGerman } from "@/lib/dates";
@@ -54,10 +54,10 @@ export default async function EingangPage({
     );
 
     return (
-      <div className="space-y-6 md:max-w-3xl">
+      <div className="kf-seite">
         <header className="space-y-1">
-          <h1 className="text-xl font-semibold text-foreground">Übernommen</h1>
-          <p className="text-sm text-muted">
+          <h2 className="p-title">Übernommen</h2>
+          <p className="text-[15px] text-ink-2">
             {ergebnis.uebernommen === 1
               ? "Eine Frage ist jetzt ein Baustein"
               : `${ergebnis.uebernommen} Fragen sind jetzt Bausteine`}{" "}
@@ -79,11 +79,11 @@ export default async function EingangPage({
         {ergebnis.uebernommen > 0 && ergebnis.wenigsteAbrufe !== null ? (
           <Card
             className={
-              ergebnis.wenigsteAbrufe < 4 ? "border-warning/40" : undefined
+              ergebnis.wenigsteAbrufe < 4 ? "border-line" : undefined
             }
           >
             <CardContent className="space-y-1">
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-[15px] font-[560] text-ink">
                 {ergebnis.wenigsteAbrufe === 0
                   ? "Vor der Klausur kommt keiner davon mehr dran."
                   : ergebnis.wenigsteAbrufe < 4
@@ -91,7 +91,7 @@ export default async function EingangPage({
                     : `Jede übernommene Frage kommt mindestens ${ergebnis.wenigsteAbrufe} Mal vor der Klausur dran.`}
               </p>
               {ergebnis.wenigsteAbrufe < 4 ? (
-                <p className="text-sm text-muted">
+                <p className="text-[15px] text-ink-2">
                   Vier Begegnungen sind die Dosis, ab der Abrufen messbar mehr
                   bringt als Wiederlesen. Dafür ist es diesmal zu spät — die
                   Fragen bleiben trotzdem im Bestand und laufen weiter.
@@ -102,20 +102,20 @@ export default async function EingangPage({
         ) : null}
 
         {abgewiesen.length > 0 ? (
-          <Card className="border-warning/40">
+          <Card className="border-line">
             <CardContent className="space-y-2">
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-[15px] font-[560] text-ink">
                 Nicht in den Bestand gekommen:
               </p>
               <ul className="space-y-2">
                 {abgewiesen.map((f, i) => (
-                  <li key={i} className="text-sm">
-                    <span className="text-foreground">{f.promptFree}</span>
-                    <span className="block text-muted">{f.grund}</span>
+                  <li key={i} className="text-[15px]">
+                    <span className="text-ink">{f.promptFree}</span>
+                    <span className="block text-ink-2">{f.grund}</span>
                   </li>
                 ))}
               </ul>
-              <p className="text-sm text-muted">
+              <p className="text-[15px] text-ink-2">
                 Dieselbe Prüfung gilt für eine von Hand angelegte Frage — die KI
                 bekommt hier keinen kürzeren Weg. Das Zitat muss wörtlich in der
                 Abschrift stehen.
@@ -137,10 +137,10 @@ export default async function EingangPage({
   const vorschlaege = await offeneVorschlaege(user.id);
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="kf-seite">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Vorschläge</h1>
-        <p className="text-sm text-muted">
+        <h2 className="p-title">Vorschläge</h2>
+        <p className="text-[15px] text-ink-2">
           {vorschlaege.length === 0
             ? "Nichts durchzusehen."
             : "Was die KI gebaut hat. Nichts davon steht im Bestand, bevor du es übernimmst."}

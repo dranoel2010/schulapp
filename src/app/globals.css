@@ -115,44 +115,13 @@ time,.tn,.t-count,.t-clock,.lbbtn,.whbtn .n,.avg,.total,.grade-row b,.pstack .n,
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* ==========================================================================
-   Brücke für die noch nicht umgebauten Seiten (bis Abschnitt G): die alten
-   Namen zeigen auf die neuen Tokens. So bleiben sie in beiden Schemata
-   lesbar. Am Ende von G fallen die alten Namen weg.
+   Tailwind-Namen für die Tokens von Modell 23. Die alten Namen der Zeit vor
+   dem Umbau (--background, --surface, --muted, …) sind mit Abschnitt G
+   entfallen (Plan G); Unterseiten schreiben text-ink-2, bg-raise usw.
    ========================================================================== */
-
-:root {
-  --background: var(--bg);
-  --surface: var(--sheet);
-  --surface-muted: var(--raise);
-  --foreground: var(--ink);
-  --muted: var(--ink-2);
-  --subtle: var(--ink-3);
-  --border: var(--line);
-  --border-strong: var(--line-strong);
-  /* --accent ist derselbe Name wie im Prototyp: #2A44C0 / #8D9CFF */
-  --accent-hover: var(--accent);
-  --accent-foreground: var(--on-accent);
-  --danger: var(--error);
-  --danger-hover: var(--error);
-  --danger-foreground: var(--bg);
-  --success: #15803d;
-  --warning: #b45309;
-  --accent-soft: color-mix(in oklab, var(--accent) 10%, var(--bg));
-  --danger-soft: color-mix(in oklab, var(--error) 10%, var(--bg));
-  --ring: var(--accent);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --success: #4ade80;
-    --warning: #fbbf24;
-  }
-}
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --success: #4ade80;
-  --warning: #fbbf24;
 }
 
 :root[data-theme="light"] {
@@ -160,42 +129,24 @@ time,.tn,.t-count,.t-clock,.lbbtn,.whbtn .n,.avg,.total,.grade-row b,.pstack .n,
 }
 
 @theme inline {
-  --color-background: var(--bg);
-  --color-surface: var(--sheet);
-  --color-surface-muted: var(--raise);
-
-  --color-foreground: var(--ink);
-  --color-muted: var(--ink-2);
-  --color-subtle: var(--ink-3);
-
-  --color-border: var(--line);
-  --color-border-strong: var(--line-strong);
-
+  --color-bg: var(--bg);
+  --color-raise: var(--raise);
+  --color-raise-2: var(--raise-2);
+  --color-sheet: var(--sheet);
+  --color-quiet: var(--quiet);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
   --color-accent: var(--accent);
-  --color-accent-hover: var(--accent);
-  --color-accent-soft: var(--accent-soft);
-  --color-accent-foreground: var(--on-accent);
-
-  --color-danger: var(--error);
-  --color-danger-hover: var(--error);
-  --color-danger-soft: var(--danger-soft);
-  --color-danger-foreground: var(--bg);
-  --color-success: var(--success);
-  --color-warning: var(--warning);
-
-  --color-ring: var(--accent);
-
-  --radius-control: 0.75rem;
-  --radius-card: 1rem;
-  --radius-pill: 9999px;
-
-  --shadow-soft: 0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 3px 0 rgb(0 0 0 / 0.05);
-  --shadow-lift: 0 8px 24px -10px rgb(0 0 0 / 0.22);
+  --color-on-accent: var(--on-accent);
+  --color-error: var(--error);
 }
 
 @layer base {
   /* Tailwind v4 setzt Rahmen auf currentColor. Ein Standardton spart in
-     den alten Komponenten das border-border. */
+     jeder Komponente das border-line. */
   *,
   ::before,
   ::after {
@@ -214,21 +165,4 @@ body:not(:has(#app)) {
   height: auto;
   min-height: 100dvh;
   overflow: visible;
-}
-
-/* Einheitliche Seitenbreite der alten Seiten ohne Shell. Hieß früher
-   `page` — der Name gehört jetzt der Nachschlage-Seite (kombi.css). */
-@utility seite {
-  width: 100%;
-  max-width: 36rem;
-  margin-inline: auto;
-  padding-inline: 1rem;
-}
-
-@utility pt-safe {
-  padding-top: env(safe-area-inset-top);
-}
-
-@utility pb-safe {
-  padding-bottom: env(safe-area-inset-bottom);
 }

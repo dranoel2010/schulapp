@@ -1,5 +1,4 @@
 import type { ProposalOrigin } from "@/db/schema";
-import { subjectColor } from "@/lib/colors";
 import { daysBetween, formatGerman, todayInBerlin } from "@/lib/dates";
 import type { ProposalItem } from "@/lib/inbox";
 import type { MaterialListItem } from "@/lib/materials";
@@ -71,7 +70,7 @@ export function OriginBadge({ origin }: { origin: ProposalOrigin }) {
   return (
     <span
       className={cn(
-        "shrink-0 rounded-pill px-2 py-0.5 text-xs",
+        "shrink-0 rounded-full px-2 py-0.5 text-[13px]",
         // Der Vorschlag des Agenten und der der App stehen in der
         // Akzentfarbe, der von Hand nicht. Nicht als Auszeichnung, sondern
         // weil sie die sind, die man lesen muss, bevor man sie übernimmt:
@@ -80,8 +79,8 @@ export function OriginBadge({ origin }: { origin: ProposalOrigin }) {
         // Überschrift der ersten Seite ist. Keiner von beiden ist etwas, das
         // ein Mensch geprüft hat.
         origin === "agent" || origin === "app"
-          ? "bg-accent-soft font-medium text-accent"
-          : "bg-surface-muted text-muted",
+          ? "bg-raise font-[560] text-accent"
+          : "bg-raise text-ink-2",
       )}
     >
       {originLabel(origin)}
@@ -102,7 +101,6 @@ export function OriginBadge({ origin }: { origin: ProposalOrigin }) {
  * und bekäme vom Route Handler zu Recht ein Nein.
  */
 export function MaterialGlance({ item }: { item: MaterialListItem }) {
-  const color = subjectColor(item.subject.color);
 
   return (
     <div className="flex items-start gap-3">
@@ -117,24 +115,19 @@ export function MaterialGlance({ item }: { item: MaterialListItem }) {
           height={COVER_HEIGHT}
           loading="lazy"
           decoding="async"
-          className="h-16 w-12 shrink-0 rounded-control border border-border bg-surface-muted object-cover"
+          className="h-16 w-12 shrink-0 rounded-[3px] bg-raise object-cover shadow-[0_0_0_1px_var(--thumb-edge)]"
         />
       ) : (
         <span
           aria-hidden="true"
-          className="h-16 w-12 shrink-0 rounded-control border border-dashed border-border bg-surface-muted"
+          className="h-16 w-12 shrink-0 rounded-[12px] border border-dashed border-line bg-raise"
         />
       )}
 
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium text-foreground">{item.title}</p>
+        <p className="truncate font-[560] text-ink">{item.title}</p>
 
-        <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted">
-          <span
-            aria-hidden="true"
-            style={{ backgroundColor: color.hex }}
-            className="size-2.5 shrink-0 rounded-full"
-          />
+        <p className="mt-0.5 flex items-center gap-1.5 text-[15px] text-ink-2">
           <span className="truncate">
             {[
               item.subject.name,
@@ -150,7 +143,7 @@ export function MaterialGlance({ item }: { item: MaterialListItem }) {
             der Blätter, an denen noch etwas zu tun ist — dort ist ein leeres
             Themenfeld der Normalfall und kein Vorwurf. */}
         {item.topics.length > 0 ? (
-          <p className="mt-0.5 truncate text-sm text-subtle">
+          <p className="mt-0.5 truncate text-[15px] text-ink-3">
             {item.topics.map((topic) => topic.title).join(" · ")}
           </p>
         ) : null}
@@ -245,7 +238,7 @@ export function ProposalSummary({
      Zeile, die eine Entscheidung verlangt und nicht verrät, worüber. */
   if (parts.length === 0) {
     return (
-      <p className="text-sm text-muted">
+      <p className="text-[15px] text-ink-2">
         Dieser Vorschlag sagt nichts mehr. Das passiert, wenn er nur ein Fach
         vorgeschlagen hat und genau dieses Fach gelöscht wurde — dann bleibt
         die Zeile stehen und die Angabe fällt weg. Zu übernehmen gibt es hier
@@ -255,15 +248,15 @@ export function ProposalSummary({
   }
 
   return (
-    <dl className="space-y-1 text-sm">
+    <dl className="space-y-1 text-[15px]">
       {/* Die Spalte der Feldnamen ist seit „Abschrift“ eine Stufe breiter: das
           Wort ist länger als die 64 Pixel, die für „Themen“ gereicht haben, und
           ein einzelnes Wort bricht nicht um — es stünde sonst in den Wert
           daneben hinein. */}
       {parts.map(({ feld, wert }) => (
         <div key={feld} className="flex gap-2">
-          <dt className="w-20 shrink-0 text-subtle">{feld}</dt>
-          <dd className="min-w-0 flex-1 text-foreground">{wert}</dd>
+          <dt className="w-20 shrink-0 text-ink-3">{feld}</dt>
+          <dd className="min-w-0 flex-1 text-ink">{wert}</dd>
         </div>
       ))}
     </dl>

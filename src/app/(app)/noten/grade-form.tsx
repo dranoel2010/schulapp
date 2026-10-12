@@ -3,9 +3,10 @@
 import { useActionState, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
-import { Button, ButtonLink, type ButtonProps } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
-import { Input, Select } from "@/components/ui/input";
+import { Button, type ButtonProps } from "@/components/kombi/form";
+import { AbbrechenKnopf, FertigBeiErfolg, useNachAktion } from "@/components/kombi/form/fertig";
+import { Field } from "@/components/kombi/form";
+import { Input, Select } from "@/components/kombi/form";
 import type { Grade, GradeKind, Subject } from "@/db/schema";
 import { formatGerman } from "@/lib/dates";
 import { GRADE_STEPS } from "@/lib/grade-scale";
@@ -36,6 +37,8 @@ export type GradeFormState = {
   /** Hinweis über dem Formular, wenn es nicht an einem einzelnen Feld liegt. */
   message?: string;
   errors?: GradeFieldErrors;
+  /** Gesetzt nach erfolgreichem Speichern: die Formularseite geht zurück (Plan 2.4). */
+  fertig?: number;
 };
 
 const EMPTY_STATE: GradeFormState = {};
@@ -94,7 +97,8 @@ export type GradeFormProps = {
     "subjectId" | "value" | "kind" | "weight" | "date" | "title"
   >;
   submitLabel: string;
-  cancelHref: string;
+  /** Früher das Ziel von „Abbrechen“; jetzt geht es eine Ebene zurück. */
+  cancelHref?: string;
 };
 
 export function GradeForm({
@@ -104,7 +108,6 @@ export function GradeForm({
   defaultSubjectId,
   item,
   submitLabel,
-  cancelHref,
 }: GradeFormProps) {
   const [subjectId, setSubjectId] = useState(
     item?.subjectId ?? defaultSubjectId ?? subjects[0]?.id ?? "",
@@ -120,11 +123,12 @@ export function GradeForm({
   const [state, formAction, pending] = useActionState(action, EMPTY_STATE);
 
   return (
-    <form action={formAction} className="space-y-6" noValidate>
+    <form action={formAction} className="kf-form" noValidate>
+      <FertigBeiErfolg marke={state.fertig} toast={item ? "Gespeichert" : "Note eingetragen"} />
       {state.message ? (
         <p
           role="alert"
-          className="rounded-control border border-danger/40 bg-danger-soft px-3.5 py-3 text-sm text-danger"
+          className="kf-fehler"
         >
           {state.message}
         </p>
@@ -248,13 +252,11 @@ export function GradeForm({
         )}
       </Field>
 
-      <div className="flex gap-3 pt-2">
-        <Button type="submit" loading={pending} className="flex-1">
+      <div className="foot">
+        <Button type="submit" loading={pending}>
           {submitLabel}
         </Button>
-        <ButtonLink href={cancelHref} variant="secondary">
-          Abbrechen
-        </ButtonLink>
+        <AbbrechenKnopf />
       </div>
     </form>
   );
@@ -289,17 +291,23 @@ export function GradeDangerZone({
   deleteAction,
 }: GradeDangerZoneProps) {
   const [confirming, setConfirming] = useState(false);
+  const { zurueck } = useNachAktion();
 
   return (
-    <section className="rounded-card border border-border bg-surface p-4 sm:p-5">
+    <section>
       {confirming ? (
-        <div className="space-y-3 rounded-control border border-danger/40 bg-danger-soft p-3.5">
-          <p className="text-sm text-foreground">
+        <div className="kf-gefahr">
+          <p className="text-[15px] text-ink">
             {gradeLabel} wirklich löschen? Rückgängig geht das nicht, und der
             Schnitt im Fach rechnet sich sofort ohne sie.
           </p>
           <div className="flex flex-wrap gap-2">
-            <form action={deleteAction}>
+            <form
+              action={async () => {
+                await deleteAction();
+                zurueck("Note gelöscht");
+              }}
+            >
               <SubmitButton variant="danger">
                 Ja, endgültig löschen
               </SubmitButton>
@@ -317,7 +325,7 @@ export function GradeDangerZone({
         <Button
           type="button"
           variant="ghost"
-          className="text-danger hover:bg-danger-soft hover:text-danger"
+          style={{ color: "var(--error)" }}
           onClick={() => setConfirming(true)}
         >
           Note löschen

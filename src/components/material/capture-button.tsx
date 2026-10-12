@@ -12,9 +12,9 @@ import {
   type ChangeEvent,
 } from "react";
 
-import { Button, ButtonLink } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
-import { Select } from "@/components/ui/input";
+import { Button, ButtonLink } from "@/components/kombi/form";
+import { Field } from "@/components/kombi/form";
+import { Select } from "@/components/kombi/form";
 import { MAX_PAGES } from "@/lib/images";
 
 import {
@@ -227,18 +227,18 @@ export function CaptureButton({
    */
   const savedNote =
     fromViewfinder > 0 && !error && !pending ? (
-      <p className="text-sm text-muted">
+      <p className="text-[15px] text-ink-2">
         {fromViewfinder === 1
           ? "1 Blatt angekommen."
           : `${fromViewfinder} Blätter angekommen.`}{" "}
         Das nächste kann gleich kommen.
       </p>
     ) : saved && !error && !pending ? (
-      <p className="text-sm text-muted">
+      <p className="text-[15px] text-ink-2">
         Angekommen — das nächste kann gleich kommen.{" "}
         <Link
           href={`/material/${saved}`}
-          className="text-foreground underline underline-offset-2"
+          className="text-ink underline underline-offset-2"
         >
           Zum Blatt
         </Link>
@@ -247,7 +247,7 @@ export function CaptureButton({
 
   /** Der Satz unter dem Knopf. Er steht an beiden Stellen, an denen es ihn gibt. */
   const errorNote = error ? (
-    <p role="alert" className="text-sm text-danger">
+    <p role="alert" className="text-[15px] text-error">
       {error}
       {saved ? (
         <>
@@ -305,7 +305,7 @@ export function CaptureButton({
     // Der Wortlaut ist deshalb derselbe wie dort („Zum Zurückholen antippen“).
     return (
       <div className={cn("space-y-3", className)}>
-        <p className="text-sm text-muted">
+        <p className="text-[15px] text-ink-2">
           {allArchived
             ? "Ein Blatt gehört immer in ein Fach. Deine Fächer sind alle archiviert — solange keins wieder aktiv ist, gibt es nichts, wohin die Aufnahme könnte."
             : "Ein Blatt gehört immer in ein Fach. Solange keins angelegt ist, gibt es nichts, wohin die Aufnahme könnte."}

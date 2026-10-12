@@ -22,7 +22,7 @@ import {
   type OeffnenOptionen,
 } from "@/components/kombi/kontext";
 import { Seite, SeitenInhalt } from "@/components/kombi/seite";
-import { ROUTE_STATT_STAPEL, seitenArt } from "@/components/kombi/seiten/registry";
+import { artAusSegmenten, ROUTE_STATT_STAPEL, seitenArt } from "@/components/kombi/seiten/registry";
 import { TischEbene } from "@/components/kombi/tisch";
 import { LernblockTisch } from "@/components/kombi/tisch/lernblock-tisch";
 import { Zeile, type ZeileHandle } from "@/components/kombi/zeile";
@@ -674,8 +674,32 @@ export function KombiShell({ children }: { children: ReactNode }) {
       return;
     }
     if (segVorher.current === segKey) return;
+    const alteSegmente = segVorher.current ? segVorher.current.split("/") : [];
     segVorher.current = segKey;
     const route = ebenenRef.current.find((e) => e.typ === "route" && !e.geht);
+    // Route löst Route ab (Blatt per URL geöffnet → „Blatt bearbeiten“): die
+    // bisherige Route legt sich als Stapelseite unter die neue, so wie eine
+    // Stapelseite unter einem Formular liegen bleibt (2.4, Punkt 5). Sonst
+    // läge unter dem einfahrenden Formular die Startseite.
+    const unter = !istStart && route && !ausPop.current && obersteEbene()?.key === route.key ? artAusSegmenten(alteSegmente) : null;
+    if (unter && route) {
+      const key = keyFuer(unter.art);
+      setzeEbenen((alt) => [
+        ...alt.filter((e) => e.key !== route.key),
+        { key, typ: "stapel", art: unter.art, params: unter.params, daten: undefined, ausCache: null, still: true },
+        { key: `route${++zaehler.current}`, typ: "route" },
+      ]);
+      holen(unter.art, unter.params).then(
+        (a) =>
+          setzeEbenen((alt) =>
+            alt.map((e) => (e.key === key && e.typ === "stapel" ? { ...e, daten: a.daten, ausCache: a.ausCache } : e)),
+          ),
+        () => {},
+      );
+      beschriften(true);
+      ausPop.current = false;
+      return;
+    }
     if (istStart) {
       if (route) setzeEbenen((alt) => alt.map((e) => (e.key === route.key ? { ...e, geht: true } : e)));
       if (!ausPop.current) {
@@ -690,7 +714,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
       beschriften(true);
     }
     ausPop.current = false;
-  }, [segKey, istStart, setzeEbenen, beschriften]);
+  }, [segKey, istStart, setzeEbenen, beschriften, obersteEbene, holen]);
 
   // „Zuletzt geöffnet“: Seiten ohne Parameter, die (bis G) noch Routen sind,
   // zählen bei jedem Einstieg — nicht nur über openPage (Prototyp `remember`)

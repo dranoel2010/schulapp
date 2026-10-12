@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
 import {
@@ -100,8 +99,7 @@ export async function createHomeworkAction(
   await createHomework(user.id, parsed.data);
   nachAufgabeGeschrieben(user.id);
 
-  revalidateHomework();
-  redirect("/hausaufgaben");
+  return { fertig: Date.now() };
 }
 
 export async function updateHomeworkAction(
@@ -129,8 +127,7 @@ export async function updateHomeworkAction(
   await updateHomework(user.id, id, parsed.data);
   nachAufgabeGeschrieben(user.id);
 
-  revalidateHomework(id);
-  redirect("/hausaufgaben");
+  return { fertig: Date.now() };
 }
 
 /**
@@ -155,6 +152,4 @@ export async function deleteHomeworkAction(id: string): Promise<void> {
   await deleteHomework(user.id, id);
   nachAufgabeGeschrieben(user.id);
 
-  revalidateHomework(id);
-  redirect("/hausaufgaben");
 }

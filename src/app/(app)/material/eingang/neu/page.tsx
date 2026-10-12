@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
@@ -67,39 +66,21 @@ export default async function NewProposalPage({
     : [item.subject, ...active];
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
-      <Link
-        href="/material/eingang"
-        className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className="size-4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m15 6-6 6 6 6" />
-        </svg>
-        Eingangskorb
-      </Link>
+    <div className="kf-seite">
 
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">
+        <h2 className="p-title">
           Vorschlag anlegen
-        </h1>
-        <p className="text-sm text-muted">
+        </h2>
+        <p className="text-[15px] text-ink-2">
           Ein Vorschlag schreibt nichts. Er legt sich neben das Blatt und
           wartet, bis jemand ihn übernimmt — und dann steht das volle Formular
           des Blattes da, vorbelegt und änderbar.
         </p>
       </header>
 
-      <section className="rounded-card border border-border bg-surface p-4 sm:p-5">
-        <h2 className="mb-3 text-sm font-medium text-muted">
+      <section className="">
+        <h2 className="mb-3 text-[15px] font-[560] text-ink-2">
           Der Vorschlag gilt diesem Blatt
         </h2>
 

@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/kombi/form";
 import {
   ABFRAGE_FRIST_MS,
   BERUEHRT_RUHE_MS,
@@ -328,7 +328,7 @@ export function AutoRefresh({ stand, inArbeit, leseZeile }: AutoRefreshProps) {
       {/* Folgt der Prop und nicht der letzten Antwort: die Zeile kommt und
           geht nur mit einem Nachladen, also nie, während jemand tippt. */}
       {leseZeile && inArbeit ? (
-        <p className="text-sm text-muted">
+        <p className="text-[15px] text-ink-2">
           Ein Blatt wird gerade gelesen … die Anzeige aktualisiert sich von
           selbst.
         </p>
@@ -340,7 +340,7 @@ export function AutoRefresh({ stand, inArbeit, leseZeile }: AutoRefreshProps) {
         <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <div
             role="status"
-            className="pointer-events-auto flex max-w-full items-center gap-3 rounded-pill border border-border bg-surface py-1.5 pl-4 pr-1.5 text-sm text-foreground shadow-lift"
+            className="pointer-events-auto flex max-w-full items-center gap-3 rounded-full border border-line bg-raise py-1.5 pl-4 pr-1.5 text-[15px] text-ink shadow-none"
           >
             {zeigeHinweis === "fokus" ? (
               <>

@@ -86,7 +86,7 @@ export function TargetSentence({
   // Das Ziel steht mit Nachkommastelle da, weil es ein Schnitt ist und keine
   // einzelne Note: „2,0“ meint den Fachschnitt, „2“ läse sich wie eine Note.
   const goal = (
-    <strong className="font-semibold">{formatAverage(target, 1)}</strong>
+    <strong className="font-[650]">{formatAverage(target, 1)}</strong>
   );
   const where = subjectName ? ` in ${subjectName}` : "";
   const next = `als nächste ${kindWord(kind)} Note mit einfachem Gewicht`;
@@ -112,7 +112,7 @@ export function TargetSentence({
   return (
     <>
       Für einen Schnitt von {goal} reicht{where} eine{" "}
-      <strong className="font-semibold">{gradeLabel(outcome.value)}</strong>{" "}
+      <strong className="font-[650]">{gradeLabel(outcome.value)}</strong>{" "}
       {next}.
     </>
   );

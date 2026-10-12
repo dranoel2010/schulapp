@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
@@ -58,42 +57,13 @@ export default async function GradePage({ params }: PageProps<"/noten/[id]">) {
   const kindLabel = KIND_LABELS[item.kind] ?? "Schriftlich";
   const weightLabel =
     WEIGHT_LABELS[item.weight] ?? `zählt ${item.weight}-fach`;
-  const subjectHref = `/noten/fach/${item.subjectId}`;
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
-      <Link
-        href={subjectHref}
-        className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className="size-4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m15 6-6 6 6 6" />
-        </svg>
-        Alle Noten in {item.subject.name}
-      </Link>
-
-      <header className="rounded-card border border-border bg-surface p-5 sm:p-6">
-        <p className="text-sm text-muted">{item.subject.name}</p>
-
-        <h1 className="mt-1.5 text-3xl font-semibold tracking-tight text-foreground">
-          {label}
-        </h1>
-
-        <p className="mt-1.5 text-muted">
-          {[item.title, formatGerman(item.date)].filter(Boolean).join(" · ")}
-        </p>
-
-        <p className="mt-1 text-sm text-muted">
-          {kindLabel} · {weightLabel}
+    <div className="kf-seite">
+      <header>
+        <h2 className="p-title">{`${label} in ${item.subject.name}`}</h2>
+        <p className="p-sub">
+          {[item.title, formatGerman(item.date), kindLabel, weightLabel].filter(Boolean).join(" · ")}
         </p>
       </header>
 
@@ -104,8 +74,7 @@ export default async function GradePage({ params }: PageProps<"/noten/[id]">) {
         // falls das Feld leer geräumt wird.
         defaultDate={todayInBerlin()}
         item={item}
-        submitLabel="Änderungen speichern"
-        cancelHref={subjectHref}
+        submitLabel="Speichern"
       />
 
       <GradeDangerZone

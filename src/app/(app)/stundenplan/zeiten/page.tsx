@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
 import { requireUser } from "@/lib/auth";
 import { ensurePeriods, isDefaultPeriods } from "@/lib/timetable";
@@ -36,29 +35,11 @@ export default async function PeriodsPage() {
   const untouched = isDefaultPeriods(rows);
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
-      <Link
-        href="/stundenplan"
-        className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className="size-4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m15 6-6 6 6 6" />
-        </svg>
-        Wochenplan
-      </Link>
+    <div className="kf-seite">
 
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Stundenzeiten</h1>
-        <p className="text-sm text-muted">
+        <h2 className="p-title">Stundenzeiten</h2>
+        <p className="text-[15px] text-ink-2">
           Wann deine Stunden anfangen und aufhören. Im Wochenraster stehen die
           Zeiten nicht — gebraucht werden sie für den Tagesplan auf der
           Startseite, der deinen Tag von morgens nach abends sortiert.
@@ -66,7 +47,7 @@ export default async function PeriodsPage() {
       </div>
 
       {untouched ? (
-        <p className="rounded-card border border-dashed border-border px-4 py-3 text-sm text-muted">
+        <p className="p-sub">
           Das ist noch die Vorgabe der App — die Pausenordnung eines gedachten
           Gymnasiums. Stell sie auf deine Schule um, sonst steht der Tagesplan
           zur falschen Zeit.

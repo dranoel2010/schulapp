@@ -1,13 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Button, CardContent, SeitenKopf } from "@/components/kombi/form";
 import type { CalendarStatus } from "@/lib/calendar/report";
 import { addDays, berlinDay, timeInBerlin, todayInBerlin } from "@/lib/dates";
 
@@ -147,8 +140,8 @@ function RecreateForm({ variant }: { variant: "primary" | "secondary" }) {
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <dt className="shrink-0 text-sm text-muted">{label}</dt>
-      <dd className="text-right font-medium">{children}</dd>
+      <dt className="shrink-0 text-[15px] text-ink-2">{label}</dt>
+      <dd className="text-right font-[560]">{children}</dd>
     </div>
   );
 }
@@ -173,36 +166,39 @@ export function GoogleCalendarCard({
   const { state } = status;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Google Kalender</CardTitle>
-        <CardDescription>
-          Klausuren, offene Hausaufgaben und freie Tage erscheinen als
-          Termine in einem eigenen Kalender „Schule“ in deinem Google
-          Kalender — ganztägig, denn die App kennt dafür keine Uhrzeit — und,
-          wenn IServ eingerichtet ist, Termine deiner Klasse aus IServ (mit
-          Uhrzeit, wenn IServ eine nennt). Die App trägt dort ein, ändert und
-          löscht — an deine anderen Kalender kommt sie nicht heran. Was du in
-          Google löschst, trägt sie nicht wieder ein. Lernblöcke kommen nicht
-          hinein.
-        </CardDescription>
-      </CardHeader>
+    <>
+      {/* Derselbe Seitenkopf wie auf den übrigen Unterseiten: ohne Rahmen darüber, sonst springt der Titel. */}
+      <SeitenKopf
+        titel="Google Kalender"
+        sub={
+          <>
+              Klausuren, offene Hausaufgaben und freie Tage erscheinen als
+              Termine in einem eigenen Kalender „Schule“ in deinem Google
+              Kalender — ganztägig, denn die App kennt dafür keine Uhrzeit — und,
+              wenn IServ eingerichtet ist, Termine deiner Klasse aus IServ (mit
+              Uhrzeit, wenn IServ eine nennt). Die App trägt dort ein, ändert und
+              löscht — an deine anderen Kalender kommt sie nicht heran. Was du in
+              Google löschst, trägt sie nicht wieder ein. Lernblöcke kommen nicht
+              hinein.
+          </>
+        }
+      />
 
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4" style={{ marginTop: 16 }}>
         {meldung ? (
           meldung.tone === "success" ? (
-            <p role="status" className="text-sm text-success">
+            <p role="status" className="text-[15px] text-ink-2">
               {meldung.text}
             </p>
           ) : (
-            <p role="alert" className="text-sm text-danger">
+            <p role="alert" className="text-[15px] text-error">
               {meldung.text}
             </p>
           )
         ) : null}
 
         {state.kind === "nicht-eingerichtet" ? (
-          <p className="text-sm text-muted">
+          <p className="text-[15px] text-ink-2">
             Auf diesem Server ist Google nicht eingerichtet — es fehlt{" "}
             {state.missing.join(", ")}. Die Variablen gehören in die .env auf
             dem NAS; wie, steht im README unter „Google Kalender“. War der
@@ -213,16 +209,16 @@ export function GoogleCalendarCard({
 
         {state.kind === "getrennt" ? (
           <>
-            <p className="text-sm">Nicht verbunden.</p>
+            <p className="text-[15px]">Nicht verbunden.</p>
             <ConnectForm label="Mit Google verbinden" />
-            <p className="text-[0.8125rem] text-subtle">
+            <p className="text-[0.8125rem] text-ink-3">
               Google fragt, ob die App eigene Kalender anlegen und darin
               Termine bearbeiten darf — mehr nicht. Weil die App dir gehört und
               nicht von Google geprüft ist, warnt Google vorher („Google hat
               diese App nicht überprüft“); über „Erweitert“ geht es weiter. Gab
               es den Kalender „Schule“ schon, führt die App ihn weiter.
             </p>
-            <p className="text-[0.8125rem] text-subtle">
+            <p className="text-[0.8125rem] text-ink-3">
               Verbinde im Browser (Safari oder Chrome) unter der Adresse der
               App, nicht aus der installierten App vom Home-Bildschirm: Dort
               landet die Rückkehr von Google womöglich in einem Fenster, das
@@ -234,7 +230,7 @@ export function GoogleCalendarCard({
 
         {state.kind === "blockiert" ? (
           <>
-            <p className="rounded-control border border-danger/40 bg-danger-soft px-3.5 py-3 text-sm text-danger">
+            <p className="kf-fehler">
               {BLOCKED_TEXT[state.reason](tag(state.since))}
             </p>
             <div className="flex flex-wrap gap-2">
@@ -271,7 +267,7 @@ export function GoogleCalendarCard({
               <Row label="Von dir in Google gelöscht">
                 {status.verworfen.count} — die App trägt sie nicht wieder ein:{" "}
                 {status.verworfen.titles.join(", ")}
-                <span className="mt-1 block text-[0.8125rem] font-normal text-subtle">
+                <span className="mt-1 block text-[0.8125rem] font-normal text-ink-3">
                   Die App bemerkt eine Löschung, sobald sie den Termin ändern
                   oder entfernen will.
                 </span>
@@ -282,7 +278,7 @@ export function GoogleCalendarCard({
 
         {(state.kind === "verbunden" || state.kind === "blockiert") &&
         status.lastError ? (
-          <p className="rounded-control border border-danger/40 bg-danger-soft px-3.5 py-3 text-sm text-danger">
+          <p className="kf-fehler">
             Letzter Fehler, {zeitpunkt(status.lastError.at)}:{" "}
             {status.lastError.sentence}
           </p>
@@ -290,7 +286,7 @@ export function GoogleCalendarCard({
 
         {(state.kind === "verbunden" || state.kind === "blockiert") &&
         status.cronStaleSince ? (
-          <p className="rounded-control border border-warning/40 px-3.5 py-3 text-sm text-warning">
+          <p className="p-sub">
             Der stündliche Abgleich ist seit {zeitpunkt(status.cronStaleSince)}{" "}
             nicht gelaufen. Änderungen kommen nur noch direkt nach dem
             Speichern an. Auf dem NAS nachsehen:{" "}
@@ -311,18 +307,18 @@ export function GoogleCalendarCard({
               <DisconnectForm />
             </div>
 
-            <p className="text-[0.8125rem] text-subtle">
+            <p className="text-[0.8125rem] text-ink-3">
               Trennen nimmt der App den Zugang. Der Kalender „Schule“ bleibt in
               Google stehen; was du dort gelöscht hast, bleibt auch nach neuem
               Verbinden draußen.
             </p>
 
-            <details className="text-sm">
-              <summary className="cursor-pointer text-muted">
+            <details className="text-[15px]">
+              <summary className="cursor-pointer text-ink-2">
                 Kalender neu anlegen
               </summary>
               <div className="mt-3 space-y-3">
-                <p className="text-muted">
+                <p className="text-ink-2">
                   Legt in Google einen frischen Kalender „Schule“ an und trägt
                   alles neu ein — auch, was du im alten gelöscht hattest. Den
                   alten Kalender löschst du danach selbst in Google. Hilft,
@@ -334,6 +330,6 @@ export function GoogleCalendarCard({
           </>
         ) : null}
       </CardContent>
-    </Card>
+    </>
   );
 }

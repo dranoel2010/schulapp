@@ -2,9 +2,11 @@
 
 import { useActionState, useMemo, useState } from "react";
 
-import { Button, ButtonLink } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
-import { Select } from "@/components/ui/input";
+import { Button } from "@/components/kombi/form";
+import { AbbrechenKnopf, FertigBeiErfolg } from "@/components/kombi/form/fertig";
+import { Field } from "@/components/kombi/form";
+import { Select } from "@/components/kombi/form";
+import { Tn } from "@/components/kombi/tn";
 
 /**
  * Den Hauptunterricht in einem Zug auf ein anderes Fach umtragen.
@@ -58,6 +60,8 @@ export type EpochFormState = {
   message?: string;
   notice?: string;
   errors?: { fromSubjectId?: string; toSubjectId?: string; slots?: string };
+  /** Gesetzt nach erfolgreichem Speichern: die Formularseite geht zurück (Plan 2.4). */
+  fertig?: number;
 };
 
 const EMPTY_STATE: EpochFormState = {};
@@ -116,9 +120,10 @@ export function EpochForm({
   );
 
   return (
-    <form action={formAction} className="space-y-6" noValidate>
+    <form action={formAction} className="kf-form" noValidate>
+      <FertigBeiErfolg marke={state.fertig} toast="Epoche umgetragen" />
       {state.message ? (
-        <p className="rounded-control border border-danger/40 bg-danger-soft px-3.5 py-3 text-sm text-danger">
+        <p className="kf-fehler">
           {state.message}
         </p>
       ) : null}
@@ -145,24 +150,24 @@ export function EpochForm({
       </Field>
 
       <div className="space-y-2">
-        <p className="text-sm font-medium">Diese Stunden wandern mit</p>
-        <p className="text-sm text-muted">
+        <p className="text-[15px] font-[560]">Diese Stunden wandern mit</p>
+        <p className="text-[15px] text-ink-2">
           Fachstunden, die stehen bleiben sollen, hier abwählen.
         </p>
 
         {betroffen.length === 0 ? (
-          <p className="rounded-control border border-border bg-surface-muted px-3.5 py-3 text-sm text-muted">
+          <p className="p-sub">
             Dieses Fach steht in keiner Stunde.
           </p>
         ) : (
-          <ul className="divide-y divide-border overflow-hidden rounded-control border border-border">
+          <ul className="divide-y divide-line overflow-hidden rounded-[12px] border border-line">
             {betroffen.map((lesson) => {
               const key = lesson.key;
               const an = !abgewaehlt.has(key);
 
               return (
                 <li key={key}>
-                  <label className="flex cursor-pointer items-center gap-3 px-3.5 py-3 hover:bg-surface-muted">
+                  <label className="flex cursor-pointer items-center gap-3 px-3.5 py-3 hover:bg-raise">
                     <input
                       type="checkbox"
                       name="slots"
@@ -171,14 +176,14 @@ export function EpochForm({
                       onChange={() => schalte(key)}
                       className="size-4 shrink-0 accent-accent"
                     />
-                    <span className="w-8 shrink-0 text-sm font-medium">
+                    <span className="w-8 shrink-0 text-[15px] font-[560]">
                       {lesson.weekday}
                     </span>
-                    <span className="w-8 shrink-0 text-sm text-muted tabular-nums">
-                      {lesson.period}
+                    <span className="min-w-[5.5rem] shrink-0 whitespace-nowrap text-[15px] text-ink-2 tabular-nums">
+                      <Tn s={lesson.period} />
                     </span>
-                    <span className="text-sm text-muted tabular-nums">
-                      {lesson.time ?? "ohne Zeit"}
+                    <span className="whitespace-nowrap text-[15px] text-ink-2 tabular-nums">
+                      {lesson.time ? <Tn s={lesson.time} /> : "ohne Zeit"}
                     </span>
                   </label>
                 </li>
@@ -188,7 +193,7 @@ export function EpochForm({
         )}
 
         {state.errors?.slots ? (
-          <p className="text-sm text-danger">{state.errors.slots}</p>
+          <p className="text-[15px] text-error">{state.errors.slots}</p>
         ) : null}
       </div>
 
@@ -216,7 +221,7 @@ export function EpochForm({
         )}
       </Field>
 
-      <div className="flex gap-3 pt-2">
+      <div className="foot">
         <Button
           type="submit"
           loading={pending}
@@ -227,15 +232,13 @@ export function EpochForm({
             ? "1 Stunde umtragen"
             : `${gewaehlt.length} Stunden umtragen`}
         </Button>
-        <ButtonLink href="/stundenplan" variant="secondary">
-          Abbrechen
-        </ButtonLink>
+        <AbbrechenKnopf />
       </div>
 
-      <p className="text-sm text-muted">
+      <p className="text-[15px] text-ink-2">
         Umgetragen wird nur der Stundenplan. Noten, Hausaufgaben und Blätter
         behalten ihr Fach —{" "}
-        <span className="text-foreground">
+        <span className="text-ink">
           was du in der Mathe-Epoche gesammelt hast, bleibt bei Mathematik
         </span>
         .
