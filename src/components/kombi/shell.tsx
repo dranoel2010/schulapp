@@ -23,6 +23,7 @@ import {
 import { Seite, SeitenInhalt } from "@/components/kombi/seite";
 import { ROUTE_STATT_STAPEL, seitenArt } from "@/components/kombi/seiten/registry";
 import { TischEbene } from "@/components/kombi/tisch";
+import { LernblockTisch } from "@/components/kombi/tisch/lernblock-tisch";
 import { Zeile, type ZeileHandle } from "@/components/kombi/zeile";
 import { E, moveTo, reduce, springOpts } from "@/lib/kombi/motion";
 import type { TagDaten } from "@/lib/kombi/tag-daten";
@@ -894,7 +895,8 @@ export function KombiShell({ children }: { children: ReactNode }) {
         else navigiereEcht("/material");
       },
       openTisch: (o) => {
-        const h = handler.current.get("tisch");
+        // Der Lernblock (Abschnitt F) hat seine eigene Ebene auf demselben Tisch
+        const h = (o?.mode === "block" ? handler.current.get("lernblock") : undefined) ?? handler.current.get("tisch");
         if (h) h(o);
         else navigiereEcht("/abruf/sitzung");
       },
@@ -1020,6 +1022,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
 
       <KameraEbene />
       <TischEbene />
+      <LernblockTisch />
       <div id="druck" aria-hidden="true" />
     </KombiKontext.Provider>
   );

@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 
+import { KlausurBlock } from "@/components/kombi/home/klausur-block";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import type { TagDaten } from "@/lib/kombi/tag-daten";
@@ -45,7 +46,12 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
         </button>
       </header>
       <h1 className="hl enter" id="h1" />
-      <div className="modes" />
+      <div className="modes">
+        {/* Abschnitt F: der Klausur-Block; B setzt ihn in die Ansicht `ueberblick` */}
+        <section className="mode on" id="m-ueberblick" data-v="ueberblick" aria-label="Überblick">
+          {daten?.lernblock ? <KlausurBlock daten={daten.lernblock} heute={daten.tag} /> : null}
+        </section>
+      </div>
     </div>
   );
 }

@@ -34,7 +34,7 @@ export async function POST() {
   const { sent, removed } = await sendToUser(user.id, {
     title: "Test",
     body: "Die Erinnerungen kommen an.",
-    url: "/einstellungen",
+    url: "/",
     tag: "schulapp-test",
   });
 

@@ -18,8 +18,8 @@ export type OeffnenOptionen = {
   vorgeladen?: boolean;
 };
 
-/** Ebenen, die spätere Abschnitte in die Shell hängen (C: Kamera, E/F: Tisch). */
-export type EbenenName = "kamera" | "tisch" | "ansicht";
+/** Ebenen, die spätere Abschnitte in die Shell hängen (C: Kamera, E: Tisch, F: Lernblock). */
+export type EbenenName = "kamera" | "tisch" | "lernblock" | "ansicht";
 export type EbenenHandler = (optionen?: Record<string, unknown>) => void;
 
 export type KombiApi = {

@@ -1,3 +1,4 @@
+import { klausurenSeite, klausurSeite } from "@/lib/seiten/klausur";
 import { probeSeite } from "@/lib/seiten/probe";
 
 /**
@@ -19,6 +20,9 @@ export type SeitenLoader = (userId: string, params: SeitenParams) => Promise<unk
 
 export const SEITEN_LOADER: Record<string, SeitenLoader | undefined> = {
   probe: probeSeite,
+  // Abschnitt F
+  klausur: klausurSeite,
+  klausuren: (userId) => klausurenSeite(userId),
 };
 
 export function seitenLoader(art: string): SeitenLoader | undefined {

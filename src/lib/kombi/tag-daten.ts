@@ -1,4 +1,5 @@
 import { berlinDay } from "@/lib/dates";
+import { lernblockUeberblick, type LernblockUeberblick } from "@/lib/kombi/lernblock-daten";
 
 /**
  * Alles, was die Startseite braucht (Plan 3.2) — ein reines, serialisierbares
@@ -14,6 +15,8 @@ export type TagDaten = {
   tag: string;
   /** Zeitpunkt der Berechnung, ISO */
   stand: string;
+  /** Klausur und Lernblockzeile des Überblicks (Abschnitt F) */
+  lernblock: LernblockUeberblick | null;
 };
 
 /** Der App-Tag: der Berliner Kalendertag von „jetzt minus 4 Stunden“. */
@@ -21,6 +24,7 @@ export function appTagVon(now: Date): string {
   return berlinDay(new Date(now.getTime() - 4 * 3600_000));
 }
 
-export async function ladeTag(_userId: string, now: Date): Promise<TagDaten> {
-  return { tag: appTagVon(now), stand: now.toISOString() };
+export async function ladeTag(userId: string, now: Date): Promise<TagDaten> {
+  const tag = appTagVon(now);
+  return { tag, stand: now.toISOString(), lernblock: await lernblockUeberblick(userId, tag) };
 }
