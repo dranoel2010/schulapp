@@ -11,7 +11,9 @@
 
 
 #app{position:fixed;inset:0;margin:0 auto;max-width:100%;overflow:hidden;isolation:isolate;background:var(--bg)}
-@media (min-width:600px){#app{max-width:390px;box-shadow:0 0 0 1px var(--line)}}
+:root{--col:680px}
+/* Am Rechner keine Handyspalte (Nutzer 12.10.2026): Papier über das ganze Fenster, Inhalt zentriert bis --col. */
+@media (min-width:600px){#app{max-width:var(--col)}html,body{background:var(--bg)}}
 .pre .enter{opacity:0}
 
 /* ---------- Ebenen: Tag (Morgens, Überblick) und Ablauf ---------- */
@@ -327,7 +329,7 @@ h1.q{font-family:var(--sans);font-size:32px;line-height:1.08;font-weight:650;let
 .zeile{position:fixed;z-index:40;left:0;right:0;bottom:var(--safe-b);margin:0 auto;max-width:100%;pointer-events:none}
 .zeile::before{content:"";position:absolute;left:0;right:0;bottom:calc(-1 * var(--safe-b));height:calc(52px + var(--safe-b) + 10px);background:var(--bg);pointer-events:auto}
 .zeile.hide::before,.zeile.menu-on::before{visibility:hidden}
-@media (min-width:600px){.zeile{max-width:390px}}
+@media (min-width:600px){.zeile{max-width:var(--col)}}
 .dock{pointer-events:auto;position:relative;z-index:3;margin:0 var(--pad);height:52px;border-radius:26px;background:var(--dock);color:var(--dock-text);
   display:flex;align-items:center;padding:4px;box-shadow:var(--dock-shadow)}
 .dock .lupe{width:40px;display:grid;place-items:center;color:var(--dock-muted);flex:none}
@@ -409,7 +411,7 @@ h1.q{font-family:var(--sans);font-size:32px;line-height:1.08;font-weight:650;let
 .tok.want{color:var(--ink-2)}
 .tok:active{transform:scale(.96)}
 
-.toast{position:fixed;z-index:66;left:calc(50% - min(50vw,195px) + var(--pad));bottom:80px;max-width:calc(min(100vw,390px) - 44px);height:44px;border-radius:22px;
+.toast{position:fixed;z-index:66;left:calc(50% - min(50vw,calc(var(--col) / 2)) + var(--pad));bottom:80px;max-width:calc(min(100vw,var(--col)) - 44px);height:44px;border-radius:22px;
   background:var(--sheet);color:var(--ink);box-shadow:var(--toast-shadow);display:flex;align-items:center;gap:2px;padding:0 4px 0 18px;
   font-size:15px;font-weight:560;opacity:0;transform:translateY(14px);pointer-events:none;transition:transform 260ms var(--ease-out),opacity 200ms var(--ease-out)}
 .toast.on{opacity:1;transform:none;pointer-events:auto}
@@ -418,7 +420,7 @@ body.toast-on .scroll{padding-bottom:calc(var(--foot-space) + 54px)}
 .toast button{flex:none;height:44px;padding:0 14px 0 10px;border-radius:999px;font-weight:650;color:var(--accent)}
 
 /* ---------- Sheet ---------- */
-.sheet{position:fixed;z-index:72;left:0;right:0;bottom:0;margin:0 auto;max-width:390px;max-height:86dvh;display:flex;flex-direction:column;
+.sheet{position:fixed;z-index:72;left:0;right:0;bottom:0;margin:0 auto;max-width:var(--col);max-height:86dvh;display:flex;flex-direction:column;
   background:var(--sheet);color:var(--ink);border-radius:28px 28px 0 0;transform:translateY(105%);visibility:hidden;box-shadow:var(--menu-shadow)}
 .sheet.open{visibility:visible}
 .sheet .grab{height:28px;display:grid;place-items:center;touch-action:none;flex:none;cursor:grab}
@@ -427,7 +429,7 @@ body.toast-on .scroll{padding-bottom:calc(var(--foot-space) + 54px)}
 .sheet-scrim{z-index:71}
 
 /* ---------- Kamera ---------- */
-.cam{position:fixed;inset:0;z-index:60;margin:0 auto;max-width:390px;background:var(--camera);color:#F2F0EA;display:none;flex-direction:column}
+.cam{position:fixed;inset:0;z-index:60;margin:0 auto;max-width:var(--col);background:var(--camera);color:#F2F0EA;display:none;flex-direction:column}
 .cam.open{display:flex}
 .cam-top{height:calc(var(--top) + 52px);padding:var(--top) 12px 0;display:grid;grid-template-columns:44px 1fr 44px;align-items:center;flex:none;position:relative;z-index:3}
 .cbtn{width:44px;height:44px;border-radius:999px;display:grid;place-items:center;background:rgba(255,255,255,.12);transition:transform 140ms var(--ease-out)}
@@ -481,7 +483,7 @@ body.toast-on .scroll{padding-bottom:calc(var(--foot-space) + 54px)}
 .fly{position:fixed;z-index:80;pointer-events:none;border-radius:4px;background:#E9E8E3 center/cover no-repeat;transform-origin:0 0}
 
 /* ---------- Tisch: Wiederholen und Lernblock ---------- */
-.tisch{position:fixed;left:0;right:0;top:0;height:100dvh;z-index:65;margin:0 auto;max-width:390px;display:none;color:var(--t-on)}
+.tisch{position:fixed;left:0;right:0;top:0;height:100dvh;z-index:65;margin:0 auto;max-width:var(--col);display:none;color:var(--t-on)}
 .tisch.open{display:block}
 .t-surface{position:absolute;inset:0;background:var(--table);overflow:hidden}
 .t-tint{position:absolute;inset:0;background:var(--accent-fill);opacity:0}
