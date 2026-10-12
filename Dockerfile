@@ -136,6 +136,15 @@ ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
 # Kein Telemetriefunk aus dem Heimnetz heraus.
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Schutz vor Versionsversatz nach einem Neubau (Modell 23, Plan A): Next hängt
+# `?dpl=<id>` an seine Dateien und lädt bei abweichender ID hart neu, statt
+# eine Server Action des alten Standes zu suchen. `scripts/nas.sh hoch` setzt
+# die ID auf den Commit; leer schaltet Next den Schutz ab, ein Fehler entsteht
+# nicht. Dieselbe ID braucht die Laufzeit (zweite Stufe, unten), weil
+# next.config.ts bei `next start` erneut ausgewertet wird.
+ARG NEXT_DEPLOYMENT_ID=""
+ENV NEXT_DEPLOYMENT_ID=$NEXT_DEPLOYMENT_ID
+
 # Der leere Schlüssel bricht den Bau nicht ab — ein Bild ohne Push ist immer
 # noch eine laufende Schulapp, und ein harter Abbruch würde einen Deploy
 # verhindern, der vielleicht gerade dringend ist. Er sagt aber Bescheid, denn
@@ -172,6 +181,11 @@ RUN apk add --no-cache libc6-compat
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# Dieselbe Deployment-ID wie beim Bau (erste Stufe); ein ARG gilt nur in der
+# Stufe, die es nennt, deshalb steht es hier ein zweites Mal.
+ARG NEXT_DEPLOYMENT_ID=""
+ENV NEXT_DEPLOYMENT_ID=$NEXT_DEPLOYMENT_ID
 
 # `next start` hört laut Handbuch von Haus aus auf 0.0.0.0 und Port 3000
 # (node_modules/next/dist/docs/01-app/03-api-reference/06-cli/next.md). PORT

@@ -6,12 +6,24 @@
  *    das Zeug ändert sich nie)
  *  - Seitenaufrufe             → network-first, sonst die zuletzt geladene Fassung,
  *    sonst die Offline-Seite
+ *  - Daten der Shell (Modell 23, Plan 2.4 Punkt 8): /api/seite/*, /api/tag/daten
+ *    und /api/tag/stand → network-first in den eigenen Cache `schulapp-v3-daten`
  *  - alles andere              → unangetastet ans Netz
  */
 
-const VERSION = "schulapp-v2";
+const VERSION = "schulapp-v3";
 const STATIC_CACHE = `${VERSION}-static`;
 const PAGE_CACHE = `${VERSION}-pages`;
+const DATA_CACHE = `${VERSION}-daten`;
+
+/** Die drei Ausnahmen von „alles unter /api/ unberührt“ (Plan 2.4, Punkt 8). */
+function istShellDaten(pathname) {
+  return (
+    pathname.startsWith("/api/seite/") ||
+    pathname === "/api/tag/daten" ||
+    pathname === "/api/tag/stand"
+  );
+}
 const OFFLINE_URL = "/offline";
 
 self.addEventListener("install", (event) => {
@@ -76,6 +88,11 @@ self.addEventListener("fetch", (event) => {
    * für ein Pfadstück — die nächste Adresse, die eine Datei ausliefert, soll
    * nicht wieder daran denken müssen.
    */
+  if (istShellDaten(url.pathname) && request.mode !== "navigate") {
+    event.respondWith(datenNetworkFirst(request, event));
+    return;
+  }
+
   if (url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
@@ -121,6 +138,36 @@ async function networkFirst(request, event) {
     if (offline) return offline;
 
     return Response.error();
+  }
+}
+
+/**
+ * Daten der Shell: erst das Netz; die Antwort wandert mit dem Zeitpunkt des
+ * Speicherns (`x-schulapp-gespeichert`) in den Daten-Cache. Ohne Netz kommt
+ * die letzte Fassung mit `x-schulapp-aus-cache: 1` — daran schreibt die
+ * Seite „Ohne Verbindung · Stand ⟨Uhrzeit⟩“. Gibt es auch dort nichts, geht
+ * der Fehler an die Shell (Toast „Keine Verbindung“).
+ *
+ * Nur erfolgreiche Antworten werden gemerkt: ein 401 nach dem Abmelden soll
+ * keine alte Seite überschreiben und keine liefern.
+ */
+async function datenNetworkFirst(request, event) {
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const body = await response.clone().arrayBuffer();
+      const headers = new Headers(response.headers);
+      headers.set("x-schulapp-gespeichert", new Date().toISOString());
+      const copy = new Response(body, { status: response.status, headers });
+      event.waitUntil(caches.open(DATA_CACHE).then((c) => c.put(request, copy)));
+    }
+    return response;
+  } catch (fehler) {
+    const cached = await caches.match(request, { cacheName: DATA_CACHE });
+    if (!cached) throw fehler;
+    const headers = new Headers(cached.headers);
+    headers.set("x-schulapp-aus-cache", "1");
+    return new Response(await cached.arrayBuffer(), { status: 200, headers });
   }
 }
 

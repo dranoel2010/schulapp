@@ -829,7 +829,7 @@ hoch() {
 
   echo "Baue und starte ... (das dauert auf dem NAS mehrere Minuten)"
   local bau="ok"
-  ( cd "$APP" && $DC up -d --build ) || bau="schief"
+  bauen_und_starten || bau="schief"
   [ "$bau" = "ok" ] && merke_gebaut "$nachher" ok
 
   if [ "$bau" != "ok" ]; then
@@ -872,6 +872,18 @@ hoch() {
 }
 
 # -------------------------------------------------------------- zurueck
+# Bauen und starten, mit dem Commit als Deployment-ID (Modell 23, Plan A):
+# Next hängt sie als `?dpl=` an seine Dateien und lädt bei einem Versatz hart
+# neu, statt nach einer Server Action des alten Standes zu suchen. Bisher
+# stand hier `up -d --build`; `up` kennt kein `--build-arg`, deshalb erst
+# `build`, dann `up`. Im Klon auf dem NAS gibt es `.git`, im Bau-Kontext
+# nicht (`.dockerignore`) — deshalb wird die ID hier gelesen und durchgereicht.
+bauen_und_starten() {
+  local dpl
+  dpl=$(git -C "$APP/repo" rev-parse HEAD 2>/dev/null || true)
+  ( cd "$APP" && $DC build --build-arg NEXT_DEPLOYMENT_ID="$dpl" && $DC up -d )
+}
+
 zurueck() {
   finde_dc
   [ -f "$MERK" ] || { echo "Kein gemerkter Stand da — nichts, wohin zurück." >&2; exit 1; }
@@ -881,7 +893,7 @@ zurueck() {
   git -C "$APP/repo" checkout "$ziel" || exit 1
   if ! rueckfall_nehmen "$ziel"; then
     echo "Baue den alten Stand wieder ... (das dauert auf dem NAS mehrere Minuten)"
-    ( cd "$APP" && $DC up -d --build ) || {
+    bauen_und_starten || {
       echo >&2
       echo "FEHLER: der Bau des alten Standes ging schief." >&2
       if [ -n "$(app_bild)" ]; then

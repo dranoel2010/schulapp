@@ -1,6 +1,32 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  /**
+   * Schutz vor Versionsversatz nach einem Neubau („Failed to find Server
+   * Action“, Plan 6): Next hängt `?dpl=<id>` an seine Dateien und lädt bei
+   * abweichender ID hart neu. Die ID kommt nur aus der Umgebung — kein
+   * `git`-Aufruf hier: `.dockerignore` schließt `.git/` aus, und diese Datei
+   * wird bei `next start` erneut ausgewertet. Bau und Laufzeit müssen dieselbe
+   * ID sehen (Dockerfile reicht sie in beide Stufen; `nas.sh hoch` setzt sie
+   * auf den Commit). Leer schaltet Next den Schutz einfach ab.
+   *
+   * Lokal: `NEXT_DEPLOYMENT_ID=$(git rev-parse HEAD) npm run build`.
+   */
+  deploymentId: process.env.NEXT_DEPLOYMENT_ID || undefined,
+
+  /**
+   * Der Service Worker darf nie aus einem HTTP-Cache kommen: sonst sähe das
+   * Handy eine neue Fassung (VERSION, Daten-Cache) erst Stunden später.
+   */
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [{ key: "Cache-Control", value: "no-cache" }],
+      },
+    ];
+  },
+
   /** PGlite bringt eigene WASM-Dateien mit und darf nicht mitgebündelt werden. */
   serverExternalPackages: ["@electric-sql/pglite"],
 
