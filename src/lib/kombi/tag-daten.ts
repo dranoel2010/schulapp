@@ -1,5 +1,6 @@
 import { berlinDay } from "@/lib/dates";
 import type { WhStand } from "@/lib/kombi/wiederholen-text";
+import { offeneVorschlaege } from "@/recall/proposals";
 import { wiederholenStand } from "@/recall/themen";
 
 /**
@@ -18,6 +19,12 @@ export type TagDaten = {
   stand: string;
   /** Block „Wiederholen“ auf dem Überblick (Abschnitt E, V2 4.5) */
   wiederholen: WhStand;
+  /**
+   * Fragen in den offenen KI-Vorschlägen (`/abruf/eingang`). Übergang bis D/G:
+   * bis dahin führt nur die Zeile unter „Wiederholen“ zum Eingang und zu
+   * „Fragen und Termine“ (`/abruf/bausteine`, mit „Termine neu rechnen“).
+   */
+  abrufEingang: number;
 };
 
 /** Der App-Tag: der Berliner Kalendertag von „jetzt minus 4 Stunden“. */
@@ -27,5 +34,7 @@ export function appTagVon(now: Date): string {
 
 export async function ladeTag(userId: string, now: Date): Promise<TagDaten> {
   const tag = appTagVon(now);
-  return { tag, stand: now.toISOString(), wiederholen: await wiederholenStand(userId, tag) };
+  const [wiederholen, vorschlaege] = await Promise.all([wiederholenStand(userId, tag), offeneVorschlaege(userId)]);
+  const abrufEingang = vorschlaege.reduce((s, v) => s + v.fragen.length, 0);
+  return { tag, stand: now.toISOString(), wiederholen, abrufEingang };
 }

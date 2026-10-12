@@ -7,6 +7,8 @@ import { asc, eq, inArray } from "drizzle-orm";
 
 import { arbeitsblaetter, exams, freePeriods, lessons, subjectTopics, subjects } from "@/db/schema";
 import { protokollieren } from "@/lib/protokoll";
+import { guessEpochSubject, loadWeek } from "@/lib/timetable";
+import { epochenFach } from "@/recall/source";
 import { recallAttempts, recallItems, recallSchedule } from "@/recall/schema";
 import { urteilFesthalten, versuchFesthalten } from "@/recall/sessions";
 import {
@@ -14,11 +16,15 @@ import {
   berlinStunde,
   faelligeThemen,
   fragenZumThema,
+  istThemaSchluessel,
+  leerStand,
   naechsterTerminThema,
   naechsterTerminUeberhaupt,
   themaTagesbericht,
+  themaSchluessel,
   wiederholenStand,
 } from "@/recall/themen";
+import { whLeerText } from "@/lib/kombi/wiederholen-text";
 
 /**
  * Wiederholen nach Themen (Plan E, Tests aus 3.4): Sortierung, Alias-Kette,
@@ -266,6 +272,86 @@ describe("Termine und Stand", () => {
       text: "Für heute durch. Nächstes Thema Dienstag.",
       ok: true,
     });
+  });
+});
+
+describe("Tisch öffnet ohne Fälliges", () => {
+  it("mit Fach: „In ⟨Fach⟩ ist heute nichts fällig.“; ohne Fach der Satz des Überblicks", async () => {
+    const n = await testNutzer("LeerTisch");
+    const f = await fach(n, "Biologie", "Bio");
+    await frage(n, f, await thema(n, f, "Zelle"), ["2026-10-13"]);
+    assert.deepEqual(await faelligeThemen(n, MO, { subjectId: f }), []);
+
+    const mitFach = await leerStand(n, MO, f);
+    assert.equal(mitFach.fachName, "Biologie");
+    assert.equal(
+      whLeerText({ ferien: false, naechstesThema: "Dienstag", ...mitFach }),
+      "In Biologie ist heute nichts fällig.",
+    );
+
+    const ohneFach = await leerStand(n, MO, null);
+    assert.deepEqual(ohneFach, { fachName: null, durch: false });
+    assert.equal(
+      whLeerText({ ferien: false, naechstesThema: "Dienstag", ...ohneFach }),
+      "Heute ist nichts fällig. Nächstes Thema Dienstag.",
+    );
+
+    // nach einem Themenende sagt der Tisch dasselbe wie der Überblick
+    await protokollieren(n, MO, "thema_beendet", themaSchluessel(f, null), { n: 1 });
+    const durch = await leerStand(n, MO, null);
+    assert.equal(durch.durch, true);
+    assert.equal(
+      whLeerText({ ferien: false, naechstesThema: "Dienstag", ...durch }),
+      "Für heute durch. Nächstes Thema Dienstag.",
+    );
+    assert.equal(
+      whLeerText({ ferien: true, naechstesThema: null, ...durch }),
+      "In den Ferien wird nicht wiederholt.",
+    );
+  });
+
+  it("ein fremdes oder unbekanntes Fach hat keinen Namen", async () => {
+    const n = await testNutzer("FremdesFach");
+    assert.equal((await leerStand(n, MO, ge)).fachName, null);
+    assert.equal((await leerStand(n, MO, "kein-fach")).fachName, null);
+  });
+});
+
+describe("Themenschlüssel", () => {
+  it("nur eine Themen-id oder „ohne:“ mit einer Fach-id", () => {
+    assert.equal(istThemaSchluessel(tGe), true);
+    assert.equal(istThemaSchluessel(themaSchluessel(ge, null)), true);
+    for (const falsch of ["", "xyz", "ohne:", "ohne:abc", `ohne:${tGe}x`, `${tGe} `, `ohne: ${ge}`, "ohne:ohne:" + ge]) {
+      assert.equal(istThemaSchluessel(falsch), false, falsch);
+    }
+  });
+
+  it("ein falscher Schlüssel ergibt leere Antworten statt einer Ausnahme aus Postgres", async () => {
+    assert.deepEqual(await fragenZumThema(nutzer, MO, "ohne:abc"), []);
+    assert.equal(await naechsterTerminThema(nutzer, "ohne:abc", MO), null);
+    assert.equal((await themaTagesbericht(nutzer, "ohne:abc", MO)).fragen, 0);
+  });
+});
+
+describe("Epoche", () => {
+  it("epochenFach folgt derselben Regel wie die Epoche-Seite (erste Stunde, meiste Tage)", async () => {
+    const n = await testNutzer("Epoche");
+    const a = await fach(n, "Deutsch", "D");
+    const b = await fach(n, "Physik", "Ph");
+    // Deutsch an drei Tagen in der ersten Stunde, Physik an zwei und dazu oft in der zweiten
+    await testDb.insert(lessons).values([
+      ...[1, 2, 3].map((weekday) => ({ userId: n, subjectId: a, weekday, period: 1 })),
+      ...[4, 5].map((weekday) => ({ userId: n, subjectId: b, weekday, period: 1 })),
+      ...[1, 2, 3, 4, 5].map((weekday) => ({ userId: n, subjectId: b, weekday, period: 2 })),
+    ]);
+    const woche = await loadWeek(n);
+    const seite = guessEpochSubject(
+      woche.days.flatMap((d) => d.lessons.map((l) => ({ period: l.period, subjectId: l.subject.id }))),
+    );
+    assert.equal(seite, a);
+    assert.equal(await epochenFach(n), seite);
+    assert.equal(await epochenFach(nutzer), ge);
+    assert.equal(await epochenFach(await testNutzer("OhnePlan")), null);
   });
 });
 

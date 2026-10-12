@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -65,12 +65,12 @@ const THEMEN = {
   "fr-pc": { fach: "fr", titel: "Passé composé mit être", termine: ["2026-10-12", "2026-10-15"] },
 } as const;
 const BLAETTER = {
-  b1: { fach: "ge", titel: "Die Dampfmaschine", thema: "ge-en", datum: "2026-09-30" },
-  b2: { fach: "fr", titel: "Passé composé avec être", thema: "fr-pc", datum: "2026-10-01" },
-  b3: { fach: "ge", titel: "Spinnmaschine und Fabrik", thema: "ge-en", datum: "2026-10-02" },
-  b4: { fach: "fr", titel: "Exercices 3 et 4", thema: "fr-pc", datum: "2026-10-05" },
-  b5: { fach: "ge", titel: "Arbeit in der Fabrik, Kinderarbeit", thema: "ge-en", datum: "2026-10-06" },
-  b7: { fach: "ma", titel: "Scheitelpunktform, Übungen", thema: "ma-qf", datum: "2026-10-08" },
+  b1: { fach: "ge", titel: "Die Dampfmaschine", thema: "ge-en", datum: "2026-09-30", seiten: 2 },
+  b2: { fach: "fr", titel: "Passé composé avec être", thema: "fr-pc", datum: "2026-10-01", seiten: 1 },
+  b3: { fach: "ge", titel: "Spinnmaschine und Fabrik", thema: "ge-en", datum: "2026-10-02", seiten: 2 },
+  b4: { fach: "fr", titel: "Exercices 3 et 4", thema: "fr-pc", datum: "2026-10-05", seiten: 1 },
+  b5: { fach: "ge", titel: "Arbeit in der Fabrik, Kinderarbeit", thema: "ge-en", datum: "2026-10-06", seiten: 3 },
+  b7: { fach: "ma", titel: "Scheitelpunktform, Übungen", thema: "ma-qf", datum: "2026-10-08", seiten: 2 },
 } as const;
 
 const ohneKlammern = (s: string) => s.replace(/[{}]/g, "");
@@ -122,18 +122,14 @@ for (const [k, t] of Object.entries(THEMEN)) {
 }
 
 // ── Blätter mit Abschrift ────────────────────────────────────────────────────
+// Seitenzahl wie im Prototyp (`BLAETTER0`, Z. 1170): die Abschrift steht auf
+// Seite 1, weitere Seiten sind gelesen und leer ("" heißt gelesen).
 const seiteVon: Record<string, string> = {};
 for (const [k, b] of Object.entries(BLAETTER)) {
   const [da] = await db
-    .select({ id: materials.id, seite: materialPages.id })
+    .select({ id: materials.id })
     .from(materials)
-    .leftJoin(materialPages, eq(materialPages.materialId, materials.id))
     .where(and(eq(materials.userId, userId), eq(materials.title, b.titel)));
-  if (da?.seite) {
-    seiteVon[k] = da.seite;
-    continue;
-  }
-  const text = (ABSCHRIFT[k] ?? []).map(([, s]) => ohneKlammern(s)).join("\n\n");
   const mid =
     da?.id ??
     (
@@ -142,11 +138,20 @@ for (const [k, b] of Object.entries(BLAETTER)) {
         .values({ userId, subjectId: fachId[b.fach], title: b.titel, capturedOn: b.datum, filedAt: new Date() })
         .returning({ id: materials.id })
     )[0].id;
-  const [seite] = await db
-    .insert(materialPages)
-    .values({ materialId: mid, sortOrder: 0, width: 1200, height: 1600, byteSize: 1, image: leer, reading: leer, thumb: leer, transcript: text })
-    .returning({ id: materialPages.id });
-  seiteVon[k] = seite.id;
+  const vorhanden = await db
+    .select({ id: materialPages.id, sortOrder: materialPages.sortOrder })
+    .from(materialPages)
+    .where(eq(materialPages.materialId, mid))
+    .orderBy(asc(materialPages.sortOrder));
+  const text = (ABSCHRIFT[k] ?? []).map(([, s]) => ohneKlammern(s)).join("\n\n");
+  for (let n = vorhanden.length; n < b.seiten; n += 1) {
+    const [seite] = await db
+      .insert(materialPages)
+      .values({ materialId: mid, sortOrder: n, width: 1200, height: 1600, byteSize: 1, image: leer, reading: leer, thumb: leer, transcript: n === 0 ? text : "" })
+      .returning({ id: materialPages.id, sortOrder: materialPages.sortOrder });
+    vorhanden.push(seite);
+  }
+  seiteVon[k] = vorhanden[0].id;
   await db.insert(materialTopics).values({ materialId: mid, subjectTopicId: themaId[b.thema] }).onConflictDoNothing();
 }
 

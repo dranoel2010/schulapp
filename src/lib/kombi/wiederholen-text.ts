@@ -39,5 +39,21 @@ export function whText(durch: boolean, naechstesThema: string | null): string {
   return durch ? `Für heute durch.${nd}` : `Heute ist nichts fällig.${nd}`;
 }
 
+/**
+ * Der Toast, wenn der Tisch beim Öffnen nichts Fälliges findet (V2 6.7;
+ * Prototyp `openTisch`, Z. 4243): Ferien, sonst mit Fach „In ⟨Fach⟩ ist heute
+ * nichts fällig.“, ohne Fach der Satz des Überblicks (`whText`).
+ */
+export function whLeerText(d: {
+  ferien: boolean;
+  fachName: string | null;
+  durch: boolean;
+  naechstesThema: string | null;
+}): string {
+  if (d.ferien) return FERIEN_TEXT;
+  if (d.fachName) return `In ${d.fachName} ist heute nichts fällig.`;
+  return whText(d.durch, d.naechstesThema);
+}
+
 export const LEER_TEXT = "Noch keine Fragen. Sie entstehen aus den Blättern eines Themas.";
 export const FERIEN_TEXT = "In den Ferien wird nicht wiederholt.";

@@ -46,6 +46,10 @@ export type WiederholenAntwort = {
   themen: ThemaKurz[];
   /** „Nächstes Thema Dienstag“: Wochentag oder Datum, sonst null */
   naechstesThema: string | null;
+  /** nur ohne fällige Themen: Name des Fachs aus `?fach=`, sonst null */
+  fachName: string | null;
+  /** nur ohne fällige Themen: heute schon ein Thema beendet („Für heute durch.“) */
+  durch: boolean;
   /** Fragen des ersten Themas, gleich mitgeschickt */
   lauf: ThemaLauf | null;
 };
@@ -56,4 +60,6 @@ export type BlattImSheet = {
   seiten: number;
   /** Abschrift je Seite; null = noch nicht gelesen */
   abschrift: (string | null)[];
+  /** der letzte Lauf des Lesers scheiterte, Seiten ohne Abschrift („Abschrift fehlgeschlagen“) */
+  fehlgeschlagen: boolean;
 };

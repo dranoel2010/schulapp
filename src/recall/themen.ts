@@ -1,10 +1,13 @@
 import { and, asc, eq, gt, gte, inArray, isNull, lt, lte } from "drizzle-orm";
 
 import { db } from "@/db";
-import { arbeitsblaetter, lessons, subjectTopics, type ThemaArt } from "@/db/schema";
+import { arbeitsblaetter, subjectTopics, type ThemaArt } from "@/db/schema";
 import { addDays, berlinDay } from "@/lib/dates";
 import { naechsteKlausur } from "@/recall/items";
+import { istId } from "@/recall/ids";
 import {
+  epochenFach,
+  fachName,
   fragenText,
   freePeriodToday,
   protokollVomTag,
@@ -78,6 +81,16 @@ export type FaelligesThema = {
 
 export const themaSchluessel = (subjectId: string, topicId: string | null): string =>
   topicId ?? `ohne:${subjectId}`;
+
+/**
+ * Ist das ein Themenschlüssel, wie `themaSchluessel()` ihn baut — die id
+ * eines Fach-Themas oder `ohne:` mit der id eines Fachs? Alles andere ist
+ * kein Thema (und darf nie als uuid an Postgres gehen).
+ */
+export function istThemaSchluessel(key: string): boolean {
+  const id = key.startsWith("ohne:") ? key.slice(5) : key;
+  return id === id.trim() && istId(id);
+}
 
 
 // ── Zeitfenster eines App-Tags ───────────────────────────────────────────────
@@ -169,6 +182,7 @@ async function fragenIdsZumThema(
   aufloesen: (id: string | null) => Thema | null,
   key: string,
 ): Promise<string[]> {
+  if (!istThemaSchluessel(key)) return [];
   const ohne = key.startsWith("ohne:") ? key.slice(5) : null;
   const zeilen = await db
     .select({ id: recallItems.id, subjectId: recallItems.subjectId, subjectTopicId: recallItems.subjectTopicId })
@@ -181,30 +195,6 @@ async function fragenIdsZumThema(
       ),
     );
   return zeilen.filter((z) => schluesselVon(aufloesen, z) === key).map((z) => z.id);
-}
-
-/**
- * Das Fach des Hauptunterrichts: das Fach, das in der ersten Stunde an den
- * meisten Tagen steht. Dieselbe Regel wie `guessEpochSubject()`
- * (`/stundenplan/epoche`); Abschnitt B zieht sie als `epochenFach()` nach
- * `src/lib/timetable.ts` — dann gehört dieser Aufruf dorthin.
- */
-async function epochenFachId(userId: string): Promise<string | null> {
-  const zeilen = await db
-    .select({ subjectId: lessons.subjectId })
-    .from(lessons)
-    .where(and(eq(lessons.userId, userId), eq(lessons.period, 1)));
-  const zaehler = new Map<string, number>();
-  for (const z of zeilen) zaehler.set(z.subjectId, (zaehler.get(z.subjectId) ?? 0) + 1);
-  let bestes: string | null = null;
-  let meiste = 0;
-  for (const [id, n] of zaehler) {
-    if (n > meiste) {
-      meiste = n;
-      bestes = id;
-    }
-  }
-  return bestes;
 }
 
 type BlattStand = {
@@ -333,7 +323,12 @@ export async function faelligeThemen(
   const { gruppen, blaetter, aufloesen } = await gruppiert(userId, heute, optionen.subjectId);
   if (gruppen.size === 0) return [];
 
-  // Angefangen: heutige Versuche an Fragen dieses Themas
+  // Angefangen: heutige Versuche an Fragen dieses Themas (Plan 3.4). Bewusste
+  // Abweichung vom Prototyp: dort gilt ein Thema schon als angefangen, wenn der
+  // Tisch es nur geöffnet hat (`persistSession` setzt `started`), auch ohne
+  // Antwort. Hier zählt erst ein Versuch — es gibt keine Sitzungstabelle und
+  // keinen Protokolltyp fürs Öffnen; wer ohne Antwort schließt, sieht weiter
+  // „Zuerst …“ statt „Weiter mit …“.
   const versuche = await versucheDesTages(userId, heute);
   const versuchtIds = [...new Set(versuche.flatMap((v) => (v.itemId ? [v.itemId] : [])))];
   const angefangeneKeys = new Set<string>();
@@ -348,7 +343,7 @@ export async function faelligeThemen(
   const faecher = [...new Set([...gruppen.values()].map((g) => g.subjectId))];
   const [klausuren, epoche] = await Promise.all([
     Promise.all(faecher.map(async (id) => [id, await naechsteKlausur(userId, id, heute)] as const)),
-    epochenFachId(userId),
+    epochenFach(userId),
   ]);
   const klausurJeFach = new Map(klausuren);
 
@@ -503,7 +498,30 @@ export async function wiederholenStand(userId: string, heute: string): Promise<W
   if (!eine) return { kind: "leer" };
   const themen = await faelligeThemen(userId, heute);
   if (themen.length) return { kind: "knopf", n: themen.length, sub: whUnterzeile(themen[0]) };
-  const [protokoll, nd] = await Promise.all([protokollVomTag(userId, heute), naechstesThemaText(userId, heute)]);
-  const durch = protokoll.some((e) => e.typ === "thema_beendet");
+  const [durch, nd] = await Promise.all([heuteDurch(userId, heute), naechstesThemaText(userId, heute)]);
   return { kind: "text", text: whText(durch, nd), ok: durch };
+}
+
+/** „Für heute durch.“: wurde heute (App-Tag) schon ein Thema beendet? */
+export async function heuteDurch(userId: string, heute: string): Promise<boolean> {
+  const protokoll = await protokollVomTag(userId, heute);
+  return protokoll.some((e) => e.typ === "thema_beendet");
+}
+
+/**
+ * Was der Tisch sagt, wenn er beim Öffnen nichts Fälliges findet (V2 6.7,
+ * Prototyp `openTisch`, Z. 4243): mit Fach dessen Name („In Mathematik ist
+ * heute nichts fällig.“), ohne Fach der Satz des Überblicks („Für heute
+ * durch. …“ nach einem Themenende, sonst „Heute ist nichts fällig. …“).
+ */
+export async function leerStand(
+  userId: string,
+  heute: string,
+  subjectId: string | null,
+): Promise<{ fachName: string | null; durch: boolean }> {
+  const [name, durch] = await Promise.all([
+    subjectId ? fachName(userId, subjectId) : Promise.resolve(null),
+    heuteDurch(userId, heute),
+  ]);
+  return { fachName: name, durch };
 }

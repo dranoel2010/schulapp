@@ -37,7 +37,7 @@ export function TischEbene() {
       closeMenu: () => api.current.closeMenu(),
       closeSheet: () => api.current.closeSheet(),
       sheetOffen: () => !!document.getElementById("sheet")?.classList.contains("open"),
-      blattAnsehen: (id) => api.current.openSheet(<BlattSheet id={id} />, true),
+      blattAnsehen: (blatt) => api.current.openSheet(<BlattSheet blatt={blatt} />, true),
       neuLaden: () => api.current.neuLaden(),
     });
     const ab = api.current.registriere("tisch", (o) => {
@@ -102,7 +102,7 @@ export function TischEbene() {
         <div className="t-blatt" id="tBlatt">
           <div className="tb-view" id="tbVorschau">
             <p style={{ fontSize: 15, lineHeight: 1.4, fontWeight: 450, textAlign: "center", paddingTop: 24 }}>
-              Das Blatt wird gerade gebaut.
+              Für dieses Thema ließ sich heute kein Blatt bauen.
             </p>
             <button className="tb-art" type="button" id="tbArt">
               Dieses Thema lieber abfragen

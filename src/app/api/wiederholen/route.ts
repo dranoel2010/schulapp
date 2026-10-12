@@ -6,11 +6,14 @@ import {
   appTagVon,
   faelligeThemen,
   fragenZumThema,
+  istThemaSchluessel,
+  leerStand,
   naechstesThemaText,
   naechsterTerminThema,
   themaTagesbericht,
 } from "@/recall/themen";
 import { freePeriodToday } from "@/lib/free-days";
+import { istId } from "@/recall/ids";
 
 /**
  * Was der Tisch zum Wiederholen braucht (Plan E, 3.4):
@@ -19,6 +22,11 @@ import { freePeriodToday } from "@/lib/free-days";
  *   Reihenfolge und gleich die Fragen des ersten Themas;
  * - `GET /api/wiederholen?thema=<key>` — die Fragen eines Themas
  *   („Fertig, weiter“).
+ *
+ * Ist nichts fällig, kommen der Fachname (bei `?fach=`) und `durch` (heute
+ * schon ein Thema beendet) mit, damit der Tisch denselben Satz sagt wie der
+ * Prototyp. Ein Schlüssel, der keiner ist, ergibt 400 statt einer Ausnahme
+ * aus Postgres.
  *
  * Die Musterlösung reist nicht mit (A2): sie kommt erst nach dem Versuch aus
  * `versuchThemaAction()`. Nur lesen, kein Termin wird hier geschrieben.
@@ -55,11 +63,12 @@ export async function GET(request: NextRequest) {
 
   const thema = sp.get("thema");
   if (thema) {
-    if (thema.length > 60) return Response.json({ ok: false }, { status: 400, headers: HEADERS });
+    if (!istThemaSchluessel(thema)) return Response.json({ ok: false }, { status: 400, headers: HEADERS });
     return Response.json({ ok: true, lauf: await lauf(user.id, heute, thema) }, { headers: HEADERS });
   }
 
-  const fach = sp.get("fach") ?? undefined;
+  const fach = sp.get("fach") || undefined;
+  if (fach && !istId(fach)) return Response.json({ ok: false }, { status: 400, headers: HEADERS });
   const [themen, naechstesThema, ferien] = await Promise.all([
     faelligeThemen(user.id, heute, { subjectId: fach }),
     naechstesThemaText(user.id, heute),
@@ -76,12 +85,15 @@ export async function GET(request: NextRequest) {
     angefangen: t.angefangen,
     blattAngefangen: t.blattAngefangen,
   }));
+  const leer = kurz.length ? { fachName: null, durch: false } : await leerStand(user.id, heute, fach ?? null);
   const antwort: WiederholenAntwort = {
     ok: true,
     heute,
     ferien: !!ferien,
     themen: kurz,
     naechstesThema,
+    fachName: leer.fachName,
+    durch: leer.durch,
     lauf: kurz[0] ? await lauf(user.id, heute, kurz[0].key) : null,
   };
   return Response.json(antwort, { headers: HEADERS });

@@ -149,6 +149,8 @@ h1.hl .swap{grid-area:1/1;font-family:var(--sans);font-size:28px;line-height:1.1
 .wh-slot{display:grid}
 .wh-slot > *{grid-area:1/1}
 .wh + .blk{margin-top:12px}
+/* Übergang bis D/G: Eingang und „Fragen und Termine“ unter „Wiederholen“ */
+.abruf-uebergang{margin-top:8px}
 /* Streifen bis an den Bildschirmrand: die Zellen sind breit genug für ganze Wörter wie "Scheitelpunktform" */
 .thumbs{position:relative;display:flex;gap:12px;margin-right:calc(-1 * var(--pad));padding-right:var(--pad);overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scroll-padding-left:0}
 .thumbs::-webkit-scrollbar{display:none}

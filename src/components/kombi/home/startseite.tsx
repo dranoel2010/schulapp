@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect } from "react";
 
 import { WiederholenBlock } from "@/components/kombi/home/wiederholen";
@@ -50,8 +51,34 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
         {/* Abschnitt E: der Block „Wiederholen“; Abschnitt B setzt ihn in den Überblick */}
         <div className="mode on" id="m-ueberblick">
           <WiederholenBlock stand={(kombi.tagDaten ?? daten)?.wiederholen} />
+          <AbrufUebergang eingang={(kombi.tagDaten ?? daten)?.abrufEingang ?? 0} />
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Übergang bis D/G (Plan 2.2: Zeilen aus Fach, Klausur und Einstellungen):
+ * Seit /abruf nach / umleitet, führen nur diese Zeilen in der Gestalt von
+ * „Und eine weitere …“ zu den wartenden KI-Fragen und zu „Fragen und
+ * Termine“ (/abruf/bausteine, mit „Termine neu rechnen“). Bisher stand „n
+ * Fragen warten im Eingang“ ganz oben auf /abruf. Mit den Zeilen aus 2.2
+ * entfällt dieser Block.
+ */
+function AbrufUebergang({ eingang }: { eingang: number }) {
+  return (
+    <div className="abruf-uebergang">
+      {eingang > 0 ? (
+        <Link className="textline more" href="/abruf/eingang">
+          {eingang === 1 ? "Eine Frage wartet im Eingang" : `${eingang} Fragen warten im Eingang`}
+          <Icon name="chevron_right" />
+        </Link>
+      ) : null}
+      <Link className="textline more" href="/abruf/bausteine">
+        Fragen und Termine
+        <Icon name="chevron_right" />
+      </Link>
     </div>
   );
 }

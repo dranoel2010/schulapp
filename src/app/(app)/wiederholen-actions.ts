@@ -7,7 +7,7 @@ import { todayInBerlin } from "@/lib/dates";
 import { protokollieren } from "@/lib/protokoll";
 import { retireItem } from "@/recall/items";
 import { urteilFesthalten, versuchFesthalten } from "@/recall/sessions";
-import { appTagVon } from "@/recall/themen";
+import { appTagVon, istThemaSchluessel } from "@/recall/themen";
 
 /**
  * Die Actions des Tisches beim Wiederholen (Modell 23, Plan E).
@@ -80,7 +80,7 @@ export async function urteilThemaAction(attemptId: string, sass: boolean): Promi
 export async function themaBeendenAction(key: string, n: number): Promise<{ ok: boolean; protokollId?: string }> {
   const user = await requireUser();
   const p = z
-    .object({ key: z.string().min(1).max(60), n: z.number().int().min(0).max(10_000) })
+    .object({ key: z.string().refine(istThemaSchluessel), n: z.number().int().min(0).max(10_000) })
     .safeParse({ key, n });
   if (!p.success) return { ok: false };
   const protokollId = await protokollieren(user.id, appTagVon(new Date()), "thema_beendet", p.data.key, {

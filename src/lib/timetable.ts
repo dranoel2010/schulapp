@@ -658,3 +658,36 @@ export async function switchEpoch(
 
   return treffer.length;
 }
+
+/**
+ * Welches Fach die App für den laufenden Hauptunterricht (die Epoche) hält —
+ * vorher in der Epoche-Seite, seit Modell 23 auch für die Morgenansicht
+ * („Hauptunterricht · Industrialisierung“, Plan B) und später die Zeile.
+ *
+ * Geraten wird über die erste Stunde: das Fach, das dort an den meisten Tagen
+ * steht (an einer Waldorfschule ist die erste Stunde der Hauptunterricht).
+ * Das ist nur eine Vorbelegung — trifft sie nicht zu, stellt man sie auf der
+ * Epoche-Seite in einem Griff um.
+ */
+export function guessEpochSubject(
+  stunden: readonly { period: number; subjectId: string }[],
+): string | null {
+  const zaehler = new Map<string, number>();
+
+  for (const stunde of stunden) {
+    if (stunde.period !== 1) continue;
+    zaehler.set(stunde.subjectId, (zaehler.get(stunde.subjectId) ?? 0) + 1);
+  }
+
+  let bestes: string | null = null;
+  let meiste = 0;
+
+  for (const [subjectId, anzahl] of zaehler) {
+    if (anzahl > meiste) {
+      meiste = anzahl;
+      bestes = subjectId;
+    }
+  }
+
+  return bestes;
+}

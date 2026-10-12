@@ -1,8 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-import { blattHolen } from "@/components/kombi/tisch/daten";
 import type { BlattImSheet } from "@/components/kombi/tisch/typen";
 import { fxTeile } from "@/lib/kombi/text";
 
@@ -10,30 +7,11 @@ import { fxTeile } from "@/lib/kombi/text";
  * „Blatt ansehen“ von der Rückseite einer Karte: das Blatt als Sheet von
  * unten auf dem Tisch (Prototyp `openSheet` mit `abschriftEl`, Z. 3236 und
  * 3335): Titel, „Fach, n Seiten“, darunter die Abschrift. Ohne Abschrift
- * steht „Abschrift folgt“.
+ * steht „Abschrift folgt“, nach einem gescheiterten Lauf „Abschrift
+ * fehlgeschlagen“ (`abschriftEl`, Z. 3238). Die Daten sind beim Öffnen schon
+ * da: der Tisch ruft `openSheet` erst mit dem fertigen Blatt auf.
  */
-export function BlattSheet({ id }: { id: string }) {
-  const [blatt, setBlatt] = useState<BlattImSheet | null>(null);
-  const [fehler, setFehler] = useState(false);
-
-  useEffect(() => {
-    let weg = false;
-    blattHolen(id).then(
-      (b) => {
-        if (!weg) setBlatt(b);
-      },
-      () => {
-        if (!weg) setFehler(true);
-      },
-    );
-    return () => {
-      weg = true;
-    };
-  }, [id]);
-
-  if (fehler) return <p className="p-sub">Keine Verbindung</p>;
-  if (!blatt) return null;
-
+export function BlattSheet({ blatt }: { blatt: BlattImSheet }) {
   const absaetze = blatt.abschrift
     .filter((t): t is string => !!t && t.trim().length > 0)
     .flatMap((t) => t.split(/\n\s*\n/))
@@ -48,7 +26,7 @@ export function BlattSheet({ id }: { id: string }) {
       </p>
       <div className="abschrift">
         {absaetze.length === 0 ? (
-          <p className="p-sub">Abschrift folgt</p>
+          <p className="p-sub">{blatt.fehlgeschlagen ? "Abschrift fehlgeschlagen" : "Abschrift folgt"}</p>
         ) : (
           absaetze.map((a, i) => (
             <p key={i} style={{ whiteSpace: "pre-line" }}>

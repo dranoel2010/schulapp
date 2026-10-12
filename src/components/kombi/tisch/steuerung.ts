@@ -2,15 +2,15 @@
 
 import { flushSync } from "react-dom";
 
-import { laufHolen, wiederholenHolen } from "@/components/kombi/tisch/daten";
-import type { FrageKarte, ThemaKurz, ThemaLauf } from "@/components/kombi/tisch/typen";
+import { blattHolen, blattVorwaermen, laufHolen, wiederholenHolen } from "@/components/kombi/tisch/daten";
+import type { BlattImSheet, FrageKarte, ThemaKurz, ThemaLauf } from "@/components/kombi/tisch/typen";
 import { whSetzen } from "@/components/kombi/tisch/wh-stand";
 import { E, buzz, moveTo, reduce, rubber, springOpts, swapText, vvStable } from "@/lib/kombi/motion";
 import { TAG, dm, fxTeile, wd } from "@/lib/kombi/text";
 import { themeColor } from "@/lib/kombi/theme-color";
 import {
-  FERIEN_TEXT,
   fragenText,
+  whLeerText,
   whText,
   whUnterzeile,
   type WhStand,
@@ -53,7 +53,8 @@ export type TischDeps = {
   closeMenu: () => void;
   closeSheet: () => void;
   sheetOffen: () => boolean;
-  blattAnsehen: (materialId: string) => void;
+  /** das Sheet „Blatt ansehen“ öffnen — erst mit fertigen Daten (Plan 2.4 Punkt 6 und 7) */
+  blattAnsehen: (blatt: BlattImSheet) => void;
   neuLaden: () => Promise<void>;
 };
 
@@ -281,10 +282,7 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
       h("span", { class: "stamp r" }, "Saß"),
     ) as Karte;
 
-    ansehen.addEventListener("click", () => {
-      const id = el._geloest?.materialId;
-      if (id) deps.blattAnsehen(id);
-    });
+    ansehen.addEventListener("click", () => blattOeffnen(el));
     heftBtn.addEventListener("click", () => {
       const open = quote.hidden;
       const sc = heftBtn.closest<HTMLElement>(".c-back")!;
@@ -292,6 +290,9 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
       const before = below.map((x) => x.getBoundingClientRect().top);
       quote.hidden = !open;
       heftBtn.setAttribute("aria-expanded", String(open));
+      /* das Blatt schon holen: „Blatt ansehen“ öffnet das Sheet dann gleich mit Inhalt */
+      const mid = el._geloest?.materialId;
+      if (open && mid) blattVorwaermen(mid);
       fitStack({ grow: open });
       /* der aufgeklappte Teil scrollt sanft ins Bild, mit "Blatt ansehen" und "Stand so nicht im Heft" */
       if (open)
@@ -317,6 +318,30 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     cb.addEventListener("scroll", () => moreHint(cb), { passive: true });
     setCardAccess(el);
     return el;
+  }
+
+  /**
+   * „Blatt ansehen“: das Sheet fährt erst mit fertigen Daten ein (vorgewärmt
+   * beim Aufklappen von „Stelle im Blatt“). Scheitert der Abruf, erscheint
+   * kein Sheet, sondern der Toast „Keine Verbindung“ mit „Erneut“ (Plan 2.4
+   * Punkt 7).
+   */
+  let blattLaedt = false;
+  function blattOeffnen(el: Karte) {
+    const id = el._geloest?.materialId;
+    if (!id || blattLaedt) return;
+    blattLaedt = true;
+    blattHolen(id).then(
+      (b) => {
+        blattLaedt = false;
+        if (T.offen && topCard() === el) deps.blattAnsehen(b);
+      },
+      () => {
+        blattLaedt = false;
+        if (T.offen && topCard() === el)
+          deps.toast("Keine Verbindung", () => blattOeffnen(el), "Keine Verbindung", "Erneut");
+      },
+    );
   }
 
   /** Die Rückseite füllen, sobald die Lösung vom Server da ist (A2). */
@@ -569,6 +594,23 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     drehen(top, p, dunno);
   }
 
+  /**
+   * Die Rückseite nach der Drehung einmal neu setzen. Gefüllt wird sie, wenn
+   * sie hochkant steht (90°); Chrome behält die Lage der Zeilen aus diesem
+   * Moment, und die zweite Lösungszeile und der Verwechslungssatz standen
+   * danach um einen Gerätepixel höher als im Prototyp, der die Rückseite vor
+   * der Drehung füllt (gemessen: gleiche Maße, anderes Raster; erst ein neues
+   * Setzen gleicht es an). Unsichtbar, solange niemand auf der Rückseite steht.
+   */
+  function frischSetzen(top: Karte) {
+    const back = top.querySelector<HTMLElement>(".face.back")!;
+    const cb = back.querySelector<HTMLElement>(".c-back")!;
+    if (back.contains(document.activeElement) || cb.scrollTop !== 0) return;
+    back.style.display = "none";
+    void back.offsetHeight;
+    back.style.display = "";
+  }
+
   function drehen(top: Karte, p: Promise<VersuchAntwort>, dunno: boolean) {
     const flipEl = top.querySelector<HTMLElement>(".sc-flip")!;
     const lift = top.querySelector<HTMLElement>(".sc-lift")!;
@@ -623,6 +665,9 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
       });
       alt.cancel();
       hebt.play();
+      dreh.finished.then(() => {
+        if (topCard() === top) frischSetzen(top);
+      }, () => {});
     };
     dreh.finished.then(
       () => {
@@ -960,9 +1005,13 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
 
   /**
    * Platz des Arbeitsblatts (Abschnitt H baut Vorschau, Druck und „Wie lief
-   * es?“). Bis dahin steht dort der ruhige Satz aus Plan H, „Das Blatt wird
-   * gerade gebaut.“, und der vorhandene Weg „Dieses Thema lieber abfragen“,
-   * der für heute auf Karten umschaltet, ohne `art` zu speichern.
+   * es?“). Bis dahin baut niemand ein Blatt; dort steht deshalb der Satz
+   * für ein gescheitertes Blatt aus Plan H, „Für dieses Thema ließ sich heute
+   * kein Blatt bauen.“, und nicht „Das Blatt wird gerade gebaut.“, das ein
+   * Warten verspräche. Darunter der vorhandene Weg „Dieses Thema lieber
+   * abfragen“, der für heute auf Karten umschaltet, ohne `art` zu speichern.
+   * Bis H muss er ihn bei jedem Übungsthema tippen — deshalb geht vor H
+   * nichts auf das NAS (Plan 4).
    */
   function renderBlattPlatz() {
     const t = thema();
@@ -1238,14 +1287,7 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     }
     if (nr !== oeffnet || T.offen) return;
     if (!daten.themen.length) {
-      const fachName = fach ? daten.themen[0]?.fach : null;
-      deps.toast(
-        daten.ferien
-          ? FERIEN_TEXT
-          : fachName
-            ? `In ${fachName} ist heute nichts fällig.`
-            : whText(false, daten.naechstesThema),
-      );
+      deps.toast(whLeerText({ ...daten, fachName: fach ? daten.fachName : null }));
       return;
     }
     T.themen = daten.themen.slice();

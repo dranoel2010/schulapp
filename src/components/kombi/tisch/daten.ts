@@ -18,9 +18,9 @@ async function holen<T>(url: string): Promise<T> {
   return json as T;
 }
 
-function ausVorrat<T>(url: string, neu: boolean): Promise<T> {
+function ausVorrat<T>(url: string, neu: boolean, gilt = 10_000): Promise<T> {
   const v = vorrat.get(url);
-  if (v && Date.now() - v.zeit < 10_000) {
+  if (v && Date.now() - v.zeit < gilt) {
     if (!neu) vorrat.delete(url);
     return v.p as Promise<T>;
   }
@@ -48,7 +48,19 @@ export async function laufHolen(key: string): Promise<ThemaLauf> {
   return r.lauf;
 }
 
+const blattUrl = (id: string) => `/api/wiederholen/blatt?id=${encodeURIComponent(id)}`;
+/* Ein Blatt ändert sich beim Lesen der Lösung nicht: das Vorgewärmte gilt eine Minute */
+const BLATT_GILT = 60_000;
+
+/**
+ * Beim Aufklappen von „Stelle im Blatt“: das Blatt schon holen, damit
+ * „Blatt ansehen“ das Sheet gleich mit Inhalt öffnet (Plan 2.4 Punkt 6).
+ */
+export function blattVorwaermen(id: string): void {
+  void ausVorrat<{ ok: true; blatt: BlattImSheet }>(blattUrl(id), true, BLATT_GILT).catch(() => {});
+}
+
 export async function blattHolen(id: string): Promise<BlattImSheet> {
-  const r = await holen<{ ok: true; blatt: BlattImSheet }>(`/api/wiederholen/blatt?id=${encodeURIComponent(id)}`);
+  const r = await ausVorrat<{ ok: true; blatt: BlattImSheet }>(blattUrl(id), true, BLATT_GILT);
   return r.blatt;
 }
