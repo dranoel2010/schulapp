@@ -1,239 +1,230 @@
 @import "tailwindcss";
 
-/* ==========================================================================
-   Tokens
+/* Tailwind sucht Klassen im ganzen Repo. Die Entwürfe gehören nicht dazu:
+   ihre Klassennamen (etwa .ring, der Abhakkreis) würden sonst als
+   Tailwind-Utilities mitgebaut und legten sich über die Klassen aus
+   kombi.css. `ring` braucht die Shell selbst als Klassennamen. */
+@source not "../../entwurf-modelle";
+@source not "../../entwurf-richtungen";
+@source not inline("ring");
 
-   Jede Farbe steht hier genau einmal: hell in :root, dunkel als --dark-*
-   daneben und weiter unten angewendet. Über @theme inline werden daraus
-   Tailwind-Klassen (bg-surface, text-muted, border-border, bg-accent …).
-   Deshalb braucht in den Komponenten praktisch nichts eine dark:-Variante —
-   wer bg-surface schreibt, ist in beiden Modi richtig.
+/* ==========================================================================
+   Tokens von Modell 23 — wörtlich aus dem Prototyp
+   (entwurf-modelle/23-kombi-v2/index.html, Z. 13–84). Hell auf :root,
+   dunkel nach System, `data-theme` nur als Prüfschalter (Kriterium 62).
+   Abweichung: --sans/--serif zeigen auf die Variablen von next/font, dazu
+   die Feder als --ease-spring/--dur-spring.
+   ========================================================================== */
+
+:root{
+  --bg:#F7F7F5; --raise:#EEEEEB; --raise-2:#E4E4E0; --sheet:#FFFFFF;
+  --line:rgba(20,20,24,.10); --line-strong:rgba(20,20,24,.20);
+  --ink:#18181B; --ink-2:#52525B; --ink-3:#6B6B72; --mark:rgba(24,24,27,.06);
+  --accent:#2A44C0; --on-accent:#FFFFFF; --accent-fill:#2A44C0; --on-accent-fill:#FFFFFF;
+  --dock:#18181B; --dock-edge:transparent; --dock-text:#F7F7F5; --dock-muted:#A1A1AA; --dock-line:#3F3F46;
+  --quiet:rgba(24,24,27,.06); --error:#B3261E; --scrim:rgba(24,24,27,.32); --camera:#0B0B0C;
+  --table:#2A44C0; --t-on:#F4F6FF; --t-fill:rgba(244,246,255,.10); --t-fill-2:rgba(244,246,255,.18); --t-sheet:#FFFFFF;
+  --t-wrong:rgba(8,12,44,.34);
+  --card:#FFFFFF; --card-ink:#12183A; --card-ink-2:#5A6185; --card-field:#F1F3FA; --card-line:rgba(18,24,58,.12);
+  --known:#FFFFFF; --known-ink:#12183A; --known-ink-2:#5A6185;
+  --menu-shadow:0 -1px 0 rgba(24,24,27,.05),0 24px 60px -12px rgba(24,24,27,.26);
+  --pop-shadow:0 0 0 1px var(--line),0 18px 40px -14px rgba(24,24,27,.32);
+  --toast-shadow:0 0 0 1px var(--line-strong),0 12px 30px -12px rgba(24,24,27,.30);
+  --dock-shadow:0 1px 2px rgba(24,24,27,.06),0 10px 26px -14px rgba(24,24,27,.28);
+  --thumb-edge:var(--line);
+  --card-shadow:0 18px 40px -12px rgba(0,0,0,.42);
+  --card-edge:transparent;
+  /* Papier des Arbeitsblatts: bleibt in beiden Schemata hell, weil es gedruckt wird */
+  --a4-paper:#FFFFFF; --a4-ink:#16181E; --a4-ink-2:#4B505E; --a4-ink-3:#676C7A; --a4-line:#C3C7D1; --a4-accent:#2A44C0;
+  --a4-grid:#C6CBD6; --a4-grid-edge:#9FA4B2; --a4-rule:#B5BAC6;
+  --ease-out:cubic-bezier(0.23,1,0.32,1);
+  --ease-drawer:cubic-bezier(0.32,0.72,0,1);
+  --ease-io:cubic-bezier(0.77,0,0.175,1);
+  --ease-grow:cubic-bezier(0.6,0,0.2,1);
+  --ease-flip:cubic-bezier(0.2,0.8,0.2,1);
+  --pad:22px;
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-b:max(16px,env(safe-area-inset-bottom,0px));
+  --top:max(var(--safe-t),10px);
+  --foot-space:calc(52px + var(--safe-b) + 10px);
+  --sans:var(--font-sans),system-ui,sans-serif;
+  --serif:var(--font-serif),serif;
+  /* die Feder spring(520, 42) als linear()-Kurve, 47 Stützpunkte (motion.ts) */
+  --ease-spring:linear(0, 0.0361, 0.0944, 0.1650, 0.2410, 0.3178, 0.3924, 0.4628, 0.5280, 0.5874, 0.6409, 0.6887, 0.7309, 0.7681, 0.8007, 0.8290, 0.8536, 0.8749, 0.8933, 0.9091, 0.9226, 0.9342, 0.9441, 0.9526, 0.9598, 0.9659, 0.9711, 0.9756, 0.9793, 0.9825, 0.9852, 0.9875, 0.9895, 0.9911, 0.9925, 0.9937, 0.9947, 0.9955, 0.9962, 0.9968, 0.9973, 0.9977, 0.9981, 0.9984, 0.9986, 0.9989, 0.9990, 1.0000);
+  --dur-spring:392ms;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141416; --raise:#202023; --raise-2:#2A2A2E; --sheet:#1C1C1F;
+    --line:rgba(244,244,245,.10); --line-strong:rgba(244,244,245,.20);
+    --ink:#EDEDEF; --ink-2:#B4B4BB; --ink-3:#92929A; --mark:rgba(255,255,255,.06);
+    --accent:#8D9CFF; --on-accent:#0E1120; --accent-fill:#3B54D6; --on-accent-fill:#F4F6FF;
+    --dock:#0B0B0C; --dock-edge:rgba(244,244,245,.14); --dock-text:#EDEDEF; --dock-muted:#8E8E96; --dock-line:#2A2A2E;
+    --error:#F2B8B5; --scrim:rgba(0,0,0,.5); --quiet:rgba(244,244,245,.07);
+    --table:#121A4E; --t-sheet:#1B2147; --t-wrong:rgba(0,0,0,.42);
+    --card:#232A52; --card-ink:#F4F6FF; --card-ink-2:#AAB1C9; --card-field:#2D355F; --card-line:rgba(244,246,255,.14);
+    --known:#EEF0F7; --known-ink:#12183A;
+    --menu-shadow:0 0 0 1px var(--line-strong);
+    --pop-shadow:0 0 0 1px var(--line-strong);
+    --toast-shadow:0 0 0 1px var(--line-strong),0 12px 30px -12px rgba(0,0,0,.6);
+    --dock-shadow:0 0 0 1px var(--dock-edge);
+    --thumb-edge:var(--line-strong);
+    --card-shadow:0 18px 40px -12px rgba(0,0,0,.55);
+    --card-edge:rgba(244,246,255,.10);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141416; --raise:#202023; --raise-2:#2A2A2E; --sheet:#1C1C1F;
+  --line:rgba(244,244,245,.10); --line-strong:rgba(244,244,245,.20);
+  --ink:#EDEDEF; --ink-2:#B4B4BB; --ink-3:#92929A; --mark:rgba(255,255,255,.06);
+  --accent:#8D9CFF; --on-accent:#0E1120; --accent-fill:#3B54D6; --on-accent-fill:#F4F6FF;
+  --dock:#0B0B0C; --dock-edge:rgba(244,244,245,.14); --dock-text:#EDEDEF; --dock-muted:#8E8E96; --dock-line:#2A2A2E;
+  --error:#F2B8B5; --scrim:rgba(0,0,0,.5); --quiet:rgba(244,244,245,.07);
+  --table:#121A4E; --t-sheet:#1B2147; --t-wrong:rgba(0,0,0,.42);
+  --card:#232A52; --card-ink:#F4F6FF; --card-ink-2:#AAB1C9; --card-field:#2D355F; --card-line:rgba(244,246,255,.14);
+  --known:#EEF0F7; --known-ink:#12183A;
+  --menu-shadow:0 0 0 1px var(--line-strong);
+  --pop-shadow:0 0 0 1px var(--line-strong);
+  --toast-shadow:0 0 0 1px var(--line-strong),0 12px 30px -12px rgba(0,0,0,.6);
+  --dock-shadow:0 0 0 1px var(--dock-edge);
+  --thumb-edge:var(--line-strong);
+  --card-shadow:0 18px 40px -12px rgba(0,0,0,.55);
+  --card-edge:rgba(244,246,255,.10);
+}
+
+/* Grundwerte, wörtlich aus Z. 86–101. Die Regeln auf Elementen liegen in
+   @layer base: sonst überstimmten sie (ungeschichtet) die Tailwind-Utilities
+   der noch nicht umgebauten Seiten, etwa jedes p-4 durch *{padding:0}. */
+@layer base {
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;overscroll-behavior:none;background:var(--bg)}
+  body{height:100dvh;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.4;font-weight:450;
+    font-synthesis:none;-webkit-font-smoothing:antialiased;overscroll-behavior:none}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:inherit;
+    touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+  input,textarea{font:inherit;color:inherit}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+}
+.ic{display:inline-grid;place-items:center;width:22px;height:22px;flex:none;line-height:0}
+.ic svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;overflow:visible}
+.ic.s20{width:20px;height:20px}
+.ic.s18{width:18px;height:18px}
+.c{font-variant-numeric:proportional-nums}
+time,.tn,.t-count,.t-clock,.lbbtn,.whbtn .n,.avg,.total,.grade-row b,.pstack .n,.t-of,.split{font-variant-numeric:tabular-nums}
+[hidden]{display:none !important}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ==========================================================================
+   Brücke für die noch nicht umgebauten Seiten (bis Abschnitt G): die alten
+   Namen zeigen auf die neuen Tokens. So bleiben sie in beiden Schemata
+   lesbar. Am Ende von G fallen die alten Namen weg.
    ========================================================================== */
 
 :root {
-  color-scheme: light;
-
-  /* Flächen — warmes Off-White statt kaltem Grau */
-  --background: #faf9f7;
-  --surface: #ffffff;
-  --surface-muted: #f2f1ee;
-
-  /* Text */
-  --foreground: #1c1917;
-  --muted: #6d6762;
-  --subtle: #857f78;
-
-  /* Linien */
-  --border: #e7e4e0;
-  --border-strong: #d4d0cb;
-
-  /* Akzent — der einzige bunte Ton der Oberfläche.
-     Bunt sind sonst nur die Fächerfarben aus src/lib/colors.ts. */
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
-  --accent-foreground: #ffffff;
-
-  /* Signale */
-  --danger: #dc2626;
-  --danger-hover: #b91c1c;
-  --danger-foreground: #ffffff;
+  --background: var(--bg);
+  --surface: var(--sheet);
+  --surface-muted: var(--raise);
+  --foreground: var(--ink);
+  --muted: var(--ink-2);
+  --subtle: var(--ink-3);
+  --border: var(--line);
+  --border-strong: var(--line-strong);
+  /* --accent ist derselbe Name wie im Prototyp: #2A44C0 / #8D9CFF */
+  --accent-hover: var(--accent);
+  --accent-foreground: var(--on-accent);
+  --danger: var(--error);
+  --danger-hover: var(--error);
+  --danger-foreground: var(--bg);
   --success: #15803d;
   --warning: #b45309;
-
-  /* Abgetönte Flächen werden abgeleitet und stimmen dadurch in beiden
-     Modi automatisch — color-mix() wird erst beim Benutzen ausgerechnet. */
-  --accent-soft: color-mix(in oklab, var(--accent) 10%, var(--surface));
-  --danger-soft: color-mix(in oklab, var(--danger) 10%, var(--surface));
-
+  --accent-soft: color-mix(in oklab, var(--accent) 10%, var(--bg));
+  --danger-soft: color-mix(in oklab, var(--error) 10%, var(--bg));
   --ring: var(--accent);
-
-  /* --------------------------------------------------------------------
-     Die dunkle Palette. Hier nur abgelegt, angewendet wird sie weiter
-     unten — damit jeder Farbwert im Projekt an genau einer Stelle steht.
-     -------------------------------------------------------------------- */
-  --dark-background: #121110;
-  --dark-surface: #1b1a18;
-  --dark-surface-muted: #24221f;
-
-  --dark-foreground: #f2f0ed;
-  --dark-muted: #a29c95;
-  --dark-subtle: #8a837b;
-
-  --dark-border: #302d2a;
-  --dark-border-strong: #423e39;
-
-  --dark-accent: #6366f1;
-  --dark-accent-hover: #818cf8;
-  --dark-accent-foreground: #ffffff;
-
-  --dark-danger: #ef4444;
-  --dark-danger-hover: #f87171;
-  --dark-danger-foreground: #ffffff;
-  --dark-success: #4ade80;
-  --dark-warning: #fbbf24;
 }
-
-/* --------------------------------------------------------------------------
-   Hell oder dunkel
-
-   Ohne Wahl folgt die App dem Gerät. Trifft der Nutzer in den Einstellungen
-   eine Wahl, schreibt der Server sie als data-theme ins <html> — schon beim
-   Ausliefern, damit die Seite nicht erst hell erscheint und dann umspringt.
-
-   Die Rangfolge muss in BEIDE Richtungen gelten: ausdrücklich hell schlägt
-   ein dunkel gestelltes Gerät, ausdrücklich dunkel schlägt ein helles. Genau
-   dafür stehen die beiden Regeln unten. Ihre Inhalte sind gleich — wer eine
-   Farbe ergänzt, ergänzt sie oben bei --dark-* und in beiden Listen.
-   -------------------------------------------------------------------------- */
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-  color-scheme: dark;
-
-  --background: var(--dark-background);
-  --surface: var(--dark-surface);
-  --surface-muted: var(--dark-surface-muted);
-
-  --foreground: var(--dark-foreground);
-  --muted: var(--dark-muted);
-  --subtle: var(--dark-subtle);
-
-  --border: var(--dark-border);
-  --border-strong: var(--dark-border-strong);
-
-  --accent: var(--dark-accent);
-  --accent-hover: var(--dark-accent-hover);
-  --accent-foreground: var(--dark-accent-foreground);
-
-  --danger: var(--dark-danger);
-  --danger-hover: var(--dark-danger-hover);
-  --danger-foreground: var(--dark-danger-foreground);
-  --success: var(--dark-success);
-  --warning: var(--dark-warning);
+    --success: #4ade80;
+    --warning: #fbbf24;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
+  --success: #4ade80;
+  --warning: #fbbf24;
+}
 
-  --background: var(--dark-background);
-  --surface: var(--dark-surface);
-  --surface-muted: var(--dark-surface-muted);
-
-  --foreground: var(--dark-foreground);
-  --muted: var(--dark-muted);
-  --subtle: var(--dark-subtle);
-
-  --border: var(--dark-border);
-  --border-strong: var(--dark-border-strong);
-
-  --accent: var(--dark-accent);
-  --accent-hover: var(--dark-accent-hover);
-  --accent-foreground: var(--dark-accent-foreground);
-
-  --danger: var(--dark-danger);
-  --danger-hover: var(--dark-danger-hover);
-  --danger-foreground: var(--dark-danger-foreground);
-  --success: var(--dark-success);
-  --warning: var(--dark-warning);
+:root[data-theme="light"] {
+  color-scheme: light;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-surface: var(--surface);
-  --color-surface-muted: var(--surface-muted);
+  --color-background: var(--bg);
+  --color-surface: var(--sheet);
+  --color-surface-muted: var(--raise);
 
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
-  --color-subtle: var(--subtle);
+  --color-foreground: var(--ink);
+  --color-muted: var(--ink-2);
+  --color-subtle: var(--ink-3);
 
-  --color-border: var(--border);
-  --color-border-strong: var(--border-strong);
+  --color-border: var(--line);
+  --color-border-strong: var(--line-strong);
 
   --color-accent: var(--accent);
-  --color-accent-hover: var(--accent-hover);
+  --color-accent-hover: var(--accent);
   --color-accent-soft: var(--accent-soft);
-  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-foreground: var(--on-accent);
 
-  --color-danger: var(--danger);
-  --color-danger-hover: var(--danger-hover);
+  --color-danger: var(--error);
+  --color-danger-hover: var(--error);
   --color-danger-soft: var(--danger-soft);
-  --color-danger-foreground: var(--danger-foreground);
+  --color-danger-foreground: var(--bg);
   --color-success: var(--success);
   --color-warning: var(--warning);
 
-  --color-ring: var(--ring);
+  --color-ring: var(--accent);
 
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-
-  /* Eigene Radien-Namen, damit rounded-lg & Co. ihre gewohnte Bedeutung
-     behalten: rounded-control für Knöpfe und Eingabefelder,
-     rounded-card für Karten, rounded-pill für Chips. */
   --radius-control: 0.75rem;
   --radius-card: 1rem;
   --radius-pill: 9999px;
 
-  /* Schatten sparsam — Karten tragen nur eine Haarlinie. */
   --shadow-soft: 0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 3px 0 rgb(0 0 0 / 0.05);
   --shadow-lift: 0 8px 24px -10px rgb(0 0 0 / 0.22);
 }
 
 @layer base {
   /* Tailwind v4 setzt Rahmen auf currentColor. Ein Standardton spart in
-     jeder Komponente das border-border. */
+     den alten Komponenten das border-border. */
   *,
   ::before,
   ::after {
-    border-color: var(--border);
-  }
-
-  * {
-    /* Android blitzt sonst bei jeder Berührung einen grauen Kasten auf. */
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  html {
-    -webkit-text-size-adjust: 100%;
-  }
-
-  body {
-    background-color: var(--background);
-    color: var(--foreground);
-    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  }
-
-  /* Ein Fokusring für alles — Knöpfe, Links, Eingabefelder. */
-  :focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
-    border-radius: 2px;
+    border-color: var(--line);
   }
 
   ::selection {
     background-color: color-mix(in oklab, var(--accent) 22%, transparent);
   }
-
-  h1,
-  h2,
-  h3 {
-    text-wrap: balance;
-  }
-
-  p {
-    text-wrap: pretty;
-  }
 }
 
-/* Einheitliche Seitenbreite: Handy randlos, am Laptop mittig und ruhig. */
-@utility page {
+/* Seiten ohne Shell (Anmeldung, Datenschutz, Offline, 404) scrollen wie
+   gewohnt; die Shell selbst legt den Körper fest (kombi.css: 100dvh, kein
+   Überlauf). */
+body:not(:has(#app)) {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+}
+
+/* Einheitliche Seitenbreite der alten Seiten ohne Shell. Hieß früher
+   `page` — der Name gehört jetzt der Nachschlage-Seite (kombi.css). */
+@utility seite {
   width: 100%;
   max-width: 36rem;
   margin-inline: auto;
   padding-inline: 1rem;
 }
 
-/* Für Leisten, die im Vollbild-Modus an den Bildschirmrand stoßen. */
 @utility pt-safe {
   padding-top: env(safe-area-inset-top);
 }

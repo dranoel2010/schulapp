@@ -21,7 +21,7 @@ export const metadata: Metadata = {
  */
 export default function DatenschutzPage() {
   return (
-    <main className="page mx-auto max-w-2xl space-y-6 py-12">
+    <main className="seite mx-auto max-w-2xl space-y-6 py-12">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight">Datenschutz</h1>
         <p className="text-sm text-muted">Stand: 5. Oktober 2026</p>

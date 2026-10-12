@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function NotFound() {
   return (
-    <main className="page flex flex-1 flex-col items-center justify-center py-16 text-center">
+    <main className="seite flex flex-1 flex-col items-center justify-center py-16 text-center">
       <svg
         viewBox="0 0 24 24"
         aria-hidden="true"
