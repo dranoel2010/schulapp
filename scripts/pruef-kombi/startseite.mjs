@@ -29,6 +29,11 @@ const FAELLE = [
   { name: "fr-0710", zeit: "07:10", tag: "2026-10-16" },
   { name: "mo-1930", zeit: "19:30", tag: "2026-10-12", proto: "skip" },
   { name: "fr-1930", zeit: "19:30", tag: "2026-10-16", proto: "skip" },
+  // „Morgen früh“ erreicht man erst über die Vorschläge der Zeile (D); bis
+  // dahin setzt der Prüfschalter die Ansicht direkt; im Prototyp der Weg über
+  // die Zeile: „morgen“ → Antwort → „Morgenansicht öffnen“ (Z. 2417).
+  { name: "mo-1930-frueh", zeit: "19:30", tag: "2026-10-12", proto: "skip", ansicht: "frueh" },
+  { name: "fr-1930-frueh", zeit: "19:30", tag: "2026-10-16", proto: "skip", ansicht: "frueh" },
   { name: "sa-0900", zeit: "09:00", tag: "2026-10-17" },
   { name: "ferien", zeit: "10:00", tag: "2026-10-27" },
 ];
@@ -86,6 +91,17 @@ for (const groesse of GROESSEN) {
       await proto.waitForTimeout(900);
       if (f.proto === "skip") {
         await proto.click("#skipBtn");
+        await proto.waitForTimeout(900);
+      }
+      if (f.ansicht) {
+        await app.evaluate((v) => window.__kombi.setView(v, { anim: false }), f.ansicht);
+        await proto.click("#field");
+        await proto.fill("#field", "morgen");
+        await proto.waitForTimeout(500);
+        await proto.locator("[role=option]", { hasText: "Stunden" }).last().click();
+        await proto.waitForTimeout(500);
+        await proto.locator("[role=option]", { hasText: "Morgenansicht öffnen" }).click();
+        await app.waitForTimeout(700);
         await proto.waitForTimeout(900);
       }
       const name = `${f.name}-${groesse}-${schema}`;

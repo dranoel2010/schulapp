@@ -24,6 +24,7 @@ import { Seite, SeitenInhalt } from "@/components/kombi/seite";
 import { ROUTE_STATT_STAPEL, seitenArt } from "@/components/kombi/seiten/registry";
 import { TischEbene } from "@/components/kombi/tisch";
 import { Zeile, type ZeileHandle } from "@/components/kombi/zeile";
+import { TOAST_MS } from "@/lib/kombi/aktion";
 import { E, moveTo, reduce, springOpts } from "@/lib/kombi/motion";
 import type { TagDaten } from "@/lib/kombi/tag-daten";
 import { themeColor, themeColorBeobachten } from "@/lib/kombi/theme-color";
@@ -233,7 +234,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
       toastTextRef.current.textContent = text;
       const t = toastZustand.current;
       t.fn = fn ?? null;
-      t.bis = Date.now() + 4500;
+      t.bis = Date.now() + TOAST_MS;
       t.desc = desc ?? text;
       t.undo = !!fn && label === "Rückgängig";
       toastActRef.current.hidden = !fn;
@@ -243,7 +244,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
       el.classList.add("on");
       document.body.classList.add("toast-on");
       clearTimeout(t.timer);
-      t.timer = setTimeout(() => hideToast(), 4500);
+      t.timer = setTimeout(() => hideToast(), TOAST_MS);
     },
     [hideToast],
   );
@@ -896,7 +897,9 @@ export function KombiShell({ children }: { children: ReactNode }) {
       openTisch: (o) => {
         const h = handler.current.get("tisch");
         if (h) h(o);
-        else navigiereEcht("/abruf/sitzung");
+        // Bis der Tisch kommt (F): der Lernblock dorthin, wo man ihn abhakt
+        // (Lernplan), das Wiederholen in die Abrufsitzung.
+        else navigiereEcht(o?.mode === "block" ? "/lernen" : "/abruf/sitzung");
       },
       setView: (ansicht, o) => {
         const h = handler.current.get("ansicht");

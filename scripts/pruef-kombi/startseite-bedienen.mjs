@@ -94,6 +94,60 @@ await page.waitForTimeout(900);
 const idNachher = await page.getAttribute("#ovHaList .task:nth-child(2)", "data-id");
 p.ok(idVorher === idNachher, `Rückgängig bringt dieselbe id zurück (${idNachher})`);
 
+// ── Wieder öffnen innerhalb der 350 ms: die Zeile bleibt stehen ────────────
+await uhr("19:30");
+await page.click("#ovHaList .task:first-child .check");
+await page.waitForTimeout(120);
+await page.click("#ovHaList .task:first-child .check");
+const wieder = [];
+// gemessen bei +0, +100, +200, +300, +600 ms
+for (const pause of [0, 100, 100, 100, 300]) {
+  if (pause) await page.waitForTimeout(pause);
+  wieder.push((await zeilen("#ovHaList")).length);
+}
+p.ok(wieder.every((n) => n === 2), `wieder geöffnet: beide Zeilen stehen durchgehend (${wieder.join(", ")})`);
+await page.waitForTimeout(800);
+await page.reload();
+await page.waitForTimeout(900);
+p.ok((await zeilen("#ovHaList")).length === 2, "wieder geöffnet: auch auf dem Server offen");
+
+// ── Löschen online, Rückgängig offline, „Erneut“ online ─────────────────────
+const idDel = await page.getAttribute("#ovHaList .task:nth-child(2)", "data-id");
+const textDel = (await zeilen("#ovHaList"))[1];
+await wisch("#ovHaList .task:nth-child(2) .t-front", -200);
+await page.waitForTimeout(500);
+await page.click("#ovHaList .task:nth-child(2) .del");
+await page.waitForTimeout(800);
+await ctx.setOffline(true);
+await page.click("#toastAct");
+await page.waitForTimeout(800);
+p.ok((await page.textContent("#toastText")) === "Nicht gespeichert", "offline Rückgängig: „Nicht gespeichert“");
+p.ok((await page.textContent("#toastAct")) === "Erneut", "… mit „Erneut“");
+p.ok((await zeilen("#ovHaList")).includes(textDel), "die Zeile steht, solange „Erneut“ angeboten wird");
+await ctx.setOffline(false);
+await page.click("#toastAct");
+await page.waitForTimeout(1500);
+p.ok((await zeilen("#ovHaList")).includes(textDel), "„Erneut“: die Zeile bleibt");
+await page.reload();
+await page.waitForTimeout(900);
+p.ok((await page.getAttribute("#ovHaList .task:nth-child(2)", "data-id")) === idDel, `„Erneut“ stellt mit alter id wieder her (${idDel})`);
+
+// ── Lernblock „Starten“: bis F in den Lernplan ─────────────────────────────
+if (await page.$("#lbBtn")) {
+  await Promise.all([page.waitForURL(/\/lernen$/, { timeout: 5000 }).catch(() => {}), page.click("#lbBtn")]);
+  p.ok(page.url().endsWith("/lernen"), `Starten führt in den Lernplan (${page.url()})`);
+} else {
+  p.ok(false, "Lernblockzeile fehlt um 19:30");
+}
+
+// ── Geschützte Leerzeichen vor „·“ (Plan 1.1) ───────────────────────────────
+await uhr("19:30");
+const lbk = await page.evaluate(() => document.querySelector("#lbRow .lbk")?.textContent ?? "");
+p.ok(lbk === "Lernblock\u00a0· ", `„Lernblock\\u00a0· “ (${JSON.stringify(lbk)})`);
+await uhr("07:10");
+const hu = await page.evaluate(() => [...document.querySelectorAll("#m-morgens em")].map((e) => e.textContent).find((t) => t.startsWith("Hauptunterricht")) ?? "");
+p.ok(!hu.includes("·") || hu.includes("\u00a0·"), `„Hauptunterricht\\u00a0· …“ (${JSON.stringify(hu)})`);
+
 // ── Wechsel über die Zeile: Wohin? → Überblick ──────────────────────────────
 await uhr("07:10");
 p.ok((await ansicht()) === "morgens", "07:10: Morgens");
@@ -129,12 +183,47 @@ await page.evaluate(() => {
 await page.waitForTimeout(1200);
 p.ok((await ansicht()) === "ueberblick", "nach Rückkehr: Wechsel (Ablauf fehlt bis C, also Überblick)");
 
+// ── Abend → nächster Morgen (V2 3.2, Kriterium 9) ──────────────────────────
+await uhr("19:30");
+p.ok((await ansicht()) === "ueberblick", "Mo 19:30: Überblick");
+await page.evaluate(async (b) => {
+  await fetch(`${b}/api/testuhr?zeit=07:10&tag=2026-10-13`, { redirect: "manual" });
+}, BASIS);
+await page.evaluate(() => {
+  Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
+  document.dispatchEvent(new Event("visibilitychange"));
+});
+await page.waitForTimeout(1500);
+const datumDi = await page.textContent("#wDate");
+p.ok((await ansicht()) === "morgens", `Di 07:10 nach Rückkehr: Morgens (${await ansicht()} | ${datumDi} | ${await h1()})`);
+p.ok(datumDi === "Dienstag, 13. Oktober", `Datum „${datumDi}“`);
+
+// ── Läuft der Fehler-Toast des Rückgängig ab, gilt das Löschen ──────────
+// (zuletzt, weil die Aufgabe danach fehlt)
+await uhr("19:30");
+await wisch("#ovHaList .task:nth-child(2) .t-front", -200);
+await page.waitForTimeout(500);
+await page.click("#ovHaList .task:nth-child(2) .del");
+await page.waitForTimeout(800);
+await ctx.setOffline(true);
+await page.click("#toastAct");
+await page.waitForTimeout(800);
+p.ok((await zeilen("#ovHaList")).includes(textDel), "offline Rückgängig: Zeile steht vorerst");
+await page.waitForTimeout(5000);
+p.ok(!(await zeilen("#ovHaList")).includes(textDel), "nach Ablauf des Fehler-Toasts ist die Zeile weg");
+await ctx.setOffline(false);
+await page.reload();
+await page.waitForTimeout(900);
+p.ok(!(await zeilen("#ovHaList")).includes(textDel), "… und auch auf dem Server gelöscht");
+
 // ── Zahnrad ─────────────────────────────────────────────────────────────────
 await page.click("#gearBtn");
 await page.waitForTimeout(1500);
 p.ok(page.url().endsWith("/einstellungen"), `Zahnrad öffnet die Einstellungen (${page.url()})`);
 
-p.ok(fehler.length === 0, `keine Konsolenfehler ${fehler.length ? JSON.stringify(fehler) : ""}`);
+// Offline gewollt: die abgewiesenen Aufrufe der Offline-Prüfung zählen nicht
+const echteFehler = fehler.filter((f) => !f.includes("ERR_INTERNET_DISCONNECTED"));
+p.ok(echteFehler.length === 0, `keine Konsolenfehler ${echteFehler.length ? JSON.stringify(echteFehler) : ""}`);
 
 // ── Kaltstart mit reduzierter Bewegung: nie html.pre (Plan B, Tests) ────────
 const rctx = await kontext(browser, { groesse: "390", schema: "light", reduziert: true, ohneSW: true });

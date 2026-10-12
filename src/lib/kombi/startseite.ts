@@ -161,7 +161,9 @@ export function headlineFor(v: Ansicht, d: TagDaten, aufgaben: readonly AufgabeT
     const w = v === "frueh" ? (diffDays(t, tag) === 1 ? "Morgen" : TAG[wd(tag)]) : "Heute";
     return n === 0 ? `${w} nichts abzugeben` : n === 1 ? `${w} eine Abgabe` : `${w} ${zahl(n)} Abgaben`;
   }
-  if (d.ferien) return `${d.ferien.titel} bis ${lang(d.ferien.bis)}`;
+  // Fest „Ferien bis …“ wie Prototyp Z. 1643 und V2 3.1/Kriterium 8 — auch bei
+  // freien Tagen mit eigenem Titel („Herbstferien“) oder Art „frei“.
+  if (d.ferien) return `Ferien bis ${lang(d.ferien.bis)}`;
   const ns = d.naechsterSchultag;
   const n = offeneFuer(d, aufgaben).length;
   const tn = tagName(ns, t);

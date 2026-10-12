@@ -14,7 +14,7 @@ import { Morgens } from "@/components/kombi/home/morgens";
 import { Ueberblick } from "@/components/kombi/home/ueberblick";
 import { Ueberschrift, type UeberschriftApi } from "@/components/kombi/home/ueberschrift";
 import { useKombi } from "@/components/kombi/kontext";
-import { RUECKSPRUNG_MS } from "@/lib/kombi/aktion";
+import { RUECKSPRUNG_MS, TOAST_MS } from "@/lib/kombi/aktion";
 import { buzz, E, flip, reduce } from "@/lib/kombi/motion";
 import {
   datumFuer,
@@ -247,23 +247,48 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
       };
       const aufruf = aufgabeLoeschenAction(id);
       let zurueckgenommen = false;
+      /** Läuft der Fehler-Toast des Rückgängig ab, gilt das Löschen doch (Plan 2.4, Punkt 9). */
+      let aufgeben: ReturnType<typeof setTimeout> | undefined;
+      const extraWeg = () => setExtra((x) => x.filter((y) => y.id !== id));
+      // Rückgängig: die Aufgabe mit ihrer alten id zurück (Plan 3.3). „Erneut“
+      // im Fehler-Toast ruft genau diesen Weg mit derselben Zeile wieder auf.
+      const wiederherstellen = async () => {
+        clearTimeout(aufgeben);
+        let r: Awaited<typeof aufruf> | null = null;
+        try {
+          r = await aufruf;
+        } catch {
+          r = null; // das Löschen selbst kam nicht an: die Aufgabe steht noch
+        }
+        try {
+          if (r?.ok) {
+            const w = await aufgabeWiederherstellenAction(r.zeile, r.protokollId);
+            if (!w.ok) throw new Error("abgewiesen");
+          }
+          await neuLaden();
+          extraWeg();
+        } catch {
+          fehlerToast("Nicht gespeichert", () => void wiederherstellen(), "Erneut");
+          // Die Zeile bleibt stehen, solange „Erneut“ angeboten wird
+          aufgeben = setTimeout(() => {
+            const s3 = scope();
+            const run = () =>
+              flushSync(() => {
+                extraWeg();
+                setWeg((w) => new Set(w).add(id));
+              });
+            if (s3) flip(s3, run, { duration: 340, easing: E.io });
+            else run();
+          }, TOAST_MS);
+        }
+      };
       toast(
         "Gelöscht",
         () => {
           zurueckgenommen = true;
           setExtra((x) => [...x.filter((y) => y.id !== id), a]);
           zurueckHolen();
-          void (async () => {
-            try {
-              const r = await aufruf;
-              if (r.ok) await aufgabeWiederherstellenAction(r.zeile, r.protokollId);
-              await neuLaden();
-            } catch {
-              fehlerToast("Nicht gespeichert", () => {}, "Erneut");
-            } finally {
-              setExtra((x) => x.filter((y) => y.id !== id));
-            }
-          })();
+          void wiederherstellen();
         },
         a.text,
       );
@@ -428,7 +453,10 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
       const alt = liveRef.current;
       liveRef.current = neu;
       if (document.querySelector("#tisch.open, #cam.open")) return;
-      if (neu !== alt && viewRef.current === alt) setView(neu);
+      // Solange der Ablauf fehlt, steht statt seiner der Überblick: beide
+      // Seiten gleich abbilden, sonst bliebe der Abend morgens stehen.
+      const eff = (x: Ansicht | null) => (x === "ablauf" && !ablaufDa() ? "ueberblick" : x);
+      if (eff(neu) !== eff(alt) && viewRef.current === eff(alt)) setView(neu);
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
@@ -457,7 +485,10 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
 
   // ── Malen ──────────────────────────────────────────────────────────────────
 
-  const ov = d ? ueberblickAufgaben(d, ordnung) : { gezeigt: [], zeilen: [] };
+  // Gehaltene Zeilen bleiben auf dem Überblick stehen, auch eine eben wieder
+  // geöffnete, deren alter Zustand „erledigt“ ist (Prototyp `keep`, Z. 1951).
+  const gehalten = useMemo(() => new Set(halten.keys()), [halten]);
+  const ov = d ? ueberblickAufgaben(d, ordnung, gehalten) : { gezeigt: [], zeilen: [] };
   const datum = d && view && view !== "ablauf" ? voll(datumFuer(view, d)) : d ? voll(d.tag) : "";
   const handlers = { onAbhaken: abhaken, onBearbeiten: bearbeiten, onLoeschen: loeschen };
 

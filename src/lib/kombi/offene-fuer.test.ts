@@ -119,6 +119,9 @@ describe("headlineFor (Prototyp Z. 1633)", () => {
       ferien: { bis: "2026-10-30", titel: "Ferien" },
     });
     assert.equal(headlineFor("ueberblick", fe, alle), "Ferien bis Freitag, 30.10.");
+    // auch mit eigenem Titel aus der Schulhomepage bleibt der Wortlaut des Prototyps
+    const herbst = { ...fe, ferien: { bis: "2026-10-30", titel: "Herbstferien" } };
+    assert.equal(headlineFor("ueberblick", herbst, alle), "Ferien bis Freitag, 30.10.");
   });
 
   it("Morgens zählt die Abgaben des Tages, offen wie erledigt", () => {
@@ -139,5 +142,17 @@ describe("moAbgaben", () => {
     const spaet = { ...geschichte, done: true, doneAt: "2026-10-12T05:12:00.000Z" };
     assert.deepEqual(moAbgaben([spaet, englisch], "2026-10-12").map((a) => a.fach), ["Englisch", "Geschichte"]);
     assert.deepEqual(moAbgaben([englisch, geschichte], "2026-10-12").map((a) => a.fach), ["Geschichte", "Englisch"]);
+  });
+});
+
+describe("ueberblickAufgaben mit gehaltenen Zeilen", () => {
+  const mo = daten({ tag: "2026-10-12", naechsterSchultag: "2026-10-13" });
+  it("eine eben wieder geöffnete Zeile (alter Zustand erledigt) bleibt stehen", () => {
+    // Reihenfolge-Stand während des Haltens: Mathe trägt noch done = true
+    const ordnung = [{ ...mathe, done: true }, deutsch];
+    const ohne = ueberblickAufgaben(mo, ordnung).gezeigt.map((a) => a.fach);
+    assert.deepEqual(ohne, ["Deutsch"]);
+    const mit = ueberblickAufgaben(mo, ordnung, new Set([mathe.id])).gezeigt.map((a) => a.fach);
+    assert.deepEqual(mit, ["Mathe", "Deutsch"]);
   });
 });

@@ -19,6 +19,9 @@ import { startTransition, useCallback, useOptimistic } from "react";
 
 export const RUECKSPRUNG_MS = 320;
 
+/** So lange steht ein Toast (Prototyp Z. 1601ff.). */
+export const TOAST_MS = 4500;
+
 export type FehlerToast = (text: string, erneut: () => void, label: string) => void;
 
 const warten = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
