@@ -51,6 +51,9 @@ export const ROUTE_STATT_STAPEL: Record<string, (p: Record<string, string>) => s
   faecher: () => "/faecher",
   fach: (p) => `/faecher/${p.id}`,
   einstellungen: () => "/einstellungen",
+  // Ziele der Zeile, die keine Nachschlage-Seiten sind (Plan 2.2)
+  eingang: () => "/material/eingang",
+  bausteine: () => "/abruf/bausteine",
 };
 
 export function seitenArt(art: string): SeitenArt | undefined {

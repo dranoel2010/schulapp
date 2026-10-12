@@ -19,11 +19,13 @@ import {
   type EbenenHandler,
   type EbenenName,
   type KombiApi,
+  type OeffnenOptionen,
 } from "@/components/kombi/kontext";
 import { Seite, SeitenInhalt } from "@/components/kombi/seite";
 import { ROUTE_STATT_STAPEL, seitenArt } from "@/components/kombi/seiten/registry";
 import { TischEbene } from "@/components/kombi/tisch";
 import { Zeile, type ZeileHandle } from "@/components/kombi/zeile";
+import { zuletztMerken } from "@/components/kombi/zeile/zuletzt";
 import { E, moveTo, reduce, springOpts } from "@/lib/kombi/motion";
 import type { TagDaten } from "@/lib/kombi/tag-daten";
 import { themeColor, themeColorBeobachten } from "@/lib/kombi/theme-color";
@@ -391,8 +393,10 @@ export function KombiShell({ children }: { children: ReactNode }) {
   const openPageRef = useRef<(art: string, params?: Record<string, string>) => void>(() => {});
 
   const openPage = useCallback(
-    (art: string, params: Record<string, string> = {}) => {
+    (art: string, params: Record<string, string> = {}, optionen?: OeffnenOptionen) => {
       clearTimeout(ausPopTimer.current);
+      // „Zuletzt geöffnet“ im Menü der Zeile (Prototyp `remember`)
+      zuletztMerken(art, params, optionen?.zuletzt);
       ausPop.current = false;
       zeileRef.current?.schliessen({ ausHistory: true });
       hideToast(true);
@@ -916,7 +920,13 @@ export function KombiShell({ children }: { children: ReactNode }) {
         }
         h?.({ ansicht, ...o });
       },
-      openZeile: () => zeileRef.current?.oeffnen(),
+      openZeile: (kontext) => zeileRef.current?.oeffnen(kontext),
+      undoJetzt: () => {
+        const t = toastZustand.current;
+        if (!t.fn || !t.undo || Date.now() >= t.bis) return null;
+        const fn = t.fn;
+        return { desc: t.desc, run: () => { hideToast(); fn(); } };
+      },
       closeMenu: () => zeileRef.current?.schliessen(),
       tagDaten,
       merkeTagDaten,

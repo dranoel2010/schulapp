@@ -162,13 +162,18 @@ export async function homeworkForRange(
   return rows.map(toItem);
 }
 
+/** Legt die Aufgabe an und gibt ihre id zurück (Rückgängig und Geistflug der Zeile brauchen sie). */
 export async function createHomework(
   userId: string,
   input: HomeworkInput,
-): Promise<void> {
+): Promise<string> {
   const values = await checkedValues(userId, input);
 
-  await db.insert(homework).values({ ...values, userId });
+  const [zeile] = await db
+    .insert(homework)
+    .values({ ...values, userId })
+    .returning({ id: homework.id });
+  return zeile.id;
 }
 
 export async function updateHomework(
