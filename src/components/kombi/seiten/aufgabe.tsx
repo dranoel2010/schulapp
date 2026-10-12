@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import {
   aufgabeLoeschenAction,
@@ -122,6 +122,15 @@ export function useAufgaben(daten: unknown) {
     },
     [kombi, setze, nachladen],
   );
+
+  // Ein Tipp irgendwo anders schließt eine aufgewischte Zeile (Prototyp Z. 1831).
+  useEffect(() => {
+    const zu = (e: MouseEvent) => {
+      if (offeneZeile && !offeneZeile.el.contains(e.target as Node)) offeneZeile.schliessen();
+    };
+    document.addEventListener("click", zu, true);
+    return () => document.removeEventListener("click", zu, true);
+  }, []);
 
   const anwenden = useCallback(
     (liste: AufgabeDaten[]) =>
