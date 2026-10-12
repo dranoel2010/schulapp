@@ -9,6 +9,7 @@ import {
   todayInBerlin,
 } from "@/lib/dates";
 import { isCronAuthorized } from "@/lib/cron-auth";
+import { zielCountdown, zielHeuteLernen } from "@/lib/erinnerung-ziel";
 import { blocksForDay, upcomingExams } from "@/lib/exams";
 import { freePeriodToday } from "@/lib/free-days";
 import { isPushConfigured, sendToUser, type PushPayload } from "@/lib/push";
@@ -162,7 +163,7 @@ function dailyMessage(blocks: PlannedBlock[]): PushPayload {
   return {
     title: blocks.length === 1 ? "Heute lernen" : `Heute lernen — ${total} min`,
     body: blocks.map(blockLine).join("\n"),
-    url: "/lernen",
+    url: zielHeuteLernen(blocks),
     tag: "schulapp-lernen",
   };
 }
@@ -186,7 +187,7 @@ function countdownMessage(exams: UpcomingExam[], today: string): PushPayload {
     return {
       title: `${examLabel(exam)} — ${formatCountdown(today, exam.date)}`,
       body: exam.title ? `${exam.title} · ${when}` : when,
-      url: "/lernen",
+      url: zielCountdown(exams),
       tag: "schulapp-countdown",
     };
   }
@@ -196,7 +197,7 @@ function countdownMessage(exams: UpcomingExam[], today: string): PushPayload {
     body: exams
       .map((exam) => `${examLabel(exam)} — ${formatCountdown(today, exam.date)}`)
       .join("\n"),
-    url: "/lernen",
+    url: zielCountdown(exams),
     tag: "schulapp-countdown",
   };
 }

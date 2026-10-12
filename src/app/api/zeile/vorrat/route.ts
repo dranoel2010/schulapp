@@ -1,3 +1,4 @@
+import { jetzt } from "@/lib/tag";
 import { zeilenVorrat } from "@/lib/kombi/zeilen-vorrat";
 import { getSessionUser } from "@/lib/session";
 
@@ -14,5 +15,5 @@ export async function GET() {
   if (!user) {
     return Response.json({ ok: false, error: "Nicht angemeldet." }, { status: 401, headers: HEADERS });
   }
-  return Response.json({ ok: true, vorrat: await zeilenVorrat(user.id, new Date()) }, { headers: HEADERS });
+  return Response.json({ ok: true, vorrat: await zeilenVorrat(user.id, await jetzt()) }, { headers: HEADERS });
 }

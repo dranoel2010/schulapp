@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/db";
@@ -14,6 +14,7 @@ import {
 } from "@/db/schema";
 import { isCalendarDate, todayInBerlin } from "@/lib/dates";
 import { freeDatesFrom } from "@/lib/free-days";
+import { blockAngefangen } from "@/lib/lernblock";
 import { normalizeTopics, topicKey } from "@/lib/topics";
 import {
   buildPlan,
@@ -311,9 +312,27 @@ export async function setTopics(
     }
   });
 
-  const removed = existing
+  const wegfallend = existing
     .filter((topic) => !keptIds.has(topic.id))
     .map((topic) => topic.id);
+
+  // Ein Thema mit angefangenem Block bleibt stehen, bis der Block beendet ist:
+  // an `exam_topics` hängen die Blöcke per cascade, und die Uhr ginge mit.
+  const gehalten =
+    wegfallend.length > 0
+      ? await db
+          .selectDistinct({ topicId: studyBlocks.topicId })
+          .from(studyBlocks)
+          .where(
+            and(
+              inArray(studyBlocks.topicId, wegfallend),
+              eq(studyBlocks.status, "open"),
+              or(isNotNull(studyBlocks.laeuftSeit), gt(studyBlocks.pauseMs, 0)),
+            ),
+          )
+      : [];
+  const halten = new Set(gehalten.map((zeile) => zeile.topicId));
+  const removed = wegfallend.filter((id) => !halten.has(id));
 
   if (updates.length === 0 && inserts.length === 0 && removed.length === 0) {
     return;
@@ -344,6 +363,30 @@ export async function setTopics(
  * Geschichte der Lernphase. Geplant wird nur, was davon noch übrig ist.
  */
 /**
+ * Ein Block, der beim Neuplanen stehen bleibt: erledigt, oder angefangen
+ * (die Uhr lief schon, Modell 23, Plan 3.5). Ein angefangener Block ist noch
+ * `open`, darf aber weder gelöscht noch verlegt werden — sonst ginge der
+ * Uhrstand verloren, ein Arbeitsblatt verlöre seinen Block, und die Einträge
+ * `lernblock_*` im Tagesprotokoll zeigten ins Leere. Seine Minuten zählen wie
+ * die eines erledigten als belegt.
+ */
+function blockSteht(block: StudyBlock): boolean {
+  return block.status === "done" || (block.status === "open" && blockAngefangen(block));
+}
+
+/** Offen und nicht angefangen: nur solche Blöcke plant das Neuverteilen um. */
+function frei(block: StudyBlock): boolean {
+  return block.status === "open" && !blockAngefangen(block);
+}
+
+/** SQL-Gegenstück zu `frei()` für das Löschen offener Blöcke. */
+const freiSql = and(
+  eq(studyBlocks.status, "open"),
+  isNull(studyBlocks.laeuftSeit),
+  eq(studyBlocks.pauseMs, 0),
+);
+
+/**
  * Minuten, die an einem Tag schon durch erledigte Blöcke dieser Prüfung
  * verbraucht sind. Gestrichene zählen nicht mit — die geben ihre Zeit wieder
  * frei.
@@ -351,7 +394,7 @@ export async function setTopics(
 function occupiedMinutes(blocks: StudyBlock[]): Record<string, number> {
   const byDay: Record<string, number> = {};
   for (const block of blocks) {
-    if (block.status !== "done") continue;
+    if (!blockSteht(block)) continue;
     byDay[block.date] = (byDay[block.date] ?? 0) + block.minutes;
   }
   return byDay;
@@ -445,7 +488,8 @@ export async function generatePlan(
     occupied,
   });
 
-  const settled = blocks.filter((block) => block.status !== "open");
+  // Erledigt, gestrichen oder angefangen: das bleibt stehen.
+  const settled = blocks.filter((block) => !frei(block));
 
   if (settled.length === 0) {
     // Nichts angefangen: der alte Plan darf komplett weichen.
@@ -515,9 +559,7 @@ export async function generatePlan(
   await db.transaction(async (tx) => {
     await tx
       .delete(studyBlocks)
-      .where(
-        and(eq(studyBlocks.examId, examId), eq(studyBlocks.status, "open")),
-      );
+      .where(and(eq(studyBlocks.examId, examId), freiSql));
     if (rows.length > 0) {
       await tx.insert(studyBlocks).values(rows);
     }
@@ -568,7 +610,8 @@ export async function catchUpMissed(
 
   // Die erledigten brauchen wir nicht zum Verschieben, aber um zu wissen,
   // an welchen Tagen schon Lernzeit verbraucht ist.
-  const open = all.filter((block) => block.status === "open");
+  // Angefangene Blöcke bleiben, wo sie sind (blockSteht).
+  const open = all.filter(frei);
   if (open.length === 0) return;
 
   const [occupied, excludedDates] = await Promise.all([
@@ -667,9 +710,7 @@ export async function moveOffFreeDays(
         .orderBy(asc(studyBlocks.date), asc(studyBlocks.sortOrder)),
     ]);
 
-    const open = all.filter(
-      (block) => block.status === "open" && block.date >= today,
-    );
+    const open = all.filter((block) => frei(block) && block.date >= today);
     if (!open.some((block) => free.has(block.date))) continue;
 
     const occupied = await occupiedAcrossExams(userId, exam.id, all);

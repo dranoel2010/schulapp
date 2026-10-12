@@ -11,7 +11,7 @@ import {
   eintragenZuruecknehmen,
   type AufgabeEingabe,
 } from "@/lib/kombi/aufgaben-zeile";
-import { appTagVon } from "@/lib/kombi/tag-daten";
+import { appTag, jetzt } from "@/lib/tag";
 
 /**
  * Server Actions der Zeile (Plan 3.9, D): Eintragen, Abhaken, Ändern und ihr
@@ -30,7 +30,7 @@ export async function aufgabeEintragenAction(e: AufgabeEingabe) {
   const user = await requireUser();
   const p = eingabe.safeParse(e);
   if (!p.success) return { ok: false as const, fehler: "Ungültig" };
-  return aufgabeEintragen(user.id, appTagVon(new Date()), p.data);
+  return aufgabeEintragen(user.id, appTag(await jetzt()), p.data);
 }
 
 export async function eintragenZuruecknehmenAction(aufgabeId: string, protokollId: string) {
@@ -42,7 +42,7 @@ export async function eintragenZuruecknehmenAction(aufgabeId: string, protokollI
 export async function aufgabeAbhakenAction(aufgabeId: string, done: boolean) {
   const user = await requireUser();
   if (!id.safeParse(aufgabeId).success || typeof done !== "boolean") return { ok: false as const, fehler: "Ungültig" };
-  return aufgabeAbhaken(user.id, appTagVon(new Date()), aufgabeId, done);
+  return aufgabeAbhaken(user.id, appTag(await jetzt()), aufgabeId, done);
 }
 
 export async function abhakenZuruecknehmenAction(aufgabeId: string, done: boolean, protokollId: string) {

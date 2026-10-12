@@ -2,6 +2,7 @@
 
 import type { ComponentType } from "react";
 
+import { KlausurenInhalt, KlausurInhalt, klausurTitel, klausurUntertitel } from "@/components/kombi/seiten/klausur";
 import { ProbeInhalt, probeTitel } from "@/components/kombi/seiten/probe";
 
 /**
@@ -42,14 +43,24 @@ export const SEITEN: Record<string, SeitenArt | undefined> = {
     titel: (p) => probeTitel(p),
     Inhalt: ProbeInhalt as ComponentType<SeitenInhaltProps>,
   },
+  // Abschnitt F
+  klausuren: {
+    url: () => "/klausuren",
+    titel: () => "Klausuren",
+    Inhalt: KlausurenInhalt as ComponentType<SeitenInhaltProps>,
+  },
+  klausur: {
+    url: (p) => `/klausuren/${encodeURIComponent(p.id ?? "")}`,
+    titel: klausurTitel,
+    untertitel: klausurUntertitel,
+    Inhalt: KlausurInhalt as ComponentType<SeitenInhaltProps>,
+  },
 };
 
 /** Bis G: welche Route eine Art heute noch ist. */
 export const ROUTE_STATT_STAPEL: Record<string, (p: Record<string, string>) => string> = {
   woche: () => "/stundenplan",
   hausaufgaben: () => "/hausaufgaben",
-  klausuren: () => "/klausuren",
-  klausur: (p) => `/klausuren/${p.id}`,
   noten: () => "/noten",
   notenfach: (p) => `/noten/fach/${p.id}`,
   ablage: () => "/material",

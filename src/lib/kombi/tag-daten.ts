@@ -8,6 +8,7 @@ import { freeLabel, freePeriodOn } from "@/lib/free-days";
 import { homeworkForRange, listHomework, type HomeworkItem } from "@/lib/homework";
 import { countInbox } from "@/lib/inbox";
 import { fachKurz } from "@/lib/kombi/fach-kurz";
+import { lernblockUeberblick } from "@/lib/kombi/lernblock-daten";
 import type {
   AufgabeT,
   BlattT,
@@ -135,7 +136,7 @@ export async function ladeTag(userId: string, now: Date): Promise<TagDaten> {
     alleStunden.map((s) => ({ period: s.period, subjectId: s.subject.id })),
   );
 
-  const [offen, bisNs, klausuren, heuteBloecke, verpasst, karten, korb, wiederholen, vorschlaege] = await Promise.all([
+  const [offen, bisNs, klausuren, heuteBloecke, verpasst, karten, korb, wiederholen, vorschlaege, klausurBlock] = await Promise.all([
     listHomework(userId),
     homeworkForRange(userId, tag, ns),
     listExams(userId, { heute: tag }),
@@ -145,6 +146,7 @@ export async function ladeTag(userId: string, now: Date): Promise<TagDaten> {
     countInbox(userId),
     wiederholenStand(userId, tag),
     offeneVorschlaege(userId),
+    frei ? Promise.resolve(null) : lernblockUeberblick(userId, tag),
   ]);
 
   // Offene Aufgaben und die erledigten bis zum nächsten Schultag (Morgens,
@@ -230,6 +232,7 @@ export async function ladeTag(userId: string, now: Date): Promise<TagDaten> {
         : null,
     blaetter,
     eingangskorb: korb,
+    klausurBlock,
     wiederholen,
     abrufEingang: vorschlaege.reduce((s, v) => s + v.fragen.length, 0),
   };

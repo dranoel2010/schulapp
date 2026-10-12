@@ -7,7 +7,8 @@ import { todayInBerlin } from "@/lib/dates";
 import { protokollieren } from "@/lib/protokoll";
 import { retireItem } from "@/recall/items";
 import { urteilFesthalten, versuchFesthalten } from "@/recall/sessions";
-import { appTagVon, istThemaSchluessel } from "@/recall/themen";
+import { appTag, jetzt } from "@/lib/tag";
+import { istThemaSchluessel } from "@/recall/themen";
 
 /**
  * Die Actions des Tisches beim Wiederholen (Modell 23, Plan E).
@@ -83,7 +84,7 @@ export async function themaBeendenAction(key: string, n: number): Promise<{ ok: 
     .object({ key: z.string().refine(istThemaSchluessel), n: z.number().int().min(0).max(10_000) })
     .safeParse({ key, n });
   if (!p.success) return { ok: false };
-  const protokollId = await protokollieren(user.id, appTagVon(new Date()), "thema_beendet", p.data.key, {
+  const protokollId = await protokollieren(user.id, appTag(await jetzt()), "thema_beendet", p.data.key, {
     n: p.data.n,
   });
   return { ok: true, protokollId };
@@ -95,6 +96,6 @@ export async function frageZurueckziehenAction(itemId: string): Promise<{ ok: bo
   const p = id.safeParse(itemId);
   if (!p.success) return { ok: false };
   const ok = await retireItem(user.id, p.data, "Stand so nicht im Heft");
-  if (ok) await protokollieren(user.id, appTagVon(new Date()), "frage_zurueckgezogen", p.data);
+  if (ok) await protokollieren(user.id, appTag(await jetzt()), "frage_zurueckgezogen", p.data);
   return { ok };
 }

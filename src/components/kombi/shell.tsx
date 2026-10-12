@@ -24,6 +24,7 @@ import {
 import { Seite, SeitenInhalt } from "@/components/kombi/seite";
 import { ROUTE_STATT_STAPEL, seitenArt } from "@/components/kombi/seiten/registry";
 import { TischEbene } from "@/components/kombi/tisch";
+import { LernblockTisch } from "@/components/kombi/tisch/lernblock-tisch";
 import { Zeile, type ZeileHandle } from "@/components/kombi/zeile";
 import { TOAST_MS } from "@/lib/kombi/aktion";
 import { festeSeiteVon, zuletztMerken } from "@/components/kombi/zeile/zuletzt";
@@ -515,8 +516,13 @@ export function KombiShell({ children }: { children: ReactNode }) {
         })
         .catch(() => {}),
     ];
-    const oben = [...ebenenRef.current].reverse().find((e) => e.typ === "stapel" && !e.geht);
-    if (oben && oben.typ === "stapel") {
+    const oben = [...ebenenRef.current].reverse().find((e) => !e.geht);
+    if (oben && oben.typ === "route") {
+      // Die oberste Ebene ist eine echte Route (direkter Aufruf, Push-Erinnerung,
+      // Neuladen ohne Stapel): ihre Daten kommen aus dem Server-Render, also
+      // rendert der Router sie neu (Plan 2.4, Punkt 2 erlaubt das für Routen).
+      router.refresh();
+    } else if (oben && oben.typ === "stapel") {
       const key = oben.key;
       auftraege.push(
         seiteHolen(oben.art, oben.params)
@@ -529,7 +535,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
       );
     }
     await Promise.all(auftraege);
-  }, [setzeEbenen]);
+  }, [setzeEbenen, router]);
 
   // ── Sheet (Prototyp Z. 3333–3366) ───────────────────────────────────────────
 
@@ -882,7 +888,8 @@ export function KombiShell({ children }: { children: ReactNode }) {
         else zeileRef.current?.oeffnen();
         return;
       }
-      if (e.key !== "Escape") return;
+      // Eine Ebene über der Shell (der Tisch) hat Escape schon für sich genommen
+      if (e.key !== "Escape" || e.defaultPrevented) return;
       if (sheetRef.current?.classList.contains("open")) sheetSchliessen();
       else if (zeileRef.current?.istOffen()) zeileRef.current.schliessen();
       else if (obersteEbene()) popPage();
@@ -918,7 +925,8 @@ export function KombiShell({ children }: { children: ReactNode }) {
         else navigiereEcht("/material");
       },
       openTisch: (o) => {
-        const h = handler.current.get("tisch");
+        // Der Lernblock (Abschnitt F) hat seine eigene Ebene auf demselben Tisch
+        const h = (o?.mode === "block" ? handler.current.get("lernblock") : undefined) ?? handler.current.get("tisch");
         if (h) h(o);
         // Bis der Tisch kommt (F): der Lernblock dorthin, wo man ihn abhakt
         // (Lernplan), das Wiederholen in die Abrufsitzung.
@@ -1054,6 +1062,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
 
       <KameraEbene />
       <TischEbene />
+      <LernblockTisch />
       <div id="druck" aria-hidden="true" />
     </KombiKontext.Provider>
   );

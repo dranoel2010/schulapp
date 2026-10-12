@@ -33,10 +33,9 @@ import type { ExamFieldErrors, ExamFormState } from "./exam-form";
  * Prüfung ans Vokabular ihres Fachs — daraus entstehen die Vorschläge, die beim
  * nächsten Mal unter dem Themenfeld stehen.
  *
- * Verwalten und Lernen sind getrennt: nach dem Anlegen geht es zum frisch
- * gebauten Lernplan unter /lernen, nach dem Bearbeiten und Löschen zurück in
- * die Liste. Weil jede Änderung den Plan betrifft, wird /lernen mit
- * aufgefrischt.
+ * Nach dem Anlegen und Bearbeiten geht es zur Klausurseite mit dem frisch
+ * gebauten Lernplan (Modell 23: /lernen gibt es nicht mehr), nach dem Löschen
+ * zurück in die Liste.
  *
  * Nach jedem erfolgreichen Speichern und Löschen wird der Google Kalender
  * angestoßen (`requestCalendarSync`) — er läuft, nachdem die Antwort draußen
@@ -134,10 +133,10 @@ export async function createExamAction(
   requestCalendarSync(user.id);
 
   revalidatePath("/klausuren");
-  revalidatePath("/lernen");
   revalidatePath("/");
-  // Genau dafür wurde die Prüfung eingetragen: der Lernplan steht jetzt da.
-  redirect("/lernen");
+  // Genau dafür wurde die Prüfung eingetragen: der Lernplan steht jetzt da —
+  // auf der Klausurseite (Modell 23: /lernen gibt es nicht mehr).
+  redirect(`/klausuren/${exam.id}`);
 }
 
 export async function updateExamAction(
@@ -209,9 +208,8 @@ export async function updateExamAction(
 
   revalidatePath("/klausuren");
   revalidatePath(`/klausuren/${examId}`);
-  revalidatePath("/lernen");
   revalidatePath("/");
-  redirect("/klausuren");
+  redirect(`/klausuren/${examId}`);
 }
 
 export async function deleteExamAction(examId: string): Promise<void> {
@@ -222,7 +220,6 @@ export async function deleteExamAction(examId: string): Promise<void> {
   requestCalendarSync(user.id);
 
   revalidatePath("/klausuren");
-  revalidatePath("/lernen");
   revalidatePath("/");
   redirect("/klausuren");
 }

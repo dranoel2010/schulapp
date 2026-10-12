@@ -1,3 +1,4 @@
+import type { LernblockUeberblick } from "@/lib/kombi/lernblock-daten";
 import type { WhStand } from "@/lib/kombi/wiederholen-text";
 import { cap, diffDays, kurz, lang, TAG, wd, weekdayOrDate, zahl } from "@/lib/kombi/text";
 
@@ -106,6 +107,8 @@ export type TagDaten = {
   blaetter: BlattT[];
   /** Blätter im Eingangskorb */
   eingangskorb: number;
+  /** Klausur und Lernblockzeile des Überblicks (Abschnitt F) */
+  klausurBlock: LernblockUeberblick | null;
   /** Block „Wiederholen“ auf dem Überblick (Abschnitt E, V2 4.5) */
   wiederholen: WhStand;
   /** Fragen in den offenen KI-Vorschlägen (`/abruf/eingang`) */

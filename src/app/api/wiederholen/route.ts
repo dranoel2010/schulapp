@@ -2,8 +2,8 @@ import type { NextRequest } from "next/server";
 
 import type { ThemaKurz, ThemaLauf, WiederholenAntwort } from "@/components/kombi/tisch/typen";
 import { getSessionUser } from "@/lib/session";
+import { appTag, jetzt } from "@/lib/tag";
 import {
-  appTagVon,
   faelligeThemen,
   fragenZumThema,
   istThemaSchluessel,
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
   if (!user) {
     return Response.json({ ok: false, error: "Nicht angemeldet." }, { status: 401, headers: HEADERS });
   }
-  const heute = appTagVon(new Date());
+  const heute = appTag(await jetzt());
   const sp = request.nextUrl.searchParams;
 
   const thema = sp.get("thema");
