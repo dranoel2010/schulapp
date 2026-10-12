@@ -17,8 +17,8 @@ import { freeLabel, listFreePeriods } from "@/lib/free-days";
 import { iservConfigured } from "@/lib/iserv/config";
 import { loadIservStatus } from "@/lib/iserv/status";
 import { jevConfigured } from "@/lib/jev";
-import { kostenSatz } from "@/lib/leser/claude-ablauf";
-import { laufKostenSeit } from "@/lib/leser/laeufe";
+import { kostenSatz, laufAnzeige } from "@/lib/leser/claude-ablauf";
+import { laufKostenSeit, letzterArbeitsblattLauf } from "@/lib/leser/laeufe";
 import { listConnections } from "@/lib/oauth";
 
 import {
@@ -61,12 +61,13 @@ export default async function SettingsPage({
   // Anthropic, nicht hier.
   const monatsanfang = new Date(`${today.slice(0, 8)}01T00:00:00Z`);
   const claude = claudeConfigured();
-  const [connections, freePeriods, calendar, iserv, kosten] = await Promise.all([
+  const [connections, freePeriods, calendar, iserv, kosten, blattLauf] = await Promise.all([
     listConnections(user.id),
     listFreePeriods(user.id, today),
     loadCalendarStatus(user.id),
     loadIservStatus(user.id),
     laufKostenSeit(user.id, monatsanfang),
+    letzterArbeitsblattLauf(user.id),
   ]);
 
   const since = tag(user.createdAt);
@@ -214,14 +215,20 @@ export default async function SettingsPage({
             <p className="text-sm text-muted">
               {`Eingerichtet: ${CLAUDE_MODELL} über den API-Schlüssel dieses Servers. Jeder Lauf kostet Geld; diesen Monat bisher ${kostenSatz(kosten)}, Abschreiben, Fragen bauen und Arbeitsblätter zusammen. Was die Läufe an einem Blatt gekostet haben, steht an ihm, was ein Fragenlauf gekostet hat, an seiner Klausur.`}
             </p>
-          ) : (
+          ) : null}
+          {/* Ein Arbeitsblatt hat keine eigene Seite: sein jüngster Bau steht hier (Befund der Abnahme von H) */}
+          {claude && blattLauf ? (
+            <p className="text-sm text-muted">{`Arbeitsblätter: ${laufAnzeige(blattLauf)}`}</p>
+          ) : null}
+          {!claude ? (
             <p className="text-sm text-muted">
               Auf diesem Server ist Claude nicht eingerichtet — es fehlt{" "}
               <code>ANTHROPIC_API_KEY</code>. Gedrucktes liest Docling weiter;
               Handschrift liest niemand, sie bleibt ohne Abschrift, bis du sie
-              am Blatt abtippst.
+              am Blatt abtippst. Übungsthemen laufen dann mit Karten statt
+              mit Arbeitsblatt.
             </p>
-          )}
+          ) : null}
         </CardContent>
       </Card>
 

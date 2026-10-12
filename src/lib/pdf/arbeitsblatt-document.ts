@@ -63,12 +63,21 @@ type Schriften = Record<Schrift, { bytes: Buffer; abdeckung: FontCoverage }>;
 
 let geladen: Schriften | null = null;
 
+/**
+ * Pfad einer Schriftdatei. `turbopackIgnore`: ein dynamischer Pfad unter
+ * `process.cwd()` ließe den Bau sonst das ganze Projekt verfolgen; das
+ * Dockerfile kopiert assets/ ausdrücklich.
+ */
+function schriftPfad(datei: string): string {
+  return join(/* turbopackIgnore: true */ process.cwd(), FONT_DIR, datei);
+}
+
 /** Lädt die Schriften einmal je Prozess (wie `loadPdfFonts`). */
 export function arbeitsblattSchriften(): Schriften {
   if (geladen) return geladen;
   const s = {} as Schriften;
   for (const [name, datei] of Object.entries(DATEIEN) as [Schrift, string][]) {
-    const pfad = join(process.cwd(), FONT_DIR, datei);
+    const pfad = schriftPfad(datei);
     let bytes: Buffer;
     try {
       bytes = readFileSync(pfad);
@@ -128,8 +137,19 @@ function laeufe(text: string, stil: Stil, s: Schriften): { text: string; schrift
   return out;
 }
 
+const angemeldet = new WeakSet<Doc>();
+
+/**
+ * Schrift einstellen — über den angemeldeten Namen: mit den Bytes direkt
+ * läse pdfkit die Datei bei JEDEM Aufruf neu ein (kein Cache-Schlüssel),
+ * und gesetzt wird je Wort mehrmals.
+ */
 function setze(doc: Doc, s: Schriften, schrift: Schrift, groesse: number) {
-  doc.font(s[schrift].bytes as unknown as string).fontSize(groesse);
+  if (!angemeldet.has(doc)) {
+    for (const name of Object.keys(s) as Schrift[]) doc.registerFont(`ab-${name}`, s[name].bytes as unknown as string);
+    angemeldet.add(doc);
+  }
+  doc.font(`ab-${schrift}`).fontSize(groesse);
 }
 
 function breiteVon(doc: Doc, s: Schriften, text: string, stil: Stil): number {
@@ -251,11 +271,16 @@ const ABC = "abcdefgh";
 
 const stil = (schrift: Schrift, groesse: number, farbe: string = FARBE.tinte): Stil => ({ schrift, groesse, farbe });
 
-/** Platz zum Rechnen: Kästchen 5 mm (Höhe in mm) oder Linien 9 mm (Zahl). Breite 165 mm. */
-function platz(doc: Doc, papier: "kaestchen" | "linien", n: number, x: number, y: number): number {
+/**
+ * Platz zum Rechnen: Kästchen 5 mm (Höhe in mm) oder Linien 9 mm (Zahl).
+ * Breite 165 mm. Beim Verkleinern (`k` < 1) wird die Höhe mitskaliert —
+ * die Kästchen bleiben 5 mm, die Linien rücken enger.
+ */
+function platz(doc: Doc, papier: "kaestchen" | "linien", n: number, x: number, y: number, k = 1): number {
   const W = 165 * MM;
   if (papier === "kaestchen") {
-    const H = n * MM;
+    const H = n * k * MM;
+    n *= k;
     doc.save().lineWidth(0.18 * MM).strokeColor(FARBE.raster);
     for (let gx = 5; gx < 165; gx += 5) doc.moveTo(x + gx * MM, y).lineTo(x + gx * MM, y + H);
     for (let gy = 5; gy < n; gy += 5) doc.moveTo(x, y + gy * MM).lineTo(x + W, y + gy * MM);
@@ -264,9 +289,10 @@ function platz(doc: Doc, papier: "kaestchen" | "linien", n: number, x: number, y
     doc.restore();
     return y + H;
   }
-  const H = (n * 9 + 1) * MM;
+  const L = 9 * k;
+  const H = (n * L + 1) * MM;
   doc.save().lineWidth(0.22 * MM).strokeColor(FARBE.zeile);
-  for (let i = 1; i <= n; i += 1) doc.moveTo(x, y + i * 9 * MM).lineTo(x + W, y + i * 9 * MM);
+  for (let i = 1; i <= n; i += 1) doc.moveTo(x, y + i * L * MM).lineTo(x + W, y + i * L * MM);
   doc.stroke().restore();
   return y + H;
 }
@@ -407,7 +433,7 @@ function seiteAufgaben(doc: Doc, s: Schriften, d: ArbeitsblattDatenMitDatum, k: 
     nummer(doc, s, i + 1, q.ersteGrundlinie);
     y = q.unten;
     if (a.teile) y = teile(doc, s, a.teile, Boolean(a.fr), RAND.links + EINZUG, y, BREITE - EINZUG, g);
-    if (a.platz) y = platz(doc, inhalt.papier, a.platz, RAND.links + EINZUG, y + 2.4 * MM);
+    if (a.platz) y = platz(doc, inhalt.papier, a.platz, RAND.links + EINZUG, y + 2.4 * MM * k, k);
   }
   fuss(
     doc,
@@ -488,9 +514,9 @@ function seiteLoesungen(doc: Doc, s: Schriften, d: ArbeitsblattDatenMitDatum, k:
 type ArbeitsblattDatenMitDatum = ArbeitsblattPdfDaten & { datum: string };
 
 /** Wo die Linie über dem Fuß liegt (eine Fußzeile): Inhalt darf nicht über sie laufen. */
-const FUSS_GRENZE = SEITE_H - RAND.unten - 8 * 1.3 - 2.6 * MM;
+export const FUSS_GRENZE = SEITE_H - RAND.unten - 8 * 1.3 - 2.6 * MM;
 
-function zeichne(daten: ArbeitsblattDatenMitDatum, s: Schriften, k: number): { doc: Doc; passt: boolean } {
+function zeichne(daten: ArbeitsblattDatenMitDatum, s: Schriften, k: number) {
   const doc = new PDFDocument({
     size: "A4",
     margin: 0,
@@ -500,27 +526,75 @@ function zeichne(daten: ArbeitsblattDatenMitDatum, s: Schriften, k: number): { d
   const u1 = seiteAufgaben(doc, s, daten, k);
   doc.addPage({ size: "A4", margin: 0 });
   const u2 = seiteLoesungen(doc, s, daten, k);
-  return { doc, passt: u1 <= FUSS_GRENZE && u2 <= FUSS_GRENZE };
+  return { doc, u1, u2, passt: u1 <= FUSS_GRENZE && u2 <= FUSS_GRENZE };
 }
 
+export type ArbeitsblattMasse = {
+  /** Gewählter Maßstab: 1, 0,94, 0,88 oder 0,85 */
+  k: number;
+  /** Unterkante der letzten Aufgabe bzw. Lösung, in pt von oben */
+  seite1: number;
+  seite2: number;
+  /** Die Linie über dem Fuß, in pt von oben */
+  grenze: number;
+};
+
 /**
- * Das PDF. Passt der Inhalt nicht auf die Seite (lange Aufgaben), wird der
- * Satz der Aufgaben etwas enger und kleiner, höchstens auf 85 %; nie eine
- * dritte Seite.
+ * Passt der Inhalt nicht auf die Seite (lange Aufgaben), wird der Satz der
+ * Aufgaben etwas enger und kleiner, höchstens auf 85 %; nie eine dritte
+ * Seite. Dass er dann passt, sorgt `blattErgebnis` (Höhenbudget, ../arbeitsblatt/hoehe).
  */
-export async function buildArbeitsblattPdf(daten: ArbeitsblattPdfDaten): Promise<Buffer> {
+function setzen(daten: ArbeitsblattPdfDaten): { doc: Doc; masse: ArbeitsblattMasse } {
   const s = arbeitsblattSchriften();
   const d: ArbeitsblattDatenMitDatum = { ...daten, datum: `${voll(daten.tag)} ${daten.tag.slice(0, 4)}` };
-  let gewaehlt: Doc | null = null;
   for (const k of [1, 0.94, 0.88, 0.85]) {
-    const { doc, passt } = zeichne(d, s, k);
-    if (passt || k === 0.85) {
-      gewaehlt = doc;
-      break;
-    }
-    doc.end();
+    const z = zeichne(d, s, k);
+    if (z.passt || k === 0.85) return { doc: z.doc, masse: { k, seite1: z.u1, seite2: z.u2, grenze: FUSS_GRENZE } };
+    z.doc.end();
   }
-  const doc = gewaehlt!;
+  throw new Error("unerreichbar");
+}
+
+/** Etwas Luft über der Fußlinie: die Seite in der App (`.a4`) setzt nicht aufs Zehntel gleich. */
+const LUFT = 1.5 * MM;
+
+/**
+ * Passt Seite 1 bei vollem Maßstab über die Fußlinie? Für das Höhenbudget
+ * beim Bau (`blattErgebnis`, ../arbeitsblatt/hoehe): gesetzt wird wirklich,
+ * nur nichts ausgegeben. Ein Messer setzt jeden Versuch auf eine neue Seite
+ * desselben Dokuments — ein neues Dokument je Versuch läse die Schriften
+ * jedes Mal neu ein (gut 0,4 s).
+ */
+export function seiteEinsMesser(kopf: Pick<ArbeitsblattPdfDaten, "fach" | "thema">): {
+  passt: (inhalt: ArbeitsblattInhalt) => boolean;
+  fertig: () => void;
+} {
+  const doc = new PDFDocument({ size: "A4", margin: 0, autoFirstPage: true });
+  const s = arbeitsblattSchriften();
+  let erste = true;
+  return {
+    passt(inhalt) {
+      if (!erste) doc.addPage({ size: "A4", margin: 0 });
+      erste = false;
+      const unten = seiteAufgaben(doc, s, { ...kopf, inhalt, tag: "2026-09-30", datum: "Mittwoch, 30. September 2026" }, 1);
+      return unten <= FUSS_GRENZE - LUFT;
+    },
+    fertig() {
+      doc.end();
+    },
+  };
+}
+
+/** Nur die Maße — für Tests und Proben: wo enden die Seiten, mit welchem Maßstab? */
+export function arbeitsblattMasse(daten: ArbeitsblattPdfDaten): ArbeitsblattMasse {
+  const { doc, masse } = setzen(daten);
+  doc.end();
+  return masse;
+}
+
+/** Das PDF. */
+export async function buildArbeitsblattPdf(daten: ArbeitsblattPdfDaten): Promise<Buffer> {
+  const { doc } = setzen(daten);
   const teile: Buffer[] = [];
   return new Promise<Buffer>((fertig, fehler) => {
     doc.on("data", (b: Buffer) => teile.push(b));

@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   auswertenAction,
   bewertenAction,
-  blattOeffnenAction,
   blattStandAction,
   gedrucktAction,
 } from "@/app/(app)/arbeitsblatt-actions";
@@ -14,7 +13,7 @@ import type { FehlerToast } from "@/lib/kombi/aktion";
 import { RUECKSPRUNG_MS } from "@/lib/kombi/aktion";
 
 /**
- * Der Stand eines Arbeitsblatts auf dem Tisch (Plan H): öffnen, nachfragen
+ * Der Stand eines Arbeitsblatts auf dem Tisch (Plan H): nachfragen
  * bis zu einem Endstatus (alle 3 s, nur solange der Server es sagt),
  * drucken, werten, auswerten. Wiederholen und Lernblock teilen sich den
  * Stand über die Datenbank: wer im einen gedruckt hat, landet im anderen
@@ -25,16 +24,12 @@ import { RUECKSPRUNG_MS } from "@/lib/kombi/aktion";
  * zurück.
  */
 
-export type BlattZiel = { thema: string } | { block: string } | { blatt: string };
-
 export type BlattPhase = "vorschau" | "bewerten" | "fertig";
 
-export type BlattLage =
-  | { art: "laedt" }
-  | { art: "fehler" }
-  /** Ein Lernblock, der kein Arbeitsblatt ist */
-  | { art: "kein-blatt" }
-  | { art: "da"; stand: BlattStand };
+/** Was auf dem Tisch liegt: ein Stand, mit dem der Tisch geöffnet wurde (`nr` zählt jedes Öffnen). */
+export type BlattAnfang = { stand: BlattStand; nr: number };
+
+export type BlattLage = { art: "zu" } | { art: "da"; stand: BlattStand };
 
 const NACHFRAGEN_MS = 3000;
 
@@ -44,76 +39,49 @@ export function phaseVon(stand: BlattStand): BlattPhase {
   return "vorschau";
 }
 
-export function useArbeitsblatt(ziel: BlattZiel | null, fehlerToast: FehlerToast) {
-  const [lage, setLage] = useState<BlattLage>({ art: "laedt" });
+/**
+ * Der Tisch öffnet erst, wenn der Stand da ist (Plan 2.4, Punkt 7: scheitert
+ * das Öffnen, geht keine Ebene auf) — der Hook bekommt ihn fertig mit.
+ */
+export function useArbeitsblatt(anfang: BlattAnfang | null, fehlerToast: FehlerToast) {
+  const [lage, setLage] = useState<BlattLage>({ art: "zu" });
   const [wertung, setWertung] = useState<Record<number, boolean>>({});
   const [phase, setPhase] = useState<BlattPhase>("vorschau");
   const [auswertung, setAuswertung] = useState<Auswertung | null>(null);
-  const zielSchluessel = ziel ? JSON.stringify(ziel) : null;
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const aktuell = useRef<string | null>(null);
 
-  const uebernehmen = useCallback((stand: BlattStand | null, ersterStand: boolean) => {
-    if (!stand) {
-      setLage({ art: "kein-blatt" });
-      return;
-    }
-    setLage({ art: "da", stand });
-    if (ersterStand) {
-      setWertung(stand.wertung);
-      setPhase(phaseVon(stand));
-    }
-  }, []);
-
-  // Öffnen
-  useEffect(() => {
-    clearTimeout(timer.current);
-    aktuell.current = zielSchluessel;
-    if (!zielSchluessel) return;
-    const z = JSON.parse(zielSchluessel) as BlattZiel;
-    let ab = false;
-    // Neues Ziel: erst einmal „lädt“ — im nächsten Takt, nicht während des Renderns.
-    void Promise.resolve().then(() => {
-      if (ab) return;
-      setLage({ art: "laedt" });
-      setAuswertung(null);
-    });
-    (async () => {
-      try {
-        const antwort = "blatt" in z ? await blattStandAction(z.blatt) : await blattOeffnenAction(z);
-        if (ab) return;
-        if (!antwort.ok) {
-          setLage({ art: "fehler" });
-          return;
-        }
-        uebernehmen(antwort.daten, true);
-      } catch {
-        if (!ab) setLage({ art: "fehler" });
-      }
-    })();
-    return () => {
-      ab = true;
-      clearTimeout(timer.current);
-    };
-  }, [zielSchluessel, uebernehmen]);
+  // Ein neuer Anfang (Öffnen, „Weiter mit …“): Stand, Wertung und Phase von vorn
+  const [vorher, setVorher] = useState<BlattAnfang | null>(null);
+  if (anfang !== vorher) {
+    setVorher(anfang);
+    setLage(anfang ? { art: "da", stand: anfang.stand } : { art: "zu" });
+    setWertung(anfang?.stand.wertung ?? {});
+    setPhase(anfang ? phaseVon(anfang.stand) : "vorschau");
+    setAuswertung(null);
+  }
 
   // Nachfragen bis zum Endstatus (oder bis die Frist um ist — dann sagt der Server `weiter: false`)
   const standId = lage.art === "da" ? lage.stand.id : null;
   const weiter = lage.art === "da" && lage.stand.weiter;
+  const nr = anfang?.nr ?? null;
   useEffect(() => {
     if (!standId || !weiter) return;
-    const schluessel = aktuell.current;
+    let ab = false;
     timer.current = setTimeout(async () => {
       try {
         const antwort = await blattStandAction(standId);
-        if (aktuell.current !== schluessel || !antwort.ok) return;
-        uebernehmen(antwort.daten, false);
+        if (ab || !antwort.ok || !antwort.daten) return;
+        const stand = antwort.daten;
+        setLage((l) => (l.art === "da" && l.stand.id === stand.id ? { art: "da", stand } : l));
       } catch {
         // Ohne Netz: beim nächsten Öffnen wieder
       }
     }, NACHFRAGEN_MS);
-    return () => clearTimeout(timer.current);
-  }, [standId, weiter, lage, uebernehmen]);
+    return () => {
+      ab = true;
+      clearTimeout(timer.current);
+    };
+  }, [standId, weiter, lage, nr]);
 
   /** „Arbeitsblatt drucken“ ist gedrückt: der Stand wechselt auf „Wie lief es?“. */
   const gedruckt = useCallback(async () => {

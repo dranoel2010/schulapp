@@ -623,7 +623,7 @@ body.toast-on .scroll{padding-bottom:calc(var(--foot-space) + 54px)}
 .tb-row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;column-gap:10px;min-height:52px;padding:4px 0;border-top:1px solid var(--t-fill-2)}
 .tb-row:last-child{border-bottom:1px solid var(--t-fill-2)}
 .tb-row .nr{font-size:17px;font-weight:650}
-.tb-row .k{font-size:15px;line-height:1.3;font-weight:450}
+.tb-row .k{font-size:15px;line-height:1.3;font-weight:450;min-width:0;overflow-wrap:anywhere;hyphens:auto;-webkit-hyphens:auto}
 .tb-row .k .m{font-family:var(--serif);font-style:italic;font-size:1.1em;font-variation-settings:"opsz" 24;white-space:nowrap}
 .tb-seg{display:flex;gap:6px}
 .tb-seg button{height:44px;padding:0 13px;border-radius:999px;background:var(--t-fill);color:var(--t-on);font-size:15px;font-weight:600;

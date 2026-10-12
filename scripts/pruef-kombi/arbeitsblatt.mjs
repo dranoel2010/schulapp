@@ -191,14 +191,12 @@ await page.screenshot({ path: name("22-geuebt") });
 const ende = await page.locator("#tEnd").innerText();
 p.ok(/Quadratische Funktionen geübt\./.test(ende) && /6 Aufgaben, 5 richtig\./.test(ende) && /Aufgabe 4 kommt aufs nächste Blatt\./.test(ende), "Ende: geübt, 5 richtig, Aufgabe 4 aufs nächste Blatt");
 p.ok(/Wieder dran: Dienstag, 13\.10\./.test(ende), "Wieder dran: Dienstag, 13.10.");
-await tippen("#tEnd .tlink", 800);
+p.ok(/Weiter mit Französisch/.test(ende) && /Für heute aufhören/.test(ende), "Ende: „Weiter mit Französisch“ und „Für heute aufhören“");
+await tippen("#tEnd .tlink:last-child", 800);
 
-// Dasselbe Blatt ist das des heutigen Lernblocks: im Block steht jetzt „Blatt ausgewertet.“
+// Dasselbe Blatt ist das des heutigen Lernblocks: der Block ist erledigt, der Tisch geht nicht mehr auf (Prototyp Z. 4240)
 await oeffnen({ block: IDS.block, mode: "block" });
-await page.screenshot({ path: name("31-lernblock-ausgewertet") });
-const blockEnde = await page.locator("#tEnd").innerText();
-p.ok(/Blatt ausgewertet\./.test(blockEnde) && /Der Lernblock zählt als erledigt\./.test(blockEnde), "Lernblock: beim Wiederholen ausgewertet → „Blatt ausgewertet.“, Block erledigt");
-await tippen("#tEnd .tlink", 800);
+p.ok((await page.locator("#tisch.open").count()) === 0, "Lernblock: beim Wiederholen ausgewertet → erledigt, der Tisch öffnet nicht");
 
 // ── Französisch ─────────────────────────────────────────────────────────────
 await oeffnen({ thema: IDS.franzoesisch });
@@ -212,11 +210,19 @@ await page.screenshot({ path: name("24-franzoesisch-seite2") });
 await tippen("#tClose", 700);
 
 // ── Gebaut wird gerade / heute gescheitert ─────────────────────────────────
-await oeffnen({ thema: IDS.deutsch });
+// Ohne Schlüssel führt das Thema zu den Karten; die Zustände zeigt das Blatt selbst
+if (!process.env.MIT_SCHLUESSEL) {
+  await oeffnen({ thema: IDS.deutsch }, 1500);
+  p.ok(page.url().endsWith("/abruf/sitzung") && (await page.locator("#tisch.open").count()) === 0, "Ohne Schlüssel, Blatt nicht fertig: Karten statt Tisch");
+  await page.goto(`${BASIS}/`);
+  await page.waitForSelector("#whenrow");
+}
+await oeffnen({ blatt: IDS.deutschBlatt });
 await page.screenshot({ path: name("50-wird-gebaut") });
 p.ok((await page.locator(".tb-wait").textContent()) === "Das Blatt wird gerade gebaut.", "Ohne fertiges Blatt: „Das Blatt wird gerade gebaut.“");
+p.ok(await page.locator("#tbArt").isVisible(), "Gebaut wird, Thema mit Fragen: „Dieses Thema lieber abfragen“");
 await tippen("#tClose", 700);
-await oeffnen({ thema: IDS.physik });
+await oeffnen({ blatt: IDS.physikBlatt });
 await page.screenshot({ path: name("51-gescheitert") });
 p.ok((await page.locator(".tb-wait").textContent()) === "Für dieses Thema ließ sich heute kein Blatt bauen.", "Gescheitert: ruhiger Satz");
 p.ok(await page.locator("#tbArt").isVisible(), "Gescheitert, Thema mit Fragen: „Dieses Thema lieber abfragen“");

@@ -9,7 +9,7 @@ import {
   UEBUNG_MATHE,
 } from "@/lib/arbeitsblatt/beispiel";
 import type { ArbeitsblattInhalt } from "@/lib/arbeitsblatt/schema";
-import { arbeitsblattDateiname, buildArbeitsblattPdf } from "@/lib/pdf/arbeitsblatt-document";
+import { arbeitsblattDateiname, arbeitsblattMasse, buildArbeitsblattPdf } from "@/lib/pdf/arbeitsblatt-document";
 
 function inhalt(fach: string, antwort: typeof UEBUNG_MATHE, abschrift: string): ArbeitsblattInhalt {
   const e = blattErgebnis(
@@ -65,6 +65,54 @@ describe("Arbeitsblatt als PDF (Plan H, ohne Datenbank)", () => {
     const pdf = await buildArbeitsblattPdf({ fach: "Mathematik", thema: "Quadratische Funktionen", tag: "2026-10-12", inhalt: lang });
     assert.equal(seiten(pdf), 2);
   });
+
+  it("die Beispiele passen ohne Verkleinern", () => {
+    for (const [fach, antwort, abschrift] of [
+      ["Mathematik", UEBUNG_MATHE, ABSCHRIFT_MATHE],
+      ["Französisch", UEBUNG_FRANZOESISCH, ABSCHRIFT_FRANZOESISCH],
+    ] as const) {
+      const m = arbeitsblattMasse({ fach, thema: "Thema", tag: "2026-10-12", inhalt: inhalt(fach, antwort, abschrift) });
+      assert.equal(m.k, 1, fach);
+      assert.ok(m.seite1 <= m.grenze, `${fach}: Seite 1 endet über dem Fuß`);
+    }
+  });
+
+  // Befund der Abnahme: 8 Aufgaben je 40 mm mit zweizeiliger Frage liefen über die Seite.
+  // Geprüft wird jetzt, wo die letzte Aufgabe endet — nicht nur die Seitenzahl.
+  for (const [name, papier, platz, fach] of [
+    ["acht Aufgaben je 40 mm Kästchen", "kaestchen", 40, "Mathematik"],
+    ["acht Aufgaben je 120 mm Kästchen", "kaestchen", 120, "Mathematik"],
+    ["acht Aufgaben je 6 Linien", "linien", 6, "Französisch"],
+    ["acht Aufgaben je 14 Linien", "linien", 14, "Französisch"],
+  ] as const) {
+    it(`${name}: die letzte Aufgabe endet über der Fußlinie, mindestens fünf bleiben`, () => {
+      const zitat = "Die Symmetrieachse ist die Gerade x = d.";
+      const aufgabe = (i: number) => ({
+        kurz: `Aufgabe ${i}`,
+        q: "Gib die Symmetrieachse von {f(x) = −½(x − 5)² + 4} an. Ist die Parabel nach oben oder nach unten geöffnet, gestreckt oder gestaucht? Begründe deine Antwort mit einem ganzen Satz.",
+        teile: ["{f(x) = (x − 4)² + 1}", "{g(x) = −(x + 3)² + 2}", "{h(x) = 2(x − 1)² − 5}"],
+        platz,
+        zitat,
+        l: [{ art: "p" as const, text: "Die Symmetrieachse ist {x = 5}." }],
+      });
+      const e = blattErgebnis(
+        { teil: "Scheitelpunktform und Symmetrie", minuten: 20, grund: "", aufgaben: Array.from({ length: 8 }, (_, i) => aufgabe(i + 1)) },
+        {
+          fach,
+          thema: "Quadratische Funktionen",
+          blaetter: [{ materialId: "8f0d3c1e-5b7a-4c2d-9e1f-0a1b2c3d4e5f", titel: "Scheitelpunktform, Übungen", datum: "2026-10-08", seiten: [ABSCHRIFT_MATHE] }],
+        },
+        papier,
+      );
+      assert.equal(e.art, "fertig");
+      if (e.art !== "fertig") return;
+      assert.ok(e.inhalt.aufgaben.length >= 5, `${e.inhalt.aufgaben.length} Aufgaben`);
+      assert.equal(e.gekappt, 8 - e.inhalt.aufgaben.length);
+      const m = arbeitsblattMasse({ fach, thema: "Quadratische Funktionen", tag: "2026-10-12", inhalt: e.inhalt });
+      assert.equal(m.k, 1, "passt ohne Verkleinern");
+      assert.ok(m.seite1 <= m.grenze, `Seite 1 endet bei ${(m.seite1 / (72 / 25.4)).toFixed(1)} mm, Fußlinie ${(m.grenze / (72 / 25.4)).toFixed(1)} mm (k ${m.k})`);
+    });
+  }
 
   it("Dateiname ohne verbotene Zeichen", () => {
     assert.equal(

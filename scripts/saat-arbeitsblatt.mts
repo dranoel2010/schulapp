@@ -167,5 +167,36 @@ await db
   .values({ userId, subjectTopicId: ks, tag: TAG, status: "laeuft", versuche: 1, fristBis: new Date(Date.now() + 15 * 60_000) })
   .onConflictDoNothing();
 
-console.log(JSON.stringify({ tag: TAG, mathe: qf, franzoesisch: pc, physik: hg, deutsch: ks, block: block?.id ?? null, fachMathe: ma }));
+// Mathematik · Lange Aufgaben: acht Aufgaben je 40 mm mit langer Frage — Befund der Abnahme von H
+// (lief über die Seite). Ohne Termine, also nie fällig; geöffnet nur mit `openTisch({ blatt })`.
+const la = await thema(ma, "Lange Aufgaben");
+const laQuelle = await blatt(ma, la, "Scheitelpunktform, lange Fassung", addDays(TAG, -3), ABSCHRIFT_MATHE);
+const lang = (i: number) => ({
+  kurz: i === 3 ? "Symmetrieachsenbestimmungsaufgabe mit Parameterdiskussion" : `Symmetrie ${i}`,
+  q: "Gib die Symmetrieachse von {f(x) = −½(x − 5)² + 4} an. Ist die Parabel nach oben oder nach unten geöffnet, gestreckt oder gestaucht? Begründe deine Antwort mit einem ganzen Satz.",
+  teile: ["{f(x) = (x − 4)² + 1}", "{g(x) = −(x + 3)² + 2}", "{h(x) = 2(x − 1)² − 5}"],
+  platz: 40,
+  zitat: "Die Symmetrieachse ist die Gerade x = d.",
+  l: [{ art: "p" as const, text: "Die Symmetrieachse ist {x = 5}." }],
+});
+await fertigesBlatt(la, "Mathematik", "Lange Aufgaben", laQuelle, { teil: "Symmetrie", minuten: 25, grund: "", aufgaben: Array.from({ length: 8 }, (_, i) => lang(i + 1)) }, ABSCHRIFT_MATHE);
+
+// Die Blätter selbst: ohne Schlüssel öffnet ein Thema ohne fertiges Blatt die Karten — die Zustände „gebaut“ und „gescheitert“ zeigt `openTisch({ blatt })`
+const blattVon = async (topic: string) =>
+  (await db.select({ id: arbeitsblaetter.id }).from(arbeitsblaetter).where(and(eq(arbeitsblaetter.subjectTopicId, topic), eq(arbeitsblaetter.tag, TAG))))[0]?.id ?? null;
+
+console.log(
+  JSON.stringify({
+    tag: TAG,
+    mathe: qf,
+    franzoesisch: pc,
+    physik: hg,
+    deutsch: ks,
+    block: block?.id ?? null,
+    fachMathe: ma,
+    physikBlatt: await blattVon(hg),
+    deutschBlatt: await blattVon(ks),
+    langBlatt: await blattVon(la),
+  }),
+);
 process.exit(0);

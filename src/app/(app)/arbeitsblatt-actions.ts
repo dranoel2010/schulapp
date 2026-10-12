@@ -12,12 +12,15 @@ import {
   blattFuerThema,
   blattStand,
   faelligeUebungsthemen,
+  themaGehoert,
+  vorhandenesBlatt,
   type Auswertung,
   type BlattStand,
 } from "@/lib/arbeitsblatt/ablauf";
 import { blattAnstossen } from "@/lib/arbeitsblatt/bauen";
 import { gedrucktSetzen, wertungSetzen } from "@/lib/arbeitsblatt/stand";
 import { requireUser } from "@/lib/auth";
+import { claudeDeps } from "@/lib/leser/claude-leser";
 import { appTagVon } from "@/lib/kombi/tag-daten";
 import { themaArtSetzen, themaArtZuruecknehmen, type ArtUmstellung } from "@/lib/themen-art";
 
@@ -36,6 +39,18 @@ export type ArbeitsblattAntwort<T> = { ok: true; daten: T } | { ok: false; fehle
 
 const fehler = (text: string): { ok: false; fehler: string } => ({ ok: false, fehler: text });
 
+/** Ist Claude eingerichtet? Ohne Schlüssel entsteht kein neues Blatt. */
+const mitSchluessel = () => claudeDeps(undefined).konfiguriert;
+
+/**
+ * Ohne Schlüssel baut niemand: nicht nachfragen (sonst fragt „wartet“ alle
+ * 3 s für immer) und nichts anstoßen.
+ */
+function ohneSchluessel(stand: BlattStand | null): BlattStand | null {
+  if (!stand || mitSchluessel()) return stand;
+  return { ...stand, weiter: false, bauBar: false };
+}
+
 /** Baut im Hintergrund, wenn ein Bau starten darf. */
 function anstossenWennNoetig(userId: string, stand: BlattStand | null) {
   if (stand?.bauBar) after(() => blattAnstossen(userId, stand.id));
@@ -43,8 +58,9 @@ function anstossenWennNoetig(userId: string, stand: BlattStand | null) {
 
 /**
  * Das Blatt für ein Übungsthema (Wiederholen) oder einen Lernblock — angelegt
- * und angestoßen, falls nötig. `null` beim Block heißt: der Block ist kein
- * Arbeitsblatt und läuft mit Karten.
+ * und angestoßen, falls nötig. `null` heißt: kein Arbeitsblatt, es läuft mit
+ * Karten — beim Block, wenn er kein Arbeitsblatt ist; ohne Schlüssel, wenn
+ * es noch kein fertiges Blatt gibt (dann wird keins angelegt).
  */
 export async function blattOeffnenAction(
   ziel: { thema: string } | { block: string },
@@ -52,14 +68,19 @@ export async function blattOeffnenAction(
   const user = await requireUser();
   const now = new Date();
   try {
-    let zeileId: string | null;
-    if ("thema" in ziel) {
-      const thema = id.parse(ziel.thema);
-      zeileId = (await blattFuerThema(user.id, thema, appTagVon(now))).id;
-    } else {
-      const block = id.parse(ziel.block);
-      zeileId = (await blattFuerBlock(user.id, block))?.id ?? null;
+    const tag = appTagVon(now);
+    const z: { thema: string } | { block: string } =
+      "thema" in ziel ? { thema: id.parse(ziel.thema) } : { block: id.parse(ziel.block) };
+    if ("thema" in z && !(await themaGehoert(user.id, z.thema))) return fehler("Thema nicht gefunden");
+    if (!mitSchluessel()) {
+      const zeile = await vorhandenesBlatt(user.id, z, tag);
+      const stand = zeile ? ohneSchluessel(await blattStand(user.id, zeile.id, now)) : null;
+      return { ok: true, daten: stand?.inhalt ? stand : null };
     }
+    const zeileId =
+      "thema" in z
+        ? (await blattFuerThema(user.id, z.thema, tag)).id
+        : ((await blattFuerBlock(user.id, z.block))?.id ?? null);
     if (!zeileId) return { ok: true, daten: null };
     const stand = await blattStand(user.id, zeileId, now);
     anstossenWennNoetig(user.id, stand);
@@ -123,7 +144,7 @@ export async function auswertenAction(
 /** Der Stand eines Blatts — auch für das Nachfragen alle 3 s. */
 export async function blattStandAction(blattId: string): Promise<ArbeitsblattAntwort<BlattStand | null>> {
   const user = await requireUser();
-  const stand = await blattStand(user.id, id.parse(blattId), new Date());
+  const stand = ohneSchluessel(await blattStand(user.id, id.parse(blattId), new Date()));
   anstossenWennNoetig(user.id, stand);
   return { ok: true, daten: stand };
 }
@@ -170,11 +191,39 @@ export async function artZuruecknehmenAction(
 }
 
 /**
- * Bis Abschnitt E den Tisch mit allen Themen bringt: das erste fällige
- * Übungsthema von heute (für „Wiederholen“ aus der Zeile) — oder null.
+ * Bis Abschnitt E den Tisch mit allen Themen bringt: das Blatt des ersten
+ * fälligen Übungsthemas von heute, das schon einen Inhalt hat (fertig oder
+ * schon gedruckt) — oder null, dann laufen die Karten in der alten Sitzung.
+ *
+ * Ein Thema, dessen Blatt noch gebaut wird, fällt hier durch (Befund der
+ * Abnahme: „Wiederholen“ blieb sonst an „Das Blatt wird gerade gebaut.“
+ * hängen, ohne Weg zu den Karten); sein Bau wird dabei angestoßen. Ohne
+ * Schlüssel wird kein Blatt angelegt.
+ *
+ * `ohne`: ein Thema, das gerade auf dem Tisch lag (für „Weiter mit …“).
  */
-export async function naechstesUebungsthemaAction(): Promise<ArbeitsblattAntwort<string | null>> {
+export async function naechstesUebungsthemaAction(
+  ohne?: string,
+): Promise<ArbeitsblattAntwort<BlattStand | null>> {
   const user = await requireUser();
-  const themen = await faelligeUebungsthemen(user.id, appTagVon(new Date()));
-  return { ok: true, daten: themen[0]?.topicId ?? null };
+  const now = new Date();
+  try {
+    const tag = appTagVon(now);
+    const schluessel = mitSchluessel();
+    const nicht = ohne ? id.parse(ohne) : null;
+    for (const t of await faelligeUebungsthemen(user.id, tag)) {
+      if (t.topicId === nicht) continue;
+      const zeile = schluessel
+        ? await blattFuerThema(user.id, t.topicId, tag)
+        : await vorhandenesBlatt(user.id, { thema: t.topicId }, tag);
+      if (!zeile) continue;
+      const stand = ohneSchluessel(await blattStand(user.id, zeile.id, now));
+      if (stand?.inhalt && !stand.ausgewertetAm) return { ok: true, daten: stand };
+      anstossenWennNoetig(user.id, stand);
+    }
+    return { ok: true, daten: null };
+  } catch (error) {
+    console.error("Nächstes Übungsthema", error);
+    return fehler("Keine Verbindung");
+  }
 }

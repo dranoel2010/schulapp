@@ -75,7 +75,7 @@ type KoerperProps = {
   onDrucken: () => void;
   onBewerten: (nr: number, richtig: boolean) => void;
   onFertig: () => void;
-  /** „Dieses Thema lieber abfragen“ — nur wenn das Thema Fragen hat */
+  /** „Dieses Thema lieber abfragen“ — nur wenn das Thema Fragen hat; auch solange gebaut wird oder wenn es scheiterte */
   onAbfragen: (() => void) | null;
   lupeRef: RefObject<LupeSteuerung | null>;
   /** Die Seiten der Vorschau, für den FLIP der Lupe */
@@ -249,7 +249,7 @@ export function BlattKoerper(p: KoerperProps) {
               {gescheitert ? "Für dieses Thema ließ sich heute kein Blatt bauen." : ohneInhalt ? "Das Blatt wird gerade gebaut." : ""}
             </p>
           )}
-          {p.onAbfragen && (!ohneInhalt || gescheitert) ? (
+          {p.onAbfragen ? (
             <button className="tb-art" type="button" id="tbArt" onClick={p.onAbfragen}>
               Dieses Thema lieber abfragen
             </button>
@@ -364,12 +364,17 @@ export function BlattLupe({
   steuerungRef,
   seitenRef,
   istOffen,
+  beimOeffnen,
+  beimSchliessen,
 }: {
   daten: A4Daten | null;
   steuerungRef: RefObject<LupeSteuerung | null>;
   seitenRef: RefObject<(HTMLDivElement | null)[]>;
   /** Liegt der Tisch noch offen? Sonst ohne Rückflug schließen. */
   istOffen: () => boolean;
+  /** Die Lupe ist aufgegangen bzw. zu — für den Eintrag in der History (Android-Zurück) */
+  beimOeffnen?: () => void;
+  beimSchliessen?: () => void;
 }) {
   const lupeRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -391,6 +396,7 @@ export function BlattLupe({
       if (!zustand.current) return;
       let { i } = zustand.current;
       zustand.current = null;
+      beimSchliessen?.();
       const box = seitenBox.current;
       const L = lupeRef.current;
       if (!box || !L) {
@@ -444,7 +450,7 @@ export function BlattLupe({
         { duration: 340, easing: E.drawer, fill: "forwards" },
       ).finished.then(fertig, () => {});
     },
-    [istOffen, seitenRef],
+    [istOffen, seitenRef, beimSchliessen],
   );
 
   const oeffnen = useCallback((i: 0 | 1, ev: { clientY?: number } | null) => {
@@ -452,9 +458,11 @@ export function BlattLupe({
     if (!src) return;
     const r1 = src.getBoundingClientRect();
     const fy = ev && ev.clientY ? Math.max(0, (ev.clientY - r1.top) / r1.height) : 0;
+    const schonOffen = zustand.current !== null;
     zustand.current = { i };
     setOffen({ i, fy, flug: true });
-  }, [seitenRef]);
+    if (!schonOffen) beimOeffnen?.();
+  }, [seitenRef, beimOeffnen]);
 
   useEffect(() => {
     steuerungRef.current = { oeffnen, schliessen, offen: () => zustand.current !== null };

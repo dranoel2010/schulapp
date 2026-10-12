@@ -21,6 +21,8 @@ export type OeffnenOptionen = {
 /** Ebenen, die spätere Abschnitte in die Shell hängen (C: Kamera, E/F: Tisch). */
 export type EbenenName = "kamera" | "tisch" | "ansicht";
 export type EbenenHandler = (optionen?: Record<string, unknown>) => void;
+/** Ebenen mit eigenem Eintrag in der History, die Zurück der Reihe nach schließt */
+export type UeberEbene = "tisch" | "lupe";
 
 export type KombiApi = {
   /** Nachschlage-Seite öffnen (Prototyp `openPage`); unbekannte Arten navigieren zur Route */
@@ -53,6 +55,14 @@ export type KombiApi = {
   neuLaden: () => Promise<void>;
   /** Spätere Abschnitte hängen hier ihre Ebene ein; gibt das Abmelden zurück */
   registriere: (name: EbenenName, handler: EbenenHandler) => () => void;
+  /**
+   * Tisch oder Lupe ist offen: ein Eintrag in der History, damit die
+   * Android-Zurück-Taste sie schließt (Grundsatz 4: Sheet → Bestätigung →
+   * Lupe → Tisch). Bei Zurück ruft die Shell `schliessen`.
+   */
+  ebeneAuf: (name: UeberEbene, schliessen: () => void) => void;
+  /** Per Knopf geschlossen: den Eintrag (und die darüber) abräumen; `ohneZurueck`, wenn danach ohnehin navigiert wird */
+  ebeneZu: (name: UeberEbene, ohneZurueck?: boolean) => void;
 };
 
 export const KombiKontext = createContext<KombiApi | null>(null);

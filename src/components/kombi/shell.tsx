@@ -18,6 +18,7 @@ import {
   KombiKontext,
   type EbenenHandler,
   type EbenenName,
+  type UeberEbene,
   type KombiApi,
 } from "@/components/kombi/kontext";
 import { Seite, SeitenInhalt } from "@/components/kombi/seite";
@@ -80,7 +81,7 @@ type KombiState = {
   ladung: string;
   /** Der Eintrag gehört einer echten Route; `stapel` sind die Seiten darunter */
   route?: 1;
-  overlay?: "menu" | "sheet";
+  overlay?: "menu" | "sheet" | UeberEbene;
 };
 
 /**
@@ -175,11 +176,13 @@ export function KombiShell({ children }: { children: ReactNode }) {
   const pushStapel = useCallback(
     (stapel: StapelEintrag[], url: string) => {
       const s = stateJetzt();
-      const state: KombiState = { kombi: 1, stapel, idx: (s.overlay ? idx.current : idx.current + 1), ladung: LADUNG };
+      // Menü und Sheet ersetzt die Seite; Tisch und Lupe bleiben darunter stehen
+      const ersetzen = s.overlay === "menu" || s.overlay === "sheet";
+      const state: KombiState = { kombi: 1, stapel, idx: (ersetzen ? idx.current : idx.current + 1), ladung: LADUNG };
       idx.current = state.idx;
       // Ein offenes Menü (oder Sheet) hat einen eigenen Eintrag: den ersetzt
       // die Seite, damit Zurück nicht erst auf dem leeren Menü landet.
-      if (s.overlay) window.history.replaceState(state, "", url);
+      if (ersetzen) window.history.replaceState(state, "", url);
       else window.history.pushState(state, "", url);
     },
     [],
@@ -577,15 +580,63 @@ export function KombiShell({ children }: { children: ReactNode }) {
     [stapelJetzt],
   );
 
+  // ── Tisch und Lupe als Einträge in der History (Grundsatz 4) ────────────────
+  //
+  // Zurück schließt erst das Sheet, dann die Bestätigung, dann die Lupe, dann
+  // den Tisch. Menü und Sheet haben ihre Einträge oben; Tisch und Lupe melden
+  // sich hier an (`ebeneAuf`) und schließen per Knopf über `ebeneZu`, das
+  // ihren Eintrag wieder abräumt.
+
+  const offeneEbenen = useRef<{ name: UeberEbene; schliessen: () => void }[]>([]);
+  const nachPop = useRef<(() => void)[]>([]);
+
+  const ebeneAuf = useCallback(
+    (name: UeberEbene, schliessen: () => void) => {
+      const eintragen = () => {
+        const s = stateJetzt();
+        const state = { ...s, kombi: 1 as const, stapel: stapelJetzt(), idx: idx.current, ladung: LADUNG, overlay: name };
+        if (s.overlay === "menu") {
+          // Das Menü hat einen eigenen Eintrag: den übernimmt die Ebene
+          zeileRef.current?.schliessen({ ausHistory: true });
+          window.history.replaceState(state, "");
+        } else window.history.pushState(state, "");
+        offeneEbenen.current.push({ name, schliessen });
+      };
+      // Ein Zurück vom Schließen des Menüs ist noch unterwegs: erst danach eintragen
+      if (ignorierePop.current > 0) nachPop.current.push(eintragen);
+      else eintragen();
+    },
+    [stapelJetzt],
+  );
+
+  const ebeneZu = useCallback((name: UeberEbene, ohneZurueck = false) => {
+    const i = offeneEbenen.current.findIndex((e) => e.name === name);
+    if (i < 0) return;
+    const n = offeneEbenen.current.length - i;
+    offeneEbenen.current.splice(i);
+    if (ohneZurueck) return;
+    ignorierePop.current += 1;
+    window.history.go(-n);
+  }, []);
+
   // ── popstate: nur mit Stapel-Markierung (Plan 2.4, Punkt 4) ────────────────
 
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
       if (ignorierePop.current > 0) {
         ignorierePop.current -= 1;
+        if (ignorierePop.current === 0) nachPop.current.splice(0).forEach((f) => f());
         return;
       }
       const s = (e.state ?? null) as (Partial<KombiState> & Record<string, unknown>) | null;
+      // Lupe und Tisch: alles über dem Eintrag, auf dem wir jetzt stehen, geht zu — oben zuerst
+      const ebenen = offeneEbenen.current;
+      let bleibt = ebenen.length;
+      while (bleibt > 0 && ebenen[bleibt - 1].name !== s?.overlay) bleibt -= 1;
+      ebenen
+        .splice(bleibt)
+        .reverse()
+        .forEach((x) => x.schliessen());
       if (zeileRef.current?.istOffen() && s?.overlay !== "menu") zeileRef.current.schliessen({ ausHistory: true });
       if (sheetRef.current?.classList.contains("open") && s?.overlay !== "sheet") sheetSchliessen(true);
       if (!s?.kombi) return;
@@ -922,8 +973,10 @@ export function KombiShell({ children }: { children: ReactNode }) {
       merkeTagDaten,
       neuLaden,
       registriere,
+      ebeneAuf,
+      ebeneZu,
     }),
-    [openPage, vorladen, popPage, toast, hideToast, fehlerToast, openSheet, sheetSchliessen, navigiereEcht, pathname, setzeEbenen, pushStapel, tagDaten, merkeTagDaten, neuLaden, registriere],
+    [openPage, vorladen, popPage, toast, hideToast, fehlerToast, openSheet, sheetSchliessen, navigiereEcht, pathname, setzeEbenen, pushStapel, tagDaten, merkeTagDaten, neuLaden, registriere, ebeneAuf, ebeneZu],
   );
 
   // Nur mit SCHULAPP_TESTUHR (data-pruefung am <html>): die API für die

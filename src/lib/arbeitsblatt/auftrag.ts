@@ -7,6 +7,9 @@ import {
 import { fristFuerTokens, type ClaudeInhalt } from "@/lib/claude/client";
 import { UNCERTAIN_CLOSE, UNCERTAIN_OPEN } from "@/lib/transcripts";
 
+import { seiteEinsMesser } from "@/lib/pdf/arbeitsblatt-document";
+
+import { aufSeiteEins, LINIEN_SUMME, PLATZ_SUMME_MM } from "./hoehe";
 import type { Quelle } from "./quelle";
 import {
   aufgabeSchema,
@@ -76,8 +79,8 @@ export function blattAuftrag(vorab: BlattVorab): string {
     "3. Formeln und Terme stehen in geschweiften Klammern, etwa {f(x) = (x − 4)² + 1} — sie werden kursiv gesetzt. Schreib Minus als −, Hochzahlen als ² ³, Brüche als ½ oder a/b. Eine Lücke zum Ausfüllen ist ___ (drei Unterstriche).",
     "",
     rechnen
-      ? "4. Gerechnet wird in Kästchen (5 mm). platz ist die Höhe des Rechenfelds in mm: 15 für Ablesen, 25 für eine Umformung, 40 für eine längere Rechnung."
-      : "4. Geschrieben wird auf Linien (9 mm). platz ist die Zahl der Linien — 0, wenn in den Lücken der Teile geschrieben wird. Fremdsprachiger Text in den Teilen bekommt fr = true (kursiv).",
+      ? "4. Gerechnet wird in Kästchen (5 mm). platz ist die Höhe des Rechenfelds in mm: 15 für Ablesen, 25 für eine Umformung, 40 für eine längere Rechnung. Alles muss auf eine Seite passen: zusammen höchstens ${PLATZ_SUMME_MM} mm platz."
+      : `4. Geschrieben wird auf Linien (9 mm). platz ist die Zahl der Linien — 0, wenn in den Lücken der Teile geschrieben wird. Alles muss auf eine Seite passen: zusammen höchstens ${LINIEN_SUMME} Linien. Fremdsprachiger Text in den Teilen bekommt fr = true (kursiv).`,
     "",
     "5. teile sind die Unteraufgaben a), b), c) … — nur wenn es mehrere gibt.",
     "",
@@ -85,7 +88,7 @@ export function blattAuftrag(vorab: BlattVorab): string {
       ? "6. Die Lösung (l) steht auf Seite 2, mit Rechenweg und nicht nur dem Ergebnis: p für einen Satz, eq für Umformungen (Zeilen aus links und rechts vom Gleichheitszeichen; links leer für eine Folgezeile), erg für das Ergebnis, teile für die Lösungen der Unteraufgaben, hint für einen typischen Fehler („Achtung: …“), wenn es einen gibt."
       : "6. Die Lösung (l) steht auf Seite 2: teile für die Lösungen der Unteraufgaben in ihrer Reihenfolge, p für eine Erklärung, hint für einen typischen Fehler („Achtung: …“), wenn es einen gibt.",
     "",
-    "7. kurz ist der Name der Aufgabe in höchstens fünf Wörtern („Scheitelpunkt ablesen“) — so steht sie danach in der App, wenn er seine Wertung einträgt.",
+    "7. kurz ist der Name der Aufgabe in höchstens fünf Wörtern und etwa 30 Zeichen („Scheitelpunkt ablesen“) — so steht sie danach in der App, wenn er seine Wertung einträgt, neben zwei Knöpfen auf einem schmalen Handy.",
     "",
     "8. teil ist die Überschrift des Blatts in wenigen Wörtern (der Teil des Themas, den es übt), minuten die geschätzte Zeit.",
     ...(vorab.zuletztFalsch.length
@@ -132,11 +135,14 @@ const LOESUNG_FORM = z
 
 const AUFGABE_FORM = z
   .object({
-    kurz: z.string().describe("Name der Aufgabe, höchstens fünf Wörter"),
+    kurz: z.string().describe("Name der Aufgabe, höchstens fünf Wörter, etwa 30 Zeichen"),
     q: z.string().describe("Die Aufgabenstellung"),
     teile: z.array(z.string()).optional().describe("Unteraufgaben a), b), … — nur wenn es mehrere gibt"),
     fr: z.boolean().optional().describe("Teile in einer Fremdsprache: kursiv"),
-    platz: z.number().int().describe("Kästchen: Höhe in mm; Linien: Zahl der Linien"),
+    platz: z
+      .number()
+      .int()
+      .describe(`Kästchen: Höhe in mm (zusammen höchstens ${PLATZ_SUMME_MM}); Linien: Zahl der Linien (zusammen höchstens ${LINIEN_SUMME})`),
     zitat: z.string().describe("Wörtlich aus einer Abschrift kopiert, außerhalb von ⟨⟩"),
     l: z.array(LOESUNG_FORM).describe("Die Lösung für Seite 2"),
   })
@@ -199,7 +205,8 @@ export function aufgabeAus(roh: unknown): Aufgabe | null {
 }
 
 export type BlattErgebnis =
-  | { art: "fertig"; inhalt: ArbeitsblattInhalt; verworfen: number }
+  /** `gekappt`: Aufgaben, die hinten wegfielen, weil Seite 1 sonst nicht auf ein A4 passt */
+  | { art: "fertig"; inhalt: ArbeitsblattInhalt; verworfen: number; gekappt: number }
   | { art: "zu-wenig"; gueltig: number; verworfen: number; grund: string };
 
 /**
@@ -244,15 +251,19 @@ export function blattErgebnis(
     });
   }
 
+  // Seite 1 muss auf ein A4 passen: platz kürzen, sonst hinten kappen (./hoehe) —
+  // gemessen am echten Satz des PDF
+  const teil = antwort.teil.trim().slice(0, 120) || quelle.thema;
+  const minuten = Math.max(5, Math.min(60, Math.round(antwort.minuten) || 20));
+  const rahmen = { teil, minuten, papier, quellen: quellen.slice(0, 12) };
+  const messer = seiteEinsMesser({ fach: quelle.fach, thema: quelle.thema });
+  const passend = aufSeiteEins(bindung.gueltig, papier, (aufgaben) => messer.passt({ ...rahmen, aufgaben }));
+  messer.fertig();
+
   return {
     art: "fertig",
     verworfen,
-    inhalt: {
-      teil: antwort.teil.trim().slice(0, 120) || quelle.thema,
-      minuten: Math.max(5, Math.min(60, Math.round(antwort.minuten) || 20)),
-      papier,
-      quellen: quellen.slice(0, 12),
-      aufgaben: bindung.gueltig,
-    },
+    gekappt: passend.gekappt,
+    inhalt: { ...rahmen, aufgaben: passend.aufgaben },
   };
 }

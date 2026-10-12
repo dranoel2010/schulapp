@@ -169,7 +169,7 @@ export async function blattBauen(
       await bauFertig(userId, blattId, e.inhalt, jetzt());
       status = "fertig";
       ergebnis = "vorschlag";
-      grund = `${e.inhalt.aufgaben.length} Aufgaben${e.verworfen ? `, ${e.verworfen} verworfen` : ""}`;
+      grund = `${e.inhalt.aufgaben.length} Aufgaben${e.verworfen ? `, ${e.verworfen} verworfen` : ""}${e.gekappt ? `, ${e.gekappt} gekappt (Seite 1 voll)` : ""}`;
     } else {
       ergebnis = "kein-vorschlag";
       grund = e.grund;

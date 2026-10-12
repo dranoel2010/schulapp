@@ -3,7 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
-import { artAction, naechstesUebungsthemaAction } from "@/app/(app)/arbeitsblatt-actions";
+import {
+  artAction,
+  blattOeffnenAction,
+  blattStandAction,
+  naechstesUebungsthemaAction,
+  type ArbeitsblattAntwort,
+} from "@/app/(app)/arbeitsblatt-actions";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import type { Auswertung, BlattStand } from "@/lib/arbeitsblatt/ablauf";
@@ -12,7 +18,7 @@ import { dm, kurz, TAG, uhrzeit, wd } from "@/lib/kombi/text";
 import { themeColor } from "@/lib/kombi/theme-color";
 
 import { a4Daten, BlattKoerper, BlattLupe, DruckSeiten, type LupeSteuerung } from "./blatt";
-import { useArbeitsblatt, type BlattZiel } from "./use-arbeitsblatt";
+import { useArbeitsblatt, type BlattAnfang } from "./use-arbeitsblatt";
 
 /**
  * Der Tisch für ein Arbeitsblatt (Plan H) — der Gastgeber, bis Abschnitt E
@@ -23,9 +29,21 @@ import { useArbeitsblatt, type BlattZiel } from "./use-arbeitsblatt";
  *
  * `openTisch` mit
  *   - `{ thema }`: ein Übungsthema beim Wiederholen;
- *   - `{ block }`: der Lernblock — ist er kein Arbeitsblatt, gilt der alte Weg;
- *   - `{ mode: 'wh' }` ohne Thema: das erste fällige Übungsthema; gibt es
- *     keins, die alte Sitzung (Karten), bis E sie ersetzt.
+ *   - `{ block }`: der Lernblock — ist er kein Arbeitsblatt, gilt der alte
+ *     Weg; ist er schon erledigt (Blatt ausgewertet), geht nichts auf
+ *     (Prototyp `openTisch`);
+ *   - `{ mode: 'wh' }` ohne Thema: das erste fällige Übungsthema mit
+ *     fertigem Blatt; gibt es keins, die alte Sitzung (Karten), bis E sie
+ *     ersetzt.
+ *
+ * Der Tisch geht erst auf, wenn der Stand da ist. Scheitert das, geht nichts
+ * auf: Toast „Keine Verbindung“ mit „Erneut“ (Plan 2.4, Punkt 7). Offen hat
+ * er einen Eintrag in der History, die Lupe darüber einen eigenen
+ * (`ebeneAuf`): Android-Zurück schließt erst die Lupe, dann den Tisch.
+ *
+ * Bekannte Lücken bis E/F: „Thema x von y“ oben rechts (die Themenfolge kennt
+ * erst E); im Lernblock die Uhr, „Material · …“ unter dem Knopf und
+ * „Material ansehen“ am Ende (kommen mit F).
  */
 
 export type TischOptionen = {
@@ -60,6 +78,7 @@ export function ArbeitsblattEnde({
   stand: BlattStand;
   auswertung: Auswertung | null;
   imBlock: boolean;
+  /** Die Knöpfe in `.tnext` (Prototyp: „Weiter mit ⟨Fach⟩“ und „Für heute aufhören“, sonst „Fertig“) */
   knoepfe: ReactNode;
 }) {
   const n = auswertung?.n ?? stand.inhalt?.aufgaben.length ?? 0;
@@ -109,10 +128,12 @@ function alsApp(): boolean {
 
 export function ArbeitsblattTisch() {
   const kombi = useKombi();
-  const { registriere, fehlerToast, neuLaden } = kombi;
+  const { registriere, fehlerToast, neuLaden, ebeneAuf, ebeneZu } = kombi;
   const router = useRouter();
   const [optionen, setOptionen] = useState<TischOptionen | null>(null);
-  const [ziel, setZiel] = useState<BlattZiel | null>(null);
+  const [anfang, setAnfang] = useState<BlattAnfang | null>(null);
+  /** Nach dem Auswerten beim Wiederholen: das nächste Übungsthema mit fertigem Blatt (Prototyp `endThema`) */
+  const [naechstes, setNaechstes] = useState<BlattStand | null>(null);
   const tischRef = useRef<HTMLElement>(null);
   const surfRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -120,56 +141,67 @@ export function ArbeitsblattTisch() {
   const lupe = useRef<LupeSteuerung | null>(null);
   const seitenRef = useRef<(HTMLDivElement | null)[]>([]);
   const offenRef = useRef(false);
+  const oeffnetRef = useRef(false);
+  const zaehler = useRef(0);
   const imBlock = optionen?.mode === "block" || Boolean(optionen?.block);
 
-  const blatt = useArbeitsblatt(ziel, fehlerToast);
+  const blatt = useArbeitsblatt(anfang, fehlerToast);
   const { lage, phase } = blatt;
   const stand = lage.art === "da" ? lage.stand : null;
 
   const zeileVerstecken = (an: boolean) => document.getElementById("zeile")?.classList.toggle("hide", an);
 
+  // Zurück (aus der History) schließt den Tisch über diese Referenz — immer die neueste `schliessen`
+  const schliessenRef = useRef<(sofort?: boolean, ausHistory?: boolean) => void>(() => {});
+
   // ── Öffnen ────────────────────────────────────────────────────────────────
   const oeffnen = useCallback(
-    async (o?: Record<string, unknown>) => {
+    async function oeffnen(o?: Record<string, unknown>): Promise<void> {
+      if (offenRef.current || oeffnetRef.current) return;
       const opt = (o ?? {}) as TischOptionen;
-      let z: BlattZiel | null = null;
-      if (opt.blatt) z = { blatt: opt.blatt };
-      else if (opt.thema) z = { thema: opt.thema };
-      else if (opt.block) z = { block: opt.block };
-      else if (opt.mode !== "block") {
-        const a = await naechstesUebungsthemaAction().catch(() => null);
-        if (a?.ok && a.daten) z = { thema: a.daten };
+      const alsBlock = opt.mode === "block" || Boolean(opt.block);
+      let antwort: ArbeitsblattAntwort<BlattStand | null> | null = null;
+      oeffnetRef.current = true;
+      try {
+        if (opt.blatt) antwort = await blattStandAction(opt.blatt);
+        else if (opt.thema) antwort = await blattOeffnenAction({ thema: opt.thema });
+        else if (opt.block) antwort = await blattOeffnenAction({ block: opt.block });
+        else if (!alsBlock) antwort = await naechstesUebungsthemaAction();
+        else antwort = { ok: true, daten: null };
+      } catch {
+        antwort = null;
+      } finally {
+        oeffnetRef.current = false;
       }
-      if (!z) {
-        // Bis E: Karten laufen in der alten Sitzung
-        router.push("/abruf/sitzung");
+      if (!antwort?.ok) {
+        // Keine Ebene öffnen (Plan 2.4, Punkt 7)
+        fehlerToast("Keine Verbindung", () => void oeffnen(o), "Erneut");
         return;
       }
+      const st = antwort.daten;
+      if (!st) {
+        // Kein Arbeitsblatt: Karten in der alten Sitzung (bis E), ein Lernblock auf dem alten Weg (bis F)
+        router.push(alsBlock ? "/lernen" : "/abruf/sitzung");
+        return;
+      }
+      // Ein erledigter Block öffnet den Tisch nicht (Prototyp `openTisch`, Z. 4240)
+      if (alsBlock && st.ausgewertetAm) return;
       kombi.closeMenu();
       kombi.hideToast(true);
       offenRef.current = true;
+      zaehler.current += 1;
       setOptionen(opt);
-      setZiel(z);
+      setNaechstes(null);
+      setAnfang({ stand: st, nr: zaehler.current });
+      ebeneAuf("tisch", () => schliessenRef.current(false, true));
     },
-    [kombi, router],
+    [kombi, router, fehlerToast, ebeneAuf],
   );
 
   useEffect(() => registriere("tisch", (o) => void oeffnen(o)), [registriere, oeffnen]);
 
-  // Ein Block, der kein Arbeitsblatt ist: der alte Weg (bis F)
-  useEffect(() => {
-    if (lage.art !== "kein-blatt" || !optionen) return;
-    offenRef.current = false;
-    const t = setTimeout(() => {
-      setOptionen(null);
-      setZiel(null);
-      router.push("/lernen");
-    }, 0);
-    return () => clearTimeout(t);
-  }, [lage, optionen, router]);
-
   // Der Tisch geht auf: aus dem Knopf, sonst Überblenden
-  const offen = optionen !== null && lage.art !== "kein-blatt";
+  const offen = optionen !== null && anfang !== null;
   useLayoutEffect(() => {
     if (!offen) return;
     const tisch = tischRef.current;
@@ -196,17 +228,23 @@ export function ArbeitsblattTisch() {
   }, [offen]);
 
   // ── Schließen ─────────────────────────────────────────────────────────────
+  /**
+   * `ausHistory`: Zurück hat den Eintrag schon genommen. `navigiert`: danach
+   * geht es auf eine andere Route, deren Eintrag den des Tisches ersetzt.
+   */
   const schliessen = useCallback(
-    (sofort = false) => {
+    (sofort = false, ausHistory = false, navigiert = false) => {
       if (!offenRef.current) return;
       offenRef.current = false;
+      if (!ausHistory) ebeneZu("tisch", navigiert);
       lupe.current?.schliessen(true);
       zeileVerstecken(false);
       themeColor("paper");
       const tisch = tischRef.current;
       const fertig = () => {
         setOptionen(null);
-        setZiel(null);
+        setAnfang(null);
+        setNaechstes(null);
       };
       void neuLaden();
       if (sofort || !tisch) {
@@ -230,10 +268,13 @@ export function ArbeitsblattTisch() {
       }
       tisch.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: "ease", fill: "forwards" }).finished.then(fertig, fertig);
     },
-    [neuLaden, optionen],
+    [neuLaden, optionen, ebeneZu],
   );
+  useEffect(() => {
+    schliessenRef.current = schliessen;
+  }, [schliessen]);
 
-  // Escape (und später Android-Zurück): erst die Lupe, dann der Tisch
+  // Escape: erst die Lupe, dann der Tisch (Android-Zurück geht über die History, siehe `ebeneAuf`)
   useEffect(() => {
     if (!offen) return;
     const taste = (e: KeyboardEvent) => {
@@ -245,6 +286,9 @@ export function ArbeitsblattTisch() {
     document.addEventListener("keydown", taste, true);
     return () => document.removeEventListener("keydown", taste, true);
   }, [offen, schliessen]);
+
+  const lupeAuf = useCallback(() => ebeneAuf("lupe", () => lupe.current?.schliessen()), [ebeneAuf]);
+  const lupeZu = useCallback(() => ebeneZu("lupe"), [ebeneZu]);
 
   // ── Handlungen ────────────────────────────────────────────────────────────
   const drucken = useCallback(() => {
@@ -262,24 +306,44 @@ export function ArbeitsblattTisch() {
   }, [stand, blatt]);
 
   const fertig = useCallback(async () => {
+    // Beim Wiederholen: gibt es noch ein Übungsthema mit fertigem Blatt? Dann „Weiter mit …“
+    const weiter =
+      !imBlock && stand?.topicId ? await naechstesUebungsthemaAction(stand.topicId).catch(() => null) : null;
     const a = await blatt.auswerten(imBlock);
     if (!a) return;
+    setNaechstes(weiter?.ok ? weiter.daten : null);
     buzz();
     void neuLaden();
-  }, [blatt, imBlock, neuLaden]);
+  }, [blatt, imBlock, neuLaden, stand]);
 
-  /** „Dieses Thema lieber abfragen“: Art umstellen (außer das Blatt ist heute gescheitert), dann Karten — bis E in der alten Sitzung. */
+  /** „Weiter mit ⟨Fach⟩“: das nächste Blatt auf denselben Tisch (Prototyp `nextThema`). */
+  const weiterMit = useCallback(() => {
+    if (!naechstes) return;
+    zaehler.current += 1;
+    setAnfang({ stand: naechstes, nr: zaehler.current });
+    setNaechstes(null);
+    const body = bodyRef.current;
+    if (body && !reduce()) {
+      body.animate([{ opacity: 0, transform: "translateX(24px)" }, { opacity: 1, transform: "none" }], { duration: 260, easing: E.out });
+    }
+  }, [naechstes]);
+
+  /**
+   * „Dieses Thema lieber abfragen“: die Art umstellen, dann Karten — bis E in
+   * der alten Sitzung. Ohne fertiges Blatt (es wird noch gebaut oder ließ
+   * sich heute nicht bauen) nur für heute: die Art bleibt.
+   */
   const abfragen = useCallback(async function abfragen(): Promise<void> {
     if (!stand) return;
-    if (stand.topicId && stand.status !== "fehlgeschlagen") {
+    if (stand.topicId && stand.inhalt) {
       const a = await artAction(stand.topicId, "abfragen").catch(() => null);
       if (!a?.ok) {
         fehlerToast("Nicht gespeichert", () => void abfragen(), "Erneut");
         return;
       }
     }
-    schliessen(true);
-    router.push("/abruf/sitzung");
+    schliessen(true, false, true);
+    router.replace("/abruf/sitzung");
   }, [stand, fehlerToast, schliessen, router]);
 
   const ended = phase === "fertig" && stand !== null;
@@ -301,7 +365,7 @@ export function ArbeitsblattTisch() {
 
   const n = stand?.inhalt?.aufgaben.length ?? 0;
   const gedrucktUm = stand?.gedrucktAm ? uhrzeit(new Date(stand.gedrucktAm)) : null;
-  const zaehler = !stand?.inhalt
+  const zaehlerText = !stand?.inhalt
     ? "Arbeitsblatt"
     : phase === "bewerten" && gedrucktUm
       ? `Arbeitsblatt · gedruckt um ${gedrucktUm}`
@@ -344,11 +408,12 @@ export function ArbeitsblattTisch() {
         </div>
         <div className="t-meta" id="tMeta" style={ended ? { visibility: "hidden" } : undefined}>
           <p className="t-count" id="tCount">
-            {stand ? <Tn text={zaehler} /> : null}
+            {stand ? <Tn text={zaehlerText} /> : null}
           </p>
         </div>
         {stand && !ended ? (
           <BlattKoerper
+            key={anfang?.nr}
             stand={stand}
             phase={phase}
             wertung={blatt.wertung}
@@ -360,13 +425,16 @@ export function ArbeitsblattTisch() {
             seitenRef={seitenRef}
             einblenden={optionen?.origin ? 204 : 60}
           />
-        ) : lage.art === "fehler" ? (
-          <div className="t-blatt">
-            <p className="tb-wait">Keine Verbindung</p>
-          </div>
         ) : null}
       </div>
-      <BlattLupe daten={stand ? a4Daten(stand) : null} steuerungRef={lupe} seitenRef={seitenRef} istOffen={() => offenRef.current} />
+      <BlattLupe
+        daten={stand ? a4Daten(stand) : null}
+        steuerungRef={lupe}
+        seitenRef={seitenRef}
+        istOffen={() => offenRef.current}
+        beimOeffnen={lupeAuf}
+        beimSchliessen={lupeZu}
+      />
       <div className={`t-end${ended ? " on" : ""}`} id="tEnd" ref={endRef}>
         {ended && stand ? (
           <ArbeitsblattEnde
@@ -374,9 +442,21 @@ export function ArbeitsblattTisch() {
             auswertung={blatt.auswertung}
             imBlock={imBlock}
             knoepfe={
-              <button className={`tlink${imBlock ? " known" : ""}`} type="button" onClick={() => schliessen()}>
-                Fertig
-              </button>
+              !imBlock && naechstes ? (
+                <>
+                  <button className="tlink known" type="button" onClick={weiterMit}>
+                    <span>{`Weiter mit ${naechstes.fach}`}</span>
+                    <span className="s">{`${naechstes.thema}, Arbeitsblatt`}</span>
+                  </button>
+                  <button className="tlink" type="button" onClick={() => schliessen()}>
+                    Für heute aufhören
+                  </button>
+                </>
+              ) : (
+                <button className={`tlink${imBlock ? " known" : ""}`} type="button" onClick={() => schliessen()}>
+                  Fertig
+                </button>
+              )
             }
           />
         ) : null}

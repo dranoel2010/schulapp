@@ -12,7 +12,9 @@ import {
   blattFuerThema,
   blattStand,
   faelligeUebungsthemen,
+  themaGehoert,
   vorabBlaetter,
+  vorhandenesBlatt,
 } from "@/lib/arbeitsblatt/ablauf";
 import { blattErgebnis } from "@/lib/arbeitsblatt/auftrag";
 import { ABSCHRIFT_MATHE, UEBUNG_MATHE } from "@/lib/arbeitsblatt/beispiel";
@@ -144,6 +146,31 @@ describe("Arbeitsblatt im Alltag (Plan H, Frage 3 a)", () => {
     assert.equal(stand?.status, "fehlgeschlagen");
     assert.equal(stand?.weiter, false);
     assert.equal(stand?.hatFragen, true);
+  });
+
+  it("fremde Themen: themaGehoert sagt nein, blattStand nennt Titel und Fach nicht", async () => {
+    const fremd = await testNutzer();
+    const t = await fachMitThema(fremd, "Biologie", "Zellteilung", "2026-10-01");
+    assert.equal(await themaGehoert(nutzer, t.topicId), false);
+    assert.equal(await themaGehoert(fremd, t.topicId), true);
+    // Eine Zeile mit fremdem Thema (wie sie vor der Prüfung entstehen konnte): kein Leck
+    const [z] = await testDb
+      .insert(arbeitsblaetter)
+      .values({ userId: nutzer, subjectTopicId: t.topicId, tag: "2026-10-12" })
+      .returning();
+    const stand = await blattStand(nutzer, z.id, um("2026-10-12"));
+    assert.equal(stand?.thema, "");
+    assert.equal(stand?.fach, "");
+  });
+
+  it("ohne Schlüssel: vorhandenesBlatt legt nichts an", async () => {
+    const t = await fachMitThema(nutzer, "Chemie", "Redoxreaktionen", "2026-10-01");
+    await frageMitTerminen(nutzer, t.subjectId, t.topicId, ["2026-10-12"]);
+    assert.equal(await vorhandenesBlatt(nutzer, { thema: t.topicId }, "2026-10-12"), null);
+    const zeilen = await testDb.select().from(arbeitsblaetter).where(eq(arbeitsblaetter.subjectTopicId, t.topicId));
+    assert.equal(zeilen.length, 0);
+    const neu = await blattFuerThema(nutzer, t.topicId, "2026-10-12");
+    assert.equal((await vorhandenesBlatt(nutzer, { thema: t.topicId }, "2026-10-12"))?.id, neu.id);
   });
 
   it("Blatt des heutigen Lernblocks beim Wiederholen ausgewertet: der Block ist erledigt (perWH)", async () => {

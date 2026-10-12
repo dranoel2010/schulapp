@@ -569,6 +569,40 @@ export async function letzterLauf(
 }
 
 /**
+ * Der jüngste Bau eines Arbeitsblatts — für die Zeile „Zuletzt …“ in den
+ * Einstellungen unter „Handschrift abschreiben“ (ein Blatt hat keine eigene
+ * Seite, an der sie stehen könnte). Dieselbe Form wie `letzterLauf()`.
+ */
+export async function letzterArbeitsblattLauf(
+  userId: string,
+): Promise<(LaufZeile & { id: string }) | null> {
+  const [zeile] = await db
+    .select({
+      id: leserLaeufe.id,
+      art: leserLaeufe.art,
+      ergebnis: leserLaeufe.ergebnis,
+      grund: leserLaeufe.grund,
+      kostenUsd: leserLaeufe.kostenUsd,
+      abbruch: leserLaeufe.abbruch,
+      gemessen: sql<boolean>`${leserLaeufe.messung} is not null`,
+      fristRestMs: restMs(leserLaeufe.fristBis),
+      createdAt: leserLaeufe.createdAt,
+    })
+    .from(leserLaeufe)
+    .where(and(eq(leserLaeufe.userId, userId), eq(leserLaeufe.art, "arbeitsblatt")))
+    .orderBy(desc(leserLaeufe.createdAt), desc(leserLaeufe.id))
+    .limit(1);
+
+  if (!zeile) return null;
+  return {
+    ...zeile,
+    gemessen: Boolean(zeile.gemessen),
+    fristRestMs: zeile.fristRestMs === null ? null : Number(zeile.fristRestMs),
+    kostenUsd: zeile.kostenUsd === null ? null : Number(zeile.kostenUsd),
+  };
+}
+
+/**
  * Der jüngste Fragenlauf zu einer Klausur — für die Zeile „Zuletzt …“ auf der
  * Klausurseite des Abrufs. Dieselbe Form wie `letzterLauf()` am Blatt.
  */

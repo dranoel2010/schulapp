@@ -120,6 +120,52 @@ export async function blattFuerThema(
 }
 
 /**
+ * Ein schon angelegtes Blatt für ein Thema (offen, auch von einem früheren
+ * Tag) oder einen Block — ohne anzulegen. Für den Betrieb ohne Schlüssel:
+ * dann entsteht kein neues Blatt, ein fertiges gilt aber weiter.
+ */
+export async function vorhandenesBlatt(
+  userId: string,
+  ziel: { thema: string } | { block: string },
+  tag: string,
+): Promise<ArbeitsblattZeile | null> {
+  if ("thema" in ziel) return offenesBlatt(userId, ziel.thema, tag);
+  const [zeile] = await db
+    .select()
+    .from(arbeitsblaetter)
+    .where(and(eq(arbeitsblaetter.userId, userId), eq(arbeitsblaetter.studyBlockId, ziel.block)))
+    .limit(1);
+  if (zeile) return zeile;
+  // Hat das Thema des Blocks an seinem Tag schon ein Blatt (beim Wiederholen gebaut), übernimmt der Block es
+  const bz = await blockZiel(userId, ziel.block);
+  if (!bz || !blockAlsBlatt(bz) || !bz.subjectTopicId) return null;
+  const [block] = await db.select({ date: studyBlocks.date }).from(studyBlocks).where(eq(studyBlocks.id, ziel.block));
+  if (!block) return null;
+  const [amThema] = await db
+    .select({ id: arbeitsblaetter.id })
+    .from(arbeitsblaetter)
+    .where(
+      and(
+        eq(arbeitsblaetter.userId, userId),
+        eq(arbeitsblaetter.subjectTopicId, bz.subjectTopicId),
+        eq(arbeitsblaetter.tag, block.date),
+      ),
+    )
+    .limit(1);
+  return amThema ? blattFuerBlock(userId, ziel.block) : null;
+}
+
+/** Gehört das Thema diesem Nutzer? */
+export async function themaGehoert(userId: string, topicId: string): Promise<boolean> {
+  const [t] = await db
+    .select({ id: subjectTopics.id })
+    .from(subjectTopics)
+    .where(and(eq(subjectTopics.userId, userId), eq(subjectTopics.id, topicId)))
+    .limit(1);
+  return Boolean(t);
+}
+
+/**
  * Das Blatt eines Lernblocks — oder null, wenn der Block kein Arbeitsblatt
  * ist (Kriterium 4: nur bei Übungsthemen). Ein Blatt des Themas von heute
  * übernimmt der Block (./stand): Wiederholen und Lernblock teilen den Stand.
@@ -205,7 +251,7 @@ export async function blattStand(
       .select({ title: subjectTopics.title, fach: subjects.name })
       .from(subjectTopics)
       .innerJoin(subjects, eq(subjects.id, subjectTopics.subjectId))
-      .where(eq(subjectTopics.id, zeile.subjectTopicId));
+      .where(and(eq(subjectTopics.userId, userId), eq(subjectTopics.id, zeile.subjectTopicId)));
     fach = t?.fach ?? "";
     thema = t?.title ?? "";
   }
