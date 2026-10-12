@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { blattOeffnenAction, blattStandAction, type ArbeitsblattAntwort } from "@/app/(app)/arbeitsblatt-actions";
-import { lernblockStartenAction, lernblockUhrAction } from "@/app/(app)/lernblock-actions";
+import { lernblockStartenAction, lernblockTischAction, lernblockUhrAction } from "@/app/(app)/lernblock-actions";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import {
@@ -16,7 +16,9 @@ import {
   useSekunde,
   zustand,
 } from "@/components/kombi/lernblock/uhr";
+import { MaterialSheet } from "@/components/kombi/tisch/lernblock-tisch";
 import { LernblockUhr } from "@/components/kombi/tisch/lernblock-uhr";
+import type { MaterialDaten } from "@/lib/kombi/lernblock-daten";
 import type { Auswertung, BlattStand } from "@/lib/arbeitsblatt/ablauf";
 import { buzz, E, reduce } from "@/lib/kombi/motion";
 import { dm, kurz, TAG, uhrzeit, wd } from "@/lib/kombi/text";
@@ -43,8 +45,8 @@ import { useArbeitsblatt, type BlattAnfang } from "./use-arbeitsblatt";
  * er einen Eintrag in der History, die Lupe darüber einen eigenen
  * (`ebeneAuf`): Android-Zurück schließt erst die Lupe, dann den Tisch.
  *
- * Bekannte Lücke: „Material · …“ unter dem Knopf und „Material ansehen“ am
- * Ende (Prototyp Z. 4109) zeigt nur der Tisch aus F.
+ * Unter dem Knopf steht wie im Prototyp „Material · …“ (Sheet auf dem
+ * Tisch), am Ende „Material ansehen“ neben „Fertig“ (Z. 4109).
  */
 
 export type TischOptionen = {
@@ -133,6 +135,8 @@ export function ArbeitsblattTisch() {
   const kombi = useKombi();
   const { registriere, fehlerToast, neuLaden, ebeneAuf, ebeneZu } = kombi;
   const [blockId, setBlockId] = useState<string | null>(null);
+  /** Das Material des Blocks („Material · Scheitelpunktform, 2 Seiten“, Prototyp `#tMat`) */
+  const [material, setMaterial] = useState<MaterialDaten | null>(null);
   const [optionen, setOptionen] = useState<TischOptionen | null>(null);
   const [anfang, setAnfang] = useState<BlattAnfang | null>(null);
   /** Nach dem Auswerten beim Wiederholen: das nächste Übungsthema mit fertigem Blatt (Prototyp `endThema`) */
@@ -214,7 +218,17 @@ export function ArbeitsblattTisch() {
             () => fehlerToast("Nicht gespeichert", () => void starten(), "Erneut"),
           );
         void starten();
-      } else setBlockId(null);
+        setMaterial(null);
+        lernblockTischAction(bid).then(
+          (r) => {
+            if (r.ok && offenRef.current) setMaterial(r.daten.material);
+          },
+          () => {},
+        );
+      } else {
+        setBlockId(null);
+        setMaterial(null);
+      }
     },
     [kombi, fehlerToast, ebeneAuf],
   );
@@ -326,6 +340,8 @@ export function ArbeitsblattTisch() {
     if (!offen) return;
     const taste = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      // Ein Sheet auf dem Tisch (Material) schließt die Shell zuerst
+      if (document.getElementById("sheet")?.classList.contains("open")) return;
       e.stopPropagation();
       if (lupe.current?.offen()) lupe.current.schliessen();
       else schliessen();
@@ -456,6 +472,11 @@ export function ArbeitsblattTisch() {
             einblenden={optionen?.origin ? 204 : 60}
           />
         ) : null}
+        {imBlock && material && !ended ? (
+          <button className="t-mat" id="tMat" type="button" onClick={() => kombi.openSheet(<MaterialSheet m={material} />, true)}>
+            <span id="tMatText">{`Material · ${material.titel.split(",")[0]}, ${material.seiten} ${material.seiten === 1 ? "Seite" : "Seiten"}`}</span>
+          </button>
+        ) : null}
       </div>
       <BlattLupe
         daten={stand ? a4Daten(stand) : null}
@@ -483,9 +504,16 @@ export function ArbeitsblattTisch() {
                   </button>
                 </>
               ) : (
-                <button className={`tlink${imBlock ? " known" : ""}`} type="button" onClick={() => schliessen()}>
-                  Fertig
-                </button>
+                <>
+                  {imBlock && material ? (
+                    <button className="tlink" type="button" onClick={() => kombi.openSheet(<MaterialSheet m={material} />, true)}>
+                      Material ansehen
+                    </button>
+                  ) : null}
+                  <button className={`tlink${imBlock ? " known" : ""}`} type="button" onClick={() => schliessen()}>
+                    Fertig
+                  </button>
+                </>
               )
             }
           />

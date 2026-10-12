@@ -2,7 +2,6 @@ import { and, asc, eq, gt, inArray } from "drizzle-orm";
 
 import { db } from "@/db";
 import { examTopics, materials, studyBlocks } from "@/db/schema";
-import { berlinDay } from "@/lib/dates";
 import { blocksForDay, listExams, missedBlocks, type TodayBlock } from "@/lib/exams";
 import { freeLabel, freePeriodOn } from "@/lib/free-days";
 import { homeworkForRange, listHomework, type HomeworkItem } from "@/lib/homework";
@@ -43,10 +42,7 @@ export type { TagDaten } from "@/lib/kombi/startseite";
  * Wiederholen (Abschnitt E) und der Ablauf (C) ergänzen ihre Felder hier.
  */
 
-/** Der App-Tag: der Berliner Kalendertag von „jetzt minus 4 Stunden“. */
-export function appTagVon(now: Date): string {
-  return berlinDay(new Date(now.getTime() - 4 * 3600_000));
-}
+export { appTagVon } from "@/lib/kombi/app-tag";
 
 /** Klausuren in höchstens so vielen Tagen stehen auf dem Überblick (V2 4.1). */
 const KLAUSUR_TAGE = 14;

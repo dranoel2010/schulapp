@@ -1,3 +1,4 @@
+import { jetzt } from "@/lib/tag";
 import { addDays, isCalendarDate } from "@/lib/dates";
 import { examTopicTitles, listExams } from "@/lib/exams";
 import { homeworkForRange } from "@/lib/homework";
@@ -37,7 +38,7 @@ export async function wocheSeite(
   userId: string,
   params: Record<string, string>,
 ): Promise<WocheDaten> {
-  const heute = heuteApp();
+  const heute = heuteApp(await jetzt());
   const kal = await schulKalender(userId, heute);
 
   let tag = params.tag && isCalendarDate(params.tag) ? params.tag : kal.naechsterSchultag(heute);

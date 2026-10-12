@@ -1,3 +1,4 @@
+import { jetzt } from "@/lib/tag";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/db";
@@ -34,7 +35,7 @@ function fachSub(kal: SchulKalender, heute: string, id: string, voll: boolean): 
 }
 
 export async function faecherSeite(userId: string): Promise<FaecherDaten> {
-  const heute = heuteApp();
+  const heute = heuteApp(await jetzt());
   const [faecher, kal] = await Promise.all([
     listSubjects(userId, { includeArchived: true }),
     schulKalender(userId, heute),
@@ -78,7 +79,7 @@ export async function fachSeite(
 ): Promise<FachDaten | null> {
   const fach = await getSubject(userId, params.id ?? "");
   if (!fach) return null;
-  const heute = heuteApp();
+  const heute = heuteApp(await jetzt());
 
   const [kal, aufgaben, klausuren, titel, themen, blaetter] = await Promise.all([
     schulKalender(userId, heute),

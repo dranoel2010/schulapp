@@ -125,7 +125,13 @@ function LernblockZeile({ block: vomServer, fach, klausurDatum }: { block: Block
   const text = gedruckt ? "Auswerten" : z === "ruhe" || done ? "Starten" : z === "pausiert" ? "Weiter" : null;
   // als HTML wie im Prototyp: Zahlen mit `tn`, Text maskiert
   const sub = done
-    ? esc(block.blatt?.ausgewertet ? "Arbeitsblatt ausgewertet" : lbDauer(block))
+    ? esc(
+        block.blatt?.perWH
+          ? "Blatt beim Wiederholen ausgewertet"
+          : block.blatt?.ausgewertet
+            ? "Arbeitsblatt ausgewertet"
+            : lbDauer(block),
+      )
     : gedruckt
       ? esc("Gedruckt, noch nicht ausgewertet")
       : z === "pausiert"

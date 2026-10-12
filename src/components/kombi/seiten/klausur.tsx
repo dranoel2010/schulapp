@@ -13,6 +13,7 @@ import {
 } from "@/app/(app)/lernblock-actions";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
+import { TextLine } from "@/components/kombi/seiten/zeilen";
 import { blockMerken, useBlock, zustand } from "@/components/kombi/lernblock/uhr";
 import { useOptimistischeAktion } from "@/lib/kombi/aktion";
 import type { BlockVorher } from "@/app/(app)/lernblock-actions";
@@ -505,12 +506,9 @@ export function KlausurenInhalt({ daten }: { params: Record<string, string>; dat
           <Icon name="chevron_right" />
         </button>
       ))}
-      <Link className="lrow plain" href="/klausuren/neu">
-        <span>
-          <b>Klausur eintragen</b>
-        </span>
-        <Icon name="chevron_right" />
-      </Link>
+      {/* wie „Fach anlegen“ auf der Fächer-Seite (Plan 2.3: Textzeile mit Chevron) */}
+      {daten.klausuren.length ? <div style={{ height: 16 }} /> : null}
+      <TextLine href="/klausuren/neu">Klausur eintragen</TextLine>
     </>
   );
 }

@@ -1,3 +1,4 @@
+import { jetzt } from "@/lib/tag";
 import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
@@ -37,7 +38,7 @@ const KALENDER: Record<string, string> = {
 };
 
 export async function einstellungenSeite(userId: string): Promise<EinstellungenDaten> {
-  const heute = heuteApp();
+  const heute = heuteApp(await jetzt());
   const [kal, kalender, verbindungen, vorschlaege, nutzer] = await Promise.all([
     schulKalender(userId, heute),
     loadCalendarStatus(userId),

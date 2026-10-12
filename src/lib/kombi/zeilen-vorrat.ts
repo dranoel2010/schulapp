@@ -1,7 +1,7 @@
-import { and, asc, eq, gte, inArray, isNull, lte, ne } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, ne } from "drizzle-orm";
 
 import { db } from "@/db";
-import { examTopics, materialTopics, materials, studyBlocks, subjectTopics, subjects } from "@/db/schema";
+import { examTopics, materialTopics, materials, studyBlocks, subjectTopics } from "@/db/schema";
 import { berlinDay } from "@/lib/dates";
 import { blocksForDay, listExams } from "@/lib/exams";
 import { listFreePeriods } from "@/lib/free-days";
@@ -11,7 +11,7 @@ import { lessonRoom } from "@/lib/home";
 import { listHomework } from "@/lib/homework";
 import { fachEintraege } from "@/lib/kombi/fach-alias";
 import { appTagVon } from "@/lib/kombi/tag-daten";
-import { diffDays, weekdayOrDate } from "@/lib/kombi/text";
+import { diffDays } from "@/lib/kombi/text";
 import {
   isSchool,
   schluss,
@@ -28,7 +28,7 @@ import { blockRest, blockZustand } from "@/lib/lernblock";
 import { ablaufSchritt, ablaufStand, protokollVomTag } from "@/lib/protokoll";
 import { listSubjects } from "@/lib/subjects";
 import { DEFAULT_PERIODS, listLessons, listPeriods, periodTimes } from "@/lib/timetable";
-import { recallItems, recallSchedule } from "@/recall/schema";
+import { faelligeThemen, wiederholenStand } from "@/recall/themen";
 
 /**
  * `zeilenVorrat(userId, now)` — der Vorrat der Zeile (Plan 3.2, D). Alles,
@@ -154,8 +154,13 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
 
   // ── Fällige Themen (nur lesen, Takt unverändert) ──────────────────────────
   const inFerienHeute = frei.some((f) => heute >= f.von && heute <= f.bis);
-  const themen: VorratThema[] = inFerienHeute ? [] : await faelligeThemenKurz(userId, heute, klausuren);
-  const wh = await whStand(userId, heute, themen, inFerienHeute, protokoll.some((e) => e.typ === "thema_beendet"));
+  // Dieselbe Folge und Art wie Überblick und Tisch (Abschnitt E, src/recall/themen.ts):
+  // ein Übungsthema heißt „Arbeitsblatt“, ein ausgewertetes fehlt bis zum nächsten Termin
+  const themen: VorratThema[] = inFerienHeute
+    ? []
+    : (await faelligeThemen(userId, heute)).map((t) => ({ key: t.key, fachId: t.subjectId, name: t.titel, umfang: t.umfang }));
+  const whE = await wiederholenStand(userId, heute);
+  const wh: VorratWh = whE.kind === "text" ? { kind: "text", text: whE.text } : whE;
 
   // ── Lernblock von heute ───────────────────────────────────────────────────
   const offen = bloeckeHeute.find((b) => b.status === "open");
@@ -237,80 +242,3 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
  * Fällige Themen, gebündelt je Fach-Thema (Plan 3.4, nur lesen). Fragen ohne
  * Thema werden je Fach zu „⟨Fach⟩ · ohne Thema“ zusammengefasst.
  */
-async function faelligeThemenKurz(userId: string, heute: string, klausuren: VorratKlausur[]): Promise<VorratThema[]> {
-  const zeilen = await db
-    .select({
-      itemId: recallItems.id,
-      subjectId: recallItems.subjectId,
-      subjectName: subjects.name,
-      topicId: recallItems.subjectTopicId,
-      topicTitle: subjectTopics.title,
-      mergedInto: subjectTopics.mergedInto,
-      dueOn: recallSchedule.dueOn,
-    })
-    .from(recallSchedule)
-    .innerJoin(recallItems, eq(recallItems.id, recallSchedule.itemId))
-    .innerJoin(subjects, eq(subjects.id, recallItems.subjectId))
-    .leftJoin(subjectTopics, eq(subjectTopics.id, recallItems.subjectTopicId))
-    .where(
-      and(eq(recallItems.userId, userId), isNull(recallItems.retiredAt), isNull(recallSchedule.doneAt), lte(recallSchedule.dueOn, heute)),
-    )
-    .orderBy(asc(recallSchedule.dueOn));
-
-  // Alias-Kette: ein zusammengelegtes Thema zählt beim Ziel
-  const ziele = new Map<string, string>();
-  const offen = [...new Set(zeilen.map((z) => z.mergedInto).filter((x): x is string => !!x))];
-  if (offen.length) {
-    const rows = await db.select({ id: subjectTopics.id, title: subjectTopics.title }).from(subjectTopics).where(inArray(subjectTopics.id, offen));
-    for (const r of rows) ziele.set(r.id, r.title);
-  }
-
-  type Buendel = { key: string; fachId: string; name: string; items: Set<string>; seit: string };
-  const b = new Map<string, Buendel>();
-  for (const z of zeilen) {
-    const key = z.topicId ? (z.mergedInto ?? z.topicId) : `ohne:${z.subjectId}`;
-    const name = z.topicId ? (z.mergedInto ? (ziele.get(z.mergedInto) ?? z.topicTitle ?? "") : (z.topicTitle ?? "")) : `${z.subjectName} · ohne Thema`;
-    const e = b.get(key) ?? { key, fachId: z.subjectId, name, items: new Set(), seit: z.dueOn };
-    e.items.add(z.itemId);
-    if (z.dueOn < e.seit) e.seit = z.dueOn;
-    b.set(key, e);
-  }
-  const naechsteKlausur = (fachId: string) => {
-    const k = klausuren.filter((x) => x.fachId === fachId && x.datum >= heute).sort((x, y) => (x.datum < y.datum ? -1 : 1))[0];
-    return k ? diffDays(heute, k.datum) : 9999;
-  };
-  return [...b.values()]
-    .sort(
-      (x, y) =>
-        (x.seit < y.seit ? -1 : x.seit > y.seit ? 1 : 0) ||
-        naechsteKlausur(x.fachId) - naechsteKlausur(y.fachId) ||
-        y.items.size - x.items.size ||
-        x.name.localeCompare(y.name, "de"),
-    )
-    .map((e) => ({ key: e.key, fachId: e.fachId, name: e.name, umfang: `${e.items.size} ${e.items.size === 1 ? "Frage" : "Fragen"}` }));
-}
-
-/** „Wiederholen“ wie auf dem Überblick (Prototyp `whState`, Z. 2016). */
-async function whStand(userId: string, heute: string, themen: VorratThema[], ferien: boolean, durch: boolean): Promise<VorratWh> {
-  if (ferien) return { kind: "ferien" };
-  if (themen.length) {
-    const [erstes] = themen;
-    const fach = await db.select({ name: subjects.name }).from(subjects).where(eq(subjects.id, erstes.fachId)).limit(1);
-    const label = erstes.key.startsWith("ohne:") ? erstes.name : `${fach[0]?.name ?? ""} · ${erstes.name}`;
-    return { kind: "knopf", n: themen.length, sub: `Zuerst ${label}` };
-  }
-  const [naechster] = await db
-    .select({ dueOn: recallSchedule.dueOn })
-    .from(recallSchedule)
-    .innerJoin(recallItems, eq(recallItems.id, recallSchedule.itemId))
-    .where(and(eq(recallItems.userId, userId), isNull(recallItems.retiredAt), isNull(recallSchedule.doneAt), gte(recallSchedule.dueOn, heute)))
-    .orderBy(asc(recallSchedule.dueOn))
-    .limit(1);
-  const [irgendeine] = await db.select({ id: recallItems.id }).from(recallItems).where(eq(recallItems.userId, userId)).limit(1);
-  if (!irgendeine) return { kind: "leer" };
-  const nd = naechster && naechster.dueOn > heute ? weekdayOrDate(naechster.dueOn, heute) : null;
-  return {
-    kind: "text",
-    text: durch ? `Für heute durch.${nd ? ` Nächstes Thema ${nd}.` : ""}` : `Heute ist nichts fällig.${nd ? ` Nächstes Thema ${nd}.` : ""}`,
-  };
-}

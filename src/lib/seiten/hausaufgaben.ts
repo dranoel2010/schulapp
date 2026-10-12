@@ -1,4 +1,5 @@
 import { listHomework } from "@/lib/homework";
+import { jetzt } from "@/lib/tag";
 
 import { aufgabeDaten, heuteApp, schulKalender, type AufgabeDaten } from "./gemeinsam";
 
@@ -17,10 +18,10 @@ export type HausaufgabenDaten = {
   erledigt: AufgabeDaten[];
 };
 
-const nachFaelligkeit = (a: AufgabeDaten, b: AufgabeDaten) =>
-  a.due < b.due ? -1 : a.due > b.due ? 1 : a.id < b.id ? -1 : 1;
+const nachFaelligkeit = (a: AufgabeDaten, b: AufgabeDaten) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0);
 
-export async function hausaufgabenSeite(userId: string, now: Date = new Date()): Promise<HausaufgabenDaten> {
+export async function hausaufgabenSeite(userId: string, jetztZeit?: Date): Promise<HausaufgabenDaten> {
+  const now = jetztZeit ?? (await jetzt());
   const heute = heuteApp(now);
   const [kal, liste] = await Promise.all([
     schulKalender(userId, heute),
@@ -28,7 +29,8 @@ export async function hausaufgabenSeite(userId: string, now: Date = new Date()):
   ]);
   const ns = kal.naechsterSchultag(heute);
   const heuteSchule = kal.schultag(heute);
-  const alle = liste.map(aufgabeDaten);
+  // gleiche Fälligkeit: in der Reihenfolge des Eintragens (Prototyp `offeneFuer`, Z. 1782)
+  const alle = [...liste].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map(aufgabeDaten);
   const grenze = now.getTime() - 2 * 864e5;
 
   return {

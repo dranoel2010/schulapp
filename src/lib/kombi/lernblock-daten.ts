@@ -10,6 +10,7 @@ import {
   materials,
   studyBlocks,
   subjects,
+  tagesprotokoll,
   type ExamTopic,
   type StudyBlock,
 } from "@/db/schema";
@@ -54,6 +55,8 @@ export type BlattStand = {
   gedruckt: boolean;
   ausgewertet: boolean;
   fehlgeschlagen: boolean;
+  /** beim Wiederholen ausgewertet, nicht im Block (Protokoll `lernblock_erledigt` {perWH}) */
+  perWH: boolean;
 };
 
 /** Benennung der Planeinträge (Plan 3.5): ein Lernblock heißt nach seinem Thema. */
@@ -100,12 +103,30 @@ export async function blattStaende(
     })
     .from(arbeitsblaetter)
     .where(and(eq(arbeitsblaetter.userId, userId), inArray(arbeitsblaetter.studyBlockId, blockIds)));
+  const perWH = zeilen.some((z) => z.ausgewertetAm !== null)
+    ? new Set(
+        (
+          await db
+            .select({ ref: tagesprotokoll.ref })
+            .from(tagesprotokoll)
+            .where(
+              and(
+                eq(tagesprotokoll.userId, userId),
+                eq(tagesprotokoll.typ, "lernblock_erledigt"),
+                inArray(tagesprotokoll.ref, blockIds),
+                sql`${tagesprotokoll.daten}->>'perWH' = 'true'`,
+              ),
+            )
+        ).map((z) => z.ref),
+      )
+    : new Set<string | null>();
   for (const z of zeilen) {
     if (!z.blockId) continue;
     out.set(z.blockId, {
       gedruckt: z.gedrucktAm !== null,
       ausgewertet: z.ausgewertetAm !== null,
       fehlgeschlagen: z.status === "fehlgeschlagen",
+      perWH: z.ausgewertetAm !== null && perWH.has(z.blockId),
     });
   }
   return out;

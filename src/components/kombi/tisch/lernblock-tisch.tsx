@@ -536,7 +536,7 @@ export function LernblockTisch() {
 }
 
 /** Das Material als Sheet auf dem Tisch (Prototyp `openSheet(b, true)`, `abschriftEl`). */
-function MaterialSheet({ m }: { m: MaterialDaten }) {
+export function MaterialSheet({ m }: { m: MaterialDaten }) {
   return (
     <>
       <h2 className="p-title">{m.titel}</h2>

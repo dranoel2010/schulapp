@@ -43,7 +43,7 @@ import { Tokens, tokensFuer } from "@/components/kombi/zeile/tokens";
 import { zuletztListe, zuletztTitel } from "@/components/kombi/zeile/zuletzt";
 import { bare, norm, type FachEintrag } from "@/lib/kombi/fach-alias";
 import { E, flash, reduce, springOpts, vvStable } from "@/lib/kombi/motion";
-import { appTagVon } from "@/lib/kombi/tag-daten";
+import { appTagVon } from "@/lib/kombi/app-tag";
 import { dm, kurz } from "@/lib/kombi/text";
 import { nextLesson, type VorratAufgabe, type ZeilenVorrat } from "@/lib/kombi/vorrat";
 
@@ -868,6 +868,9 @@ export function Zeile({
   const doneFuer = (a: VorratAufgabe) => (z.heldDone.has(a.id) ? (z.heldDone.get(a.id) ?? null) : a.done);
   const undo = kombi.undoJetzt();
   const tagAnsicht = (kombi.tagDaten as unknown as { ansicht?: string } | null)?.ansicht;
+  /** die Ansicht, die die Startseite gerade zeigt (Morgens, Überblick, Morgen früh) */
+  const homeAnsicht = () =>
+    typeof document === "undefined" ? undefined : (document.querySelector<HTMLElement>("#home .mode.on")?.dataset.v ?? undefined);
 
   const leerGruppen: { label: string; items: Option[]; grid?: boolean }[] = [];
   let hitsInhalt: React.ReactNode = null;
@@ -877,7 +880,10 @@ export function Zeile({
   if (v)
     leerGruppen.push({
       label: "Vorschläge",
-      items: suggestions({ v, jetzt: jetzt(), ansicht: ablaufZ.sichtbar ? "ablauf" : (tagAnsicht ?? v.ansicht),
+      // Was gerade zu sehen ist, weiß der Ablauf (C): die Ansicht aus den Tagesdaten
+      // sagt nur, womit der Tag begann; „übersprungen“ meldet er, bevor der Vorrat nachzieht
+      items: suggestions({ v: ablaufZ.nachDerSchule && v.ablauf !== "übersprungen" ? { ...v, ablauf: "übersprungen" } : v, jetzt: jetzt(),
+          ansicht: ablaufZ.sichtbar ? "ablauf" : (homeAnsicht() ?? (tagAnsicht === "ablauf" ? "ueberblick" : (tagAnsicht ?? v.ansicht))),
           schritt: ablaufZ.sichtbar ? ablaufZ.schritt : v.schritt, undo: undo ? { desc: undo.desc } : null, used: z.used }),
     });
   leerGruppen.push({
