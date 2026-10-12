@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
 import { requestCalendarSync } from "@/lib/calendar/sync";
@@ -85,7 +84,7 @@ export async function createSubjectAction(
   await createSubject(user.id, parsed.data);
 
   revalidatePath("/faecher");
-  redirect("/faecher");
+  return { fertig: Date.now() };
 }
 
 export async function updateSubjectAction(
@@ -114,7 +113,7 @@ export async function updateSubjectAction(
 
   revalidatePath("/faecher");
   revalidatePath(`/faecher/${id}`);
-  redirect("/faecher");
+  return { fertig: Date.now() };
 }
 
 export async function setArchivedAction(
@@ -127,7 +126,6 @@ export async function setArchivedAction(
 
   revalidatePath("/faecher");
   revalidatePath(`/faecher/${id}`);
-  redirect("/faecher");
 }
 
 export async function deleteSubjectAction(id: string): Promise<void> {
@@ -137,7 +135,6 @@ export async function deleteSubjectAction(id: string): Promise<void> {
   requestCalendarSync(user.id);
 
   revalidatePath("/faecher");
-  redirect("/faecher");
 }
 
 /**
@@ -192,5 +189,5 @@ export async function quickAddSubjectsAction(
   }
 
   revalidatePath("/faecher");
-  return {};
+  return { fertig: Date.now() };
 }

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
 import {
   canonicalResource,
   findClient,
@@ -133,114 +132,52 @@ export default async function VerbindenPage({
 
   return (
     <>
-      <section className="flex flex-1 flex-col justify-center px-[30px] pt-safe pb-safe md:px-8">
-        <div className="mx-auto w-full max-w-[420px] py-12 md:max-w-[420px] md:py-10">
-          <span
-            aria-hidden="true"
-            className="mb-5 flex size-[52px] items-center justify-center rounded-[16px] bg-accent text-[22px] font-semibold text-accent-foreground md:size-11 md:rounded-[14px]"
-          >
-            S
-          </span>
+      <h1 className="hl">{client.name} mit deiner Schulapp verbinden?</h1>
+      <p className="q-sub">
+        Danach kann {client.name} deine Schulsachen lesen und dir Vorschläge in den Eingangskorb legen.
+      </p>
 
-          <h1 className="text-[30px] font-semibold leading-[1.15] tracking-[-0.03em] md:text-[26px] md:tracking-[-0.02em]">
-            {client.name} mit deiner Schulapp verbinden?
-          </h1>
-          <p className="mt-2.5 text-base leading-[1.5] text-muted">
-            Danach kann {client.name} deine Schulsachen lesen und dir
-            Vorschläge in den Eingangskorb legen.
-          </p>
+      {/* Der Name ist frei gewählt — jedes Programm darf sich „Claude“ nennen.
+          Die Adresse dagegen kann sich niemand aussuchen: dorthin geht der
+          Zugangscode. Sie ist die einzige Angabe, an der sich ein echtes
+          Programm von einem untergeschobenen unterscheiden lässt — deshalb
+          steht sie oben. */}
+      <p style={{ fontSize: 17, lineHeight: 1.45 }}>
+        Die Antwort geht an <b style={{ fontWeight: 650, wordBreak: "break-all" }}>{ziel}</b>. Erlaube das nur, wenn du
+        diese Verbindung gerade selbst geöffnet hast.
+      </p>
 
-          {/* Der Name daneben ist frei gewählt — jedes Programm im Netz darf
-              sich anmelden und sich „Claude" nennen. Die Adresse dagegen kann
-              sich niemand aussuchen, ohne dass es hier steht: dorthin geht der
-              Zugangscode, und nur wer sie besitzt, kann ihn einlösen. Sie ist
-              damit die einzige Angabe auf dieser Seite, an der sich ein echtes
-              Programm von einem untergeschobenen unterscheiden lässt — und
-              deshalb steht sie oben und nicht im Kleingedruckten. */}
-          <p className="mt-6 rounded-[14px] border border-border bg-surface-muted px-4 py-3 text-[15px] leading-relaxed md:rounded-control">
-            Die Antwort geht an{" "}
-            <span className="font-medium break-all">{ziel}</span>. Erlaube das
-            nur, wenn du diese Verbindung gerade selbst geöffnet hast.
-          </p>
+      <h3 className="p-lab">Lesen darf es</h3>
+      <p className="p-sub">
+        Fächer und Themen, den Stundenplan, Hausaufgaben, Klausuren samt Lernplan, Noten, die Blätter in der Ablage —
+        auch die Fotos — und den Eingangskorb.
+      </p>
+      <h3 className="p-lab">Schreiben darf es</h3>
+      <p className="p-sub">
+        nur Vorschläge zu einem Blatt. Ein Vorschlag ändert nichts; er liegt im Eingangskorb, bis du ihn übernimmst.
+      </p>
+      <h3 className="p-lab">Nicht möglich ist</h3>
+      <p className="p-sub">
+        etwas anzulegen, zu ändern oder zu löschen — und auch nicht, einen Vorschlag selbst zu übernehmen.
+      </p>
 
-          <dl className="mt-7 space-y-4 text-[15px] leading-relaxed">
-            <div>
-              <dt className="font-medium">Lesen darf es</dt>
-              <dd className="mt-1 text-muted">
-                Fächer und Themen, den Stundenplan, Hausaufgaben, Klausuren
-                samt Lernplan, Noten, die Blätter in der Ablage — auch die Fotos
-                — und den Eingangskorb.
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium">Schreiben darf es</dt>
-              <dd className="mt-1 text-muted">
-                nur Vorschläge zu einem Blatt. Ein Vorschlag ändert nichts; er
-                liegt im Eingangskorb, bis du ihn übernimmst.
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium">Nicht möglich ist</dt>
-              <dd className="mt-1 text-muted">
-                etwas anzulegen, zu ändern oder zu löschen — und auch nicht,
-                einen Vorschlag selbst zu übernehmen.
-              </dd>
-            </div>
-          </dl>
+      <form action={decideAction} className="foot" style={{ flexDirection: "column", alignItems: "stretch" }}>
+        <input type="hidden" name="client_id" value={client.id} />
+        <input type="hidden" name="redirect_uri" value={redirectUri} />
+        <input type="hidden" name="code_challenge" value={codeChallenge} />
+        <input type="hidden" name="state" value={state} />
+        <button className="btn primary" type="submit" name="entscheidung" value="erlauben">
+          Erlauben
+        </button>
+        <button className="btn quiet" type="submit" name="entscheidung" value="ablehnen">
+          Ablehnen
+        </button>
+      </form>
 
-          <form action={decideAction} className="mt-8 space-y-3">
-            <input type="hidden" name="client_id" value={client.id} />
-            <input type="hidden" name="redirect_uri" value={redirectUri} />
-            <input type="hidden" name="code_challenge" value={codeChallenge} />
-            <input type="hidden" name="state" value={state} />
-
-            <Button
-              type="submit"
-              name="entscheidung"
-              value="erlauben"
-              size="lg"
-              className="w-full"
-            >
-              Erlauben
-            </Button>
-            <Button
-              type="submit"
-              name="entscheidung"
-              value="ablehnen"
-              variant="secondary"
-              size="lg"
-              className="w-full"
-            >
-              Ablehnen
-            </Button>
-          </form>
-
-          <p className="mt-5 text-center text-[13px] leading-relaxed text-subtle">
-            Gilt für <span className="break-all">{canonicalResource(origin)}</span>
-            . Du kannst die Verbindung jederzeit unter Einstellungen trennen.
-          </p>
-        </div>
-      </section>
-
-      {/* Rechts, erst ab mittlerer Breite: warum diese Frage überhaupt gestellt
-          wird. Sie ist die einzige Stelle, an der ein Mensch entscheidet, und
-          das soll nicht wie eine Formalie aussehen. */}
-      <aside className="hidden border-l border-border bg-surface-muted p-12 md:flex md:flex-col md:justify-center">
-        <div className="mx-auto w-full max-w-[380px]">
-          <p className="text-[13px] uppercase tracking-[0.1em] text-subtle">
-            Warum diese Frage
-          </p>
-          <p className="mt-4 text-[26px] font-semibold leading-[1.2] tracking-[-0.02em]">
-            Ein Agent liest deine Blätter — schreiben darf er sie nicht.
-          </p>
-          <p className="mt-5 text-[15px] leading-relaxed text-muted">
-            Was auf einem abfotografierten Blatt steht, hat nicht diese App
-            geschrieben. Deshalb kommt nichts davon in deine Daten, ohne dass du
-            es gesehen hast: ein Agent legt Vorschläge in den Eingangskorb, und
-            übernehmen kannst nur du — mit demselben Formular wie immer.
-          </p>
-        </div>
-      </aside>
+      <p className="p-sub" style={{ marginTop: 16 }}>
+        Gilt für <span style={{ wordBreak: "break-all" }}>{canonicalResource(origin)}</span>. Du kannst die Verbindung
+        jederzeit unter Einstellungen trennen.
+      </p>
     </>
   );
 }
@@ -253,14 +190,10 @@ export default async function VerbindenPage({
  */
 function Absage({ titel, satz }: { titel: string; satz: string }) {
   return (
-    <section className="flex flex-1 flex-col justify-center px-[30px] pt-safe pb-safe md:col-span-2 md:px-8">
-      <div className="mx-auto w-full max-w-[420px] py-12">
-        <h1 className="text-[28px] font-semibold leading-[1.15] tracking-[-0.02em]">
-          {titel}
-        </h1>
-        <p className="mt-3 text-base leading-relaxed text-muted">{satz}</p>
-      </div>
-    </section>
+    <>
+      <h1 className="hl">{titel}</h1>
+      <p className="q-sub">{satz}</p>
+    </>
   );
 }
 

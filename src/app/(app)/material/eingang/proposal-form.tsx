@@ -1,11 +1,11 @@
 "use client";
 
-import { useActionState, useState, type ReactNode } from "react";
+import { useActionState, useState, type ReactNode, type CSSProperties } from "react";
 import { useFormStatus } from "react-dom";
 
-import { Button, type ButtonProps } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
-import { Input, Select, Textarea } from "@/components/ui/input";
+import { Button, type ButtonProps } from "@/components/kombi/form";
+import { Field } from "@/components/kombi/form";
+import { Input, Select, Textarea } from "@/components/kombi/form";
 import { formatGerman } from "@/lib/dates";
 import type { ProposalFormState } from "@/lib/inbox";
 
@@ -56,10 +56,12 @@ export function SubmitButton({
   children,
   variant = "secondary",
   className,
+  style,
 }: {
   children: ReactNode;
   variant?: ButtonProps["variant"];
   className?: string;
+  style?: CSSProperties;
 }) {
   const { pending } = useFormStatus();
 
@@ -69,6 +71,7 @@ export function SubmitButton({
       variant={variant}
       loading={pending}
       className={className}
+      style={style}
     >
       {children}
     </Button>
@@ -203,7 +206,7 @@ export function ProposalForm({
       {state.message ? (
         <p
           role="alert"
-          className="rounded-control border border-danger/40 bg-danger-soft px-3.5 py-3 text-sm text-danger"
+          className="kf-fehler"
         >
           {state.message}
         </p>
@@ -214,13 +217,13 @@ export function ProposalForm({
       {!state.message && state.notice ? (
         <p
           role="status"
-          className="rounded-control border border-border bg-surface-muted px-3.5 py-3 text-sm text-foreground"
+          className="p-sub"
         >
           {state.notice}
         </p>
       ) : null}
 
-      <p className="text-sm text-muted">
+      <p className="text-[15px] text-ink-2">
         Sag nur, was du sagen willst. Jedes Feld darf leer bleiben — leer heißt
         überall „dazu sage ich nichts“, und dann bleibt am Blatt stehen, was
         dort schon steht. Löschen kann ein Vorschlag nichts; was hier grau im

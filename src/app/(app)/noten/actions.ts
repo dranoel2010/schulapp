@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
 import {
@@ -106,7 +105,7 @@ export async function createGradeAction(
   await createGrade(user.id, parsed.data);
 
   revalidateGrades([parsed.data.subjectId]);
-  redirect("/noten");
+  return { fertig: Date.now() };
 }
 
 export async function updateGradeAction(
@@ -134,7 +133,7 @@ export async function updateGradeAction(
 
   // Das alte Fach kommt mit: wurde gewechselt, hängt die Note dort nicht mehr.
   revalidateGrades([existing.subjectId, parsed.data.subjectId], id);
-  redirect("/noten");
+  return { fertig: Date.now() };
 }
 
 export async function deleteGradeAction(id: string): Promise<void> {
@@ -147,5 +146,4 @@ export async function deleteGradeAction(id: string): Promise<void> {
   await deleteGrade(user.id, id);
 
   revalidateGrades(existing ? [existing.subjectId] : [], id);
-  redirect("/noten");
 }

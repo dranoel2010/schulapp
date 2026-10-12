@@ -4,10 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/kombi/form";
 import { formatGerman } from "@/lib/dates";
-import { Card, CardContent } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/kombi/form";
+import { Textarea } from "@/components/kombi/form";
 
 import {
   abendBeendenAction,
@@ -82,10 +82,10 @@ export function SessionView({
     return (
       <Card>
         <CardContent className="space-y-4">
-          <p className="text-foreground">
+          <p className="text-ink">
             Für heute durch — jeder fällige Baustein saß mindestens einmal.
           </p>
-          <p className="text-sm text-muted">
+          <p className="text-[15px] text-ink-2">
             Was heute danebenging, steht morgen nicht automatisch wieder da: Der
             nächste Termin ist der geplante. Das ist Absicht — nachschieben
             hieße, den ganzen Plan nach hinten zu ziehen.
@@ -167,20 +167,17 @@ export function SessionView({
   return (
     <div className="space-y-4">
       <Card
-        style={{
-          backgroundColor: `color-mix(in oklab, ${aktuell.subjectColorHex} 8%, var(--surface))`,
-        }}
       >
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 text-[13px]">
             <span
-              className="rounded-pill px-2.5 py-1 font-medium"
+              className="rounded-full px-2.5 py-1 font-[560]"
               style={{ color: aktuell.subjectColorHex }}
             >
               {aktuell.subjectName}
             </span>
             {aktuell.ueberfaellig ? (
-              <span className="text-warning">
+              <span className="text-ink">
                 {/* Auf Deutsch und nicht als „2026-09-09": Diese Zeile liest
                     ein Schüler, und die App schreibt Datumsangaben überall
                     sonst mit `formatGerman()`. */}
@@ -189,7 +186,7 @@ export function SessionView({
             ) : null}
           </div>
 
-          <p className="text-lg font-medium text-foreground">
+          <p className="text-lg font-[560] text-ink">
             {aktuell.promptFree}
           </p>
 
@@ -207,23 +204,23 @@ export function SessionView({
                 <Button type="button" onClick={abschicken} loading={laeuft}>
                   Antwort abschicken
                 </Button>
-                <span className="text-sm text-subtle">
+                <span className="text-[15px] text-ink-3">
                   Auch leer abschicken zählt als Versuch.
                 </span>
               </div>
             </>
           ) : (
             <div className="space-y-4">
-              <div className="rounded-control border border-border bg-surface px-3.5 py-3">
-                <p className="text-xs font-medium text-muted">Deine Antwort</p>
-                <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+              <div className="p-sub">
+                <p className="text-[13px] font-[560] text-ink-2">Deine Antwort</p>
+                <p className="mt-1 whitespace-pre-wrap text-[15px] text-ink">
                   {antwort.trim() === "" ? "— nichts geschrieben —" : antwort}
                 </p>
               </div>
 
               <div className="space-y-2">
-                <p className="text-xs font-medium text-muted">Musterlösung</p>
-                <ol className="ml-4 list-decimal space-y-1 text-sm text-foreground">
+                <p className="text-[13px] font-[560] text-ink-2">Musterlösung</p>
+                <ol className="ml-4 list-decimal space-y-1 text-[15px] text-ink">
                   {geloest.solution
                     .split("\n")
                     .map((zeile) => zeile.trim())
@@ -232,24 +229,24 @@ export function SessionView({
                       <li key={i}>{zeile}</li>
                     ))}
                 </ol>
-                <p className="text-sm text-muted">{geloest.misconception}</p>
+                <p className="text-[15px] text-ink-2">{geloest.misconception}</p>
               </div>
 
               {/* Der Rückweg zur Quelle (A5). Erst hier, weil das Zitat der
                   Wortlaut ist, aus dem die Antwort stammt — vorher gezeigt
                   wäre es die Lösung mit Umweg. Und ohne ihn müsste der
                   Meldeknopf darunter blind gedrückt werden. */}
-              <details className="rounded-control border border-border bg-surface px-3.5 py-2">
-                <summary className="cursor-pointer text-xs font-medium text-muted">
+              <details className="p-sub">
+                <summary className="cursor-pointer text-[13px] font-[560] text-ink-2">
                   Das stand im Heft
                 </summary>
-                <p className="mt-2 text-sm whitespace-pre-wrap text-foreground">
+                <p className="mt-2 text-[15px] whitespace-pre-wrap text-ink">
                   {geloest.sourceQuote}
                 </p>
                 {geloest.materialId ? (
                   <Link
                     href={`/material/${geloest.materialId}`}
-                    className="mt-2 inline-block text-xs text-muted underline underline-offset-2"
+                    className="mt-2 inline-block text-[13px] text-ink-2 underline underline-offset-2"
                   >
                     Blatt ansehen
                   </Link>
@@ -273,7 +270,7 @@ export function SessionView({
               <button
                 type="button"
                 onClick={melden}
-                className="text-sm text-subtle underline underline-offset-2 hover:text-muted"
+                className="text-[15px] text-ink-3 underline underline-offset-2 hover:text-ink-2"
               >
                 Stand so nicht im Heft
               </button>
@@ -285,13 +282,13 @@ export function SessionView({
       {fehler ? (
         <p
           role="alert"
-          className="rounded-control border border-danger/40 bg-danger-soft px-3.5 py-3 text-sm text-danger"
+          className="kf-fehler"
         >
           {fehler}
         </p>
       ) : null}
 
-      <p className="text-sm text-subtle">
+      <p className="text-[15px] text-ink-3">
         {warten > 0
           ? `Noch ${warten} ${warten === 1 ? "Baustein" : "Bausteine"} in der Reihe.`
           : "Letzter Baustein für heute."}{" "}

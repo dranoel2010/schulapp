@@ -3,9 +3,10 @@
 import { useActionState, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
-import { Button, ButtonLink, type ButtonProps } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { Button, type ButtonProps } from "@/components/kombi/form";
+import { AbbrechenKnopf, FertigBeiErfolg, useNachAktion } from "@/components/kombi/form/fertig";
+import { Field } from "@/components/kombi/form";
+import { Input } from "@/components/kombi/form";
 import type { Subject } from "@/db/schema";
 import {
   SUBJECT_COLORS,
@@ -82,12 +83,10 @@ export function SubjectForm({ action, subject, submitLabel }: SubjectFormProps) 
   }
 
   return (
-    <form action={formAction} className="space-y-6" noValidate>
+    <form action={formAction} className="kf-form" noValidate>
+      <FertigBeiErfolg marke={state.fertig} toast={subject ? "Gespeichert" : "Fach angelegt"} />
       {state.message ? (
-        <p
-          role="alert"
-          className="rounded-control border border-danger/40 bg-danger-soft px-3.5 py-3 text-sm text-danger"
-        >
+        <p role="alert" className="kf-fehler">
           {state.message}
         </p>
       ) : null}
@@ -131,7 +130,7 @@ export function SubjectForm({ action, subject, submitLabel }: SubjectFormProps) 
       </div>
 
       <fieldset>
-        <legend className="text-sm font-medium text-foreground">Farbe</legend>
+        <legend className="kf-label">Farbe</legend>
 
         <div className="mt-2 flex flex-wrap gap-0.5">
           {SUBJECT_COLORS.map((option) => {
@@ -154,9 +153,9 @@ export function SubjectForm({ action, subject, submitLabel }: SubjectFormProps) 
                   style={{ backgroundColor: option.hex }}
                   className={cn(
                     "flex size-8 items-center justify-center rounded-full transition-transform",
-                    "peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring",
+                    "peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent",
                     selected &&
-                      "scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-surface",
+                      "scale-110 ring-2 ring-ink ring-offset-2 ring-offset-bg",
                   )}
                 >
                   {selected ? (
@@ -181,7 +180,7 @@ export function SubjectForm({ action, subject, submitLabel }: SubjectFormProps) 
         </div>
 
         {state.errors?.color ? (
-          <p className="mt-1.5 text-sm text-danger">{state.errors.color}</p>
+          <p className="mt-1.5 text-[15px] text-error">{state.errors.color}</p>
         ) : null}
       </fieldset>
 
@@ -239,12 +238,12 @@ export function SubjectForm({ action, subject, submitLabel }: SubjectFormProps) 
               style={{ accentColor: hex }}
               className="h-11 w-full cursor-pointer"
             />
-            <p className="text-sm text-muted" aria-live="polite">
-              <span className="font-medium text-foreground">
+            <p className="text-[15px] text-ink-2" aria-live="polite">
+              <span className="font-[560] text-ink">
                 {weightWritten}&nbsp;%
               </span>{" "}
               schriftlich ·{" "}
-              <span className="font-medium text-foreground">
+              <span className="font-[560] text-ink">
                 {100 - weightWritten}&nbsp;%
               </span>{" "}
               mündlich
@@ -253,13 +252,11 @@ export function SubjectForm({ action, subject, submitLabel }: SubjectFormProps) 
         )}
       </Field>
 
-      <div className="flex gap-3 pt-2">
-        <Button type="submit" loading={pending} className="flex-1">
+      <div className="foot">
+        <AbbrechenKnopf />
+        <Button type="submit" loading={pending}>
           {submitLabel}
         </Button>
-        <ButtonLink href="/faecher" variant="secondary">
-          Abbrechen
-        </ButtonLink>
       </div>
     </form>
   );
@@ -289,7 +286,7 @@ export type SubjectDangerZoneProps = {
   deleteAction: () => Promise<void>;
 };
 
-/** Archivieren und Löschen — bewusst unten und optisch getrennt. */
+/** Archivieren und Löschen — bewusst unten und getrennt. */
 export function SubjectDangerZone({
   subjectName,
   archived,
@@ -297,70 +294,59 @@ export function SubjectDangerZone({
   deleteAction,
 }: SubjectDangerZoneProps) {
   const [confirming, setConfirming] = useState(false);
+  const { zurueck, heim } = useNachAktion();
 
   return (
-    <section className="space-y-4 rounded-card border border-border bg-surface p-4 sm:p-5">
-      <div className="space-y-2">
-        <h2 className="text-base font-semibold text-foreground">
-          {archived ? "Wieder mitmachen" : "Nicht mehr im Alltag"}
-        </h2>
-        <p className="text-sm text-muted">
-          {archived
-            ? `${subjectName} ist archiviert: es zählt nicht mehr im Schnitt und wird nirgends mehr vorgeschlagen. Alles, was daran hängt — Noten, Termine, Stunden und Blätter —, ist weiter da und sichtbar.`
-            : `Archivieren blendet ${subjectName} aus dem Alltag aus — Noten, Termine und Blätter bleiben erhalten. Das ist der richtige Weg für ein abgewähltes Fach.`}
-        </p>
-        <form action={archiveAction}>
-          <SubmitButton variant="secondary">
-            {archived ? "Fach wieder aktivieren" : "Fach archivieren"}
-          </SubmitButton>
-        </form>
-      </div>
+    <section>
+      <h3 className="p-lab">{archived ? "Wieder mitmachen" : "Nicht mehr im Alltag"}</h3>
+      <p className="p-sub">
+        {archived
+          ? `${subjectName} ist archiviert: es zählt nicht mehr im Schnitt und wird nirgends mehr vorgeschlagen. Alles, was daran hängt — Noten, Termine, Stunden und Blätter —, ist weiter da und sichtbar.`
+          : `Archivieren blendet ${subjectName} aus dem Alltag aus — Noten, Termine und Blätter bleiben erhalten. Das ist der richtige Weg für ein abgewähltes Fach.`}
+      </p>
+      <form
+        action={async () => {
+          await archiveAction();
+          zurueck(archived ? `${subjectName} wieder aufgenommen` : `${subjectName} archiviert`);
+        }}
+      >
+        <SubmitButton variant="secondary">{archived ? "Fach wieder aktivieren" : "Fach archivieren"}</SubmitButton>
+      </form>
 
-      <hr className="border-border" />
-
+      <h3 className="p-lab">Löschen</h3>
       {confirming ? (
-        <div className="space-y-3 rounded-control border border-danger/40 bg-danger-soft p-3.5">
+        <div>
           {/* Die Aufzählung gibt sich als vollständig — dann muss sie es auch
-              sein. Seit dem 15.9.2026 gehören die Abruf-Bausteine dazu: Sie
-              hängen an ihrer Klausur, die Klausur hängt am Fach, und damit
-              nimmt ein gelöschtes Fach sie über zwei Ecken mit. Eine Zahl steht
-              hier nicht — die Aufzählung nennt sonst auch keine, und bei einem
-              ganzen Fach wäre sie eine von sieben. `materials.subjectId` hängt mit „cascade“ am Fach, über
-              `material_pages` fallen also auch die Aufnahmen weg. Sie stehen
-              zuletzt und mit eigenem Satz, weil sie das Einzige sind, was sich
-              nicht wiederbeschaffen lässt: eine Note tippt man neu ein, eine
-              Tafel von letzter Woche fotografiert man nicht noch einmal ab. */}
-          <p className="text-sm text-foreground">
+              sein: mit den Klausuren gehen auch ihre Abruf-Bausteine, mit den
+              Blättern ihre Aufnahmen (cascade über das Fach). */}
+          <p className="p-sub" style={{ color: "var(--ink)" }}>
             {subjectName} wirklich löschen? Damit ist das Fach weg — und mit ihm
             sofort alle Klausuren samt Lernplan, alle Stundenplan-Einträge, alle
             Hausaufgaben, alle Noten und alle Blätter, die daran hängen. Mit den
             Klausuren gehen auch die Bausteine des Abrufs, die zu ihnen gebaut
-            wurden, samt ihren Terminen. Mit den
-            Blättern gehen auch ihre Aufnahmen, und ein zweites Mal abfotografieren
-            lässt sich eine Tafel von letzter Woche nicht. Rückgängig geht das
-            nicht. Wer nur ein abgewähltes Fach loswerden will, archiviert es:
-            dann bleiben die Noten für den Schnitt vergangener Halbjahre da.
+            wurden, samt ihren Terminen. Mit den Blättern gehen auch ihre
+            Aufnahmen, und ein zweites Mal abfotografieren lässt sich eine Tafel
+            von letzter Woche nicht. Rückgängig geht das nicht. Wer nur ein
+            abgewähltes Fach loswerden will, archiviert es: dann bleiben die
+            Noten für den Schnitt vergangener Halbjahre da.
           </p>
-          <div className="flex flex-wrap gap-2">
-            <form action={deleteAction}>
-              <SubmitButton variant="danger">Ja, endgültig löschen</SubmitButton>
-            </form>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setConfirming(false)}
-            >
+          <div className="foot" style={{ marginTop: 12 }}>
+            <Button type="button" variant="secondary" onClick={() => setConfirming(false)}>
               Doch nicht
             </Button>
+            <form
+              style={{ flex: 1, display: "flex" }}
+              action={async () => {
+                await deleteAction();
+                heim(`${subjectName} gelöscht`);
+              }}
+            >
+              <SubmitButton variant="danger">Endgültig löschen</SubmitButton>
+            </form>
           </div>
         </div>
       ) : (
-        <Button
-          type="button"
-          variant="ghost"
-          className="text-danger hover:bg-danger-soft hover:text-danger"
-          onClick={() => setConfirming(true)}
-        >
+        <Button type="button" variant="ghost" style={{ color: "var(--error)" }} onClick={() => setConfirming(true)}>
           Fach löschen
         </Button>
       )}

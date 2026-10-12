@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import { ButtonLink } from "@/components/ui/button";
+import Link from "next/link";
+
+import "@/components/kombi/form/form.css";
 
 /**
  * Wird gezeigt, wenn eine Adresse ins Leere zeigt — etwa ein Fach, das es
@@ -12,32 +14,16 @@ export const metadata: Metadata = {
 
 export default function NotFound() {
   return (
-    <main className="seite flex flex-1 flex-col items-center justify-center py-16 text-center">
-      <svg
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-        className="size-10 text-subtle"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 8v4.5" />
-        <path d="M12 16h.01" />
-      </svg>
-
-      <h1 className="mt-5 text-xl font-semibold">Hier ist nichts</h1>
-
-      <p className="mt-2 max-w-sm text-muted">
-        Diese Seite gibt es nicht — vielleicht hast du ein Fach gelöscht, das
-        noch als Lesezeichen herumliegt.
-      </p>
-
-      <ButtonLink href="/" className="mt-6">
-        Zur Startseite
-      </ButtonLink>
+    <main className="solo">
+      <div className="solo-in">
+        <h1 className="hl">Hier ist nichts</h1>
+        <p className="q-sub">Diese Seite gibt es nicht — vielleicht hast du ein Fach gelöscht, das noch als Lesezeichen herumliegt.</p>
+        <div className="foot">
+          <Link className="btn primary" href="/">
+            Zur Startseite
+          </Link>
+        </div>
+      </div>
     </main>
   );
 }

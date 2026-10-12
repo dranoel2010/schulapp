@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { SeitenKopf } from "@/components/kombi/form";
 import { requireUser } from "@/lib/auth";
-import { subjectColor } from "@/lib/colors";
 import { listTopics, type TopicItem } from "@/lib/subject-topics";
 import { getSubject } from "@/lib/subjects";
 
@@ -111,49 +110,13 @@ export default async function SubjectTopicsPage({
   }
 
   const topics = await listTopics(user.id, subject.id, { includeMerged: true });
-  const color = subjectColor(subject.color);
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
-      {/* Zurück zum Fach und nicht zur Fächerliste: diese Seite ist die
-          Unterseite genau dieses Fachs, und von dort kam man her. */}
-      <Link
-        href={`/faecher/${subject.id}`}
-        className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className="size-4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m15 6-6 6 6 6" />
-        </svg>
-        Zurück zum Fach
-      </Link>
-
-      <header className="space-y-1">
-        <h1 className="flex items-center gap-2 text-xl font-semibold text-foreground">
-          {/* Die Fachfarbe als Punkt — dieselbe Geste wie in der Fächerliste
-              und auf der Notenseite eines Fachs. Farbiger Text wäre in einer
-              der beiden Ansichten immer zu blass. */}
-          <span
-            aria-hidden="true"
-            style={{ backgroundColor: color.hex }}
-            className="size-3 shrink-0 rounded-full"
-          />
-          <span className="min-w-0 truncate">{subject.name}</span>
-        </h1>
-        <p className="text-sm text-muted">
-          Alle Themen, die dieses Fach kennt. Sie kommen aus den Themen deiner
-          Klausuren und von deinen abfotografierten Blättern und lassen sich
-          hier umbenennen, zusammenlegen und von Hand ergänzen.
-        </p>
-      </header>
+    <>
+      <SeitenKopf
+        titel={`Themen in ${subject.name}`}
+        sub="Alle Themen, die dieses Fach kennt. Sie kommen aus den Themen deiner Klausuren und von deinen abfotografierten Blättern und lassen sich hier umbenennen, zusammenlegen und von Hand ergänzen."
+      />
 
       <TopicList
         rows={toRows(topics)}
@@ -163,6 +126,6 @@ export default async function SubjectTopicsPage({
         createAction={createTopicAction.bind(null, subject.id)}
         seedAction={seedTopicsAction.bind(null, subject.id)}
       />
-    </div>
+    </>
   );
 }

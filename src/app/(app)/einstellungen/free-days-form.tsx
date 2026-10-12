@@ -2,9 +2,9 @@
 
 import { useActionState, useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
-import { Input, Select } from "@/components/ui/input";
+import { Button } from "@/components/kombi/form";
+import { Field } from "@/components/kombi/form";
+import { Input, Select } from "@/components/kombi/form";
 
 import type { FreePeriodState } from "./actions";
 
@@ -40,9 +40,9 @@ export function FreeDaysForm({ action }: FreeDaysFormProps) {
   }
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={formAction} className="kf-form">
       {state.message ? (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-[15px] text-error">
           {state.message}
         </p>
       ) : null}
@@ -109,7 +109,7 @@ export function FreeDaysForm({ action }: FreeDaysFormProps) {
       </Button>
 
       {state.saved ? (
-        <p role="status" className="text-sm text-success">
+        <p role="status" className="text-[15px] text-ink-2">
           {state.saved.label} eingetragen.{" "}
           {state.saved.movedExams === 0
             ? "Im Lernplan lag nichts auf diesen Tagen."

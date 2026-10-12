@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
-import { ButtonLink } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
+import { ButtonLink } from "@/components/kombi/form";
+import { EmptyState } from "@/components/kombi/form";
 import { requireUser } from "@/lib/auth";
 import { todayInBerlin } from "@/lib/dates";
 import { listSubjects } from "@/lib/subjects";
@@ -23,11 +23,11 @@ export default async function NewExamPage() {
   // speichern.
   if (subjects.length === 0) {
     return (
-      <div className="space-y-6 md:max-w-3xl">
+      <div className="kf-seite">
         <header className="space-y-1">
-          <h1 className="text-xl font-semibold text-foreground">
+          <h2 className="p-title">
             Neue Klausur
-          </h1>
+          </h2>
         </header>
 
         <EmptyState
@@ -56,10 +56,10 @@ export default async function NewExamPage() {
   );
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="kf-seite">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Neue Klausur</h1>
-        <p className="text-sm text-muted">
+        <h2 className="p-title">Neue Klausur</h2>
+        <p className="text-[15px] text-ink-2">
           Termin und Themen eintragen — den Lernplan baut die App daraus selbst.
         </p>
       </header>
@@ -70,7 +70,6 @@ export default async function NewExamPage() {
         today={today}
         topicSuggestions={topicSuggestions}
         submitLabel="Klausur eintragen"
-        cancelHref="/klausuren"
       />
     </div>
   );

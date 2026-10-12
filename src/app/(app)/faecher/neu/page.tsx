@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 
+import { SeitenKopf } from "@/components/kombi/form";
 import { requireUser } from "@/lib/auth";
 
-import { createSubjectAction } from "../actions";
+import { createSubjectAction, quickAddSubjectsAction } from "../actions";
+import { QuickAdd } from "../quick-add";
 import { SubjectForm } from "../subject-form";
+
+/** Fach anlegen (Plan 2.2): einzeln mit allen Angaben oder mehrere auf einmal. */
 
 export const metadata: Metadata = {
   title: "Neues Fach",
@@ -13,15 +17,12 @@ export default async function NewSubjectPage() {
   await requireUser();
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Neues Fach</h1>
-        <p className="text-sm text-muted">
-          Kürzel und Farbe tauchen später als Kachel im Stundenplan wieder auf.
-        </p>
-      </header>
-
-      <SubjectForm action={createSubjectAction} submitLabel="Fach anlegen" />
-    </div>
+    <>
+      <SeitenKopf titel="Fach anlegen" sub="Name, Kürzel und Gewichtung; ändern lässt sich alles später." />
+      <div style={{ marginTop: 16 }}>
+        <SubjectForm action={createSubjectAction} submitLabel="Fach anlegen" />
+      </div>
+      <QuickAdd action={quickAddSubjectsAction} />
+    </>
   );
 }

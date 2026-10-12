@@ -42,7 +42,7 @@ export async function POST() {
   if (!user) return seeOther("/login");
 
   const cfg = calendarConfig();
-  if (!cfg.ok) return seeOther("/einstellungen?kalender=nicht-eingerichtet#kalender");
+  if (!cfg.ok) return seeOther("/einstellungen/kalender?kalender=nicht-eingerichtet");
 
   const { state, verifier, challenge } = newAuthorization();
 

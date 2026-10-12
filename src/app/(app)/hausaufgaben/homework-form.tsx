@@ -3,9 +3,10 @@
 import { useActionState, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
-import { Button, ButtonLink, type ButtonProps } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
-import { Input, Select, Textarea } from "@/components/ui/input";
+import { Button, type ButtonProps } from "@/components/kombi/form";
+import { AbbrechenKnopf, FertigBeiErfolg, useNachAktion } from "@/components/kombi/form/fertig";
+import { Field } from "@/components/kombi/form";
+import { Input, Select, Textarea } from "@/components/kombi/form";
 import type { Homework, Subject } from "@/db/schema";
 import { formatGerman } from "@/lib/dates";
 import type { HomeworkInput } from "@/lib/homework";
@@ -35,6 +36,8 @@ export type HomeworkFormState = {
   /** Hinweis über dem Formular, wenn es nicht an einem einzelnen Feld liegt. */
   message?: string;
   errors?: HomeworkFieldErrors;
+  /** Gesetzt nach erfolgreichem Speichern: die Formularseite geht zurück (Plan 2.4). */
+  fertig?: number;
 };
 
 const EMPTY_STATE: HomeworkFormState = {};
@@ -76,7 +79,8 @@ export type HomeworkFormProps = {
   /** Beim Bearbeiten die Vorbelegung, beim Anlegen leer. */
   item?: Pick<Homework, "subjectId" | "title" | "details" | "dueDate">;
   submitLabel: string;
-  cancelHref: string;
+  /** Früher das Ziel von „Abbrechen“; jetzt geht es eine Ebene zurück. */
+  cancelHref?: string;
 };
 
 export function HomeworkForm({
@@ -86,7 +90,6 @@ export function HomeworkForm({
   fallbackDueDate,
   item,
   submitLabel,
-  cancelHref,
 }: HomeworkFormProps) {
   const firstSubjectId = item?.subjectId ?? subjects[0]?.id ?? "";
 
@@ -122,11 +125,12 @@ export function HomeworkForm({
     [dayLabel(dueDate), suggestion].filter(Boolean).join(" · ") || undefined;
 
   return (
-    <form action={formAction} className="space-y-6" noValidate>
+    <form action={formAction} className="kf-form" noValidate>
+      <FertigBeiErfolg marke={state.fertig} toast={item ? "Gespeichert" : "Eingetragen"} />
       {state.message ? (
         <p
           role="alert"
-          className="rounded-control border border-danger/40 bg-danger-soft px-3.5 py-3 text-sm text-danger"
+          className="kf-fehler"
         >
           {state.message}
         </p>
@@ -204,13 +208,11 @@ export function HomeworkForm({
         )}
       </Field>
 
-      <div className="flex gap-3 pt-2">
-        <Button type="submit" loading={pending} className="flex-1">
+      <div className="foot">
+        <Button type="submit" loading={pending}>
           {submitLabel}
         </Button>
-        <ButtonLink href={cancelHref} variant="secondary">
-          Abbrechen
-        </ButtonLink>
+        <AbbrechenKnopf />
       </div>
     </form>
   );
@@ -245,18 +247,24 @@ export function HomeworkDangerZone({
   deleteAction,
 }: HomeworkDangerZoneProps) {
   const [confirming, setConfirming] = useState(false);
+  const { zurueck } = useNachAktion();
 
   return (
-    <section className="rounded-card border border-border bg-surface p-4 sm:p-5">
+    <section>
       {confirming ? (
-        <div className="space-y-3 rounded-control border border-danger/40 bg-danger-soft p-3.5">
-          <p className="text-sm text-foreground">
+        <div className="kf-gefahr">
+          <p className="text-[15px] text-ink">
             {homeworkLabel} wirklich löschen? Rückgängig geht das nicht. Wenn du
             sie nur nicht mehr sehen willst: abgehakte Aufgaben verschwinden
             nach zwei Wochen von selbst aus der Liste.
           </p>
           <div className="flex flex-wrap gap-2">
-            <form action={deleteAction}>
+            <form
+              action={async () => {
+                await deleteAction();
+                zurueck("Gelöscht");
+              }}
+            >
               <SubmitButton variant="danger">
                 Ja, endgültig löschen
               </SubmitButton>
@@ -274,7 +282,7 @@ export function HomeworkDangerZone({
         <Button
           type="button"
           variant="ghost"
-          className="text-danger hover:bg-danger-soft hover:text-danger"
+          style={{ color: "var(--error)" }}
           onClick={() => setConfirming(true)}
         >
           Aufgabe löschen

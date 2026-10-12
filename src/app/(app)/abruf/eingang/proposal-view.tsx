@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/kombi/form";
+import { Card, CardContent } from "@/components/kombi/form";
 
 import {
   vorschlagUebernehmenAction,
@@ -102,12 +102,9 @@ export function ProposalView({ vorschlag }: { vorschlag: Vorschlag }) {
   return (
     <div className="space-y-4">
       <Card
-        style={{
-          backgroundColor: `color-mix(in oklab, ${vorschlag.subjectColorHex} 7%, var(--surface))`,
-        }}
       >
         <CardContent className="space-y-1">
-          <p className="text-foreground">
+          <p className="text-ink">
             {alle} {alle === 1 ? "Frage" : "Fragen"} für{" "}
             <span style={{ color: vorschlag.subjectColorHex }}>
               {vorschlag.subjectName}
@@ -115,7 +112,7 @@ export function ProposalView({ vorschlag }: { vorschlag: Vorschlag }) {
             am {vorschlag.klausurtag}.
           </p>
           {vorschlag.note ? (
-            <p className="text-sm text-muted">{vorschlag.note}</p>
+            <p className="text-[15px] text-ink-2">{vorschlag.note}</p>
           ) : null}
         </CardContent>
       </Card>
@@ -134,12 +131,12 @@ export function ProposalView({ vorschlag }: { vorschlag: Vorschlag }) {
                       onChange={() => umschalten(frage.id)}
                       className="mt-1 size-4 shrink-0 accent-accent"
                     />
-                    <span className="font-medium text-foreground">
+                    <span className="font-[560] text-ink">
                       {frage.promptFree}
                     </span>
                   </label>
 
-                  <ol className="ml-7 list-decimal space-y-0.5 text-sm text-foreground">
+                  <ol className="ml-7 list-decimal space-y-0.5 text-[15px] text-ink">
                     {frage.solution
                       .split("\n")
                       .map((z) => z.trim())
@@ -149,24 +146,24 @@ export function ProposalView({ vorschlag }: { vorschlag: Vorschlag }) {
                       ))}
                   </ol>
 
-                  <p className="ml-7 text-sm text-muted">
+                  <p className="ml-7 text-[15px] text-ink-2">
                     {frage.misconception}
                   </p>
 
-                  <div className="ml-7 rounded-control border border-border bg-surface-muted px-3 py-2">
-                    <p className="text-xs text-subtle">
+                  <div className="ml-7 rounded-[12px] border border-line bg-raise px-3 py-2">
+                    <p className="text-[13px] text-ink-3">
                       {frage.blattTitel} · Seite {frage.seitenNummer}
                       {/* In der Warnfarbe, weil es eine Bitte ist und keine
                           Auskunft: wer übernimmt, ohne hinzusehen, übernimmt
                           womöglich eine Frage zu einem Wort, das nie auf dem
                           Blatt stand. */}
                       {frage.maschinell ? (
-                        <span className="text-warning">
+                        <span className="text-ink">
                           {" · Quelle maschinell gelesen (Docling) – Zitat am Foto prüfen"}
                         </span>
                       ) : null}
                     </p>
-                    <p className="mt-1 text-sm whitespace-pre-wrap text-foreground">
+                    <p className="mt-1 text-[15px] whitespace-pre-wrap text-ink">
                       {frage.sourceQuote}
                     </p>
                   </div>

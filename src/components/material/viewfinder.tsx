@@ -151,7 +151,7 @@ export function Viewfinder({
       />
 
       <div className="relative flex items-start justify-between gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <span className="rounded-full bg-black/50 px-3 py-1.5 text-[15px] font-medium">
+        <span className="rounded-full bg-black/50 px-3 py-1.5 text-[15px] font-[560]">
           {label}
         </span>
 

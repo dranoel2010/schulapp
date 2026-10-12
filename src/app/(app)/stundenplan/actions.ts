@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { requireUser } from "@/lib/auth";
@@ -123,7 +122,7 @@ export async function saveLessonAction(
   await saveLesson(user.id, { ...parsed.data, weekday, period });
 
   revalidateSlot(weekday, period);
-  redirect("/stundenplan");
+  return { fertig: Date.now() };
 }
 
 export async function deleteLessonAction(
@@ -135,7 +134,6 @@ export async function deleteLessonAction(
   await clearSlot(user.id, weekday, period);
 
   revalidateSlot(weekday, period);
-  redirect("/stundenplan");
 }
 
 /** [7] → "7.", [7, 8] → "7. und 8.", [7, 8, 9] → "7., 8. und 9." */
@@ -221,7 +219,7 @@ export async function savePeriodsAction(
   revalidatePath("/");
   revalidatePath("/stundenplan");
   revalidatePath("/stundenplan/zeiten");
-  redirect("/stundenplan");
+  return { fertig: Date.now() };
 }
 
 /**
@@ -292,5 +290,5 @@ export async function switchEpochAction(
   for (const slot of slots) {
     revalidatePath(`/stundenplan/${slot.weekday}/${slot.period}`);
   }
-  redirect("/stundenplan");
+  return { fertig: Date.now() };
 }

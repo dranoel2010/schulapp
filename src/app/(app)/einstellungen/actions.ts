@@ -80,7 +80,7 @@ export async function setReminderHourAction(
     .where(eq(users.id, user.id));
   requestCalendarSync(user.id);
 
-  revalidatePath("/einstellungen");
+  revalidatePath("/einstellungen", "layout");
 
   return { savedHour: hour };
 }
@@ -107,7 +107,7 @@ export async function revokeConnectionAction(formData: FormData): Promise<void> 
 
   await revokeConnection(user.id, id);
 
-  revalidatePath("/einstellungen");
+  revalidatePath("/einstellungen", "layout");
 }
 
 type FreePeriodField = "kind" | "title" | "startsOn" | "endsOn";
@@ -197,7 +197,7 @@ export async function syncCalendarNowAction(): Promise<void> {
 
   await syncCalendar(user.id, { anlass: "hand", requestedAt: Date.now() });
 
-  revalidatePath("/einstellungen");
+  revalidatePath("/einstellungen", "layout");
 }
 
 /**
@@ -211,9 +211,9 @@ export async function disconnectCalendarAction(): Promise<void> {
   const widerruf = await disconnectGoogle(user.id);
   const ohneWiderruf = widerruf !== "widerrufen" && widerruf !== "nichts";
 
-  revalidatePath("/einstellungen");
+  revalidatePath("/einstellungen", "layout");
   redirect(
-    `/einstellungen?kalender=${ohneWiderruf ? "getrennt-ohne-widerruf" : "getrennt"}#kalender`,
+    `/einstellungen/kalender?kalender=${ohneWiderruf ? "getrennt-ohne-widerruf" : "getrennt"}`,
   );
 }
 
@@ -223,8 +223,8 @@ export async function recreateCalendarAction(): Promise<void> {
 
   const ok = await recreateCalendar(user.id);
 
-  revalidatePath("/einstellungen");
-  redirect(`/einstellungen?kalender=${ok ? "neu-angelegt" : "neu-anlegen-gescheitert"}#kalender`);
+  revalidatePath("/einstellungen", "layout");
+  redirect(`/einstellungen/kalender?kalender=${ok ? "neu-angelegt" : "neu-anlegen-gescheitert"}`);
 }
 
 /**
@@ -254,7 +254,7 @@ export async function retryIservAction(): Promise<void> {
     console.error("IServ: Erneut versuchen gescheitert", fehler instanceof Error ? fehler.name : "unbekannt");
   }
 
-  revalidatePath("/einstellungen");
+  revalidatePath("/einstellungen", "layout");
 }
 
 async function replanAroundFreeDays(userId: string): Promise<number> {

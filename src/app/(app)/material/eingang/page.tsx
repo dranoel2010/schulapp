@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
 import { AutoRefresh } from "@/components/material/auto-refresh";
-import { ButtonLink } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
+import { ButtonLink } from "@/components/kombi/form";
+import { EmptyState } from "@/components/kombi/form";
 import { requireUser } from "@/lib/auth";
 import { todayInBerlin } from "@/lib/dates";
 import { INBOX_LIMIT, listInbox, type InboxEntry } from "@/lib/inbox";
@@ -187,29 +186,11 @@ export default async function InboxPage({
   const ueberholt = count(firstValue(query.ueberholt));
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
-      <Link
-        href="/material"
-        className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className="size-4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m15 6-6 6 6 6" />
-        </svg>
-        Alle Blätter
-      </Link>
+    <div className="kf-seite">
 
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Eingangskorb</h1>
-        <p className="text-sm text-muted">
+        <h2 className="p-title">Eingangskorb</h2>
+        <p className="text-[15px] text-ink-2">
           Hier liegt, was noch eine Entscheidung braucht: frisch aufgenommene
           Blätter, die niemand durchgesehen hat, und Vorschläge, über die noch
           niemand entschieden hat. Ein Vorschlag ändert von sich aus nichts —
@@ -232,9 +213,9 @@ export default async function InboxPage({
       {confirmed ? (
         <div
           role="status"
-          className="space-y-2 rounded-card border border-border bg-surface-muted p-4"
+          className="space-y-2"
         >
-          <p className="text-sm text-foreground">
+          <p className="text-[15px] text-ink">
             {`Übernommen: „${confirmed.title}“ steht jetzt so da, wie du es bestätigt hast — durchgesehen und aus dem Korb heraus.`}
           </p>
 
@@ -246,7 +227,7 @@ export default async function InboxPage({
               Gezählt sind die Seiten, an denen sich der Text wirklich geändert
               hat — nicht die, die noch einmal geschrieben wurden. */}
           {abschrift > 0 ? (
-            <p className="text-sm text-muted">
+            <p className="text-[15px] text-ink-2">
               {abschrift === 1
                 ? "Die Abschrift einer Seite ist damit ans Blatt geschrieben — sie steht dort unter der Aufnahme, zu der sie gehört."
                 : `Die Abschrift von ${abschrift} Seiten ist damit ans Blatt geschrieben — sie steht dort jeweils unter der Aufnahme, zu der sie gehört.`}
@@ -259,7 +240,7 @@ export default async function InboxPage({
               bleiben, sonst steht am Blatt etwas anderes als im Formular, und
               niemand sagt warum (wie auf der Blattseite). */}
           {ueberholt > 0 ? (
-            <p className="text-sm text-muted">
+            <p className="text-[15px] text-ink-2">
               {ueberholt === 1
                 ? "An einer Seite hat inzwischen jemand anders geschrieben, meist die App — sie wurde nicht überschrieben. Am Blatt steht, was wirklich an ihr steht."
                 : `An ${ueberholt} Seiten hat inzwischen jemand anders geschrieben, meist die App — sie wurden nicht überschrieben. Am Blatt steht, was wirklich an ihnen steht.`}
@@ -270,7 +251,7 @@ export default async function InboxPage({
               bezögen sich auf einen Stand, den es nicht mehr gibt. Still
               verschwinden dürfen sie deshalb trotzdem nicht. */}
           {weitere > 0 ? (
-            <p className="text-sm text-muted">
+            <p className="text-[15px] text-ink-2">
               {weitere === 1
                 ? "Ein weiterer Vorschlag zu diesem Blatt ist damit weggefallen — er galt einem Stand, den es nicht mehr gibt."
                 : `${weitere} weitere Vorschläge zu diesem Blatt sind damit weggefallen — sie galten einem Stand, den es nicht mehr gibt.`}
@@ -278,7 +259,7 @@ export default async function InboxPage({
           ) : null}
 
           {ohneFachwort > 0 ? (
-            <p className="text-sm text-muted">
+            <p className="text-[15px] text-ink-2">
               {ohneFachwort === 1
                 ? "Ein Thema wurde nicht übernommen: ihm fehlt ein Fachwort. „Übungen“ ist kein Thema, sondern das, was man damit macht."
                 : `${ohneFachwort} Themen wurden nicht übernommen: ihnen fehlt ein Fachwort. „Übungen“ ist kein Thema, sondern das, was man damit macht.`}
@@ -291,7 +272,7 @@ export default async function InboxPage({
               hier. Ohne diesen Satz hieße ein Thema am Blatt plötzlich anders
               als das, was man bestätigt hat, und niemand sagte warum. */}
           {andereSchreibweise > 0 ? (
-            <p className="text-sm text-muted">
+            <p className="text-[15px] text-ink-2">
               {andereSchreibweise === 1
                 ? "Ein Thema führt das Fach schon unter einer anderen Schreibweise — die gilt, und so steht es jetzt am Blatt."
                 : `${andereSchreibweise} Themen führt das Fach schon unter anderen Schreibweisen — die gelten, und so stehen sie jetzt am Blatt.`}
@@ -299,7 +280,7 @@ export default async function InboxPage({
           ) : null}
 
           {zusammengefallen > 0 ? (
-            <p className="text-sm text-muted">
+            <p className="text-[15px] text-ink-2">
               {zusammengefallen === 1
                 ? "Ein Thema meint dasselbe wie ein anderes und steht einmal am Blatt."
                 : `${zusammengefallen} Themen meinen dasselbe wie jeweils ein anderes und stehen einmal am Blatt.`}
@@ -348,7 +329,7 @@ export default async function InboxPage({
               nach hinten gibt es nicht und soll es nicht geben: der Korb ist
               zum Leeren da, nicht zum Blättern. */}
           {atLimit ? (
-            <p className="text-sm text-muted">
+            <p className="text-[15px] text-ink-2">
               {`Hier stehen ${INBOX_LIMIT} Blätter aus dem Korb. Liegen mehr darin, zeigt diese Liste die älteren nicht — arbeite von oben ab, dann rücken sie nach.`}
             </p>
           ) : null}
@@ -383,7 +364,7 @@ function InboxRow({
   const einziger = item.proposals.length === 1 ? item.proposals[0] : null;
 
   return (
-    <li className="space-y-3 rounded-card border border-border bg-surface p-4 sm:p-5">
+    <li className="space-y-3">
       <MaterialGlance item={item} />
 
       {/* Zwei leise Sätze, je einer nur, wenn er etwas sagt — an einem Blatt
@@ -398,7 +379,7 @@ function InboxRow({
           handschriftliche Rückseite Claude. Wer übernimmt, soll wissen,
           welcher Teil des Textes von niemandem gegengelesen ist. */}
       {stand && stand.offenPages > 0 ? (
-        <p className="text-sm text-muted">
+        <p className="text-[15px] text-ink-2">
           {stand.offenPages === 1
             ? "1 Seite liest die App gerade."
             : `${stand.offenPages} Seiten liest die App gerade.`}
@@ -406,7 +387,7 @@ function InboxRow({
       ) : null}
 
       {stand && stand.maschinellPages > 0 ? (
-        <p className="text-sm text-muted">
+        <p className="text-[15px] text-ink-2">
           {`${stand.maschinellPages} von ${item.pageCount} ${
             item.pageCount === 1 ? "Seite" : "Seiten"
           } maschinell gelesen (Docling) — von niemandem gegengelesen.`}
@@ -419,7 +400,7 @@ function InboxRow({
           (siehe `listInbox()` in @/lib/inbox), der Satz kann also nichts
           Falsches behaupten. */}
       {filed ? (
-        <p className="text-sm text-muted">
+        <p className="text-[15px] text-ink-2">
           Durchgesehen — im Korb liegt es nur noch, weil ein Vorschlag dazu auf
           eine Entscheidung wartet.
         </p>
@@ -504,13 +485,13 @@ function InboxRow({
       </div>
 
       {item.proposals.length > 0 ? (
-        <ul className="space-y-2 border-t border-border pt-3">
+        <ul className="space-y-2 border-t border-line pt-3">
           {item.proposals.map((proposal) => (
             <li
               key={proposal.id}
-              className="space-y-2 rounded-control border border-border bg-surface-muted p-3"
+              className="space-y-2 rounded-[12px] border border-line bg-raise p-3"
             >
-              <p className="flex flex-wrap items-center gap-2 text-sm text-muted">
+              <p className="flex flex-wrap items-center gap-2 text-[15px] text-ink-2">
                 <OriginBadge origin={proposal.origin} />
                 <span>{arrivedLabel(proposal.createdAt, today)}</span>
               </p>

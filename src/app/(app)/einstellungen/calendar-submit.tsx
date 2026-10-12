@@ -2,7 +2,7 @@
 
 import { useFormStatus } from "react-dom";
 
-import { Button, type ButtonProps } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/kombi/form";
 
 /**
  * Ein Knopf für die Formulare der Karte „Google Kalender", der von selbst

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
-import { Button, ButtonLink } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
+import { Button, ButtonLink } from "@/components/kombi/form";
+import { Card, CardContent } from "@/components/kombi/form";
+import { EmptyState } from "@/components/kombi/form";
 import { requireUser } from "@/lib/auth";
 import { subjectColor } from "@/lib/colors";
 import { formatGerman, todayInBerlin } from "@/lib/dates";
@@ -58,10 +58,10 @@ export default async function AbrufPage() {
   const ueberfaellig = faellig.filter((f) => f.dueOn < heute).length;
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="kf-seite">
       <header>
-        <h1 className="text-xl font-semibold text-foreground">Abruf</h1>
-        <p className="mt-1 text-muted">
+        <h2 className="p-title">Abruf</h2>
+        <p className="mt-1 text-ink-2">
           {aktive.length === 0
             ? zurueckgezogen > 0
               ? // „Noch keine" hieße: es gab noch nie welche. Bei
@@ -84,9 +84,9 @@ export default async function AbrufPage() {
       {/* Ein Vorschlag im Eingang ist Arbeit, die wartet — und sie steht ganz
           oben, weil sie den Bestand füllt, aus dem alles Übrige lebt. */}
       {offeneFragen > 0 ? (
-        <Card className="border-accent/40">
+        <Card className="border-line-strong">
           <CardContent className="space-y-3">
-            <p className="text-foreground">
+            <p className="text-ink">
               {offeneFragen}{" "}
               {offeneFragen === 1 ? "Frage wartet" : "Fragen warten"} im Eingang
               — die KI hat sie gebaut, übernommen ist noch keine.
@@ -131,9 +131,9 @@ export default async function AbrufPage() {
                 return (
                   <span
                     key={name}
-                    className="rounded-pill px-2.5 py-1 text-xs font-medium"
+                    className="rounded-full px-2.5 py-1 text-[13px] font-[560]"
                     style={{
-                      backgroundColor: `color-mix(in oklab, ${farbe.hex} 12%, var(--surface))`,
+                      backgroundColor: `color-mix(in oklab, ${farbe.hex} 12%, var(--bg))`,
                       color: farbe.hex,
                     }}
                   >
@@ -149,7 +149,7 @@ export default async function AbrufPage() {
               {ueberfaellig > 0 ? "Weitermachen" : "Abend anfangen"}
             </ButtonLink>
 
-            <p className="text-sm text-muted">
+            <p className="text-[15px] text-ink-2">
               Erst antworten, dann die Lösung — in dieser Reihenfolge, sonst
               lernt man das Wiedererkennen statt der Sache. Ein Baustein ist
               erst durch, wenn er einmal saß.
@@ -159,12 +159,12 @@ export default async function AbrufPage() {
       ) : (
         <Card>
           <CardContent className="space-y-2">
-            <p className="text-foreground">
+            <p className="text-ink">
               {bericht.versuche > 0
                 ? `${bericht.versuche} ${bericht.versuche === 1 ? "Versuch" : "Versuche"} über ${bericht.bausteine} ${bericht.bausteine === 1 ? "Baustein" : "Bausteine"}, davon ${bericht.aufAnhieb} auf Anhieb richtig.`
                 : "Heute war nichts fällig."}
             </p>
-            <p className="text-sm text-muted">
+            <p className="text-[15px] text-ink-2">
               Das ist ein Bericht über den Abend, keine Zusammenfassung des
               Stoffs — die gehört in dein Heft und nicht hierher.
             </p>
@@ -174,7 +174,7 @@ export default async function AbrufPage() {
 
       {aktive.length > 0 ? (
         <section className="space-y-3">
-          <h2 className="text-sm font-medium text-muted">Bestand</h2>
+          <h2 className="p-lab">Bestand</h2>
           <div className="flex flex-wrap items-center gap-3">
             <ButtonLink href="/abruf/bausteine" variant="secondary">
               {aktive.length} {aktive.length === 1 ? "Baustein" : "Bausteine"}
@@ -197,7 +197,7 @@ export default async function AbrufPage() {
             </Button>
           </form>
 
-          <p className="text-sm text-subtle">
+          <p className="text-[15px] text-ink-3">
             Heute ist der {formatGerman(heute, "lang")}. Trägst du eine Klausur
             nach oder verschiebst sie, rechne die Termine neu — sie entstehen
             beim Anlegen und wissen von der Änderung sonst nichts.

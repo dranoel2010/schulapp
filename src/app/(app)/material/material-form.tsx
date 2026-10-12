@@ -12,9 +12,10 @@ import {
 } from "react";
 import { useFormStatus } from "react-dom";
 
-import { Button, type ButtonProps } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
-import { Input, Select, Textarea } from "@/components/ui/input";
+import { Button, type ButtonProps } from "@/components/kombi/form";
+import { NeuLadenBei, useNachAktion } from "@/components/kombi/form/fertig";
+import { Field } from "@/components/kombi/form";
+import { Input, Select, Textarea } from "@/components/kombi/form";
 import type { Subject } from "@/db/schema";
 import { formatGerman } from "@/lib/dates";
 import { formatBytes } from "@/lib/images";
@@ -153,11 +154,11 @@ export function MaterialPages({ pages, title }: MaterialPagesProps) {
               height={page.height}
               loading="lazy"
               decoding="async"
-              className="h-auto w-full rounded-card border border-border bg-surface-muted"
+              className="h-auto w-full"
             />
 
             <figcaption className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1">
-              <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] text-ink-2">
                 <span>
                   {`Seite ${index + 1} von ${pages.length} · ${formatBytes(page.byteSize)}`}
                   {/* Die App entscheidet gerade, wer diese Seite liest, und
@@ -185,7 +186,7 @@ export function MaterialPages({ pages, title }: MaterialPagesProps) {
                   deleteAction={page.deleteAction}
                 />
               ) : (
-                <span className="text-sm text-subtle">
+                <span className="text-[15px] text-ink-3">
                   Die einzige Seite bleibt stehen.
                 </span>
               )}
@@ -225,7 +226,7 @@ export function MaterialPages({ pages, title }: MaterialPagesProps) {
  */
 function MaschinellBadge({ kurz = false }: { kurz?: boolean }) {
   return (
-    <span className="shrink-0 rounded-pill border border-border px-2 py-0.5 text-xs text-muted">
+    <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[13px] text-ink-2">
       {kurz ? (
         // An der zugeklappten Zeile ist neben Vorschaubild, Seitenzahl und
         // „2 unsicher“ am Handy kein Platz für mehr als ein Wort. Vorgelesen
@@ -255,7 +256,7 @@ function PageDelete({
       <Button
         type="button"
         variant="ghost"
-        className="text-danger hover:bg-danger-soft hover:text-danger"
+        style={{ color: "var(--error)" }}
         onClick={() => setConfirming(true)}
       >
         {`${label} löschen`}
@@ -265,7 +266,7 @@ function PageDelete({
 
   return (
     <span className="flex flex-wrap items-center gap-2">
-      <span className="text-sm text-foreground">Wirklich? Das bleibt weg.</span>
+      <span className="text-[15px] text-ink">Wirklich? Das bleibt weg.</span>
 
       <form action={deleteAction}>
         <SubmitButton variant="danger">Ja, löschen</SubmitButton>
@@ -295,7 +296,7 @@ function Chevron() {
     <svg
       viewBox="0 0 24 24"
       aria-hidden="true"
-      className="size-4 shrink-0 text-subtle transition-transform group-open:rotate-90"
+      className="size-4 shrink-0 text-ink-3 transition-transform group-open:rotate-90"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.5"
@@ -331,7 +332,7 @@ function uncertainBadge(count: number): string {
  */
 function TranscriptText({ text }: { text: string }) {
   return (
-    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
+    <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-ink">
       {splitTranscript(text).map((part, index) =>
         part.uncertain ? (
           // Der Index als Schlüssel ist hier der richtige: die Liste ist aus
@@ -339,7 +340,7 @@ function TranscriptText({ text }: { text: string }) {
           // ihre Stelle IST ihre Identität.
           <mark
             key={index}
-            className="rounded-control bg-warning/25 px-0.5 text-foreground"
+            className="rounded-[12px] bg-raise px-0.5 text-ink"
           >
             {part.text}
           </mark>
@@ -387,22 +388,22 @@ function PageTranscript({
   const marks = uncertainSpans(transcript);
 
   return (
-    <details className="group rounded-control border border-border bg-surface">
-      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-3.5 py-2.5 transition-colors hover:bg-surface-muted [&::-webkit-details-marker]:hidden">
+    <details className="group rounded-[12px] border border-line bg-raise">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-3.5 py-2.5 transition-colors hover:bg-raise [&::-webkit-details-marker]:hidden">
         <Chevron />
 
-        <span className="min-w-0 flex-1 text-sm font-medium text-foreground">
+        <span className="min-w-0 flex-1 text-[15px] font-[560] text-ink">
           Abschrift
         </span>
 
         {marks.length > 0 ? (
-          <span className="shrink-0 rounded-pill bg-warning/25 px-2 py-0.5 text-xs text-foreground">
+          <span className="shrink-0 rounded-full bg-raise px-2 py-0.5 text-[13px] text-ink">
             {uncertainBadge(marks.length)}
           </span>
         ) : null}
       </summary>
 
-      <div className="space-y-3 border-t border-border p-3.5">
+      <div className="space-y-3 border-t border-line p-3.5">
         <TranscriptText text={transcript} />
 
         {/* Der Weg zum Feld, in dem sie sich ändern lässt. Er zeigt auf die id
@@ -417,7 +418,7 @@ function PageTranscript({
             sonst zwölfmal denselben Satz. */}
         <a
           href={`#${transcriptFieldId(pageId)}`}
-          className="inline-flex min-h-11 items-center text-sm text-accent transition-colors hover:text-accent-hover"
+          className="inline-flex min-h-11 items-center text-[15px] text-accent transition-colors hover:text-accent"
         >
           Diese Abschrift ändern
           <span className="sr-only">{`, Seite ${index}`}</span>
@@ -563,9 +564,9 @@ function TranscriptField({
       <details
         open={open}
         onToggle={(event) => onOpenChange(event.currentTarget.open)}
-        className="group rounded-control border border-border bg-surface-muted"
+        className="group rounded-[12px] border border-line bg-raise"
       >
-        <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 p-2.5 transition-colors hover:bg-surface [&::-webkit-details-marker]:hidden">
+        <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 p-2.5 transition-colors hover:bg-raise [&::-webkit-details-marker]:hidden">
           <Chevron />
 
           {/* eslint-disable-next-line @next/next/no-img-element -- next/image fragt ohne Session-Cookie an und legt das Blatt in einen öffentlichen Cache */}
@@ -578,11 +579,11 @@ function TranscriptField({
             height={48}
             loading="lazy"
             decoding="async"
-            className="h-12 w-9 shrink-0 rounded-control border border-border bg-surface object-cover"
+            className="h-12 w-9 shrink-0 rounded-[12px] border border-line bg-raise object-cover"
           />
 
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-medium text-foreground">
+            <span className="block text-[15px] font-[560] text-ink">
               {`Seite ${index} von ${total}`}
             </span>
 
@@ -590,7 +591,7 @@ function TranscriptField({
                 Grund dafür. „Noch nicht gelesen“ und „Nichts darauf“ sind
                 zwei verschiedene Zustände und dürfen an der zugeklappten
                 Zeile nicht gleich aussehen. */}
-            <span className="block truncate text-sm text-muted">
+            <span className="block truncate text-[15px] text-ink-2">
               {preview !== ""
                 ? preview
                 : page.prefill === null
@@ -600,7 +601,7 @@ function TranscriptField({
           </span>
 
           {marks.length > 0 ? (
-            <span className="shrink-0 rounded-pill bg-warning/25 px-2 py-0.5 text-xs text-foreground">
+            <span className="shrink-0 rounded-full bg-raise px-2 py-0.5 text-[13px] text-ink">
               {uncertainBadge(marks.length)}
             </span>
           ) : null}
@@ -610,7 +611,7 @@ function TranscriptField({
           {page.maschinell ? <MaschinellBadge kurz /> : null}
         </summary>
 
-        <div className="border-t border-border bg-surface p-3 sm:p-4">
+        <div className="border-t border-line bg-raise p-3 sm:p-4">
           <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
             {/* eslint-disable-next-line @next/next/no-img-element -- next/image fragt ohne Session-Cookie an und legt das Blatt in einen öffentlichen Cache */}
             <img
@@ -620,7 +621,7 @@ function TranscriptField({
               height={page.height}
               loading="lazy"
               decoding="async"
-              className="h-auto w-full rounded-control border border-border bg-surface-muted"
+              className="h-auto w-full rounded-[12px] border border-line bg-raise"
             />
 
             <div className="space-y-3">
@@ -634,13 +635,13 @@ function TranscriptField({
                   im Feld, und weil die Klammern dort mit drinstehen, findet
                   auch die Suchfunktion des Browsers sie. */}
               {marks.length > 0 ? (
-                <div className="space-y-1.5 rounded-control border border-border bg-surface-muted p-3">
-                  <p className="text-sm text-muted">Unsicher gelesen:</p>
+                <div className="space-y-1.5 rounded-[12px] border border-line bg-raise p-3">
+                  <p className="text-[15px] text-ink-2">Unsicher gelesen:</p>
 
                   <ul className="flex flex-wrap gap-1.5">
                     {marks.map((mark, position) => (
                       <li key={`${position}-${mark}`}>
-                        <mark className="inline-block max-w-full truncate rounded-pill bg-warning/25 px-2 py-0.5 text-sm text-foreground">
+                        <mark className="inline-block max-w-full truncate rounded-full bg-raise px-2 py-0.5 text-[15px] text-ink">
                           {mark}
                         </mark>
                       </li>
@@ -814,10 +815,10 @@ function TranscriptFields({ pages, values, onChange }: TranscriptFieldsProps) {
 
   return (
     <fieldset id="abschrift" className="min-w-0 space-y-3">
-      <legend className="text-sm font-medium text-foreground">Abschrift</legend>
+      <legend className="text-[15px] font-[560] text-ink">Abschrift</legend>
 
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-        <p className="min-w-0 flex-1 text-sm text-muted">
+        <p className="min-w-0 flex-1 text-[15px] text-ink-2">
           Was auf den Seiten steht, wörtlich. Gespeichert wird, was hier im Feld
           steht — lies es gegen das Bild daneben.
         </p>
@@ -828,7 +829,7 @@ function TranscriptFields({ pages, values, onChange }: TranscriptFieldsProps) {
             onClick={() =>
               setOpen(allOpen ? new Set() : new Set(pages.map((p) => p.id)))
             }
-            className="inline-flex min-h-11 shrink-0 items-center text-sm text-accent transition-colors hover:text-accent-hover"
+            className="inline-flex min-h-11 shrink-0 items-center text-[15px] text-accent transition-colors hover:text-accent"
           >
             {allOpen ? "Alle zuklappen" : "Alle aufklappen"}
           </button>
@@ -839,7 +840,7 @@ function TranscriptFields({ pages, values, onChange }: TranscriptFieldsProps) {
           nicht zwölfmal an jeder Seite. An der Seite steht dafür nur noch
           „Unsicher gelesen:“ und der Ausschnitt selbst. */}
       {marks > 0 ? (
-        <p className="text-sm text-muted">
+        <p className="text-[15px] text-ink-2">
           {marks === 1
             ? "An einer Stelle war sich der Agent nicht sicher; sie steht in ⟨spitzen Klammern⟩ und ist unten hervorgehoben. Genau solche Stellen sind der Grund, warum ein Mensch das hier ansieht."
             : `An ${marks} Stellen war sich der Agent nicht sicher; sie stehen in ⟨spitzen Klammern⟩ und sind unten hervorgehoben. Genau solche Stellen sind der Grund, warum ein Mensch das hier ansieht.`}
@@ -949,7 +950,7 @@ function TopicInput({
             <li key={topic}>
               <input type="hidden" name={name} value={topic} />
 
-              <span className="inline-flex min-h-11 max-w-full items-center gap-1 rounded-pill border border-accent bg-accent-soft py-1 pl-3.5 pr-1 text-sm font-medium text-accent">
+              <span className="inline-flex min-h-11 max-w-full items-center gap-1 rounded-full border border-ink bg-raise py-1 pl-3.5 pr-1 text-[15px] font-[560] text-accent">
                 <span className="min-w-0 truncate">{topic}</span>
 
                 <button
@@ -958,7 +959,7 @@ function TopicInput({
                     onTopicsChange(topics.filter((item) => item !== topic))
                   }
                   aria-label={`${topic} entfernen`}
-                  className="flex size-9 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-danger-soft hover:text-danger"
+                  className="flex size-9 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-raise hover:text-error"
                 >
                   <svg
                     viewBox="0 0 24 24"
@@ -1060,11 +1061,11 @@ function TopicSuggestions({
               aria-pressed={isChosen}
               onClick={() => toggle(topic.title)}
               className={cn(
-                "inline-flex min-h-11 max-w-full items-center rounded-pill",
-                "border px-3.5 py-1.5 text-left text-sm transition-colors",
+                "inline-flex min-h-11 max-w-full items-center rounded-full",
+                "border px-3.5 py-1.5 text-left text-[15px] transition-colors",
                 isChosen
-                  ? "border-accent bg-accent-soft font-medium text-accent"
-                  : "border-border bg-surface text-muted hover:border-border-strong hover:text-foreground",
+                  ? "border-ink bg-raise font-[560] text-accent"
+                  : "border-line bg-raise text-ink-2 hover:border-line-strong hover:text-ink",
               )}
             >
               {topic.title}
@@ -1077,7 +1078,7 @@ function TopicSuggestions({
         <button
           type="button"
           onClick={() => setShowAll(true)}
-          className="inline-flex min-h-11 items-center text-sm text-accent transition-colors hover:text-accent-hover"
+          className="inline-flex min-h-11 items-center text-[15px] text-accent transition-colors hover:text-accent"
         >
           Alle zeigen
         </button>
@@ -1428,14 +1429,15 @@ export function MaterialForm({
   return (
     <form
       action={formAction}
-      className="space-y-6"
+      className="kf-form"
       noValidate
       data-ungespeichert={ungespeichert || pending ? "" : undefined}
     >
+      <NeuLadenBei marke={state.saves} />
       {state.message ? (
         <p
           role="alert"
-          className="rounded-control border border-danger/40 bg-danger-soft px-3.5 py-3 text-sm text-danger"
+          className="kf-fehler"
         >
           {state.message}
         </p>
@@ -1446,7 +1448,7 @@ export function MaterialForm({
       {!state.message && state.notice ? (
         <p
           role="status"
-          className="rounded-control border border-border bg-surface-muted px-3.5 py-3 text-sm text-foreground"
+          className="p-sub"
         >
           {state.notice}
         </p>
@@ -1577,8 +1579,8 @@ export function MaterialForm({
         />
       ) : null}
 
-      <div className="pt-2">
-        <Button type="submit" loading={pending} className="w-full sm:w-auto">
+      <div className="foot">
+        <Button type="submit" loading={pending}>
           {submitLabel}
         </Button>
       </div>
@@ -1605,12 +1607,13 @@ export function MaterialDangerZone({
   deleteAction,
 }: MaterialDangerZoneProps) {
   const [confirming, setConfirming] = useState(false);
+  const { heim } = useNachAktion();
 
   return (
-    <section className="rounded-card border border-border bg-surface p-4 sm:p-5">
+    <section>
       {confirming ? (
-        <div className="space-y-3 rounded-control border border-danger/40 bg-danger-soft p-3.5">
-          <p className="text-sm text-foreground">
+        <div className="kf-gefahr">
+          <p className="text-[15px] text-ink">
             {materialLabel} wirklich löschen? Damit{" "}
             {pageCount === 1
               ? "ist auch die Aufnahme weg"
@@ -1619,7 +1622,12 @@ export function MaterialDangerZone({
             lässt sich eine Tafel von letzter Woche nicht.
           </p>
           <div className="flex flex-wrap gap-2">
-            <form action={deleteAction}>
+            <form
+              action={async () => {
+                await deleteAction();
+                heim("Blatt gelöscht");
+              }}
+            >
               <SubmitButton variant="danger">
                 Ja, endgültig löschen
               </SubmitButton>
@@ -1637,7 +1645,7 @@ export function MaterialDangerZone({
         <Button
           type="button"
           variant="ghost"
-          className="text-danger hover:bg-danger-soft hover:text-danger"
+          style={{ color: "var(--error)" }}
           onClick={() => setConfirming(true)}
         >
           Blatt löschen

@@ -50,10 +50,10 @@ export default async function SitzungPage() {
   }));
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="kf-seite">
       <header>
-        <h1 className="text-xl font-semibold text-foreground">Abend</h1>
-        <p className="mt-1 text-sm text-muted">
+        <h2 className="p-title">Abend</h2>
+        <p className="mt-1 text-[15px] text-ink-2">
           Erst antworten, dann vergleichen. Ein Baustein ist durch, wenn er
           einmal saß — was danebengeht, kommt heute noch einmal.
         </p>

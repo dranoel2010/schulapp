@@ -3,11 +3,11 @@
 import { useActionState, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
-import { Button, ButtonLink, type ButtonProps } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
-import { Input, Select, Textarea } from "@/components/ui/input";
+import { Button, type ButtonProps } from "@/components/kombi/form";
+import { AbbrechenKnopf, FertigBeiErfolg, useNachAktion } from "@/components/kombi/form/fertig";
+import { Field } from "@/components/kombi/form";
+import { Input, Select, Textarea } from "@/components/kombi/form";
 import type { Exam, ExamKind, Subject } from "@/db/schema";
-import { subjectColor } from "@/lib/colors";
 import { addDays, formatGerman } from "@/lib/dates";
 import type { ExamInput } from "@/lib/exams";
 import type { TopicItem } from "@/lib/subject-topics";
@@ -45,6 +45,8 @@ export type ExamFormState = {
   /** Hinweis über dem Formular, wenn es nicht an einem einzelnen Feld liegt. */
   message?: string;
   errors?: ExamFieldErrors;
+  /** Gesetzt nach erfolgreichem Speichern: die Formularseite geht zurück (Plan 2.4). */
+  fertig?: number;
 };
 
 const EMPTY_STATE: ExamFormState = {};
@@ -167,11 +169,11 @@ function TopicSuggestions({
               aria-pressed={isChosen}
               onClick={() => toggle(topic.title)}
               className={cn(
-                "inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-pill",
-                "border px-3.5 py-1.5 text-left text-sm transition-colors",
+                "inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-full",
+                "border px-3.5 py-1.5 text-left text-[15px] transition-colors",
                 isChosen
-                  ? "border-accent bg-accent-soft font-medium text-accent"
-                  : "border-border bg-surface text-muted hover:border-border-strong hover:text-foreground",
+                  ? "border-ink bg-raise font-[560] text-accent"
+                  : "border-line bg-raise text-ink-2 hover:border-line-strong hover:text-ink",
               )}
             >
               {topic.title}
@@ -182,7 +184,7 @@ function TopicSuggestions({
                 <span
                   className={cn(
                     "shrink-0 tabular-nums",
-                    isChosen ? "font-normal" : "text-subtle",
+                    isChosen ? "font-normal" : "text-ink-3",
                   )}
                 >
                   · {topic.examCount}×
@@ -197,7 +199,7 @@ function TopicSuggestions({
         <button
           type="button"
           onClick={() => setShowAll(true)}
-          className="inline-flex min-h-11 items-center text-sm text-accent transition-colors hover:text-accent-hover"
+          className="inline-flex min-h-11 items-center text-[15px] text-accent transition-colors hover:text-accent"
         >
           Alle zeigen
         </button>
@@ -237,7 +239,8 @@ export type ExamFormProps = {
   /** Die Themen der Prüfung in ihrer Reihenfolge. */
   topics?: string[];
   submitLabel: string;
-  cancelHref: string;
+  /** Früher das Ziel von „Abbrechen“; jetzt geht es eine Ebene zurück. */
+  cancelHref?: string;
 };
 
 export function ExamForm({
@@ -248,7 +251,6 @@ export function ExamForm({
   exam,
   topics: savedTopics = [],
   submitLabel,
-  cancelHref,
 }: ExamFormProps) {
   const [subjectId, setSubjectId] = useState(
     exam?.subjectId ?? subjects[0]?.id ?? "",
@@ -273,9 +275,6 @@ export function ExamForm({
 
   const [state, formAction, pending] = useActionState(action, EMPTY_STATE);
 
-  const color = subjectColor(
-    subjects.find((subject) => subject.id === subjectId)?.color,
-  );
 
   // Ein Fehler aus der Lernplanung steht auch zugeklappt in der Titelzeile —
   // eine Meldung, die niemand sieht, ist keine.
@@ -307,11 +306,12 @@ export function ExamForm({
       : `${topics.length} ${topics.length === 1 ? "Thema" : "Themen"} — daraus baut die App den Lernplan. Vier bis zehn funktionieren gut.`;
 
   return (
-    <form action={formAction} className="space-y-6" noValidate>
+    <form action={formAction} className="kf-form" noValidate>
+      <FertigBeiErfolg marke={state.fertig} toast={exam ? "Gespeichert" : "Klausur eingetragen"} />
       {state.message ? (
         <p
           role="alert"
-          className="rounded-control border border-danger/40 bg-danger-soft px-3.5 py-3 text-sm text-danger"
+          className="kf-fehler"
         >
           {state.message}
         </p>
@@ -321,11 +321,6 @@ export function ExamForm({
         <Field id="subjectId" label="Fach" error={state.errors?.subjectId}>
           {(control) => (
             <span className="flex items-center gap-2.5">
-              <span
-                aria-hidden="true"
-                style={{ backgroundColor: color.hex }}
-                className="size-3 shrink-0 rounded-full"
-              />
               <span className="min-w-0 flex-1">
                 <Select
                   {...control}
@@ -426,13 +421,13 @@ export function ExamForm({
       <details
         open={planOpen}
         onToggle={(event) => setPlanOpen(event.currentTarget.open)}
-        className="group overflow-hidden rounded-card border border-border bg-surface"
+        className="group"
       >
-        <summary className="flex min-h-12 cursor-pointer list-none items-center gap-1.5 px-4 text-sm font-medium text-foreground [&::-webkit-details-marker]:hidden">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center gap-1.5 px-4 text-[15px] font-[560] text-ink [&::-webkit-details-marker]:hidden">
           <svg
             viewBox="0 0 24 24"
             aria-hidden="true"
-            className="size-4 shrink-0 text-subtle transition-transform group-open:rotate-90"
+            className="size-4 shrink-0 text-ink-3 transition-transform group-open:rotate-90"
             fill="none"
             stroke="currentColor"
             strokeWidth="1.5"
@@ -445,15 +440,15 @@ export function ExamForm({
           <span
             className={
               planError
-                ? "ml-auto pl-3 text-right font-normal text-danger"
-                : "ml-auto pl-3 text-right font-normal text-muted"
+                ? "ml-auto pl-3 text-right font-normal text-error"
+                : "ml-auto pl-3 text-right font-normal text-ink-2"
             }
           >
             {planError ?? `${leadDays || "?"} Tage · ${minutesPerDay || "?"} Min.`}
           </span>
         </summary>
 
-        <div className="space-y-4 border-t border-border p-4">
+        <div className="space-y-4 border-t border-line p-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               id="leadDays"
@@ -498,7 +493,7 @@ export function ExamForm({
           </div>
 
           {start ? (
-            <p className="text-sm text-muted">
+            <p className="text-[15px] text-ink-2">
               {start.iso < today
                 ? `Rechnerisch ginge es am ${start.label} los — das ist vorbei, geplant wird ab heute.`
                 : `Die Lernphase beginnt am ${start.label}.`}
@@ -526,18 +521,13 @@ export function ExamForm({
         )}
       </Field>
 
-      <div className="space-y-3 pt-2">
-        <div className="flex gap-3">
-          <Button type="submit" loading={pending} className="flex-1">
-            {submitLabel}
-          </Button>
-          <ButtonLink href={cancelHref} variant="secondary">
-            Abbrechen
-          </ButtonLink>
-        </div>
-
-        {footnote ? <p className="text-sm text-muted">{footnote}</p> : null}
+      <div className="foot">
+        <AbbrechenKnopf />
+        <Button type="submit" loading={pending}>
+          {submitLabel}
+        </Button>
       </div>
+      {footnote ? <p className="p-sub">{footnote}</p> : null}
     </form>
   );
 }
@@ -587,12 +577,13 @@ export function ExamDangerZone({
   deleteAction,
 }: ExamDangerZoneProps) {
   const [confirming, setConfirming] = useState(false);
+  const { heim } = useNachAktion();
 
   return (
-    <section className="rounded-card border border-border bg-surface p-4 sm:p-5">
+    <section>
       {confirming ? (
-        <div className="space-y-3 rounded-control border border-danger/40 bg-danger-soft p-3.5">
-          <p className="text-sm text-foreground">
+        <div className="kf-gefahr">
+          <p className="text-[15px] text-ink">
             {examLabel} wirklich löschen? Der Termin geht weg, die Themen und
             {blockCount > 0
               ? ` der ganze Lernplan mit ${blockCount} ${blockCount === 1 ? "Lernblock" : "Lernblöcken"}`
@@ -613,7 +604,12 @@ export function ExamDangerZone({
             Rückgängig geht das nicht.
           </p>
           <div className="flex flex-wrap gap-2">
-            <form action={deleteAction}>
+            <form
+              action={async () => {
+                await deleteAction();
+                heim("Prüfung gelöscht");
+              }}
+            >
               <SubmitButton variant="danger">Ja, endgültig löschen</SubmitButton>
             </form>
             <Button
@@ -629,7 +625,7 @@ export function ExamDangerZone({
         <Button
           type="button"
           variant="ghost"
-          className="text-danger hover:bg-danger-soft hover:text-danger"
+          style={{ color: "var(--error)" }}
           onClick={() => setConfirming(true)}
         >
           Prüfung löschen

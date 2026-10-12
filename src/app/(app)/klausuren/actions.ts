@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
 import { requestCalendarSync } from "@/lib/calendar/sync";
@@ -137,7 +136,7 @@ export async function createExamAction(
   revalidatePath("/lernen");
   revalidatePath("/");
   // Genau dafür wurde die Prüfung eingetragen: der Lernplan steht jetzt da.
-  redirect("/lernen");
+  return { fertig: Date.now() };
 }
 
 export async function updateExamAction(
@@ -211,7 +210,7 @@ export async function updateExamAction(
   revalidatePath(`/klausuren/${examId}`);
   revalidatePath("/lernen");
   revalidatePath("/");
-  redirect("/klausuren");
+  return { fertig: Date.now() };
 }
 
 export async function deleteExamAction(examId: string): Promise<void> {
@@ -224,5 +223,4 @@ export async function deleteExamAction(examId: string): Promise<void> {
   revalidatePath("/klausuren");
   revalidatePath("/lernen");
   revalidatePath("/");
-  redirect("/klausuren");
 }

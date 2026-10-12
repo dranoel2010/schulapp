@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
 import { requestCalendarSync } from "@/lib/calendar/sync";
@@ -101,7 +100,7 @@ export async function createHomeworkAction(
   requestCalendarSync(user.id);
 
   revalidateHomework();
-  redirect("/hausaufgaben");
+  return { fertig: Date.now() };
 }
 
 export async function updateHomeworkAction(
@@ -130,7 +129,7 @@ export async function updateHomeworkAction(
   requestCalendarSync(user.id);
 
   revalidateHomework(id);
-  redirect("/hausaufgaben");
+  return { fertig: Date.now() };
 }
 
 /**
@@ -156,5 +155,4 @@ export async function deleteHomeworkAction(id: string): Promise<void> {
   requestCalendarSync(user.id);
 
   revalidateHomework(id);
-  redirect("/hausaufgaben");
 }

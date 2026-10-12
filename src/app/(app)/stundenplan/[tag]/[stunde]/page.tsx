@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { ButtonLink } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
+import { ButtonLink } from "@/components/kombi/form";
+import { EmptyState } from "@/components/kombi/form";
 import { requireUser } from "@/lib/auth";
 import { listSubjects } from "@/lib/subjects";
 import {
@@ -82,40 +82,22 @@ export default async function LessonPage({
   }
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
-      <Link
-        href="/stundenplan"
-        className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className="size-4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m15 6-6 6 6 6" />
-        </svg>
-        Wochenplan
-      </Link>
+    <div className="kf-seite">
 
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">
+        <h2 className="p-title">
           {day.long}, {periodLabel(period, period)}
-        </h1>
+        </h2>
 
         {time ? (
-          <p className="text-sm text-muted">
+          <p className="text-[15px] text-ink-2">
             <span className="font-mono tabular-nums">
               {time.startsAt} – {time.endsAt}
             </span>{" "}
             ·{" "}
             <Link
               href="/stundenplan/zeiten"
-              className="text-accent transition-colors hover:text-accent-hover"
+              className="text-accent transition-colors hover:text-accent"
             >
               Zeiten ändern
             </Link>
