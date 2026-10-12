@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { AufgabeZeile } from "@/components/kombi/aufgabe-zeile";
+import { WiederholenBlock } from "@/components/kombi/home/wiederholen";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import { E, reduce } from "@/lib/kombi/motion";
@@ -131,7 +132,7 @@ export function Ueberblick({
           ) : null}
         </div>
       ) : null}
-      {/* Wiederholen (#ovWh, V2 4.5) setzt Abschnitt E hier ein. */}
+      <WiederholenBlock stand={d.wiederholen} />
       <div className="blk enter" id="ovBl">
         <div className="lab">
           <h2 style={{ font: "inherit" }}>Zuletzt abgelegt</h2>

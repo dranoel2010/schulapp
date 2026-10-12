@@ -29,6 +29,8 @@ import {
   type Schulkalender,
 } from "@/lib/tag";
 import { guessEpochSubject } from "@/lib/timetable";
+import { offeneVorschlaege } from "@/recall/proposals";
+import { wiederholenStand } from "@/recall/themen";
 
 export type { TagDaten } from "@/lib/kombi/startseite";
 
@@ -133,7 +135,7 @@ export async function ladeTag(userId: string, now: Date): Promise<TagDaten> {
     alleStunden.map((s) => ({ period: s.period, subjectId: s.subject.id })),
   );
 
-  const [offen, bisNs, klausuren, heuteBloecke, verpasst, karten, korb] = await Promise.all([
+  const [offen, bisNs, klausuren, heuteBloecke, verpasst, karten, korb, wiederholen, vorschlaege] = await Promise.all([
     listHomework(userId),
     homeworkForRange(userId, tag, ns),
     listExams(userId, { heute: tag }),
@@ -141,6 +143,8 @@ export async function ladeTag(userId: string, now: Date): Promise<TagDaten> {
     missedBlocks(userId, tag),
     listMaterialCards(userId, { limit: 3, order: "aufnahme" }),
     countInbox(userId),
+    wiederholenStand(userId, tag),
+    offeneVorschlaege(userId),
   ]);
 
   // Offene Aufgaben und die erledigten bis zum nächsten Schultag (Morgens,
@@ -226,5 +230,7 @@ export async function ladeTag(userId: string, now: Date): Promise<TagDaten> {
         : null,
     blaetter,
     eingangskorb: korb,
+    wiederholen,
+    abrufEingang: vorschlaege.reduce((s, v) => s + v.fragen.length, 0),
   };
 }

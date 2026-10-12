@@ -6,20 +6,24 @@ import {
   examTopics,
   exams,
   freePeriods,
+  lessons,
   materialPages,
   materialTopics,
   materials,
   subjects,
 } from "@/db/schema";
 import { addDays, daysBetween } from "@/lib/dates";
+import { guessEpochSubject } from "@/lib/timetable";
 
 /**
  * Die eine Andockstelle zur Schulapp.
  *
  * Der Abrufkern liest wenig aus dem Bestand: welche Heftseiten eine Abschrift
  * haben, was darauf steht, was zur Klausur gehört — und seit dem 4.10.2026,
- * an welchen Tagen frei ist. Sonst nichts — kein Stundenplan, keine Noten,
- * keine Hausaufgaben. Diese Datei ist die Stelle, an der das steht, und
+ * an welchen Tagen frei ist. Seit Modell 23 (Wiederholen nach Themen) dazu
+ * eine einzige Frage an den Stundenplan: welches Fach gerade Epoche ist
+ * (`epochenFach()`), nach derselben Regel wie die Epoche-Seite. Sonst nichts —
+ * keine Noten, keine Hausaufgaben. Diese Datei ist die Stelle, an der das steht, und
  * sie ist bewusst die einzige: Wird der Kern eines Tages herausgelöst, ist sie
  * die Datei, die neu geschrieben werden muss, und alle anderen unter
  * `src/recall/` bleiben, wie sie sind.
@@ -338,4 +342,40 @@ export async function sperrtageAb(
   }
 
   return [...tage].sort();
+}
+
+/**
+ * Was „Wiederholen nach Themen“ (`themen.ts`, Modell 23, Plan 3.4) aus der
+ * Schulapp braucht, durch diese eine Tür: freie Tage (in Ferien wird nicht
+ * wiederholt), das Tagesprotokoll („Für heute durch.“), die Art eines Themas
+ * (Abfragen oder Üben) und der Wortlaut der Texte rund um „Wiederholen“.
+ */
+export { freePeriodToday } from "@/lib/free-days";
+export { protokollVomTag } from "@/lib/protokoll";
+export { themaArt } from "@/lib/themen-art";
+export { weekdayOrDate } from "@/lib/kombi/text";
+export { fragenText, whText, whUnterzeile, type WhStand } from "@/lib/kombi/wiederholen-text";
+
+/**
+ * Das Fach des Hauptunterrichts („Epoche · Geschichte“ über dem Thema): die
+ * eine Regel `guessEpochSubject()` aus @/lib/timetable, dieselbe wie auf der
+ * Epoche-Seite und in der Morgenansicht. Gelesen wird nur die erste Stunde.
+ */
+export async function epochenFach(userId: string): Promise<string | null> {
+  const zeilen = await db
+    .select({ period: lessons.period, subjectId: lessons.subjectId })
+    .from(lessons)
+    .where(and(eq(lessons.userId, userId), eq(lessons.period, 1)));
+  return guessEpochSubject(zeilen);
+}
+
+/** Der Name eines eigenen Fachs („In Mathematik ist heute nichts fällig.“), sonst null. */
+export async function fachName(userId: string, subjectId: string): Promise<string | null> {
+  if (!istId(subjectId)) return null;
+  const [zeile] = await db
+    .select({ name: subjects.name })
+    .from(subjects)
+    .where(and(eq(subjects.userId, userId), eq(subjects.id, subjectId)))
+    .limit(1);
+  return zeile?.name ?? null;
 }

@@ -1,3 +1,4 @@
+import type { WhStand } from "@/lib/kombi/wiederholen-text";
 import { cap, diffDays, kurz, lang, TAG, wd, weekdayOrDate, zahl } from "@/lib/kombi/text";
 
 /**
@@ -105,6 +106,10 @@ export type TagDaten = {
   blaetter: BlattT[];
   /** Blätter im Eingangskorb */
   eingangskorb: number;
+  /** Block „Wiederholen“ auf dem Überblick (Abschnitt E, V2 4.5) */
+  wiederholen: WhStand;
+  /** Fragen in den offenen KI-Vorschlägen (`/abruf/eingang`) */
+  abrufEingang: number;
 };
 
 /** Ist der Tag ein Schultag? Aus den Daten: der App-Tag selbst oder der nächste. */

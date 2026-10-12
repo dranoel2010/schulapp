@@ -125,7 +125,7 @@ export default async function EingangPage({
         ) : null}
 
         <div className="flex flex-wrap items-center gap-3">
-          <ButtonLink href="/abruf">Zum Abruf</ButtonLink>
+          <ButtonLink href="/abruf/bausteine">Zu den Bausteinen</ButtonLink>
           <ButtonLink href="/abruf/eingang" variant="secondary">
             Eingang
           </ButtonLink>

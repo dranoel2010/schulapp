@@ -165,7 +165,7 @@ async function seiteMitAbschrift(
  */
 const HARTE_TERMINE = ["klausur", "test"] as const;
 
-async function naechsteKlausur(
+export async function naechsteKlausur(
   userId: string,
   subjectId: string,
   heute: string,
