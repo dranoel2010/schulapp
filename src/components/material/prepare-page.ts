@@ -287,6 +287,23 @@ export async function prepareFrame(
 }
 
 /**
+ * Ein schon eingefrorenes Standbild (Canvas in voller Auflösung) in die drei
+ * Fassungen — für die Kamera von Modell 23, die beim Auslösen einfriert und
+ * erst nebenher rechnet, damit der nächste Tipp sofort geht. Das Canvas wird
+ * danach geleert (rund 20 MB je Bild).
+ */
+export async function prepareCanvas(
+  shot: HTMLCanvasElement,
+): Promise<PreparedPage> {
+  try {
+    return await prepareFrame_({ draw: shot, width: shot.width, height: shot.height });
+  } finally {
+    shot.width = 0;
+    shot.height = 0;
+  }
+}
+
+/**
  * Eine Seite über die Leitung. Das Ergebnis ist die id des Blattes — ohne
  * `materialId` die eines frisch angelegten, sonst die schon bekannte.
  *

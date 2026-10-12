@@ -20,7 +20,9 @@ import {
   MATERIAL_TITLE_MAX,
   defaultMaterialTitle,
   ersteSeiteDocling,
+  getMaterial,
   listMaterialTranscripts,
+  setMaterialTopics,
   type MaterialDetail,
   type MaterialPageTranscript,
   listPageActivity,
@@ -434,4 +436,47 @@ function ausgangslage(
     topics: material.topics.map((topic) => topic.title),
     pages,
   };
+}
+
+/**
+ * Die Themen eines Blatts, dessen Fach schon feststeht — „Fach ändern“ im
+ * Ablauf (Modell 23, Plan 3.8): Fach und `filed_at` setzt der Mensch, Jev
+ * bestimmt nur noch die Themen im Vokabular dieses Fachs. Dieselbe Frage wie
+ * in `autoFile()`, nur ohne die Frage nach dem Fach (die Fachvorgabe).
+ *
+ * Ohne Jev, ohne lesbare Abschrift oder ohne Themen im Fach bleibt das Blatt
+ * ohne Thema; das ist kein Fehler, das Fach stimmt ja.
+ */
+export async function themenFuerFach(
+  userId: string,
+  materialId: string,
+): Promise<{ ok: true; topics: string[] } | { ok: false; grund: string }> {
+  if (!jevConfigured()) return { ok: false, grund: "Jev ist nicht eingerichtet." };
+
+  const material = await getMaterial(userId, materialId);
+  if (!material) return { ok: false, grund: "Das Blatt gibt es nicht mehr." };
+
+  const pages = await listMaterialTranscripts(userId, materialId);
+  const text = pages
+    .map((page) => page.transcript ?? "")
+    .filter((entry) => entry.trim() !== "")
+    .join("\n\n");
+  if (readableChars(text) < MIN_READABLE_CHARS) {
+    return { ok: false, grund: "Auf dem Blatt ist zu wenig lesbar." };
+  }
+
+  const vocabulary = await listTopicsForSubjects(userId, [material.subject.id]);
+  const candidates = topicCandidates(
+    (vocabulary.get(material.subject.id) ?? []).map((topic) => topic.title),
+    [],
+  );
+  if (candidates.length === 0) return { ok: true, topics: [] };
+
+  const themen = await askJev(
+    jevState(text),
+    topicQuestions(material.subject.name, candidates),
+  );
+  const topics = readTopics(candidates, themen.answers);
+  await setMaterialTopics(userId, materialId, topics);
+  return { ok: true, topics };
 }

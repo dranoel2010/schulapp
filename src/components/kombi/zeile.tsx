@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
+import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, useSyncExternalStore, type Ref } from "react";
 
+import { ablaufAusMenuMerken, ablaufStore } from "@/components/kombi/ablauf/ablauf-store";
 import { Icon } from "@/components/kombi/icon";
+import { warmCamera } from "@/components/kombi/kamera/stream";
 import { useKombi } from "@/components/kombi/kontext";
 import { E, reduce, springOpts } from "@/lib/kombi/motion";
+import { TAG, cap, kurz as kurzDatum, wd } from "@/lib/kombi/text";
 
 /**
  * Die Zeile (Prototyp Z. 891–909, 2262–2919): die dunkle Pille unten mit
@@ -41,6 +44,74 @@ const BEREICHE = [
 
 const MENU_FULL = "inset(0px 0px 0px 0px round 24px 24px 0px 0px)";
 
+/**
+ * Kontext „Eintragen“ (Prototyp `openZeile`, Z. 2829; V2 5.3): Schritt 2 des
+ * Ablaufs öffnet die Zeile mit Fach und nächster Stunde als Tokens, „Anderes
+ * Fach“ ohne Fach-Token mit Fach-Pillen. Abschnitt C baut davon nur, was
+ * „+ Aufgabe“ braucht (Kriterium 22): Tokens, Pillen, Rückfrage „Bis wann?“
+ * und Absenden. Parser, Suche und Dubletten bringt Abschnitt D.
+ */
+export type EintragFach = { id: string; name: string; kurz: string; naechste: string | null };
+export type EintragSenden = {
+  intent: "eintragen" | "aendern";
+  id?: string;
+  fachId: string;
+  text: string;
+  due: string;
+  /** das Feld der Zeile beim Absenden: dort startet der Geistflug (13.3 Nr. 23) */
+  from: DOMRect | null;
+};
+export type EintragKontext = {
+  intent: "eintragen" | "aendern";
+  fach: string | null;
+  due: string | null;
+  dueAuto?: boolean;
+  dueRemoved?: boolean;
+  fachPills?: boolean;
+  text?: string;
+  /** beim Ändern: die Aufgabe */
+  id?: string;
+  /** App-Tag, für die Rückfrage „Bis wann?“ */
+  heute: string;
+  faecher: EintragFach[];
+  senden: (e: EintragSenden) => void;
+};
+
+function istEintragKontext(k: unknown): k is EintragKontext {
+  if (!k || typeof k !== "object") return false;
+  const o = k as Record<string, unknown>;
+  return (o.intent === "eintragen" || o.intent === "aendern") && Array.isArray(o.faecher) && typeof o.senden === "function";
+}
+
+/** Prototyp `fmtTask`, Z. 2302 */
+function fmtTask(roh: string): string {
+  let s = roh.replace(/\s+/g, " ").trim();
+  s = s.replace(/^[\s,.:;–-]+|[\s,:;–-]+$/g, "");
+  s = s
+    .replace(/(?<![\p{L}])s\.?\s*(\d)/giu, "S. $1")
+    .replace(/(?<![\p{L}])nr\.?\s*(\d)/giu, "Nr. $1")
+    .replace(/(\d)\s*-\s*(\d)/g, "$1–$2");
+  return cap(s);
+}
+
+function plusTage(tag: string, n: number): string {
+  const d = new Date(`${tag}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Die nächsten Wochentage Mo–Fr nach `tag` (Rückfrage „Bis wann?“, Prototyp Z. 2647). */
+function naechsteWochentage(tag: string, n: number): string[] {
+  const out: string[] = [];
+  let t = tag;
+  while (out.length < n) {
+    t = plusTage(t, 1);
+    const w = wd(t);
+    if (w >= 1 && w <= 5) out.push(t);
+  }
+  return out;
+}
+
 export function Zeile({
   handleRef,
   versteckt = false,
@@ -55,6 +126,12 @@ export function Zeile({
   const kombi = useKombi();
   const [offen, setOffen] = useState(false);
   const [text, setText] = useState("");
+  const [ctx, setCtx] = useState<EintragKontext | null>(null);
+  const [needFach, setNeedFach] = useState(false);
+  const [rueck, setRueck] = useState(false);
+  const fachRef = useRef<HTMLDivElement>(null);
+  const tokRef = useRef<HTMLDivElement>(null);
+  const tokVorher = useRef<Set<string>>(new Set());
   const offenRef = useRef(false);
   const zeileRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -146,6 +223,9 @@ export function Zeile({
           menu.classList.remove("open");
           menu.style.transform = "";
           setText("");
+          setCtx(null);
+          setNeedFach(false);
+          setRueck(false);
         },
         () => {},
       );
@@ -157,7 +237,12 @@ export function Zeile({
   useImperativeHandle(
     handleRef,
     () => ({
-      oeffnen: () => {
+      oeffnen: (kontext) => {
+        const k = istEintragKontext(kontext) ? kontext : null;
+        setCtx(k);
+        setNeedFach(false);
+        setRueck(false);
+        setText(k?.text ?? "");
         feldRef.current?.focus({ preventScroll: true });
         oeffnen();
       },
@@ -236,6 +321,123 @@ export function Zeile({
     if (!reduce()) menu.animate([{ transform: `translateY(${s.dy}px)` }, { transform: "none" }], springOpts());
   };
 
+  // Vorschläge des Ablaufs (Prototyp suggestions(), Z. 2595–2608); den Rest bringt Abschnitt D
+  const ablauf = useSyncExternalStore(ablaufStore.subscribe, ablaufStore.get, ablaufStore.getServer);
+  const vorschlaege: { key: "ablauf" | "cam"; l1: string; l2?: string }[] = [];
+  if (ablauf.nachDerSchule && !ablauf.sichtbar) {
+    vorschlaege.push({ key: "ablauf", l1: "Nach der Schule", l2: "Blätter und Hausaufgaben" });
+  }
+  if (ablauf.sichtbar && ablauf.schritt === "blaetter") vorschlaege.push({ key: "cam", l1: "Blatt aufnehmen" });
+
+  function vorschlagWaehlen(key: "ablauf" | "cam") {
+    schliessen();
+    if (key === "ablauf") {
+      ablaufAusMenuMerken();
+      kombi.setView("ablauf", { dir: -1 });
+    } else kombi.openCam({ ziel: { kind: "liste" } });
+  }
+
+  // ── Kontext „Eintragen“ (Prototyp parse/renderTokens/renderFachPills/doEintragen) ──
+  const eFach = ctx?.fach ? (ctx.faecher.find((f) => f.id === ctx.fach) ?? null) : null;
+  let eDue: string | null = null;
+  let dueAuto = false;
+  if (ctx?.due) {
+    eDue = ctx.due;
+    dueAuto = !!ctx.dueAuto;
+  } else if (eFach && !ctx?.dueRemoved && eFach.naechste) {
+    eDue = eFach.naechste;
+    dueAuto = true;
+  }
+  const taskText = ctx ? fmtTask(text) : "";
+  const tokens: { key: string; cls: string; icon?: "add" | "edit"; label: string }[] = ctx
+    ? [
+        { key: `int:${ctx.intent}`, cls: "int", icon: ctx.intent === "aendern" ? "edit" : "add", label: ctx.intent === "aendern" ? "Ändern" : "Eintragen" },
+        eFach ? { key: `fach:${eFach.id}`, cls: "", label: eFach.name } : { key: "fach:none", cls: "want", label: "welches Fach?" },
+        ...(eFach
+          ? [
+              eDue
+                ? { key: `due:${eDue}${dueAuto}`, cls: "", label: `${kurzDatum(eDue)}${dueAuto ? ", nächste Stunde" : ""}` }
+                : { key: "due:none", cls: "want", label: "bis wann?" },
+            ]
+          : []),
+      ]
+    : [];
+  const tokKeys = tokens.map((t) => t.key).join("|");
+
+  // Tippen erkennt ein Token: nur neue kommen herein, unveränderte bleiben stehen (13.3 Nr. 18)
+  useLayoutEffect(() => {
+    const box = tokRef.current;
+    if (!box) return;
+    const jetzt = new Set<string>();
+    box.querySelectorAll<HTMLElement>(".tok").forEach((t) => {
+      const k = t.dataset.k ?? "";
+      jetzt.add(k);
+      if (!tokVorher.current.has(k) && !reduce()) {
+        t.animate([{ opacity: 0, transform: "translateY(4px) scale(.94)" }, { opacity: 1, transform: "none" }], { duration: 220, easing: E.out });
+      }
+    });
+    tokVorher.current = jetzt;
+  }, [tokKeys]);
+
+  // Treffer stehen unten am Feld: der Scrollbereich sitzt beim Eintragen am Ende (Prototyp renderMenu, Z. 2756)
+  const hitsKey = ctx ? `${tokKeys}|${taskText}|${needFach}|${rueck}` : "";
+  useLayoutEffect(() => {
+    const sc = scrollRef.current;
+    if (!sc || !hitsKey) return;
+    sc.scrollTop = sc.scrollHeight;
+    mehrAnzeigen();
+  }, [hitsKey, mehrAnzeigen]);
+
+  const absenden = (due: string) => {
+    if (!ctx || !eFach) return;
+    const from = feldRef.current?.getBoundingClientRect() ?? null;
+    const c = ctx;
+    // das Feld ist sofort leer, der Satz fliegt (Prototyp doEintragen: field.value = '' vor closeMenu)
+    setText("");
+    schliessen();
+    c.senden({ intent: c.intent, id: c.id, fachId: eFach.id, text: taskText, due, from });
+  };
+
+  /** Prototyp `doEintragen`, Z. 2922 */
+  const eintragen = () => {
+    if (!ctx) return;
+    if (!eFach) {
+      setNeedFach(true);
+      feldRef.current?.focus({ preventScroll: true });
+      const b = fachRef.current;
+      if (b?.firstChild && !reduce()) {
+        b.animate([{ transform: "translateX(0)" }, { transform: "translateX(6px)" }, { transform: "translateX(0)" }], { duration: 200 });
+      }
+      return;
+    }
+    if (!taskText) {
+      feldRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (!eDue) {
+      setRueck(true);
+      return;
+    }
+    absenden(eDue);
+  };
+
+  const rueckWahl = (() => {
+    if (!ctx || !eFach || !rueck) return null;
+    const [d1, d2, d3] = naechsteWochentage(ctx.heute, 3);
+    return [
+      { l: d1 === plusTage(ctx.heute, 1) ? "Morgen" : TAG[wd(d1)], d: d1 },
+      { l: TAG[wd(d2)], d: d2 },
+      { l: TAG[wd(d3)], d: d3 },
+    ];
+  })();
+  const ersteZeile =
+    ctx && !rueckWahl && (taskText || !eFach || needFach)
+      ? {
+          l1: !eFach ? (needFach || !taskText ? "Welches Fach?" : taskText) : taskText,
+          l2: !eFach && taskText && !needFach ? "Fach fehlt" : null,
+        }
+      : null;
+
   /** „Wohin?“: die neun Bereiche (Prototyp AREAS, Z. 2359) */
   function bereichWaehlen(key: string) {
     if (key === "ueberblick") {
@@ -274,7 +476,31 @@ export function Zeile({
             onPointerCancel={griffLos}
           />
           <div className="m-scroll" id="mScroll" ref={scrollRef}>
-            <div className="m-layer" id="mLeer" role="listbox" aria-label="Wohin?" ref={leerRef}>
+            <div className={`m-layer${ctx ? " off" : ""}`} id="mLeer" role="listbox" aria-label="Wohin?" ref={leerRef}>
+              {vorschlaege.length ? (
+                <div className="m-group" role="group" aria-label="Vorschläge">
+                  <p className="m-gl">Vorschläge</p>
+                  <div>
+                    {vorschlaege.map((o, i) => (
+                      <div
+                        key={o.key}
+                        className={`opt${i === 0 ? " first" : ""}`}
+                        role="option"
+                        aria-selected="false"
+                        id={`o-v-${o.key}`}
+                        onPointerDown={o.key === "cam" ? () => void warmCamera() : undefined}
+                        onClick={() => vorschlagWaehlen(o.key)}
+                      >
+                        <div>
+                          <p className="o1">{o.l1}</p>
+                          {o.l2 ? <p className="o2">{o.l2}</p> : null}
+                        </div>
+                        <span className="o-end" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <div className="m-group" role="group" aria-label="Wohin?">
                 <p className="m-gl">Wohin?</p>
                 <div className="m-grid">
@@ -297,13 +523,73 @@ export function Zeile({
                 </div>
               </div>
             </div>
-            <div className="m-layer m-hits off" id="mHits" role="listbox" aria-label="Treffer" />
+            <div className={`m-layer m-hits${ctx ? "" : " off"}`} id="mHits" role="listbox" aria-label="Treffer">
+              {ersteZeile ? (
+                <div className="opt first" role="option" aria-selected="true" id="o-first" onClick={eintragen}>
+                  <div>
+                    <p className="o1">{ersteZeile.l1}</p>
+                    {ersteZeile.l2 ? <p className="o2">{ersteZeile.l2}</p> : null}
+                  </div>
+                  <span className="o-end" />
+                </div>
+              ) : null}
+              {rueckWahl && eFach ? (
+                <div className="m-group">
+                  <p className="m-gl" style={{ fontSize: 17, color: "var(--ink)" }}>
+                    Bis wann ist {eFach.kurz} fällig?
+                  </p>
+                  <div>
+                    {rueckWahl.map((c, i) => (
+                      <div
+                        key={c.d}
+                        className={`opt${i === 0 ? " first" : ""}`}
+                        role="option"
+                        aria-selected={i === 0}
+                        id={`o-rq-${i}`}
+                        onClick={() => absenden(c.d)}
+                      >
+                        <div>
+                          <p className="o1">{c.l}</p>
+                          <p className="o2">{kurzDatum(c.d)}</p>
+                        </div>
+                        <span className="o-end" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
-          <div className="m-fach" id="mFach" />
-          <div className="m-tokens" id="mTokens" aria-live="polite" />
+          <div className="m-fach" id="mFach" ref={fachRef}>
+            {ctx && !eFach && !rueck
+              ? ctx.faecher.map((f) => (
+                  <button
+                    key={f.id}
+                    className="fp"
+                    type="button"
+                    aria-pressed="false"
+                    onClick={() => {
+                      setCtx({ ...ctx, fach: f.id, due: null, dueAuto: false, dueRemoved: false });
+                      setNeedFach(false);
+                      feldRef.current?.focus({ preventScroll: true });
+                    }}
+                  >
+                    {f.name}
+                  </button>
+                ))
+              : null}
+          </div>
+          <div className="m-tokens" id="mTokens" aria-live="polite" ref={tokRef}>
+            {tokens.map((t) => (
+              <button key={t.key} data-k={t.key} className={`tok${t.cls ? ` ${t.cls}` : ""}`} type="button" tabIndex={-1}>
+                {t.icon ? <Icon name={t.icon} /> : null}
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
         <form
-          className="dock"
+          className={`dock${ctx ? " ctx" : ""}`}
           id="dock"
           ref={dockRef}
           autoComplete="off"
@@ -313,18 +599,21 @@ export function Zeile({
             feldRef.current?.focus({ preventScroll: true });
           }}
           onSubmit={(e) => {
-            // Eintragen und Suchen bringt Abschnitt D.
             e.preventDefault();
+            // Eintragen aus Schritt 2 (Kriterium 22); Suchen bringt Abschnitt D.
+            if (!ctx) return;
+            if (rueckWahl) absenden(rueckWahl[0].d);
+            else eintragen();
           }}
         >
           <span className="lupe" aria-hidden="true">
-            <Icon name="search" id="lupeIcon" />
+            <Icon name={ctx ? (ctx.intent === "aendern" ? "edit" : "add") : "search"} id="lupeIcon" />
           </span>
           <input
             ref={feldRef}
             id="field"
             type="text"
-            placeholder="Eintragen oder suchen"
+            placeholder={ctx ? "Was ist auf?" : "Eintragen oder suchen"}
             role="combobox"
             aria-controls="mLeer"
             aria-expanded={offen}
@@ -337,14 +626,29 @@ export function Zeile({
             value={text}
             onChange={(e) => {
               setText(e.target.value);
+              setNeedFach(false);
+              setRueck(false);
               if (!offenRef.current) oeffnen();
+            }}
+            onKeyDown={(e) => {
+              // Rücktaste im leeren Feld nimmt erst den Termin, dann das Fach (Prototyp Z. 2800)
+              if (e.key !== "Backspace" || text || !ctx) return;
+              e.preventDefault();
+              if (eDue && !ctx.dueRemoved) setCtx({ ...ctx, due: null, dueAuto: false, dueRemoved: true });
+              else if (ctx.fach) setCtx({ ...ctx, fach: null, fachPills: true });
+              setRueck(false);
             }}
             onFocus={() => {
               if (!offenRef.current) oeffnen();
             }}
           />
-          <button className={`send${text.trim() ? " on" : ""}`} id="send" type="submit" aria-label="Zeigen">
-            <Icon name="arrow_forward" id="sendIcon" />
+          <button
+            className={`send${text.trim() ? " on" : ""}`}
+            id="send"
+            type="submit"
+            aria-label={ctx ? (ctx.intent === "aendern" ? "Ändern" : "Eintragen") : "Zeigen"}
+          >
+            <Icon name={ctx ? "check" : "arrow_forward"} id="sendIcon" />
           </button>
           <span className="dsep" aria-hidden="true" />
           <button
@@ -352,6 +656,7 @@ export function Zeile({
             id="camBtn"
             type="button"
             aria-label="Blatt aufnehmen"
+            onPointerDown={() => void warmCamera()}
             onClick={() => {
               schliessen();
               kombi.openCam({ ziel: "zeile" });

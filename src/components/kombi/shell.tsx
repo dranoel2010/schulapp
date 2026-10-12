@@ -227,9 +227,12 @@ export function KombiShell({ children }: { children: ReactNode }) {
       const el = toastRef.current;
       const z = document.getElementById("zeile");
       if (!el || !toastTextRef.current || !toastActRef.current) return;
-      const bottom = z?.classList.contains("hide")
-        ? 16
-        : (z ? parseFloat(getComputedStyle(z).bottom) || 16 : 16) + 52 + 10;
+      const camTop = document.body.classList.contains("cam-offen") ? document.querySelector(".cam-top") : null;
+      const bottom = camTop
+        ? window.innerHeight - camTop.getBoundingClientRect().bottom - 8 - 44
+        : z?.classList.contains("hide")
+          ? 16
+          : (z ? parseFloat(getComputedStyle(z).bottom) || 16 : 16) + 52 + 10;
       el.style.bottom = `${Math.round(bottom)}px`;
       toastTextRef.current.textContent = text;
       const t = toastZustand.current;
@@ -636,9 +639,14 @@ export function KombiShell({ children }: { children: ReactNode }) {
         ),
       );
     }
-    // Diesen Eintrag übernimmt die jetzige Ladung (auch nach Neuladen).
+    // Diesen Eintrag übernimmt die jetzige Ladung (auch nach Neuladen). Ein
+    // liegengebliebenes Overlay (Menü, Sheet, Kamera) gibt es nach dem
+    // Neuladen nicht mehr — Chrome stellt eine verworfene PWA mit ihrem
+    // History-Eintrag wieder her; der darf den Ablauf nicht aufhalten.
+    const { overlay: _liegengeblieben, ...ohneOverlay } = s;
+    void _liegengeblieben;
     window.history.replaceState(
-      { ...s, kombi: 1, stapel: s.kombi ? gespeichert : unten, idx: idx.current, ladung: LADUNG },
+      { ...ohneOverlay, kombi: 1, stapel: s.kombi ? gespeichert : unten, idx: idx.current, ladung: LADUNG },
       "",
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -918,8 +926,10 @@ export function KombiShell({ children }: { children: ReactNode }) {
           pushStapel([], "/");
         }
         h?.({ ansicht, ...o });
+        // die Ebene `flow` (Abschnitt C) zeigt oder verbirgt den Ablauf
+        handler.current.get("ablauf")?.({ ansicht, ...o });
       },
-      openZeile: () => zeileRef.current?.oeffnen(),
+      openZeile: (kontext) => zeileRef.current?.oeffnen(kontext),
       closeMenu: () => zeileRef.current?.schliessen(),
       tagDaten,
       merkeTagDaten,
