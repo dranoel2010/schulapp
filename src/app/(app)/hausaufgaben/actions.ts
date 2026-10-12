@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
-import { requestCalendarSync } from "@/lib/calendar/sync";
 import {
   homeworkInputSchema,
   createHomework,
@@ -13,6 +12,7 @@ import {
   setHomeworkDone,
   updateHomework,
 } from "@/lib/homework";
+import { nachAufgabeGeschrieben } from "@/lib/homework-nachlauf";
 import { listSubjects } from "@/lib/subjects";
 
 import type { HomeworkFieldErrors, HomeworkFormState } from "./homework-form";
@@ -31,7 +31,7 @@ import type { HomeworkFieldErrors, HomeworkFormState } from "./homework-form";
  * „/hausaufgaben“ — sonst zeigte die Kachel eine Zahl, die nicht mehr stimmt.
  *
  * Jede erfolgreiche Änderung stößt den Google Kalender an
- * (`requestCalendarSync`), auch das Abhaken: Eine abgehakte Aufgabe nimmt die
+ * (`nachAufgabeGeschrieben` → `requestCalendarSync`), auch das Abhaken: Eine abgehakte Aufgabe nimmt die
  * App aus dem Kalender, eine wieder geöffnete trägt sie wieder ein. Der
  * Abgleich läuft nach der Antwort und kann sie weder bremsen noch scheitern
  * lassen.
@@ -98,7 +98,7 @@ export async function createHomeworkAction(
   }
 
   await createHomework(user.id, parsed.data);
-  requestCalendarSync(user.id);
+  nachAufgabeGeschrieben(user.id);
 
   revalidateHomework();
   redirect("/hausaufgaben");
@@ -127,7 +127,7 @@ export async function updateHomeworkAction(
 
   // Der Haken bleibt, wie er ist: updateHomework fasst doneAt nicht an.
   await updateHomework(user.id, id, parsed.data);
-  requestCalendarSync(user.id);
+  nachAufgabeGeschrieben(user.id);
 
   revalidateHomework(id);
   redirect("/hausaufgaben");
@@ -144,7 +144,7 @@ export async function setHomeworkDoneAction(
   const user = await requireUser();
 
   await setHomeworkDone(user.id, id, done);
-  requestCalendarSync(user.id);
+  nachAufgabeGeschrieben(user.id);
 
   revalidateHomework(id);
 }
@@ -153,7 +153,7 @@ export async function deleteHomeworkAction(id: string): Promise<void> {
   const user = await requireUser();
 
   await deleteHomework(user.id, id);
-  requestCalendarSync(user.id);
+  nachAufgabeGeschrieben(user.id);
 
   revalidateHomework(id);
   redirect("/hausaufgaben");

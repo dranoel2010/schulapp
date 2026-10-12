@@ -574,6 +574,7 @@ Erst dann beginnt der nächste (V2 16.4 Nr. 8).
 **Eingangskorb auf dem Überblick:** die Zeile „n Blätter im Eingangskorb ›“ aus 3.2.
 
 **Löschen** (Ersatz steht jetzt): `src/components/nav/app-nav.tsx`, `src/components/home/{swipe-pager,pager-context,day-timeline,dashboard}.tsx`. `tile-grid`, `capture-pane` und `camera-pane` bleiben bis C über eine vorläufige Zeile „Blatt fotografieren“ auf dem Überblick erreichbar (nur lokal, siehe Abschnitt 4).
+  - *Abweichung im Bau (B, Prüferbefund 6):* Die vorläufige Zeile „Blatt fotografieren“ ist **nicht** gebaut. Fotografieren bleibt über den Kameraknopf der Zeile erreichbar, der bis C nach `/material` mit `CaptureButton` führt — keine Funktion geht verloren, und der Überblick bleibt im Bild gleich dem Prototyp. `tile-grid`, `capture-pane` und `camera-pane` bleiben bis C ohne Aufrufer stehen und gehen mit C.
 
 **Abnahme:**
 - V2 Kriterien 1–11, 14–18 und 26–30.

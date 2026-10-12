@@ -162,13 +162,49 @@ export async function homeworkForRange(
   return rows.map(toItem);
 }
 
+/** Legt die Aufgabe an und gibt ihre id zurück (Rückgängig und Protokoll hängen an ihr). */
 export async function createHomework(
   userId: string,
   input: HomeworkInput,
-): Promise<void> {
+): Promise<string> {
   const values = await checkedValues(userId, input);
 
-  await db.insert(homework).values({ ...values, userId });
+  const [zeile] = await db
+    .insert(homework)
+    .values({ ...values, userId })
+    .returning({ id: homework.id });
+  return zeile.id;
+}
+
+/**
+ * Rückgängig nach dem Löschen (Modell 23, Plan 3.3): die Aufgabe kommt mit
+ * ihrer **alten id** und allen Werten zurück — auch `createdAt`, `doneAt` und
+ * `details`. So zählt `eingetragenHeute()` sie wieder genau einmal, und
+ * Verweise wie der Kalender-Abgleich bleiben gültig. Steht die id schon
+ * (doppeltes Rückgängig), passiert nichts.
+ */
+export async function homeworkWiederherstellen(
+  userId: string,
+  zeile: Pick<Homework, "id" | "subjectId" | "title" | "details" | "dueDate" | "doneAt" | "createdAt">,
+): Promise<void> {
+  if (!isId(zeile.id)) return;
+  const values = await checkedValues(userId, {
+    subjectId: zeile.subjectId,
+    title: zeile.title,
+    details: zeile.details,
+    dueDate: zeile.dueDate,
+  });
+
+  await db
+    .insert(homework)
+    .values({
+      ...values,
+      id: zeile.id,
+      userId,
+      doneAt: zeile.doneAt,
+      createdAt: zeile.createdAt,
+    })
+    .onConflictDoNothing();
 }
 
 export async function updateHomework(
