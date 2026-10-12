@@ -8,11 +8,16 @@ import { requestCalendarSync } from "@/lib/calendar/sync";
  * Eintragen, Abhaken, Löschen, Ändern und beide Rückgängig-Wege dazu. Damit
  * keiner davon den Abgleich vergisst, rufen alle diese eine Funktion.
  *
- * `abgleich` ist ein Objekt und keine feste Funktion, damit ein Test den
- * Aufruf beobachten kann (ESM-Importe lassen sich nicht überschreiben).
+ * `nachlauf.sync` und `abgleich.anstossen` sind Objekte und keine festen
+ * Funktionen, damit ein Test den Aufruf beobachten kann (ESM-Importe lassen
+ * sich nicht überschreiben). Beide führen zum selben Abgleich.
  */
+export const nachlauf = {
+  sync: (userId: string) => requestCalendarSync(userId),
+};
+
 export const abgleich: { anstossen: (userId: string) => void } = {
-  anstossen: (userId) => requestCalendarSync(userId),
+  anstossen: (userId) => nachlauf.sync(userId),
 };
 
 export function nachAufgabeGeschrieben(userId: string): void {

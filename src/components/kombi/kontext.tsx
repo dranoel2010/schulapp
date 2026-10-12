@@ -16,6 +16,8 @@ export type Ansicht = "morgens" | "ablauf" | "ueberblick" | "frueh";
 export type OeffnenOptionen = {
   /** Aus der Zeile oder dem Überblick: Daten schon bei `pointerdown` geholt */
   vorgeladen?: boolean;
+  /** Für „Zuletzt geöffnet“ im Menü der Zeile: Titel und Unterzeile (Klausur, Noten eines Fachs) */
+  zuletzt?: { label: string; sub?: string | null };
 };
 
 /** Ebenen, die spätere Abschnitte in die Shell hängen (C: Kamera und Ablauf, E/F: Tisch). */
@@ -45,6 +47,8 @@ export type KombiApi = {
   /** Zeile öffnen, optional mit Kontext (Abschnitt D) */
   openZeile: (kontext?: Record<string, unknown> | null) => void;
   closeMenu: () => void;
+  /** Das Rückgängig des Toasts, solange es gilt (Vorschlag „Rückgängig: …“ im Menü) */
+  undoJetzt: () => { desc: string; run: () => void } | null;
   /** Daten der Startseite; null bis zum ersten Laden */
   tagDaten: TagDaten | null;
   /** Startseite hat Daten vom Server mitgebracht (Kaltstart auf `/`) */

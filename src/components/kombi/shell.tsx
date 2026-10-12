@@ -19,12 +19,14 @@ import {
   type EbenenHandler,
   type EbenenName,
   type KombiApi,
+  type OeffnenOptionen,
 } from "@/components/kombi/kontext";
 import { Seite, SeitenInhalt } from "@/components/kombi/seite";
 import { ROUTE_STATT_STAPEL, seitenArt } from "@/components/kombi/seiten/registry";
 import { TischEbene } from "@/components/kombi/tisch";
 import { Zeile, type ZeileHandle } from "@/components/kombi/zeile";
 import { TOAST_MS } from "@/lib/kombi/aktion";
+import { festeSeiteVon, zuletztMerken } from "@/components/kombi/zeile/zuletzt";
 import { E, moveTo, reduce, springOpts } from "@/lib/kombi/motion";
 import type { TagDaten } from "@/lib/kombi/tag-daten";
 import { themeColor, themeColorBeobachten } from "@/lib/kombi/theme-color";
@@ -395,8 +397,10 @@ export function KombiShell({ children }: { children: ReactNode }) {
   const openPageRef = useRef<(art: string, params?: Record<string, string>) => void>(() => {});
 
   const openPage = useCallback(
-    (art: string, params: Record<string, string> = {}) => {
+    (art: string, params: Record<string, string> = {}, optionen?: OeffnenOptionen) => {
       clearTimeout(ausPopTimer.current);
+      // „Zuletzt geöffnet“ im Menü der Zeile (Prototyp `remember`)
+      zuletztMerken(art, params, optionen?.zuletzt);
       ausPop.current = false;
       zeileRef.current?.schliessen({ ausHistory: true });
       hideToast(true);
@@ -410,6 +414,10 @@ export function KombiShell({ children }: { children: ReactNode }) {
       let gezeigt = false;
       let erledigt = false;
       const zeigen = (daten: unknown, ausCache: string | null) => {
+        if (daten !== undefined) {
+          const zl = s.zuletzt?.(params, daten);
+          if (zl) zuletztMerken(art, params, zl);
+        }
         if (gezeigt) {
           setzeEbenen((alt) =>
             alt.map((e) => (e.key === key && e.typ === "stapel" ? { ...e, daten, ausCache } : e)),
@@ -678,6 +686,13 @@ export function KombiShell({ children }: { children: ReactNode }) {
     ausPop.current = false;
   }, [segKey, istStart, setzeEbenen, beschriften]);
 
+  // „Zuletzt geöffnet“: Seiten ohne Parameter, die (bis G) noch Routen sind,
+  // zählen bei jedem Einstieg — nicht nur über openPage (Prototyp `remember`)
+  useEffect(() => {
+    const art = festeSeiteVon(pathname);
+    if (art) zuletztMerken(art, {});
+  }, [pathname]);
+
   // ── TagDaten nachladen, wenn der Einstieg nicht `/` war (2.4, Punkt 1) ──────
 
   useEffect(() => {
@@ -930,6 +945,12 @@ export function KombiShell({ children }: { children: ReactNode }) {
         handler.current.get("ablauf")?.({ ansicht, ...o });
       },
       openZeile: (kontext) => zeileRef.current?.oeffnen(kontext),
+      undoJetzt: () => {
+        const t = toastZustand.current;
+        if (!t.fn || !t.undo || Date.now() >= t.bis) return null;
+        const fn = t.fn;
+        return { desc: t.desc, run: () => { hideToast(); fn(); } };
+      },
       closeMenu: () => zeileRef.current?.schliessen(),
       tagDaten,
       merkeTagDaten,

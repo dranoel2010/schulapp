@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 
 import { AutoRefresh } from "@/components/material/auto-refresh";
 import { CaptureButton } from "@/components/material/capture-button";
+import { zuletztTitel } from "@/components/kombi/zeile/zuletzt";
+import { ZuletztMerken } from "@/components/kombi/zeile/zuletzt-merken";
 import { ButtonLink } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
 import { claudeConfigured } from "@/lib/claude/client";
@@ -165,6 +167,7 @@ export default async function MaterialDetailPage({
 
   return (
     <div className="space-y-6 md:max-w-3xl">
+      <ZuletztMerken art="blatt" id={item.id} label={zuletztTitel.blatt(item.title)} />
       <Link
         href="/material"
         className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"

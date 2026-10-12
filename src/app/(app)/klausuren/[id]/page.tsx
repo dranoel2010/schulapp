@@ -2,10 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { zuletztTitel } from "@/components/kombi/zeile/zuletzt";
+import { ZuletztMerken } from "@/components/kombi/zeile/zuletzt-merken";
 import { requireUser } from "@/lib/auth";
 import { subjectColor } from "@/lib/colors";
 import { formatGerman, todayInBerlin } from "@/lib/dates";
 import { getExam } from "@/lib/exams";
+import { dm } from "@/lib/kombi/text";
 import { listSubjects } from "@/lib/subjects";
 import { suggestTopicsForExam } from "@/lib/subject-topics";
 import { anhangZuKlausur } from "@/recall/items";
@@ -80,6 +83,7 @@ export default async function ExamPage({
 
   return (
     <div className="space-y-6 md:max-w-3xl">
+      <ZuletztMerken art="klausur" id={exam.id} label={zuletztTitel.klausur(subject.name)} sub={dm(exam.date)} />
       <Link
         href="/klausuren"
         className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"

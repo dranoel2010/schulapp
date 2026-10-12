@@ -27,6 +27,12 @@ export type SeitenArt = {
   url: (params: Record<string, string>) => string;
   titel: (params: Record<string, string>, daten: unknown) => string;
   untertitel?: (params: Record<string, string>, daten: unknown) => string | null;
+  /**
+   * Titel und Unterzeile für „Zuletzt geöffnet“ aus den Seitendaten (Klausur,
+   * Noten eines Fachs, Fach, Blatt). Die Shell ruft es, sobald die Antwort von
+   * `/api/seite` da ist — für jeden Einstieg. Seiten ohne Parameter brauchen es nicht.
+   */
+  zuletzt?: (params: Record<string, string>, daten: unknown) => { label: string; sub?: string | null } | null;
   Inhalt: ComponentType<SeitenInhaltProps>;
 };
 
@@ -51,6 +57,9 @@ export const ROUTE_STATT_STAPEL: Record<string, (p: Record<string, string>) => s
   faecher: () => "/faecher",
   fach: (p) => `/faecher/${p.id}`,
   einstellungen: () => "/einstellungen",
+  // Ziele der Zeile, die keine Nachschlage-Seiten sind (Plan 2.2)
+  eingang: () => "/material/eingang",
+  bausteine: () => "/abruf/bausteine",
 };
 
 export function seitenArt(art: string): SeitenArt | undefined {
