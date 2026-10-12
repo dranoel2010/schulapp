@@ -110,10 +110,12 @@ function ThemaArtRow({ t }: { t: ThemaZeile }) {
   );
 }
 
-export function FachInhalt({ daten }: { daten: FachDaten }) {
+export function FachInhalt({ daten: vomServer }: { daten: FachDaten }) {
   const kombi = useKombi();
-  const { anwenden, schalten, loeschen } = useAufgaben(daten);
-  const offen = anwenden(daten.offen).filter((a) => !a.done);
+  // gezeigt wird der Stand, den der FLIP-Lauf übernommen hat (useAufgaben);
+  // eine eben abgehakte Zeile bleibt 350 ms stehen
+  const { stand: daten, anwenden, schalten, loeschen, halten, ankerRef } = useAufgaben(vomServer);
+  const offen = anwenden(daten.offen).filter((a) => !a.done || halten.has(a.id));
 
   // Benannt, damit „Erneut“ im Fehlertoast denselben Weg noch einmal geht
   // (Plan 2.4 Punkt 9), wie umlegen() und schalten().
@@ -130,6 +132,7 @@ export function FachInhalt({ daten }: { daten: FachDaten }) {
 
   return (
     <>
+      <div hidden ref={ankerRef} />
       {offen.length ? (
         <>
           <PLab>Offen</PLab>

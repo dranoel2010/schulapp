@@ -1,3 +1,4 @@
+import type { BlattStatus } from "@/lib/kombi/blaetter";
 import type { LernblockUeberblick } from "@/lib/kombi/lernblock-daten";
 import type { WhStand } from "@/lib/kombi/wiederholen-text";
 import { cap, diffDays, kurz, lang, TAG, wd, weekdayOrDate, zahl } from "@/lib/kombi/text";
@@ -71,8 +72,10 @@ export type BlattT = {
   fachName: string;
   /** id der ersten Seite für `/api/material/<id>/vorschau` */
   cover: string | null;
-  /** noch nicht eingeordnet: „Wird eingeordnet“ statt des Fachs */
-  einordnen: boolean;
+  /** Status wie im Ablauf (Plan 3.8, `blattStatus`) */
+  status: BlattStatus;
+  /** Aufnahmedatum 'YYYY-MM-DD' */
+  datum: string;
 };
 
 export type TagDaten = {

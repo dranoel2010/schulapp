@@ -73,8 +73,20 @@ type Ueber = { done: boolean; doneAt: string | null };
 export function Startseite({ daten, vomServer = false }: { daten: TagDaten | null; vomServer?: boolean }) {
   const kombi = useKombi();
   const router = useRouter();
-  const { merkeTagDaten, registriere, neuLaden, toast, hideToast, fehlerToast } = kombi;
-  const d = kombi.tagDaten ?? daten;
+  const { merkeTagDaten, registriere, neuLaden, toast, hideToast, fehlerToast, openZeile } = kombi;
+  const live = kombi.tagDaten ?? daten;
+  /**
+   * Solange eine Zeile gehalten wird, gilt der Stand vom Abhaken: Kommt die
+   * Antwort des Servers vor Ablauf der 350 ms, ordnete sie die Liste sonst
+   * neu, während die Zeile noch stehen soll — und das FLIP beim Loslassen
+   * fände nichts mehr zu bewegen. Die Serverdaten gelten erst in loslassen(),
+   * im selben FLIP-Lauf (Prototyp: erst nach 350 ms `refreshTasks`).
+   */
+  const [eingefroren, setEingefroren] = useState<TagDaten | null>(null);
+  /** Zeilen, die nach dem Abhaken noch an ihrer alten Stelle stehen: id → alter Zustand */
+  const [halten, setHalten] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const haltenRef = useRef<ReadonlyMap<string, boolean>>(halten);
+  const d = halten.size && eingefroren ? eingefroren : live;
 
   useEffect(() => {
     if (vomServer && daten) merkeTagDaten(daten);
@@ -92,8 +104,6 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
   const [ueber, setUeber] = useState<Record<string, Ueber>>({});
   const [weg, setWeg] = useState<ReadonlySet<string>>(new Set());
   const [extra, setExtra] = useState<AufgabeT[]>([]);
-  /** Zeilen, die nach dem Abhaken noch an ihrer alten Stelle stehen: id → alter Zustand */
-  const [halten, setHalten] = useState<ReadonlyMap<string, boolean>>(new Map());
   const laufend = useRef(new Set<string>());
   const timer = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
@@ -105,14 +115,6 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
       .map((a) => (ueber[a.id] ? { ...a, ...ueber[a.id] } : a));
   }, [d, extra, weg, ueber]);
 
-  // Neue Tagesdaten: was nicht mehr unterwegs ist, gilt vom Server
-  useEffect(() => {
-    setUeber((alt) => {
-      const neu: Record<string, Ueber> = {};
-      for (const [id, u] of Object.entries(alt)) if (laufend.current.has(id)) neu[id] = u;
-      return neu;
-    });
-  }, [d]);
 
   /** Für die Reihenfolge zählt bei gehaltenen Zeilen noch der alte Zustand. */
   const ordnung = useMemo(
@@ -131,19 +133,55 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
 
   const scope = () => document.getElementById(`m-${viewRef.current ?? "ueberblick"}`);
 
-  /** Nach dem Halten: Listen per FLIP abgleichen (13.3 Nr. 27, 340 ms ease-io). */
-  const loslassen = useCallback((id: string) => {
-    timer.current.delete(id);
-    const s = scope();
-    const run = () => flushSync(() => setHalten((m) => {
-      if (!m.has(id)) return m;
-      const n = new Map(m);
-      n.delete(id);
-      return n;
-    }));
-    if (s) flip(s, run, { duration: 340, easing: E.io });
-    else run();
-  }, []);
+  /** Overrides, deren Aufruf nicht mehr unterwegs ist, gelten nicht mehr. */
+  const ueberAufraeumen = useCallback(
+    () =>
+      setUeber((alt) => {
+        const neu: Record<string, Ueber> = {};
+        let gleich = true;
+        for (const [id, u] of Object.entries(alt)) {
+          if (laufend.current.has(id) || haltenRef.current.has(id)) neu[id] = u;
+          else gleich = false;
+        }
+        return gleich ? alt : neu;
+      }),
+    [],
+  );
+
+  /**
+   * Nach dem Halten: Listen per FLIP abgleichen (13.3 Nr. 27, 340 ms ease-io).
+   * Im selben Lauf gelten die inzwischen geladenen Serverdaten und fallen die
+   * erledigten Overrides; `vorher` legt weitere Änderungen in denselben Lauf
+   * (Rückgängig).
+   */
+  const loslassen = useCallback(
+    (id: string, vorher?: () => void) => {
+      clearTimeout(timer.current.get(id));
+      timer.current.delete(id);
+      const s = scope();
+      const run = () =>
+        flushSync(() => {
+          vorher?.();
+          if (haltenRef.current.has(id)) {
+            const n = new Map(haltenRef.current);
+            n.delete(id);
+            haltenRef.current = n;
+            setHalten(n);
+            if (!n.size) setEingefroren(null);
+          }
+          ueberAufraeumen();
+        });
+      if (s) flip(s, run, { duration: 340, easing: E.io });
+      else run();
+    },
+    [ueberAufraeumen],
+  );
+
+  // Neue Tagesdaten (nicht während des Haltens, da gilt der eingefrorene
+  // Stand): was nicht mehr unterwegs ist, gilt vom Server
+  useEffect(() => {
+    ueberAufraeumen();
+  }, [d, ueberAufraeumen]);
 
   // für „Erneut“ im Fehler-Toast: der Weg ruft sich selbst wieder auf
   const abhakenRef = useRef<(id: string, done: boolean) => void>(() => {});
@@ -157,7 +195,10 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
       laufend.current.add(id);
       setUeber((u) => ({ ...u, [id]: { done, doneAt: done ? new Date().toISOString() : null } }));
       if (done) buzz();
-      setHalten((m) => new Map(m).set(id, vorher.done));
+      if (!haltenRef.current.size) setEingefroren(dRef.current);
+      const gehaltenNeu = new Map(haltenRef.current).set(id, vorher.done);
+      haltenRef.current = gehaltenNeu;
+      setHalten(gehaltenNeu);
       clearTimeout(timer.current.get(id));
       timer.current.set(id, setTimeout(() => loslassen(id), done ? 350 : 200));
 
@@ -165,22 +206,21 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
       const aufruf = aufgabeAbhakenAction({ id, done });
       const zurueck = async () => {
         zurueckgenommen = true;
-        clearTimeout(timer.current.get(id));
-        setUeber((u) => ({ ...u, [id]: vorher }));
-        loslassen(id);
+        // Der alte Zustand gilt im selben FLIP-Lauf: die Zeile gleitet zurück.
+        // Bis die Rücknahme gespeichert und geladen ist, hält der Override.
+        laufend.current.add(id);
+        loslassen(id, () => setUeber((u) => ({ ...u, [id]: vorher })));
         try {
           const r = await aufruf;
           await aufgabeAbhakenAction({ id, done: vorher.done, rueckgaengig: r.protokollId });
           await neuLaden();
+          // der Override fällt mit dem Übernehmen der neuen Daten (Effekt auf `d`)
+          laufend.current.delete(id);
         } catch {
           fehlerToast("Nicht gespeichert", () => void zurueck(), "Erneut");
-        } finally {
+          await new Promise((res) => setTimeout(res, RUECKSPRUNG_MS));
           laufend.current.delete(id);
-          setUeber((u) => {
-            const n = { ...u };
-            delete n[id];
-            return n;
-          });
+          loslassen(id);
         }
       };
       if (done) toast(`${a.fach} abgehakt`, () => void zurueck(), `${a.fach}, ${a.text}`);
@@ -191,23 +231,15 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
           if (!r.ok) throw new Error("abgewiesen");
           if (zurueckgenommen) return;
           await neuLaden();
+          // Der Override fällt mit dem Übernehmen der neuen Daten (Effekt auf
+          // `d`), bei einer gehaltenen Zeile erst in loslassen()
           laufend.current.delete(id);
-          setUeber((u) => {
-            const n = { ...u };
-            delete n[id];
-            return n;
-          });
         })
         .catch(async () => {
           if (zurueckgenommen) return;
           fehlerToast("Nicht gespeichert", () => abhakenRef.current(id, done), "Erneut");
           await new Promise((r) => setTimeout(r, RUECKSPRUNG_MS));
           laufend.current.delete(id);
-          setUeber((u) => {
-            const n = { ...u };
-            delete n[id];
-            return n;
-          });
           loslassen(id);
         });
     },
@@ -310,8 +342,21 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
     loeschenRef.current = loeschen;
   }, [loeschen]);
 
-  /** Bearbeiten: das Formular der Aufgabe, bis die Zeile es kann (Abschnitt D, `startEdit`). */
-  const bearbeiten = useCallback((id: string) => router.push(`/hausaufgaben/${id}`), [router]);
+  /**
+   * Bearbeiten (Plan 2.2, Prototyp `startEdit`): ein Kurztext ohne Details
+   * ändert man in der Zeile, eine Aufgabe mit Details im Formular.
+   */
+  const bearbeiten = useCallback(
+    (id: string) => {
+      const a = aufgabenRef.current.find((x) => x.id === id);
+      if (!a || a.details) {
+        router.push(`/hausaufgaben/${id}`);
+        return;
+      }
+      openZeile({ intent: "aendern", id: a.id, text: a.text, fach: a.fachId, due: a.due, dueAuto: false });
+    },
+    [router, openZeile],
+  );
 
   // ── Überschrift ────────────────────────────────────────────────────────────
 

@@ -31,13 +31,20 @@ const uhr = async (zeit, tag = "2026-10-12") => {
   await page.waitForSelector("#m-ueberblick", { state: "attached" });
   await page.waitForTimeout(700);
 };
+/** Seit Abschnitt C öffnet Mo 19:30 im Ablauf; die Listenprüfungen laufen auf dem Überblick. */
+const zumUeberblick = async () => {
+  await page.evaluate(() => window.__kombi.setView("ueberblick", { anim: false }));
+  await page.waitForTimeout(500);
+};
 const h1 = () => page.evaluate(() => [...document.querySelectorAll("#h1 .swap")].filter((s) => !s.classList.contains("out")).pop()?.textContent ?? "");
 const zeilen = (sel) => page.evaluate((s) => [...document.querySelectorAll(`${s} .task`)].map((t) => t.querySelector(".t-txt").textContent), sel);
 const ansicht = () => page.evaluate(() => document.querySelector(".mode.on")?.dataset.v ?? null);
 
 // ── Abhaken auf dem Überblick ───────────────────────────────────────────────
 await uhr("19:30");
-p.ok((await ansicht()) === "ueberblick", "Mo 19:30: Überblick (der Ablauf kommt mit C)");
+// Seit Abschnitt C steht Mo 19:30 der Ablauf; abgehakt wird auf dem Überblick
+await zumUeberblick();
+p.ok((await ansicht()) === "ueberblick", "Mo 19:30, zum Überblick gewechselt");
 p.ok((await h1()) === "Zwei Aufgaben für Dienstag", `Überschrift „${await h1()}“`);
 const vorher = await zeilen("#ovHaList");
 p.ok(vorher[0] === "S. 84, Nr. 3–5", `erste Zeile Mathe (${vorher.join(" | ")})`);
@@ -56,6 +63,7 @@ p.ok((await zeilen("#ovHaList")).length === 2, "Rückgängig: die Zeile ist wied
 p.ok((await h1()) === "Zwei Aufgaben für Dienstag", "Rückgängig: Überschrift wieder „Zwei …“");
 await page.reload();
 await page.waitForTimeout(900);
+await zumUeberblick();
 p.ok((await zeilen("#ovHaList")).length === 2, "nach Neuladen weiter offen (Server)");
 
 // ── Wisch nach rechts ───────────────────────────────────────────────────────
@@ -91,11 +99,13 @@ await page.click("#toastAct");
 await page.waitForTimeout(1500);
 await page.reload();
 await page.waitForTimeout(900);
+await zumUeberblick();
 const idNachher = await page.getAttribute("#ovHaList .task:nth-child(2)", "data-id");
 p.ok(idVorher === idNachher, `Rückgängig bringt dieselbe id zurück (${idNachher})`);
 
 // ── Wieder öffnen innerhalb der 350 ms: die Zeile bleibt stehen ────────────
 await uhr("19:30");
+await zumUeberblick();
 await page.click("#ovHaList .task:first-child .check");
 await page.waitForTimeout(120);
 await page.click("#ovHaList .task:first-child .check");
@@ -109,6 +119,7 @@ p.ok(wieder.every((n) => n === 2), `wieder geöffnet: beide Zeilen stehen durchg
 await page.waitForTimeout(800);
 await page.reload();
 await page.waitForTimeout(900);
+await zumUeberblick();
 p.ok((await zeilen("#ovHaList")).length === 2, "wieder geöffnet: auch auf dem Server offen");
 
 // ── Löschen online, Rückgängig offline, „Erneut“ online ─────────────────────
@@ -130,6 +141,7 @@ await page.waitForTimeout(1500);
 p.ok((await zeilen("#ovHaList")).includes(textDel), "„Erneut“: die Zeile bleibt");
 await page.reload();
 await page.waitForTimeout(900);
+await zumUeberblick();
 p.ok((await page.getAttribute("#ovHaList .task:nth-child(2)", "data-id")) === idDel, `„Erneut“ stellt mit alter id wieder her (${idDel})`);
 
 // ── Lernblock „Starten“: bis F in den Lernplan ─────────────────────────────
@@ -201,6 +213,7 @@ p.ok(datumDi === "Dienstag, 13. Oktober", `Datum „${datumDi}“`);
 // ── Läuft der Fehler-Toast des Rückgängig ab, gilt das Löschen ──────────
 // (zuletzt, weil die Aufgabe danach fehlt)
 await uhr("19:30");
+await zumUeberblick();
 await wisch("#ovHaList .task:nth-child(2) .t-front", -200);
 await page.waitForTimeout(500);
 await page.click("#ovHaList .task:nth-child(2) .del");
@@ -214,6 +227,7 @@ p.ok(!(await zeilen("#ovHaList")).includes(textDel), "nach Ablauf des Fehler-Toa
 await ctx.setOffline(false);
 await page.reload();
 await page.waitForTimeout(900);
+await zumUeberblick();
 p.ok(!(await zeilen("#ovHaList")).includes(textDel), "… und auch auf dem Server gelöscht");
 
 // ── Zahnrad ─────────────────────────────────────────────────────────────────

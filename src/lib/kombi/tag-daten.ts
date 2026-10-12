@@ -1,12 +1,13 @@
 import { and, asc, eq, gt, inArray } from "drizzle-orm";
 
 import { db } from "@/db";
-import { examTopics, materials, studyBlocks } from "@/db/schema";
+import { examTopics, studyBlocks } from "@/db/schema";
 import { blocksForDay, listExams, missedBlocks, type TodayBlock } from "@/lib/exams";
 import { freeLabel, freePeriodOn } from "@/lib/free-days";
 import { homeworkForRange, listHomework, type HomeworkItem } from "@/lib/homework";
 import { countInbox } from "@/lib/inbox";
 import { fachKurz } from "@/lib/kombi/fach-kurz";
+import { blattStatusVon } from "@/lib/kombi/blaetter";
 import { lernblockUeberblick } from "@/lib/kombi/lernblock-daten";
 import type {
   AufgabeT,
@@ -187,19 +188,15 @@ export async function ladeTag(userId: string, now: Date): Promise<TagDaten> {
 
   const verpasstHier = naechste ? verpasst.filter((b) => b.examId === naechste.id) : [];
 
-  // Ob ein Blatt schon eingeordnet ist, steht nicht an der Karte.
-  const eingeordnet = karten.length
-    ? await db
-        .select({ id: materials.id, filedAt: materials.filedAt })
-        .from(materials)
-        .where(and(eq(materials.userId, userId), inArray(materials.id, karten.map((b) => b.id))))
-    : [];
+  // Der Status steht nicht an der Karte: derselbe wie im Ablauf (Plan 3.8)
+  const status = await blattStatusVon(userId, karten.map((b) => b.id));
   const blaetter: BlattT[] = karten.map((b) => ({
     id: b.id,
     titel: b.title,
     fachName: b.subject.name,
     cover: b.coverPageId,
-    einordnen: !eingeordnet.find((e) => e.id === b.id)?.filedAt,
+    status: status.get(b.id) ?? "eingeordnet",
+    datum: b.capturedOn,
   }));
 
   return {

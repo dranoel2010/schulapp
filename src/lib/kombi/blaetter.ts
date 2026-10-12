@@ -263,6 +263,17 @@ export async function blaetterKurz(userId: string, { limit = 3 }: { limit?: numb
   return kurzMachen(userId, zeilen);
 }
 
+/** Der Status (Plan 3.8) bestimmter Blätter, etwa der Miniaturen auf dem Überblick. */
+export async function blattStatusVon(userId: string, ids: string[]): Promise<Map<string, BlattStatus>> {
+  if (!ids.length) return new Map();
+  const zeilen = await db
+    .select(FELDER)
+    .from(materials)
+    .innerJoin(subjects, eq(subjects.id, materials.subjectId))
+    .where(and(eq(materials.userId, userId), inArray(materials.id, ids)));
+  return new Map((await kurzMachen(userId, zeilen)).map((b) => [b.id, b.status]));
+}
+
 /** Ein Blatt in Kurzform, oder null. */
 export async function blattKurz(userId: string, id: string): Promise<BlattKurz | null> {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;

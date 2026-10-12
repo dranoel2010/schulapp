@@ -7,6 +7,7 @@ import { KlausurBlock } from "@/components/kombi/home/klausur-block";
 import { WiederholenBlock } from "@/components/kombi/home/wiederholen";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
+import { dm } from "@/lib/kombi/text";
 import {
   eingangskorbText,
   tagName,
@@ -91,7 +92,7 @@ export function Ueberblick({
         </div>
         <div className="thumbs" id="ovThumbs">
           {d.blaetter.map((b) => (
-            <Miniatur key={b.id} b={b} />
+            <Miniatur key={b.id} b={b} heute={d.tag} />
           ))}
         </div>
         {d.eingangskorb > 0 ? (
@@ -105,16 +106,28 @@ export function Ueberblick({
   );
 }
 
-/** Zuletzt abgelegt: Titel einzeilig, darunter nur das Fach (Prototyp `thumbCell`, `cellTexts`). */
-function Miniatur({ b }: { b: BlattT }) {
+/**
+ * Zuletzt abgelegt: Titel einzeilig, darunter nur das Fach (Prototyp
+ * `thumbCell`, `cellTexts`). Der Status ist derselbe wie im Ablauf
+ * (`blattStatus`): „Wird eingeordnet“ nur, solange ein Lauf arbeitet; ein
+ * Blatt, das im Korb liegen blieb, sagt „Liegt im Eingangskorb“.
+ */
+function Miniatur({ b, heute }: { b: BlattT; heute: string }) {
   const kombi = useKombi();
-  const [t, s] = b.einordnen ? ["Blatt von heute", "Wird eingeordnet"] : [b.titel || "Blatt von heute", b.fachName];
+  const titel = b.titel || (b.datum === heute ? "Blatt von heute" : `Blatt vom ${dm(b.datum)}`);
+  const [t, s] =
+    b.status === "einordnen"
+      ? ["Blatt von heute", "Wird eingeordnet"]
+      : b.status === "im_korb"
+        ? [titel, "Liegt im Eingangskorb"]
+        : [titel, b.fachName];
   return (
     <button
       className="tcell"
       type="button"
       data-bid={b.id}
-      aria-label={`Blatt ${b.titel || "ohne Titel"} öffnen`}
+      // die Ansage nennt denselben Titel, der unter der Miniatur steht
+      aria-label={`${/^Blatt\b/.test(t) ? t : `Blatt ${t}`} öffnen`}
       onPointerDown={() => kombi.vorladen("blatt", { id: b.id })}
       onClick={() => kombi.openPage("blatt", { id: b.id })}
     >

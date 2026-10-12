@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 import {
   aufgabeLoeschenAction,
@@ -11,7 +12,7 @@ import {
 } from "@/app/(app)/hausaufgaben/zeile-actions";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
-import { buzz, E, moveTo, reduce, springOpts } from "@/lib/kombi/motion";
+import { buzz, E, flip, moveTo, reduce, springOpts } from "@/lib/kombi/motion";
 import { kurz } from "@/lib/kombi/text";
 import type { AufgabeDaten } from "@/lib/seiten/gemeinsam";
 
@@ -34,16 +35,70 @@ type Ueber = Record<string, { done?: boolean; weg?: boolean }>;
 
 const RUECKSPRUNG_MS = 300;
 
-/** Gemeinsamer Zustand aller Aufgabenzeilen einer Seite. */
-export function useAufgaben(daten: unknown) {
+/**
+ * Gemeinsamer Zustand aller Aufgabenzeilen einer Seite.
+ *
+ * Die Seite zeigt `stand`, nicht direkt die Daten vom Server: Neue Daten
+ * gelten erst in einem FLIP-Lauf (340 ms ease-io, Prototyp
+ * `hausaufgabenGroups` → `flip(sc, run)`), und solange eine eben abgehakte
+ * Zeile noch 350 ms stehen bleibt (wieder geöffnet: 200 ms), warten sie bis
+ * zu deren Loslassen. Sonst ordnete eine schnelle Antwort die Liste schon
+ * während des Haltens hart um, und beim Loslassen glitte nichts mehr.
+ */
+export function useAufgaben<T>(daten: T) {
   const kombi = useKombi();
+  const [stand, setStand] = useState(daten);
   const [ueber, setUeber] = useState<Ueber>({});
-  const [vorher, setVorher] = useState(daten);
-  if (vorher !== daten) {
-    // neue Daten vom Server: sie gelten
-    setVorher(daten);
-    setUeber({});
-  }
+  const [halten, setHalten] = useState<ReadonlySet<string>>(new Set());
+  const haltenRef = useRef<ReadonlySet<string>>(halten);
+  const datenRef = useRef(daten);
+  const standRef = useRef(stand);
+  /** Aufrufe, die noch unterwegs sind: deren Override überlebt neue Daten */
+  const laufend = useRef(new Set<string>());
+  const timer = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  /** Anker in der Seite, von ihm aus findet der FLIP-Lauf die Scrollfläche */
+  const ankerRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    datenRef.current = daten;
+    standRef.current = stand;
+  });
+
+  /** Ein FLIP-Lauf über die Seite: `mutate` setzt Zustand, flushSync malt ihn. */
+  const imFlip = useCallback((mutate: () => void) => {
+    const sc = ankerRef.current?.closest<HTMLElement>(".scroll") ?? null;
+    const run = () => flushSync(mutate);
+    if (sc && sc.offsetParent) flip(sc, run, { duration: 340, easing: E.io });
+    else run();
+  }, []);
+
+  /** Neue Serverdaten übernehmen; Overrides ohne laufenden Aufruf fallen. */
+  const datenUebernehmen = useCallback(() => {
+    if (datenRef.current !== standRef.current) {
+      standRef.current = datenRef.current;
+      setStand(datenRef.current);
+    }
+    setUeber((u) => {
+      const n: Ueber = {};
+      let gleich = true;
+      for (const [id, w] of Object.entries(u)) {
+        if (laufend.current.has(id) || haltenRef.current.has(id)) n[id] = w;
+        else gleich = false;
+      }
+      return gleich ? u : n;
+    });
+  }, []);
+
+  // Neue Daten vom Server: sie gelten — im FLIP-Lauf, und nicht, solange eine
+  // Zeile gehalten wird (dann übernimmt loslassen()).
+  useEffect(() => {
+    if (daten === standRef.current || haltenRef.current.size) return;
+    // nicht mitten im Commit: flushSync braucht einen freien Renderer
+    queueMicrotask(() => {
+      if (haltenRef.current.size) return;
+      imFlip(datenUebernehmen);
+    });
+  }, [daten, imFlip, datenUebernehmen]);
 
   const setze = useCallback((id: string, wert: { done?: boolean; weg?: boolean } | null) => {
     setUeber((u) => {
@@ -54,73 +109,136 @@ export function useAufgaben(daten: unknown) {
     });
   }, []);
 
-  const nachladen = useCallback(
-    (ms: number) => {
-      setTimeout(() => void kombi.neuLaden(), ms);
+  const loslassen = useCallback(
+    (id: string, vorher?: () => void) => {
+      clearTimeout(timer.current.get(id));
+      timer.current.delete(id);
+      imFlip(() => {
+        vorher?.();
+        if (haltenRef.current.has(id)) {
+          const n = new Set(haltenRef.current);
+          n.delete(id);
+          haltenRef.current = n;
+          setHalten(n);
+        }
+        if (!haltenRef.current.size) datenUebernehmen();
+      });
     },
-    [kombi],
+    [imFlip, datenUebernehmen],
   );
+
+  /**
+   * Ein Aufruf ist durch und seine Daten sind geladen: sein Override fällt mit
+   * dem Übernehmen dieser Daten (Effekt oben bzw. loslassen()), nicht vorher —
+   * sonst stünde für einen Augenblick der alte Stand da.
+   */
+  const fertig = useCallback((id: string) => {
+    laufend.current.delete(id);
+  }, []);
+
+  const halte = useCallback(
+    (id: string, ms: number) => {
+      const n = new Set(haltenRef.current).add(id);
+      haltenRef.current = n;
+      setHalten(n);
+      clearTimeout(timer.current.get(id));
+      timer.current.set(id, setTimeout(() => loslassen(id), ms));
+    },
+    [loslassen],
+  );
+
+  useEffect(() => {
+    const t = timer.current;
+    return () => t.forEach((x) => clearTimeout(x));
+  }, []);
 
   const schalten = useCallback(
     function schalten(a: AufgabeDaten, done: boolean) {
+      laufend.current.add(a.id);
       setze(a.id, { done });
+      // die Zeile bleibt 350 ms stehen (wieder geöffnet 200 ms), dann ordnet
+      // sich die Liste per FLIP neu (Prototyp `setDone`, 7.2 Nr. 27)
+      halte(a.id, done ? 350 : 200);
       if (done) buzz();
       else kombi.hideToast();
       aufgabeSetzenAction(a.id, done).then(
-        (r) => {
+        async (r) => {
           if (!r.ok) throw new Error("abgewiesen");
           if (done) {
             kombi.toast(
               `${a.fach} abgehakt`,
               () => {
-                setze(a.id, { done: false });
+                laufend.current.add(a.id);
+                // der alte Zustand gilt im selben FLIP-Lauf
+                loslassen(a.id, () => setze(a.id, { done: false }));
                 aufgabeZuruecknehmenAction(a.id, r.protokollId ?? null).then(
-                  () => nachladen(0),
-                  () => kombi.fehlerToast("Nicht gespeichert", () => schalten(a, false), "Erneut"),
+                  async () => {
+                    await kombi.neuLaden();
+                    fertig(a.id);
+                  },
+                  () => {
+                    laufend.current.delete(a.id);
+                    kombi.fehlerToast("Nicht gespeichert", () => schalten(a, false), "Erneut");
+                  },
                 );
               },
               `${a.fach}, ${a.text}`,
             );
           }
-          // die Zeile bleibt 350 ms stehen, dann ordnet sich die Liste neu
-          nachladen(done ? 350 : 200);
+          await kombi.neuLaden();
+          fertig(a.id);
         },
         () => {
           kombi.fehlerToast("Nicht gespeichert", () => schalten(a, done), "Erneut");
-          setTimeout(() => setze(a.id, null), RUECKSPRUNG_MS);
+          setTimeout(() => {
+            laufend.current.delete(a.id);
+            loslassen(a.id, () => setze(a.id, null));
+          }, RUECKSPRUNG_MS);
         },
       );
     },
-    [kombi, setze, nachladen],
+    [kombi, setze, halte, loslassen, fertig],
   );
 
   const loeschen = useCallback(
     function loeschen(a: AufgabeDaten) {
-      setze(a.id, { weg: true });
+      laufend.current.add(a.id);
+      imFlip(() => setze(a.id, { weg: true }));
       aufgabeLoeschenAction(a.id).then(
-        (r) => {
+        async (r) => {
           if (!r.ok || !r.zeile) throw new Error("abgewiesen");
           const zeile = r.zeile;
           kombi.toast(
             "Gelöscht",
             () => {
-              setze(a.id, null);
+              laufend.current.add(a.id);
               aufgabeWiederherstellenAction(zeile, r.protokollId ?? null).then(
-                () => nachladen(0),
-                () => kombi.fehlerToast("Nicht gespeichert", () => loeschen(a), "Erneut"),
+                async () => {
+                  await kombi.neuLaden();
+                  laufend.current.delete(a.id);
+                  imFlip(() => setze(a.id, null));
+                },
+                () => {
+                  laufend.current.delete(a.id);
+                  kombi.fehlerToast("Nicht gespeichert", () => loeschen(a), "Erneut");
+                },
               );
             },
             a.text,
           );
-          nachladen(200);
+          await kombi.neuLaden();
+          fertig(a.id);
         },
         () => {
           kombi.fehlerToast("Nicht gespeichert", () => loeschen(a), "Erneut");
-          setTimeout(() => setze(a.id, null), RUECKSPRUNG_MS);
+          setTimeout(() => {
+            laufend.current.delete(a.id);
+            imFlip(() => setze(a.id, null));
+          }, RUECKSPRUNG_MS);
         },
       );
     },
-    [kombi, setze, nachladen],
+    [kombi, setze, imFlip, fertig],
   );
 
   // Ein Tipp irgendwo anders schließt eine aufgewischte Zeile (Prototyp Z. 1831).
@@ -140,7 +258,7 @@ export function useAufgaben(daten: unknown) {
     [ueber],
   );
 
-  return { anwenden, schalten, loeschen };
+  return { stand, anwenden, schalten, loeschen, halten, ankerRef };
 }
 
 // ── Zeile ─────────────────────────────────────────────────────────────────
@@ -201,6 +319,7 @@ export function AufgabeZeile({
   onLoeschen: (a: AufgabeDaten) => void;
 }) {
   const router = useRouter();
+  const kombi = useKombi();
   const rowRef = useRef<HTMLDivElement>(null);
   const frontRef = useRef<HTMLDivElement>(null);
   const warDone = useRef(a.done);
@@ -237,9 +356,12 @@ export function AufgabeZeile({
   if (!a.done && a.due < heute) sub = `war fällig ${kurz(a.due)}`;
   else if (!a.done && (modus === "subj" || modus === "page-sp")) sub = kurz(a.due);
 
+  // Plan 2.2 (Prototyp `startEdit`): ohne Details ändert die Zeile den
+  // Kurztext, mit Details öffnet das Formular.
   const bearbeiten = () => {
     schliessen(true);
-    router.push(`/hausaufgaben/${a.id}`);
+    if (a.details) router.push(`/hausaufgaben/${a.id}`);
+    else kombi.openZeile({ intent: "aendern", id: a.id, text: a.text, fach: a.fachId, due: a.due, dueAuto: false });
   };
 
   return (

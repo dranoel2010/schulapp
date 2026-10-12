@@ -20,12 +20,13 @@ import { TextLine } from "./zeilen";
 export const wocheTitel = () => "Woche";
 export const wocheSub = (d: WocheDaten) => `${dm(d.tage[0].tag)} bis ${dm(d.tage[4].tag)}`;
 
-export function WocheInhalt({ daten }: { daten: WocheDaten }) {
+export function WocheInhalt({ daten: vomServer }: { daten: WocheDaten }) {
+  // gezeigt wird der Stand, den der FLIP-Lauf übernommen hat (useAufgaben)
+  const { stand: daten, anwenden, schalten, loeschen, ankerRef } = useAufgaben(vomServer);
   const start = Math.max(0, daten.tage.findIndex((t) => t.tag === daten.tag));
   const [sel, setSel] = useState(start);
   const [gezeigt, setGezeigt] = useState(start);
   const listRef = useRef<HTMLDivElement>(null);
-  const { anwenden, schalten, loeschen } = useAufgaben(daten);
 
   const waehlen = (i: number) => {
     if (i === sel) return;
@@ -77,6 +78,7 @@ export function WocheInhalt({ daten }: { daten: WocheDaten }) {
         ))}
         <span className="day-ind" aria-hidden="true" style={{ transform: `translateX(${sel * 100}%)` }} />
       </div>
+      <div hidden ref={ankerRef} />
       <div className="lessons" ref={listRef}>
         {t.frei ? <p className="free">{t.frei}</p> : null}
         {t.stunden.map((l) => (

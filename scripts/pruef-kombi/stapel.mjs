@@ -160,6 +160,49 @@ try {
   await ruhe(page, 900);
   p.ok((await seitenZahl(page)) === 0, `und Startseite (${await seitenZahl(page)})`);
 
+  // Neuladen auf /noten/fach/[id], nachdem im Tab schon Seiten offen waren:
+  // „Zuletzt geöffnet“ (sessionStorage) darf das Hydrieren nicht stören
+  // (React #418, danach fehlte window.__kombi).
+  {
+    const nf = await ctx.newPage();
+    const nfFehler = fehlerSammeln(nf);
+    await nf.goto(`${BASIS}/`);
+    await nf.waitForFunction(() => !!window.__kombi);
+    // ein Fach über die Fächerliste (die Saat hat nicht immer Noten), dann seine Noten
+    await nf.evaluate(() => window.__kombi.openPage("faecher"));
+    await nf.waitForSelector('#pages .page .p-title:text-is("Fächer")');
+    await ruhe(nf);
+    const zeile = nf.locator("#pages > .page:last-child .lrow").first();
+    if (await zeile.count()) {
+      await zeile.click();
+      await nf.waitForURL(/\/faecher\/[0-9a-f-]{36}/);
+      await ruhe(nf);
+      const fachId = new URL(nf.url()).pathname.split("/")[2];
+      await nf.evaluate((id) => window.__kombi.openPage("notenfach", { id }), fachId);
+      await nf.waitForURL(/\/noten\/fach\//);
+      await ruhe(nf);
+      const ziel = nf.url();
+      nfFehler.length = 0;
+      await nf.reload();
+      await nf.waitForSelector("#pages .page .p-title");
+      await ruhe(nf, 900);
+      const hat = await nf.evaluate(() => !!window.__kombi);
+      const pe = nfFehler.filter((f) => f.startsWith("pageerror"));
+      p.ok(pe.length === 0 && hat, `Neuladen auf ${new URL(ziel).pathname}: keine pageerror, __kombi da${pe.length ? `: ${pe.join(" | ")}` : ""}`);
+      for (const pfad of ["/stundenplan", "/"]) {
+        nfFehler.length = 0;
+        await nf.goto(`${BASIS}${pfad}`);
+        await nf.waitForSelector("#whenrow", { state: "attached" });
+        await ruhe(nf, 900);
+        const pe2 = nfFehler.filter((f) => f.startsWith("pageerror"));
+        p.ok(pe2.length === 0, `danach ${pfad} aufgerufen: keine pageerror${pe2.length ? `: ${pe2.join(" | ")}` : ""}`);
+      }
+    } else {
+      p.ok(false, "Fächer: kein Fach zum Öffnen (Saat?)");
+    }
+    await nf.close();
+  }
+
   // ── 4. Flugmodus ─────────────────────────────────────────────────────────
   console.log("4. Flugmodus");
   await zuHause();

@@ -156,6 +156,8 @@ export type EintragSenden = {
   from: DOMRect | null;
 };
 
+const ohneAbo = () => () => {};
+
 export function Zeile({
   handleRef,
   versteckt = false,
@@ -198,6 +200,8 @@ export function Zeile({
   /** Vertrag mit dem Ablauf (C): wohin ein Eintrag aus dessen Kontext geht */
   const sendenRef = useRef<((e: EintragSenden) => void) | null>(null);
   const ablaufZ = useSyncExternalStore(ablaufStore.subscribe, ablaufStore.get, ablaufStore.getServer);
+  /** false beim Server-Rendern und beim Hydrieren, danach true */
+  const hydriert = useSyncExternalStore(ohneAbo, () => true, () => false);
   const Z = useRef<Zustand>({
     ctx: null,
     override: null,
@@ -888,7 +892,8 @@ export function Zeile({
     });
   leerGruppen.push({
     label: "Zuletzt geöffnet",
-    items: zuletztListe()
+    // erst nach dem Hydrieren: der Server kennt sessionStorage nicht (React #418)
+    items: (hydriert ? zuletztListe() : [])
       .slice(0, 3)
       .map((r) => ({ key: "r:" + r.key, l1: r.label, l2: r.sub, ziel: { typ: "seite" as const, art: r.art, params: r.params } })),
   });
@@ -1133,9 +1138,14 @@ export function Zeile({
         : menu.animate([{ clipPath: menuClip(H) }, { clipPath: MENU_FULL }], { duration: 280, easing: E.drawer });
     }
 
-    // Neue Knoten fahren ein (13.3 Nr. 14): beim Öffnen gestaffelt ab 80 ms
+    // Neue Knoten fahren ein (13.3 Nr. 14): beim Öffnen gestaffelt ab 80 ms.
+    // Wie im Prototyp (`opts.concat($$('.m-group'))`) erst alle Optionen, dann
+    // die Gruppenlabels — so fahren alle Bereichszellen ein.
     const frisch = layer
-      ? [...layer.querySelectorAll<HTMLElement>(".opt, .m-group")].filter((n) => {
+      ? [
+          ...layer.querySelectorAll<HTMLElement>(".opt"),
+          ...layer.querySelectorAll<HTMLElement>(".m-group"),
+        ].filter((n) => {
           const k = (showLeer ? "L" : "") + (n.dataset.k ?? "");
           const istNeu = !z.gesehen.has(k);
           z.gesehen.add(k);

@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 
@@ -67,7 +66,6 @@ async function ablaufHolen(): Promise<AblaufDaten | null> {
 export function AblaufEbene() {
   const kombi = useKombi();
   const { registriere, toast, hideToast, fehlerToast, openPage, openCam, openZeile, setView, neuLaden } = kombi;
-  const router = useRouter();
 
   const [daten, setDaten] = useState<AblaufDaten | null>(null);
   const [ausMenu, setAusMenu] = useState(false);
@@ -653,10 +651,12 @@ export function AblaufEbene() {
   const blattOeffnen = useCallback(
     (b: BlattAnzeige) => {
       if (!b.id) return;
-      if (b.status === "im_korb") router.push(`/material/eingang/${b.id}`);
-      else openPage("blatt", { id: b.id });
+      // Auch ein Blatt im Eingangskorb öffnet seine Blattseite: /material/eingang/[id]
+      // erwartet eine Vorschlags-ID, die es hier nicht gibt (sonst „Hier ist
+      // nichts“). Die Blattseite führt mit „Vorschlag anlegen“ weiter.
+      openPage("blatt", { id: b.id });
     },
-    [openPage, router],
+    [openPage],
   );
 
   const fachAendern = useCallback(

@@ -18,8 +18,9 @@ import { TextLine } from "./zeilen";
 export const tagName = (tag: string, heute: string) =>
   tag === addDays(heute, 1) ? TAG[wd(tag)] : lang(tag);
 
-export function HausaufgabenInhalt({ daten }: { daten: HausaufgabenDaten }) {
-  const { anwenden, schalten, loeschen } = useAufgaben(daten);
+export function HausaufgabenInhalt({ daten: vomServer }: { daten: HausaufgabenDaten }) {
+  // gezeigt wird der Stand, den der FLIP-Lauf übernommen hat (useAufgaben)
+  const { stand: daten, anwenden, schalten, loeschen, ankerRef } = useAufgaben(vomServer);
   const fuer = `Für ${tagName(daten.ns, daten.heute)}`;
   const gruppen: [string, HausaufgabenDaten["fuer"], ZeilenModus][] = [
     [fuer, anwenden(daten.fuer), "page"],
@@ -29,7 +30,7 @@ export function HausaufgabenInhalt({ daten }: { daten: HausaufgabenDaten }) {
 
   return (
     <>
-      <div>
+      <div ref={ankerRef}>
         {gruppen.map(([l, liste, modus], i) => (
           <div className="group" data-g={l} key={l} hidden={!liste.length && i > 0}>
             <h3 className="lab">{l}</h3>
