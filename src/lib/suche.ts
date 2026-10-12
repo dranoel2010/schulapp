@@ -6,9 +6,11 @@ import { norm } from "@/lib/kombi/fach-alias";
 /**
  * Volltextsuche über die Blätter (Modell 23, Plan 3.7) für die Zeile.
  *
- * - Jedes Wort wird zum Präfix (`wort:*`), **alle** Wörter müssen treffen —
- *   in Titel, Thema, Fachname oder Abschrift, zusammen genommen wie der
- *   Prototyp (`serverSuche`, Z. 2451).
+ * - Jedes Wort ab drei Zeichen wird zum Präfix (`wort:*`), kürzere müssen
+ *   als ganzes Wort stehen; **alle** Wörter müssen treffen — in Titel, Thema,
+ *   Fachname oder Abschrift, zusammen genommen wie der Prototyp
+ *   (`serverSuche`, Z. 2451). Konfiguration 'simple': kein Stemmer, keine
+ *   Stoppwörter, also dasselbe wie `startsWith` im Prototyp.
  * - Rang je Wort: Treffer im Titel 4, im Thema 2, sonst 1 (Titel vor Thema
  *   vor Text). Bei Gleichstand das jüngere Blatt zuerst.
  * - `unaccent` fehlt in PGlite. Deshalb bekommt jedes Wort seine Umlaut-
@@ -48,7 +50,15 @@ export function schreibweisen(w: string): string[] {
   return [...new Set([w, aus, ein, ss])].filter((x) => /^[\p{L}\p{N}]+$/u.test(x));
 }
 
-const teilQuery = (w: string) => `(${schreibweisen(w).map((x) => `${x}:*`).join(" | ")})`;
+/**
+ * Ein Wort als tsquery wie `wordHit` im Prototyp (Z. 2349): ab drei Zeichen
+ * ein Präfix (`wort:*`), darunter nur das ganze Wort. Immer mit der
+ * Konfiguration 'simple' — ohne Stemmer (sonst wird „industrie“ zu
+ * „industri:*“ und trifft „Industrialisierung“) und ohne Stoppwortliste
+ * (sonst fallen „nach“, „über“ still weg und „alle Wörter“ gilt nicht mehr).
+ */
+export const teilQuery = (w: string) =>
+  `(${schreibweisen(w).map((x) => (w.length >= 3 ? `${x}:*` : x)).join(" | ")})`;
 
 /** Text der Abschrift für den Ausschnitt: ohne ⟨⟩ und Auszeichnung. */
 export function abschriftText(s: string): string {
@@ -93,21 +103,21 @@ export async function sucheBlaetter(
     with kandidat as (
       select m.id from materials m
        where m.user_id = ${userId}
-         and to_tsvector('german', coalesce(m.title, '')) @@ to_tsquery('german', ${irgendeins})
+         and to_tsvector('simple', coalesce(m.title, '')) @@ to_tsquery('simple', ${irgendeins})
       union
       select p.material_id from material_pages p
         join materials m on m.id = p.material_id and m.user_id = ${userId}
-       where to_tsvector('german', coalesce(p.transcript, '')) @@ to_tsquery('german', ${irgendeins})
+       where to_tsvector('simple', coalesce(p.transcript, '')) @@ to_tsquery('simple', ${irgendeins})
       union
       select mt.material_id from material_topics mt
         join subject_topics st on st.id = mt.subject_topic_id
         join materials m on m.id = mt.material_id and m.user_id = ${userId}
-       where to_tsvector('german', st.title) @@ to_tsquery('german', ${irgendeins})
+       where to_tsvector('simple', st.title) @@ to_tsquery('simple', ${irgendeins})
       union
       select m.id from materials m
         join subjects s on s.id = m.subject_id
        where m.user_id = ${userId}
-         and to_tsvector('german', s.name) @@ to_tsquery('german', ${irgendeins})
+         and to_tsvector('simple', s.name) @@ to_tsquery('simple', ${irgendeins})
     ),
     blatt as (
       select m.id, m.title as titel, m.subject_id as fach_id, m.captured_on, m.created_at,
@@ -126,16 +136,16 @@ export async function sucheBlaetter(
            -- je Wort: 4 im Titel, 2 im Thema, sonst 1
            ${sql.join(
              ws.map(
-               (w) => sql`(case when to_tsvector('german', coalesce(titel, '')) @@ to_tsquery('german', ${teilQuery(w)}) then 4
-                               when to_tsvector('german', coalesce(themen, '')) @@ to_tsquery('german', ${teilQuery(w)}) then 2
+               (w) => sql`(case when to_tsvector('simple', coalesce(titel, '')) @@ to_tsquery('simple', ${teilQuery(w)}) then 4
+                               when to_tsvector('simple', coalesce(themen, '')) @@ to_tsquery('simple', ${teilQuery(w)}) then 2
                                else 1 end)`,
              ),
              sql` + `,
            )} as treffer
       from blatt
-     where (to_tsvector('german', coalesce(titel, '')) || to_tsvector('german', coalesce(themen, ''))
-            || to_tsvector('german', coalesce(fach, '')) || to_tsvector('german', coalesce(text, '')))
-           @@ to_tsquery('german', ${alle})
+     where (to_tsvector('simple', coalesce(titel, '')) || to_tsvector('simple', coalesce(themen, ''))
+            || to_tsvector('simple', coalesce(fach, '')) || to_tsvector('simple', coalesce(text, '')))
+           @@ to_tsquery('simple', ${alle})
      order by treffer desc, captured_on desc, created_at desc
      limit ${limit}
   `);

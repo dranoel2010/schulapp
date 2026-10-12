@@ -609,7 +609,7 @@ export const materials = pgTable(
     // sonst nimmt Postgres den Index nicht.
     index("materials_titel_volltext_idx").using(
       "gin",
-      sql`to_tsvector('german', coalesce(${t.title}, ''))`,
+      sql`to_tsvector('simple', coalesce(${t.title}, ''))`,
     ),
   ],
 );
@@ -793,7 +793,7 @@ export const materialPages = pgTable(
     // wie in `sucheBlaetter()`.
     index("material_pages_volltext_idx").using(
       "gin",
-      sql`to_tsvector('german', coalesce(${t.transcript}, ''))`,
+      sql`to_tsvector('simple', coalesce(${t.transcript}, ''))`,
     ),
     check(
       "material_pages_leser_check",

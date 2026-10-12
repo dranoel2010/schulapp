@@ -1,6 +1,9 @@
 -- Volltextsuche der Zeile für Modell 23 (Plan 3.7): zwei GIN-Indizes über
 -- Titel und Abschrift.
 --
+-- Konfiguration 'simple' (kein Stemmer, keine Stoppwörter): die Suche
+-- vergleicht wie der Prototyp Wortanfänge, nicht deutsche Wortstämme.
+--
 -- Rein additiv. Ohne diese Indizes läuft die Suche trotzdem, nur langsamer;
 -- `nas.sh hoch` prüft sie deshalb nicht. Der Ausdruck muss wörtlich derselbe
 -- sein wie in `sucheBlaetter()` (src/lib/suche.ts), sonst nimmt Postgres den
@@ -37,5 +40,5 @@
 --
 -- Danach nachsehen: \di *volltext*
 
-CREATE INDEX "material_pages_volltext_idx" ON "material_pages" USING gin (to_tsvector('german', coalesce("transcript", '')));
-CREATE INDEX "materials_titel_volltext_idx" ON "materials" USING gin (to_tsvector('german', coalesce("title", '')));
+CREATE INDEX "material_pages_volltext_idx" ON "material_pages" USING gin (to_tsvector('simple', coalesce("transcript", '')));
+CREATE INDEX "materials_titel_volltext_idx" ON "materials" USING gin (to_tsvector('simple', coalesce("title", '')));

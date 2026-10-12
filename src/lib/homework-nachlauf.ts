@@ -5,7 +5,7 @@ import { requestCalendarSync } from "@/lib/calendar/sync";
  * Kalender wird angestoßen — nach Eintragen, Ändern, Abhaken, Löschen und
  * nach jedem Rückgängig. Eine Stelle für alle Wege, damit es keiner vergisst.
  *
- * `nachlauf.sync` ist die Naht für Tests (Spion statt echtem Abgleich).
+ * `nachlauf.sync` ist das Interface für Tests (Spion statt echtem Abgleich).
  */
 export const nachlauf = {
   sync: (userId: string) => requestCalendarSync(userId),

@@ -38,9 +38,10 @@ import {
   type Ziel,
 } from "@/components/kombi/zeile/suche";
 import { Tokens, tokensFuer } from "@/components/kombi/zeile/tokens";
-import { zuletztListe } from "@/components/kombi/zeile/zuletzt";
+import { zuletztListe, zuletztTitel } from "@/components/kombi/zeile/zuletzt";
 import { bare, norm, type FachEintrag } from "@/lib/kombi/fach-alias";
 import { E, flash, reduce, springOpts, vvStable } from "@/lib/kombi/motion";
+import { appTagVon } from "@/lib/kombi/tag-daten";
 import { dm, kurz } from "@/lib/kombi/text";
 import { nextLesson, type VorratAufgabe, type ZeilenVorrat } from "@/lib/kombi/vorrat";
 
@@ -68,6 +69,8 @@ export type ZeileHandle = {
 
 /** Die Uhr des Geräts; die Zeile rechnet mit dem Versatz zur Serveruhr weiter. */
 const uhr = () => Date.now();
+/** Monotone Zeit für die Reihenfolge von Quittung und Laden des Vorrats. */
+const messzeit = () => performance.now();
 
 const MENU_FULL = "inset(0px 0px 0px 0px round 24px 24px 0px 0px)";
 
@@ -95,7 +98,44 @@ type Zustand = {
   animNext: boolean;
   /** zuletzt gerenderte Zerlegung (für „Eintragen“ aus der ersten Zeile) */
   p?: Geparst | null;
+  /**
+   * Das nächste Malen ist ein `renderMenu` im Sinne des Prototyps (Eingabe,
+   * Öffnen, Ebenenwechsel, Antwort, Rückfrage, neue Serverliste): nur dann
+   * setzt es `scrollTop` und scrollt die Auswahl ins Bild. Neu malen durch
+   * Abhaken, Toast oder neue Daten lässt die Liste stehen.
+   */
+  scrollNeu: boolean;
+  /** wartet auf einen Vorrat vom heutigen App-Tag (Eintragen nach 04:00) */
+  nachVorrat: (() => void) | null;
 };
+
+type UeberEintrag = { wert: number | null; bis: number; tok: number };
+/**
+ * Optimistischer Stand: `bis` ist der Zeitpunkt (performance.now) der
+ * Quittung durch die Action, `Infinity`, solange sie läuft. Ein Vorrat, der
+ * danach geholt wurde, enthält den Stand schon; dann fällt der Eintrag weg.
+ */
+type Ueberlagerung = {
+  done: Map<string, UeberEintrag>;
+  neu: { a: VorratAufgabe; bis: number; tok: number }[];
+  weg: Map<string, UeberEintrag>;
+};
+
+function ueberlagerungNach(l: Ueberlagerung, start: number): Ueberlagerung {
+  const done = new Map([...l.done].filter(([, e]) => e.bis > start));
+  const weg = new Map([...l.weg].filter(([, e]) => e.bis > start));
+  const neu = l.neu.filter((n) => n.bis > start);
+  if (done.size === l.done.size && weg.size === l.weg.size && neu.length === l.neu.length) return l;
+  return { done, neu, weg };
+}
+
+/** Gilt der Vorrat noch für den App-Tag von jetzt (Wechsel 04:00)? */
+function vorratVomTag(vv: { v: ZeilenVorrat; versatz: number }): boolean {
+  return appTagVon(new Date(Date.now() + vv.versatz)) === vv.v.heute;
+}
+
+/** Wie `homeworkInputSchema`: der Titel einer Aufgabe hat höchstens 120 Zeichen. */
+const TITEL_MAX = 120;
 
 const ZIEL_ARTEN = new Set(["woche", "hausaufgaben", "klausuren", "klausur", "noten", "notenfach", "ablage", "blatt", "faecher", "fach", "einstellungen"]);
 
@@ -118,12 +158,8 @@ export function Zeile({
   const [text, setText] = useState("");
   const [, setTick] = useState(0);
   const [vorrat, setVorrat] = useState<{ v: ZeilenVorrat; versatz: number } | null>(null);
-  /** optimistischer Stand der Aufgaben, bis der Vorrat neu da ist */
-  const [lokal, setLokal] = useState<{ done: Map<string, number | null>; neu: VorratAufgabe[]; weg: Set<string> }>(() => ({
-    done: new Map(),
-    neu: [],
-    weg: new Set(),
-  }));
+  /** optimistischer Stand der Aufgaben, bis ein Vorrat da ist, der ihn schon enthält */
+  const [lokal, setLokal] = useState<Ueberlagerung>(() => ({ done: new Map(), neu: [], weg: new Map() }));
 
   const offenRef = useRef(false);
   const textRef = useRef("");
@@ -137,7 +173,11 @@ export function Zeile({
   const tokRef = useRef<HTMLDivElement>(null);
   const fachRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<Animation | null>(null);
-  const vorratLaeuft = useRef<Promise<void> | null>(null);
+  const vorratLaeuft = useRef<Promise<boolean> | null>(null);
+  /** Beginn des Ladens, dessen Vorrat gerade gilt — ein älteres überschreibt ihn nicht */
+  const vorratStand = useRef(-1);
+  const vorratRef = useRef<{ v: ZeilenVorrat; versatz: number } | null>(null);
+  const ueberNr = useRef(0);
   const Z = useRef<Zustand>({
     ctx: null,
     override: null,
@@ -155,35 +195,92 @@ export function Zeile({
     heldDone: new Map(),
     gesehen: new Set(),
     animNext: false,
+    scrollNeu: false,
+    nachVorrat: null,
   });
   const neu = useCallback(() => setTick((t) => t + 1), []);
 
-  // ── Vorrat (Plan 3.2): beim ersten Öffnen, danach aus dem Speicher ─────────
-  const vorratLaden = useCallback((): Promise<void> => {
-    const p = fetch("/api/zeile/vorrat", { headers: { accept: "application/json" } })
+  // ── Vorrat (Plan 3.2) ──────────────────────────────────────────────────────
+  // Stale-while-revalidate: der alte Vorrat steht sofort, der neue ersetzt ihn,
+  // sobald er da ist. Geholt wird bei jedem Öffnen des Menüs, nach jedem
+  // `neuLaden()` der Shell (neue TagDaten), wenn die App wieder sichtbar wird
+  // und spätestens, wenn der App-Tag (04:00) wechselt. Die optimistische
+  // Überlagerung bleibt, bis ein Vorrat da ist, der erst nach der Quittung
+  // der Action geholt wurde.
+  const vorratLaden = useCallback((): Promise<boolean> => {
+    const start = messzeit();
+    const p: Promise<boolean> = fetch("/api/zeile/vorrat", { headers: { accept: "application/json" } })
       .then((r) => (r.ok ? (r.json() as Promise<{ ok: boolean; vorrat?: ZeilenVorrat }>) : null))
       .then((j) => {
-        if (j?.ok && j.vorrat) {
-          const v = j.vorrat;
-          setVorrat({ v, versatz: v.jetzt - Date.now() });
-          setLokal({ done: new Map(), neu: [], weg: new Set() });
-        }
+        if (!j?.ok || !j.vorrat) return false;
+        if (start < vorratStand.current) return true;
+        vorratStand.current = start;
+        // die erste Liste nach einem Menü ohne Daten darf Auswahl und Scroll setzen
+        if (!vorratRef.current) Z.current.scrollNeu = true;
+        const neuV = { v: j.vorrat, versatz: j.vorrat.jetzt - Date.now() };
+        vorratRef.current = neuV;
+        setVorrat(neuV);
+        setLokal((l) => ueberlagerungNach(l, start));
+        return true;
       })
-      .catch(() => {})
+      .catch(() => false)
       .finally(() => {
-        vorratLaeuft.current = null;
+        if (vorratLaeuft.current === p) vorratLaeuft.current = null;
       });
     vorratLaeuft.current = p;
     return p;
   }, []);
-  const vorratSicher = useCallback(() => {
-    if (!vorrat && !vorratLaeuft.current) void vorratLaden();
-  }, [vorrat, vorratLaden]);
+  /** Neu holen, außer es läuft schon ein Laden (Öffnen, Sichtbarwerden, Tageswechsel). */
+  const vorratAuffrischen = useCallback(() => vorratLaeuft.current ?? vorratLaden(), [vorratLaden]);
   useEffect(() => {
     // im Leerlauf vorwärmen, damit das erste Öffnen schon Daten hat
-    const t = setTimeout(() => vorratSicher(), 1200);
+    const t = setTimeout(() => {
+      if (!vorratRef.current) void vorratAuffrischen();
+    }, 1200);
     return () => clearTimeout(t);
-  }, [vorratSicher]);
+  }, [vorratAuffrischen]);
+  // nach jedem neuLaden() der Shell (Abhaken auf der Startseite, Rückgängig, …)
+  useEffect(() => {
+    if (kombi.tagDaten && vorratRef.current) void vorratLaden();
+  }, [kombi.tagDaten, vorratLaden]);
+  // wieder sichtbar (offen gelassene PWA) und der Tageswechsel um 04:00
+  useEffect(() => {
+    const sichtbarGeworden = () => {
+      if (document.visibilityState === "visible" && vorratRef.current) void vorratAuffrischen();
+    };
+    const uhrwerk = setInterval(() => {
+      const vv = vorratRef.current;
+      if (vv && document.visibilityState === "visible" && !vorratVomTag(vv)) void vorratAuffrischen();
+    }, 60_000);
+    document.addEventListener("visibilitychange", sichtbarGeworden);
+    return () => {
+      document.removeEventListener("visibilitychange", sichtbarGeworden);
+      clearInterval(uhrwerk);
+    };
+  }, [vorratAuffrischen]);
+
+  // Überlagerung setzen (Action läuft), quittieren (Action fertig) und entfernen (gescheitert)
+  const ueberSetzen = (art: "done" | "weg", id: string, wert: number | null = null): number => {
+    const tok = ++ueberNr.current;
+    setLokal((l) => ({ ...l, [art]: new Map(l[art]).set(id, { wert, bis: Infinity, tok }) }));
+    return tok;
+  };
+  const ueberQuittieren = (art: "done" | "weg", id: string, tok: number) => {
+    const bis = messzeit();
+    setLokal((l) => {
+      const e = l[art].get(id);
+      if (!e || e.tok !== tok) return l;
+      return { ...l, [art]: new Map(l[art]).set(id, { ...e, bis }) };
+    });
+  };
+  const ueberEntfernen = (art: "done" | "weg", id: string, tok: number) =>
+    setLokal((l) => {
+      const e = l[art].get(id);
+      if (!e || e.tok !== tok) return l;
+      const m = new Map(l[art]);
+      m.delete(id);
+      return { ...l, [art]: m };
+    });
 
   // Vorrat mit dem optimistischen Stand
   const v: ZeilenVorrat | null = vorrat
@@ -191,8 +288,13 @@ export function Zeile({
         ...vorrat.v,
         aufgaben: vorrat.v.aufgaben
           .filter((a) => !lokal.weg.has(a.id))
-          .map((a) => (lokal.done.has(a.id) ? { ...a, done: lokal.done.get(a.id) ?? null } : a))
-          .concat(lokal.neu),
+          .map((a) => (lokal.done.has(a.id) ? { ...a, done: lokal.done.get(a.id)!.wert } : a))
+          .concat(
+            lokal.neu
+              // steht die echte Aufgabe schon im Vorrat, fällt die vorläufige weg (keine Dublette)
+              .filter((n) => !vorrat.v.aufgaben.some((x) => x.fachId === n.a.fachId && x.text === n.a.text && x.due === n.a.due))
+              .map((n) => n.a),
+          ),
       }
     : null;
   const jetzt = () => uhr() + (vorrat?.versatz ?? 0);
@@ -234,12 +336,14 @@ export function Zeile({
     z.maxH = 0;
     z.settled = true;
     z.animNext = true;
+    z.scrollNeu = true;
     kombi.hideToast(true);
-    vorratSicher();
+    // jedes Öffnen holt den Vorrat neu; bis er da ist, steht der alte
+    void vorratAuffrischen();
     setOffen(true);
     setSichtbar(true);
     onOffen?.(true, false);
-  }, [kombi, onOffen, vorratSicher]);
+  }, [kombi, onOffen, vorratAuffrischen]);
 
   const schliessen = useCallback(
     (optionen: { blur?: boolean; ausHistory?: boolean; keepText?: boolean } = {}) => {
@@ -248,6 +352,7 @@ export function Zeile({
       const z = Z.current;
       clearTimeout(z.shrinkT);
       z.heldDone.clear();
+      z.nachVorrat = null;
       setOffen(false);
       onOffen?.(false, !!optionen.ausHistory);
       if (optionen.blur !== false) feldRef.current?.blur();
@@ -316,10 +421,15 @@ export function Zeile({
     z.heldDone.clear();
     z.settled = false;
     z.needFach = false;
+    z.scrollNeu = true;
     clearTimeout(z.settleT);
     z.settleT = setTimeout(() => {
       z.settled = true;
-      if (offenRef.current) neu();
+      // wie im Prototyp (Z. 2780): neu malen nur, wenn die Absicht gehalten war
+      if (offenRef.current && z.p && z.p.held) {
+        z.scrollNeu = true;
+        neu();
+      }
     }, 250);
     const val = textRef.current;
     if (!val.trim() && !z.ctx) z.override = null;
@@ -347,6 +457,7 @@ export function Zeile({
       if (!offenRef.current) oeffnen();
       else {
         z.animNext = true;
+        z.scrollNeu = true;
         neu();
       }
     },
@@ -382,10 +493,10 @@ export function Zeile({
         let zuletzt: { label: string; sub?: string | null } | undefined;
         if (ziel.art === "klausur" && v) {
           const k = v.klausuren.find((x) => x.id === params.id);
-          if (k) zuletzt = { label: `Klausur ${fachVon(k.fachId)?.name ?? ""}`, sub: dm(k.datum) };
+          if (k) zuletzt = { label: zuletztTitel.klausur(fachVon(k.fachId)?.name ?? ""), sub: dm(k.datum) };
         } else if (ziel.art === "notenfach") {
           const f = fachVon(params.id);
-          if (f) zuletzt = { label: `Noten ${f.name}` };
+          if (f) zuletzt = { label: zuletztTitel.notenfach(f.name) };
         }
         kombi.openPage(ziel.art, params, zuletzt ? { zuletzt } : undefined);
         return;
@@ -430,13 +541,15 @@ export function Zeile({
     const done = !a.done;
     if (!z.heldDone.has(a.id)) z.heldDone.set(a.id, vorher);
     const neuDone = done ? jetzt() : null;
-    setLokal((l) => ({ ...l, done: new Map(l.done).set(a.id, neuDone) }));
+    const tok = ueberSetzen("done", a.id, neuDone);
     const k = fachKurz(a.fachId);
     let protokoll: Promise<string | null> = Promise.resolve(null);
-    const zurueck = () => setLokal((l) => ({ ...l, done: new Map(l.done).set(a.id, vorher) }));
+    // Rückgängig: der alte Stand gilt, bis das Zurücknehmen quittiert ist
+    const zurueck = () => ueberSetzen("done", a.id, vorher);
     protokoll = aufgabeAbhakenAction(a.id, done).then(
       (r) => {
         if (!r.ok) throw new Error(r.fehler);
+        ueberQuittieren("done", a.id, tok);
         void kombi.neuLaden();
         return r.protokollId;
       },
@@ -446,7 +559,8 @@ export function Zeile({
     );
     protokoll.catch(() => {
       kombi.fehlerToast("Nicht gespeichert", () => setDone({ ...a, done: vorher }), "Erneut");
-      setTimeout(zurueck, 320);
+      // auf dem Server hat sich nichts geändert: die Überlagerung fällt weg
+      setTimeout(() => ueberEntfernen("done", a.id, tok), 320);
     });
     if (done) {
       try {
@@ -457,10 +571,18 @@ export function Zeile({
       kombi.toast(
         `${k} abgehakt`,
         () => {
-          zurueck();
-          void protokoll.then((pid) => {
-            if (pid) void abhakenZuruecknehmenAction(a.id, !!vorher, pid).then(() => kombi.neuLaden());
-          });
+          const tz = zurueck();
+          void protokoll.then(
+            (pid) => {
+              if (!pid) return ueberQuittieren("done", a.id, tz);
+              const fertig = () => {
+                ueberQuittieren("done", a.id, tz);
+                void kombi.neuLaden();
+              };
+              void abhakenZuruecknehmenAction(a.id, !!vorher, pid).then(fertig, fertig);
+            },
+            () => ueberEntfernen("done", a.id, tz),
+          );
         },
         `${k}, ${a.text}`,
       );
@@ -522,8 +644,8 @@ export function Zeile({
       aufgabeAendernAction(vorher.id, e).then(
         (r) => {
           if (!r.ok) throw new Error(r.fehler);
+          // neuLaden() bringt neue TagDaten, und die holen den Vorrat nach
           void kombi.neuLaden();
-          void vorratLaden();
           nachher();
         },
         () => {
@@ -542,6 +664,7 @@ export function Zeile({
     const z = Z.current;
     if (!p.eFach) {
       z.needFach = true;
+      z.scrollNeu = true;
       neu();
       feldRef.current?.focus({ preventScroll: true });
       const b = fachRef.current;
@@ -549,12 +672,29 @@ export function Zeile({
         b.animate([{ transform: "translateX(0)" }, { transform: "translateX(6px)" }, { transform: "translateX(0)" }], { duration: 200 });
       return;
     }
-    if (!p.taskText) {
+    if (!p.taskText || p.taskText.length > TITEL_MAX) {
+      // zu lang: die erste Zeile sagt es („Höchstens 120 Zeichen“), nichts wird eingetragen
       feldRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    // Fälligkeiten („morgen“, „bis Do“, nächste Stunde) rechnen vom App-Tag des
+    // Vorrats: nach 04:00 erst den heutigen holen und dann neu zerlegen
+    if (!vorrat || !vorratVomTag(vorrat)) {
+      const auto = !z.rueck && p === z.p;
+      z.nachVorrat = () => {
+        const q = auto ? Z.current.p : p;
+        if (q) doEintragenRef.current(q);
+      };
+      void vorratLaden().then((ok) => {
+        if (ok) return;
+        Z.current.nachVorrat = null;
+        kombi.fehlerToast("Keine Verbindung", () => doEintragenRef.current(p), "Erneut");
+      });
       return;
     }
     if (!p.due) {
       z.rueck = p;
+      z.scrollNeu = true;
       neu();
       return;
     }
@@ -565,16 +705,19 @@ export function Zeile({
     const fr = feldRef.current?.getBoundingClientRect() ?? new DOMRect();
     const tempId = `neu-${uhr()}`;
     const a: VorratAufgabe = { id: tempId, fachId: p.eFach.id, text: p.taskText, due: p.due, done: null, details: false };
-    setLokal((l) => ({ ...l, neu: [...l.neu, a] }));
+    const tok = ++ueberNr.current;
+    setLokal((l) => ({ ...l, neu: [...l.neu, { a, bis: Infinity, tok }] }));
     setFeld("");
     schliessen();
-    const weg = () => setLokal((l) => ({ ...l, neu: l.neu.filter((x) => x.id !== tempId) }));
+    const weg = () => setLokal((l) => ({ ...l, neu: l.neu.filter((x) => x.a.id !== tempId) }));
     const ergebnis = aufgabeEintragenAction({ subjectId: a.fachId, title: a.text, dueDate: a.due }).then((r) => {
       if (!r.ok) throw new Error(r.fehler);
       return r;
     });
     ergebnis.then(
       (r) => {
+        const bis = messzeit();
+        setLokal((l) => ({ ...l, neu: l.neu.map((x) => (x.a.id === tempId ? { ...x, bis } : x)) }));
         void geistflug(r.id, a.text, fr);
         void vorratLaden();
       },
@@ -587,16 +730,21 @@ export function Zeile({
       "Eingetragen",
       () => {
         weg();
-        void ergebnis.then((r) =>
-          eintragenZuruecknehmenAction(r.id, r.protokollId).then(() => {
+        void ergebnis.then((r) => {
+          // die echte Aufgabe bleibt verborgen, bis das Zurücknehmen quittiert ist
+          const tw = ueberSetzen("weg", r.id);
+          const fertig = () => {
+            ueberQuittieren("weg", r.id, tw);
             void kombi.neuLaden();
-            void vorratLaden();
-          }),
-        );
+          };
+          void eintragenZuruecknehmenAction(r.id, r.protokollId).then(fertig, fertig);
+        });
       },
       a.text,
     );
   };
+  const doEintragenRef = useRef(doEintragen);
+  doEintragenRef.current = doEintragen;
 
   // ── Antwort zeigen (Prototyp showAnswer, Z. 2817) ───────────────────────────
 
@@ -610,6 +758,7 @@ export function Zeile({
     setFeld("");
     z.ctx = null;
     z.override = null;
+    z.scrollNeu = true;
     neu();
   };
 
@@ -630,6 +779,7 @@ export function Zeile({
         if (r) doEintragen({ ...r, due: i.due, dueAuto: false });
       } else if (i.typ === "undo") {
         kombi.undoJetzt()?.run();
+        z.scrollNeu = true;
         neu();
       }
       return;
@@ -760,7 +910,14 @@ export function Zeile({
       else {
         // Fach und Termin stehen schon als Tokens darunter; die Zeile nennt nur, was eingetragen wird
         const l1 = !p.eFach ? (z.needFach || !p.taskText ? "Welches Fach?" : p.taskText) : p.taskText ? p.taskText : "Was ist auf?";
-        first = { key: "first", l1, l2: !p.eFach && p.taskText && !z.needFach ? "Fach fehlt" : null, intern: { typ: "eintragen" } };
+        // zu lang für eine Aufgabe (homeworkInputSchema): Hinweis wie bei „Fach fehlt“
+        const zuLang = p.taskText.length > TITEL_MAX;
+        first = {
+          key: "first",
+          l1,
+          l2: zuLang ? `Zu lang · höchstens ${TITEL_MAX} Zeichen` : !p.eFach && p.taskText && !z.needFach ? "Fach fehlt" : null,
+          intern: { typ: "eintragen" },
+        };
       }
       const second: Option | null =
         p.intent === "eintragen"
@@ -831,7 +988,7 @@ export function Zeile({
   const lupeName: IconName = intent === "suchen" ? "search" : intent === "aendern" ? "edit" : "add";
   const sendName: IconName = intent === "suchen" ? "arrow_forward" : "check";
 
-  const syncSel = (opts?: HTMLElement[]) => {
+  const syncSel = (opts?: HTMLElement[], insBild = true) => {
     const z = Z.current;
     const layer = showLeer ? leerRef.current : hitsRef.current;
     const list = opts ?? (layer ? [...layer.querySelectorAll<HTMLElement>(".opt")] : []);
@@ -841,7 +998,7 @@ export function Zeile({
     const feld = feldRef.current;
     if (cur && feld) {
       feld.setAttribute("aria-activedescendant", cur.id);
-      cur.scrollIntoView({ block: "nearest" });
+      if (insBild) cur.scrollIntoView({ block: "nearest" });
     } else feld?.removeAttribute("aria-activedescendant");
   };
 
@@ -893,14 +1050,26 @@ export function Zeile({
     z.maxH = Math.min(z.maxH, mx);
     menu.style.minHeight = `${z.maxH}px`;
 
-    ms.scrollTop = showLeer ? 0 : ms.scrollHeight;
-
     // Auswahl (Pfeiltasten, Enter) — aria-selected wie syncSel
     const layer = showLeer ? leerRef.current : hitsRef.current;
     const opts = layer ? [...layer.querySelectorAll<HTMLElement>(".opt")] : [];
     const keep = opts.findIndex((n) => n.dataset.k === z.selKey);
-    z.sel = keep >= 0 && !animate ? keep : 0;
-    syncSel(opts);
+    if (z.scrollNeu) {
+      // nur ein renderMenu im Sinne des Prototyps setzt Scroll und Auswahl
+      z.scrollNeu = false;
+      ms.scrollTop = showLeer ? 0 : ms.scrollHeight;
+      z.sel = keep >= 0 && !animate ? keep : 0;
+      syncSel(opts);
+    } else {
+      // Abhaken, Toast, neue Daten: die Liste bleibt, wo sie ist (kein Umsortieren unter dem Finger)
+      if (keep >= 0) z.sel = keep;
+      syncSel(opts, false);
+    }
+    if (z.nachVorrat && vorrat && vorratVomTag(vorrat)) {
+      const weiter = z.nachVorrat;
+      z.nachVorrat = null;
+      queueMicrotask(weiter);
+    }
 
     if (ersteMal) {
       const H = menu.offsetHeight;
@@ -985,20 +1154,34 @@ export function Zeile({
     clearTimeout(zz.serverT);
     if (!suchText) return;
     const q = suchText;
+    // Eine ältere Antwort (langsamer Funnel) darf die Liste der neueren nicht überschreiben:
+    // jede Anfrage bricht beim nächsten Tastendruck ab
+    const abbruch = new AbortController();
+    let nachlauf: ReturnType<typeof setTimeout> | undefined;
     zz.serverT = setTimeout(() => {
-      fetch(`/api/suche?q=${encodeURIComponent(q)}&w=${encodeURIComponent(markWoerter)}`, { headers: { accept: "application/json" } })
+      fetch(`/api/suche?q=${encodeURIComponent(q)}&w=${encodeURIComponent(markWoerter)}`, {
+        headers: { accept: "application/json" },
+        signal: abbruch.signal,
+      })
         .then((r) => (r.ok ? (r.json() as Promise<{ ok: boolean; list: BlattTreffer[] }>) : null))
         .then((j) => {
-          if (!j?.ok) return;
-          setTimeout(() => {
+          if (!j?.ok || abbruch.signal.aborted) return;
+          nachlauf = setTimeout(() => {
             const alt = zz.server;
             const same = alt.q === q && alt.list.length === j.list.length && alt.list.every((x, i) => x.id === j.list[i].id && x.ausschnitt === j.list[i].ausschnitt);
             zz.server = { q, list: j.list };
-            if (!same && offenRef.current && textRef.current.trim() && norm(textRef.current).includes(norm(q))) neu();
+            if (!same && offenRef.current && textRef.current.trim() && norm(textRef.current).includes(norm(q))) {
+              zz.scrollNeu = true;
+              neu();
+            }
           }, 40);
         })
         .catch(() => {});
     }, 150);
+    return () => {
+      abbruch.abort();
+      clearTimeout(nachlauf);
+    };
   }, [suchText, markWoerter, neu]);
 
   // Tastatur: die Zeile bleibt am Daumen (03 Z. 96, Prototyp vvFit)
@@ -1140,7 +1323,7 @@ export function Zeile({
           ref={dockRef}
           autoComplete="off"
           onPointerDown={(e) => {
-            vorratSicher();
+            if (!vorratRef.current) void vorratAuffrischen();
             if ((e.target as HTMLElement).closest("#camBtn, #send, input")) return;
             e.preventDefault();
             feldRef.current?.focus({ preventScroll: true });
@@ -1151,6 +1334,7 @@ export function Zeile({
             if (p && p.held) {
               zz.settled = true;
               zz.sel = 0;
+              zz.scrollNeu = true;
               neu();
               setTimeout(() => {
                 if (offenRef.current) optionVon(optionenJetzt()[0]);

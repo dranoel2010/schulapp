@@ -78,6 +78,22 @@ describe("sucheBlaetter (Volltext über die Abschriften)", () => {
     assert.equal(r.ausschnitt, "… in England. James Watt verbesserte sie 1769.");
   });
 
+  it("kein Stemmer: »industrie« trifft „Industrialisierung“ nicht", async () => {
+    assert.deepEqual(await sucheBlaetter(nutzer, ["industrie"]), []);
+    assert.equal((await sucheBlaetter(nutzer, ["industrial"])).length, 2);
+  });
+
+  it("Wörter unter drei Zeichen nur als ganzes Wort (Prototyp wordHit)", async () => {
+    // „bis“ steht im Text von „Arbeit in der Fabrik“; „bi“ ist dort kein Wort
+    assert.deepEqual(await sucheBlaetter(nutzer, ["bi"]), []);
+    assert.deepEqual((await sucheBlaetter(nutzer, ["12"])).map((x) => x.id), [fabrik]);
+    assert.deepEqual(await sucheBlaetter(nutzer, ["1"]), []);
+  });
+
+  it("keine Stoppwörter: »von« muss selbst treffen", async () => {
+    assert.deepEqual((await sucheBlaetter(nutzer, ["dampf", "von"])).map((x) => x.id), [fabrik]);
+  });
+
   it("nur die eigenen Blätter", async () => {
     const r = await sucheBlaetter(nutzer, ["fremde"]);
     assert.deepEqual(r, []);

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { zuletztTitel } from "@/components/kombi/zeile/zuletzt";
+import { ZuletztMerken } from "@/components/kombi/zeile/zuletzt-merken";
 import { ButtonLink } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
 import { getSubject } from "@/lib/subjects";
@@ -29,6 +31,7 @@ export default async function EditSubjectPage({
 
   return (
     <div className="space-y-6 md:max-w-3xl">
+      <ZuletztMerken art="fach" id={subject.id} label={zuletztTitel.fach(subject.name)} />
       <header className="space-y-1">
         <h1 className="text-xl font-semibold text-foreground">
           {subject.name}

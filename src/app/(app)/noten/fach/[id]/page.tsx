@@ -11,6 +11,8 @@ import {
   nextWholeTarget,
   toGradeEntries,
 } from "@/components/grades/target-sentence";
+import { zuletztTitel } from "@/components/kombi/zeile/zuletzt";
+import { ZuletztMerken } from "@/components/kombi/zeile/zuletzt-merken";
 import { ButtonLink } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { GradeKind } from "@/db/schema";
@@ -107,6 +109,7 @@ export default async function SubjectGradesPage({
 
   return (
     <div className="space-y-6 md:max-w-3xl">
+      <ZuletztMerken art="notenfach" id={subject.id} label={zuletztTitel.notenfach(subject.name)} />
       <Link
         href="/noten"
         className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
