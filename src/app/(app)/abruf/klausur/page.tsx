@@ -120,7 +120,7 @@ export default async function KlausurStoffPage({
             {formatCountdown(heute, gewaehlt.klausurtag)} ·{" "}
             <Link
               href="/abruf/klausur"
-              className="underline underline-offset-2"
+              className="kf-inline underline underline-offset-2"
             >
               andere Klausur
             </Link>
@@ -150,7 +150,7 @@ export default async function KlausurStoffPage({
                   Blätter dazugehören. Häng sie unter{" "}
                   <Link
                     href={`/klausuren/${gewaehlt.examId}`}
-                    className="underline underline-offset-2"
+                    className="kf-inline underline underline-offset-2"
                   >
                     Klausuren
                   </Link>{" "}
@@ -181,7 +181,7 @@ export default async function KlausurStoffPage({
                     ein, zwei Minuten. Sie landen als Vorschlag im{" "}
                     <Link
                       href="/abruf/eingang"
-                      className="underline underline-offset-2"
+                      className="kf-inline underline underline-offset-2"
                     >
                       Eingang
                     </Link>
@@ -214,7 +214,7 @@ export default async function KlausurStoffPage({
                       {" "}
                       <Link
                         href="/abruf/eingang"
-                        className="underline underline-offset-2"
+                        className="kf-inline underline underline-offset-2"
                       >
                         Zum Eingang
                       </Link>
@@ -240,7 +240,7 @@ export default async function KlausurStoffPage({
                 dort führt kein Weg zu Blättern. Das lässt sich unter{" "}
                 <Link
                   href={`/klausuren/${gewaehlt.examId}`}
-                  className="underline underline-offset-2"
+                  className="kf-inline underline underline-offset-2"
                 >
                   Klausuren
                 </Link>{" "}
@@ -357,7 +357,7 @@ export default async function KlausurStoffPage({
                   Themen sind dieselben, und die Blätter auch.{" "}
                   <Link
                     href="/klausuren/neu"
-                    className="underline underline-offset-2"
+                    className="kf-inline underline underline-offset-2"
                   >
                     Nächste Klausur eintragen
                   </Link>

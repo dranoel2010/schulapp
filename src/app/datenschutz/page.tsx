@@ -115,7 +115,7 @@ export default function DatenschutzPage() {
         <p>
           In den Einstellungen unter „Google Kalender“ mit „Trennen“, oder bei
           Google unter{" "}
-          <a className="underline" href="https://myaccount.google.com/permissions">
+          <a className="kf-inline underline" href="https://myaccount.google.com/permissions">
             myaccount.google.com/permissions
           </a>
           . Danach vergisst die App den gespeicherten Zugang. Der Kalender

@@ -56,7 +56,7 @@ export default async function HomeworkPage({
         subjects={subjects}
         fallbackDueDate={addDays(today, 1)}
         item={item}
-        submitLabel="Änderungen speichern"
+        submitLabel="Speichern"
       />
 
       <HomeworkDangerZone

@@ -55,10 +55,6 @@ import {
  * des Fachs als antippbare Chips. Getippt wird selten; angetippt oft.
  */
 
-function cn(...parts: Array<string | false | null | undefined>) {
-  return parts.filter(Boolean).join(" ");
-}
-
 const EMPTY_STATE: MaterialFormState = {};
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -579,7 +575,7 @@ function TranscriptField({
             height={48}
             loading="lazy"
             decoding="async"
-            className="h-12 w-9 shrink-0 rounded-[12px] border border-line bg-raise object-cover"
+            className="h-12 w-9 shrink-0 rounded-[3px] bg-raise object-cover shadow-[0_0_0_1px_var(--thumb-edge)]"
           />
 
           <span className="min-w-0 flex-1">
@@ -621,7 +617,7 @@ function TranscriptField({
               height={page.height}
               loading="lazy"
               decoding="async"
-              className="h-auto w-full rounded-[12px] border border-line bg-raise"
+              className="h-auto w-full rounded-[4px] bg-raise shadow-[0_0_0_1px_var(--thumb-edge)]"
             />
 
             <div className="space-y-3">
@@ -950,7 +946,7 @@ function TopicInput({
             <li key={topic}>
               <input type="hidden" name={name} value={topic} />
 
-              <span className="inline-flex min-h-11 max-w-full items-center gap-1 rounded-full border border-ink bg-raise py-1 pl-3.5 pr-1 text-[15px] font-[560] text-accent">
+              <span className="kf-chip" aria-pressed="true" style={{ paddingRight: 0, maxWidth: "100%" }}>
                 <span className="min-w-0 truncate">{topic}</span>
 
                 <button
@@ -959,7 +955,7 @@ function TopicInput({
                     onTopicsChange(topics.filter((item) => item !== topic))
                   }
                   aria-label={`${topic} entfernen`}
-                  className="flex size-9 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-raise hover:text-error"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full"
                 >
                   <svg
                     viewBox="0 0 24 24"
@@ -1060,13 +1056,7 @@ function TopicSuggestions({
               type="button"
               aria-pressed={isChosen}
               onClick={() => toggle(topic.title)}
-              className={cn(
-                "inline-flex min-h-11 max-w-full items-center rounded-full",
-                "border px-3.5 py-1.5 text-left text-[15px] transition-colors",
-                isChosen
-                  ? "border-ink bg-raise font-[560] text-accent"
-                  : "border-line bg-raise text-ink-2 hover:border-line-strong hover:text-ink",
-              )}
+              className="kf-chip"
             >
               {topic.title}
             </button>

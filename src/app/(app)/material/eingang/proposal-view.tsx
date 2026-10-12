@@ -115,7 +115,7 @@ export function MaterialGlance({ item }: { item: MaterialListItem }) {
           height={COVER_HEIGHT}
           loading="lazy"
           decoding="async"
-          className="h-16 w-12 shrink-0 rounded-[12px] border border-line bg-raise object-cover"
+          className="h-16 w-12 shrink-0 rounded-[3px] bg-raise object-cover shadow-[0_0_0_1px_var(--thumb-edge)]"
         />
       ) : (
         <span

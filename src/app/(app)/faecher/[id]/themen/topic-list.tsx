@@ -160,7 +160,7 @@ function UsageLabel({
         // groß genug, um den Link neben dem Aufklappen zu treffen.
         <Link
           href={`/material?thema=${topicId}`}
-          className="inline-flex min-h-11 items-center text-accent underline-offset-2 transition-colors hover:text-accent hover:underline"
+          className="inline-flex min-h-11 min-w-11 items-center justify-end text-accent underline-offset-2 hover:underline"
         >
           {materialCount === 1 ? "1 Blatt" : `${materialCount} Blätter`}
         </Link>

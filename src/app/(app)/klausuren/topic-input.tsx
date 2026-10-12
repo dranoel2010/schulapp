@@ -93,7 +93,7 @@ export function TopicInput({
   return (
     <div className="space-y-2">
       {topics.length > 0 ? (
-        <ol className="divide-y divide-line overflow-hidden rounded-[12px] border border-line bg-raise">
+        <ol className="divide-y divide-line">
           {topics.map((topic, index) => (
             <li key={topic} className="flex items-center gap-3 py-1 pl-3.5 pr-1">
               <input type="hidden" name={name} value={topic} />

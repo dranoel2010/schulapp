@@ -99,7 +99,6 @@ export async function createHomeworkAction(
   await createHomework(user.id, parsed.data);
   requestCalendarSync(user.id);
 
-  revalidateHomework();
   return { fertig: Date.now() };
 }
 
@@ -128,7 +127,6 @@ export async function updateHomeworkAction(
   await updateHomework(user.id, id, parsed.data);
   requestCalendarSync(user.id);
 
-  revalidateHomework(id);
   return { fertig: Date.now() };
 }
 
@@ -154,5 +152,4 @@ export async function deleteHomeworkAction(id: string): Promise<void> {
   await deleteHomework(user.id, id);
   requestCalendarSync(user.id);
 
-  revalidateHomework(id);
 }

@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { requireUser } from "@/lib/auth";
@@ -85,12 +84,11 @@ function fieldErrors(issues: { path: PropertyKey[]; message: string }[]) {
   return errors;
 }
 
-/** Nach jeder Änderung: das Feld selbst, das Wochenraster und die Startseite. */
-function revalidateSlot(weekday: number, period: number): void {
-  revalidatePath("/");
-  revalidatePath("/stundenplan");
-  revalidatePath(`/stundenplan/${weekday}/${period}`);
-}
+/*
+ * Kein revalidatePath() in den Actions, die zurückgehen (Plan 2.4): die
+ * Shell lädt die Seite darunter nach; ein Auffrischen der Route überschriebe
+ * den Stapel-Eintrag.
+ */
 
 export async function saveLessonAction(
   weekday: number,
@@ -121,7 +119,6 @@ export async function saveLessonAction(
 
   await saveLesson(user.id, { ...parsed.data, weekday, period });
 
-  revalidateSlot(weekday, period);
   return { fertig: Date.now() };
 }
 
@@ -133,7 +130,6 @@ export async function deleteLessonAction(
 
   await clearSlot(user.id, weekday, period);
 
-  revalidateSlot(weekday, period);
 }
 
 /** [7] → "7.", [7, 8] → "7. und 8.", [7, 8, 9] → "7., 8. und 9." */
@@ -216,9 +212,6 @@ export async function savePeriodsAction(
     throw error;
   }
 
-  revalidatePath("/");
-  revalidatePath("/stundenplan");
-  revalidatePath("/stundenplan/zeiten");
   return { fertig: Date.now() };
 }
 
@@ -285,10 +278,5 @@ export async function switchEpochAction(
     };
   }
 
-  revalidatePath("/");
-  revalidatePath("/stundenplan");
-  for (const slot of slots) {
-    revalidatePath(`/stundenplan/${slot.weekday}/${slot.period}`);
-  }
   return { fertig: Date.now() };
 }

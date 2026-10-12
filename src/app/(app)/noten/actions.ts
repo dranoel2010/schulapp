@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/auth";
 import {
@@ -65,27 +64,12 @@ async function subjectMissing(
   return !subjects.some((subject) => subject.id === subjectId);
 }
 
-/**
- * Nach jeder Änderung: die Startseite, die Liste, die Note selbst und die
- * Fachseite.
- *
- * „/“ muss dabei sein, weil Kachel und Dashboard den Gesamtschnitt zeigen —
- * eine einzige neue Note verschiebt ihn. Und `subjectIds` ist eine Liste, weil
- * beim Ändern das Fach gewechselt worden sein kann: dann muss auch die alte
- * Fachseite neu rechnen, sonst bliebe dort ein Schnitt stehen, in dem die
- * weggezogene Note noch mitzählt.
+/*
+ * Kein revalidatePath() mehr in diesen Actions (Modell 23, Plan 2.4): Nach
+ * dem Speichern geht die Formularseite per popPage() eine Ebene zurück, und
+ * die Shell lädt die Stapelseite darunter gezielt nach. Ein Auffrischen der
+ * Route käme nach dem Zurückgehen an und überschriebe den Stapel-Eintrag.
  */
-function revalidateGrades(subjectIds: string[], id?: string): void {
-  revalidatePath("/");
-  revalidatePath("/noten");
-  if (id) revalidatePath(`/noten/${id}`);
-
-  // Beim Anlegen und beim Fach, das gleich geblieben ist, steht dieselbe id
-  // zweimal in der Liste — einmal auffrischen genügt.
-  for (const subjectId of new Set(subjectIds)) {
-    revalidatePath(`/noten/fach/${subjectId}`);
-  }
-}
 
 export async function createGradeAction(
   _state: GradeFormState,
@@ -104,7 +88,6 @@ export async function createGradeAction(
 
   await createGrade(user.id, parsed.data);
 
-  revalidateGrades([parsed.data.subjectId]);
   return { fertig: Date.now() };
 }
 
@@ -132,18 +115,11 @@ export async function updateGradeAction(
   await updateGrade(user.id, id, parsed.data);
 
   // Das alte Fach kommt mit: wurde gewechselt, hängt die Note dort nicht mehr.
-  revalidateGrades([existing.subjectId, parsed.data.subjectId], id);
   return { fertig: Date.now() };
 }
 
 export async function deleteGradeAction(id: string): Promise<void> {
   const user = await requireUser();
 
-  // Vorher nachsehen, an welchem Fach die Note hängt: hinterher ist die Zeile
-  // weg und mit ihr die Auskunft, welche Fachseite falsch geworden ist.
-  const existing = await getGrade(user.id, id);
-
   await deleteGrade(user.id, id);
-
-  revalidateGrades(existing ? [existing.subjectId] : [], id);
 }

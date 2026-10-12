@@ -91,13 +91,13 @@ export default async function LessonPage({
 
         {time ? (
           <p className="text-[15px] text-ink-2">
-            <span className="font-mono tabular-nums">
+            <span className="tabular-nums">
               {time.startsAt} – {time.endsAt}
             </span>{" "}
             ·{" "}
             <Link
               href="/stundenplan/zeiten"
-              className="text-accent transition-colors hover:text-accent"
+              className="kf-inline text-accent"
             >
               Zeiten ändern
             </Link>

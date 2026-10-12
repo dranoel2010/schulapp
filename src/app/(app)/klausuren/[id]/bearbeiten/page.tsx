@@ -93,7 +93,7 @@ export default async function ExamPage({
         topicSuggestions={topicSuggestions}
         exam={exam}
         topics={topics.map((topic) => topic.title)}
-        submitLabel="Änderungen speichern"
+        submitLabel="Speichern"
       />
 
       <ExamDangerZone

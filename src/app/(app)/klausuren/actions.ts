@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/auth";
 import { requestCalendarSync } from "@/lib/calendar/sync";
@@ -132,9 +131,6 @@ export async function createExamAction(
   await generatePlan(user.id, exam.id, todayInBerlin());
   requestCalendarSync(user.id);
 
-  revalidatePath("/klausuren");
-  revalidatePath("/lernen");
-  revalidatePath("/");
   // Genau dafür wurde die Prüfung eingetragen: der Lernplan steht jetzt da.
   return { fertig: Date.now() };
 }
@@ -206,10 +202,6 @@ export async function updateExamAction(
 
   requestCalendarSync(user.id);
 
-  revalidatePath("/klausuren");
-  revalidatePath(`/klausuren/${examId}`);
-  revalidatePath("/lernen");
-  revalidatePath("/");
   return { fertig: Date.now() };
 }
 
@@ -220,7 +212,4 @@ export async function deleteExamAction(examId: string): Promise<void> {
   await deleteExam(user.id, examId);
   requestCalendarSync(user.id);
 
-  revalidatePath("/klausuren");
-  revalidatePath("/lernen");
-  revalidatePath("/");
 }

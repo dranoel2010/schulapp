@@ -168,13 +168,7 @@ function TopicSuggestions({
               type="button"
               aria-pressed={isChosen}
               onClick={() => toggle(topic.title)}
-              className={cn(
-                "inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-full",
-                "border px-3.5 py-1.5 text-left text-[15px] transition-colors",
-                isChosen
-                  ? "border-ink bg-raise font-[560] text-accent"
-                  : "border-line bg-raise text-ink-2 hover:border-line-strong hover:text-ink",
-              )}
+              className="kf-chip"
             >
               {topic.title}
               {/* Wie oft das Thema schon drankam. Erst ab zwei sagt die Zahl

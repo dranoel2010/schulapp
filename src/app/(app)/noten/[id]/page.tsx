@@ -74,7 +74,7 @@ export default async function GradePage({ params }: PageProps<"/noten/[id]">) {
         // falls das Feld leer geräumt wird.
         defaultDate={todayInBerlin()}
         item={item}
-        submitLabel="Änderungen speichern"
+        submitLabel="Speichern"
       />
 
       <GradeDangerZone

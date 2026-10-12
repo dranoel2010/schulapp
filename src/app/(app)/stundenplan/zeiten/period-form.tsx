@@ -122,7 +122,7 @@ export function PeriodForm({ action, rows: saved }: PeriodFormProps) {
           return (
             <li key={number} className="px-4 py-3">
               <div className="grid grid-cols-[2rem_1fr_1fr] items-center gap-3">
-                <span className="font-mono text-[15px] tabular-nums text-ink-3">
+                <span className="text-[15px] tabular-nums text-ink-3">
                   {number}.
                 </span>
 

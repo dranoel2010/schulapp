@@ -19,6 +19,9 @@ input.kf-input[type="date"],input.kf-input[type="time"],input.kf-input[type="num
 .kf-hint{font-size:15px;line-height:1.35;color:var(--ink-2)}
 .kf-fehler{font-size:15px;line-height:1.35;color:var(--error)}
 .kf-btn{text-decoration:none}
+/* Außerhalb einer Knopfzeile nimmt ein Knopf nur seinen Platz (.btn.primary hat sonst flex:1) */
+.btn.kf-btn{flex:0 0 auto}
+.foot .btn.kf-btn{flex:1 1 0;min-width:0}
 .kf-btn:disabled,.kf-btn[aria-disabled="true"]{opacity:.55;pointer-events:none}
 .kf-danger{flex:1;background:var(--error);color:var(--bg)}
 .kf-abschnitt{margin-top:4px}
@@ -36,12 +39,16 @@ input.kf-input[type="date"],input.kf-input[type="time"],input.kf-input[type="num
 /* Formular-Abstände: Felder untereinander mit 16px, Knopfzeile wie .foot */
 .kf-form > * + *{margin-top:16px}
 .kf-form .foot{margin-top:28px}
+.kf-form .foot .btn,.kf-seite .foot .btn,.kf-gefahr .foot .btn{flex:1 1 0;min-width:0;padding:0 16px}
+/* Ein Link mitten im Satz: die Tippfläche reicht 12px über und unter die Zeile (44px) */
+.kf-inline{display:inline-block;padding:12px 0;margin:-12px 0}
 /* Kleine Auswahlknöpfe (Chips) der alten Formulare in der Gestalt .fp */
 .kf-chip{flex:none;display:inline-flex;align-items:center;height:44px;padding:0 14px;border-radius:999px;background:var(--raise);
   font-size:15px;font-weight:560;color:var(--ink);transition:transform 140ms var(--ease-out)}
 .kf-chip:active{transform:scale(.96)}
 .kf-chip[aria-pressed="true"],.kf-chip[aria-current="true"],.kf-chip[aria-checked="true"]{background:var(--ink);color:var(--bg)}
 /* Kästchen und Optionsfelder in der Farbe der Schrift */
+.kf-form input[type="checkbox"],.kf-form input[type="radio"],.kf-seite input[type="checkbox"]{accent-color:var(--ink);width:22px;height:22px}
 .kf-check{display:flex;align-items:center;gap:12px;min-height:44px;font-size:17px}
 .kf-check input{width:22px;height:22px;accent-color:var(--ink);flex:none}
 /* Seiten ohne Shell: Anmeldung, Einrichtung, Offline, Datenschutz, 404 (Plan 2.2) */

@@ -246,7 +246,7 @@ export default async function ProposalPage({
                   height={128}
                   loading="lazy"
                   decoding="async"
-                  className="h-32 w-24 rounded-[12px] border border-line bg-raise object-cover"
+                  className="h-32 w-24 rounded-[3px] bg-raise object-cover shadow-[0_0_0_1px_var(--thumb-edge)]"
                 />
               </li>
             ))}
