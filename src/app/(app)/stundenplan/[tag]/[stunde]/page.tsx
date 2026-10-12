@@ -82,7 +82,7 @@ export default async function LessonPage({
   }
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="space-y-6">
       <Link
         href="/stundenplan"
         className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
@@ -103,7 +103,7 @@ export default async function LessonPage({
       </Link>
 
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">
+        <h1 className="page-heading">
           {day.long}, {periodLabel(period, period)}
         </h1>
 

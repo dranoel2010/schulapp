@@ -14,23 +14,23 @@
   color-scheme: light;
 
   /* Flächen — warmes Off-White statt kaltem Grau */
-  --background: #faf9f7;
+  --background: #f5f5ef;
   --surface: #ffffff;
-  --surface-muted: #f2f1ee;
+  --surface-muted: #eef0e8;
 
   /* Text */
-  --foreground: #1c1917;
-  --muted: #6d6762;
-  --subtle: #857f78;
+  --foreground: #203c33;
+  --muted: #65736b;
+  --subtle: #707b72;
 
   /* Linien */
-  --border: #e7e4e0;
-  --border-strong: #d4d0cb;
+  --border: #dfe5da;
+  --border-strong: #b9c8b8;
 
-  /* Akzent — der einzige bunte Ton der Oberfläche.
+  /* Akzent — Waldgrün für Navigation und Aktionen.
      Bunt sind sonst nur die Fächerfarben aus src/lib/colors.ts. */
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
+  --accent: #28634b;
+  --accent-hover: #1c4b38;
   --accent-foreground: #ffffff;
 
   /* Signale */
@@ -51,20 +51,20 @@
      Die dunkle Palette. Hier nur abgelegt, angewendet wird sie weiter
      unten — damit jeder Farbwert im Projekt an genau einer Stelle steht.
      -------------------------------------------------------------------- */
-  --dark-background: #121110;
-  --dark-surface: #1b1a18;
-  --dark-surface-muted: #24221f;
+  --dark-background: #111c18;
+  --dark-surface: #192820;
+  --dark-surface-muted: #22332a;
 
-  --dark-foreground: #f2f0ed;
-  --dark-muted: #a29c95;
-  --dark-subtle: #8a837b;
+  --dark-foreground: #edf3e9;
+  --dark-muted: #b2c0b5;
+  --dark-subtle: #97aa9b;
 
-  --dark-border: #302d2a;
-  --dark-border-strong: #423e39;
+  --dark-border: #33463a;
+  --dark-border-strong: #4b6050;
 
-  --dark-accent: #6366f1;
-  --dark-accent-hover: #818cf8;
-  --dark-accent-foreground: #ffffff;
+  --dark-accent: #addc93;
+  --dark-accent-hover: #c5edac;
+  --dark-accent-foreground: #162c20;
 
   --dark-danger: #ef4444;
   --dark-danger-hover: #f87171;
@@ -170,8 +170,8 @@
   /* Eigene Radien-Namen, damit rounded-lg & Co. ihre gewohnte Bedeutung
      behalten: rounded-control für Knöpfe und Eingabefelder,
      rounded-card für Karten, rounded-pill für Chips. */
-  --radius-control: 0.75rem;
-  --radius-card: 1rem;
+  --radius-control: 0.875rem;
+  --radius-card: 1.5rem;
   --radius-pill: 9999px;
 
   /* Schatten sparsam — Karten tragen nur eine Haarlinie. */
@@ -240,4 +240,69 @@
 
 @utility pb-safe {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Gemeinsamer Rahmen und wiederverwendbare Oberflächen. */
+@layer base {
+  html { scroll-padding-top: 6rem; }
+  body { line-height: 1.55; }
+  button, summary, select { cursor: pointer; }
+  button:disabled { cursor: default; }
+  input, textarea, select { scroll-margin-block: 7rem; }
+  dialog { color: var(--foreground); }
+}
+
+@layer components {
+  .eyebrow { font-size: .65rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+  .brand-mark { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 2.6rem; height: 2.6rem; border-radius: .9rem; background: #c5edac; color: #203c33; }
+  .app-sidebar { display: none; }
+  .app-topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: .75rem; min-height: 4.5rem; padding: calc(.65rem + env(safe-area-inset-top)) 1rem .65rem; border-bottom: 1px solid var(--border); background: color-mix(in oklab, var(--background) 94%, transparent); backdrop-filter: blur(16px); }
+  .app-main { flex: 1; min-width: 0; padding: 1.5rem 1rem calc(6.5rem + env(safe-area-inset-bottom)); }
+  .page-content { width: 100%; max-width: 60rem; margin-inline: auto; }
+  .page-content-wide { max-width: 82rem; }
+  .page-heading { font-size: clamp(1.75rem, 3vw, 2.25rem); font-weight: 650; letter-spacing: -.045em; line-height: 1.15; overflow-wrap: anywhere; }
+  .page-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border); }
+  .page-description { max-width: 36rem; margin-top: .65rem; color: var(--muted); font-size: .9375rem; line-height: 1.65; }
+  .mobile-nav { position: fixed; inset: auto 0 0; z-index: 30; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: .5rem .5rem calc(.5rem + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--surface); box-shadow: 0 -4px 24px rgb(20 40 25 / .04); }
+  .mobile-nav-item { display: flex; min-width: 0; min-height: 3.25rem; flex-direction: column; align-items: center; justify-content: center; gap: .3rem; border-radius: .9rem; color: var(--muted); font-size: .65rem; font-weight: 600; }
+  .mobile-nav-item[aria-current], .mobile-nav-item.is-active { background: var(--accent-soft); color: var(--accent); }
+  .navigation-dialog { inset: auto 0 0; margin: 0 auto; width: 100%; max-width: 40rem; max-height: 90dvh; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: 1.75rem 1.75rem 0 0; background: var(--surface); }
+  .navigation-dialog::backdrop { background: rgb(12 30 22 / .55); backdrop-filter: blur(4px); }
+  .menu-link { display: flex; align-items: center; gap: .7rem; min-height: 3.7rem; padding: .75rem; border: 1px solid var(--border); border-radius: 1rem; font-size: .8rem; }
+  .menu-link[aria-current], .menu-link:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .skip-link { position: fixed; left: 1rem; top: -10rem; z-index: 100; border-radius: .75rem; padding: .8rem 1.2rem; background: var(--accent); color: var(--accent-foreground); }
+  .skip-link:focus { top: 1rem; }
+  .home-tabs { display: flex; width: fit-content; max-width: 100%; gap: .25rem; padding: .3rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); }
+  .home-tab { display: flex; min-height: 2.75rem; align-items: center; justify-content: center; gap: .5rem; padding: .55rem .85rem; border-radius: .75rem; color: var(--muted); font-size: .8rem; font-weight: 550; }
+  .home-tab[aria-selected=true] { background: var(--accent); color: var(--accent-foreground); }
+  .dashboard-card { border: 1px solid var(--border); border-radius: 1.5rem; background: var(--surface); padding: 1.25rem; }
+  .dashboard-card h3 { font-size: 1rem; }
+  .dashboard-hero { position: relative; overflow: hidden; border-radius: 1.75rem; padding: 1.5rem; background: #203c33; color: #f4f7ef; }
+  .dashboard-hero::after { content: ""; position: absolute; pointer-events: none; width: 15rem; height: 15rem; right: -5rem; top: -9rem; border: 1px solid #c5edac55; border-radius: 50%; box-shadow: 0 0 0 2rem #c5edac0a, 0 0 0 4rem #c5edac08; }
+  .summary-link { display: flex; min-width: 0; flex-direction: column; gap: .25rem; padding: 1rem; border: 1px solid var(--border); border-radius: 1.25rem; background: var(--surface); transition: border-color .15s; }
+  .summary-link:hover { border-color: var(--accent); }
+  .summary-number { font-size: 1.8rem; font-weight: 600; line-height: 1.2; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+  .auth-layout { background: var(--surface); }
+  .auth-layout > aside { background: #203c33; color: #f4f7ef; border: 0; margin: 1.5rem; border-radius: 2rem; }
+}
+
+@media (min-width: 640px) {
+  .app-main { padding-inline: 2rem; padding-top: 2rem; }
+  .dashboard-hero { padding: 2rem; }
+}
+@media (min-width: 1024px) {
+  .app-sidebar { position: sticky; top: 0; display: flex; flex-direction: column; flex-shrink: 0; width: 15.5rem; height: 100dvh; overflow-y: auto; padding: 1.5rem 1rem; background: #203c33; color: #f4f7ef; }
+  .sidebar-link { display: flex; align-items: center; gap: .85rem; min-height: 2.85rem; padding: .6rem 1rem; border-radius: .8rem; font-size: .875rem; color: #c0d0c3; transition: background .15s; }
+  .sidebar-link:hover { background: #ffffff0d; color: #fff; }
+  .sidebar-link[aria-current] { background: #c5edac; color: #203c33; font-weight: 600; }
+  .mobile-nav { display: none; }
+  .app-topbar { padding-inline: 2.5rem; min-height: 5rem; }
+  .app-main { padding: 2rem 2.5rem 4rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+@layer components {
+  .form-surface { max-width: 44rem; padding: 1.25rem; border: 1px solid var(--border); border-radius: 1.5rem; background: var(--surface); }
 }

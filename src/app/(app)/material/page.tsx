@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/page-header";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -339,18 +340,9 @@ export default async function MaterialPage({
   const linkTo = (id: string | null) => (id ? `/material?fach=${id}` : "/material");
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Material</h1>
-        <p className="text-sm text-muted">
-          Arbeitsblätter, Tafelbilder, Kopien. Fotografieren, Fach und Thema
-          dazuschreiben — dann findest du sie vor der Klausur wieder.
-        </p>
-
-        {/* Die Liste sagt selbst nichts darüber, ob gerade gelesen wird —
-            also sagt es die Zeile des Bausteins. */}
-        <AutoRefresh stand={anfang.stand} inArbeit={anfang.inArbeit} leseZeile />
-      </header>
+    <div className="space-y-6">
+      <PageHeader title="Dein Material" eyebrow="Alles gesammelt" description="Arbeitsblätter, Tafelbilder und Notizen. Fotografieren, zuordnen und wiederfinden." action={<ButtonLink href="/material/eingang" variant="secondary">Eingangskorb{inboxCount > 0 ? ` · ${inboxCount}` : ""}</ButtonLink>} />
+      <AutoRefresh stand={anfang.stand} inArbeit={anfang.inArbeit} leseZeile />
 
       {/* Ohne ein einziges Fach gibt es nichts, wohin eine Aufnahme könnte.
           Sind nur alle Fächer archiviert, bleibt die Ablage trotzdem stehen —

@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/page-header";
 import type { Metadata } from "next";
 
 import { logout } from "@/app/(app)/actions";
@@ -91,10 +92,13 @@ export default async function SettingsPage({
   ].filter((teil): teil is string => teil !== null);
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
-      <h1 className="text-2xl font-semibold tracking-tight">Einstellungen</h1>
+    <div className="space-y-6">
+      <PageHeader title="Einstellungen" eyebrow="So passt es zu dir" description="Erinnerungen, freie Tage und Verbindungen für deinen Schulalltag." />
+      <nav aria-label="Einstellungsbereiche" className="flex flex-wrap gap-2">
+        {[ ["erinnerungen", "Erinnerungen"], ["freie-tage", "Freie Tage"], ["darstellung", "Darstellung"], ["verbindungen", "Verbindungen"], ["konto", "Konto"] ].map(([id, label]) => <a key={id} href={`#${id}`} className="inline-flex min-h-11 items-center rounded-pill border border-border bg-surface px-4 text-sm text-muted hover:border-accent hover:text-accent">{label}</a>)}
+      </nav>
 
-      <Card>
+      <Card id="erinnerungen" className="scroll-mt-24">
         <CardHeader>
           <CardTitle>Erinnerungen</CardTitle>
         </CardHeader>
@@ -110,7 +114,7 @@ export default async function SettingsPage({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="freie-tage" className="scroll-mt-24">
         <CardHeader>
           <CardTitle>Ferien und Klassenfahrt</CardTitle>
           <CardDescription>
@@ -174,7 +178,7 @@ export default async function SettingsPage({
         <IservCard status={iserv} />
       </section>
 
-      <Card>
+      <Card id="darstellung" className="scroll-mt-24">
         <CardHeader>
           <CardTitle>Darstellung</CardTitle>
           <CardDescription>
@@ -262,7 +266,7 @@ export default async function SettingsPage({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="verbindungen" className="scroll-mt-24">
         <CardHeader>
           <CardTitle>Verbundene Programme</CardTitle>
           <CardDescription>
@@ -306,7 +310,7 @@ export default async function SettingsPage({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="konto" className="scroll-mt-24">
         <CardHeader>
           <CardTitle>Konto</CardTitle>
         </CardHeader>

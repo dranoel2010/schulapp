@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/page-header";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { CSSProperties } from "react";
@@ -236,31 +237,8 @@ export default async function ExamsPage() {
   const [next, ...later] = upcoming;
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
-      <div className="space-y-1">
-        <header className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold text-foreground">Klausuren</h1>
-          {exams.length > 0 ? (
-            <ButtonLink href="/klausuren/neu" variant="secondary">
-              Klausur eintragen
-            </ButtonLink>
-          ) : null}
-        </header>
-
-        {exams.length > 0 ? (
-          <p className="text-sm text-muted">
-            Antippen öffnet die Prüfung zum Bearbeiten. Was du heute lernen
-            sollst, steht unter{" "}
-            <Link
-              href="/lernen"
-              className="text-accent transition-colors hover:text-accent-hover"
-            >
-              Lernen
-            </Link>
-            .
-          </p>
-        ) : null}
-      </div>
+    <div className="space-y-6">
+      <PageHeader title="Klausuren & Termine" eyebrow="Gut vorbereitet" description={<>Deine nächsten Prüfungen im Blick. Den passenden Lernplan findest du unter <Link href="/lernen" className="font-medium text-accent underline underline-offset-4">Lernen</Link>.</>} action={subjects.length > 0 ? <ButtonLink href="/klausuren/neu">+ Klausur</ButtonLink> : undefined} />
 
       {exams.length === 0 ? (
         subjects.length === 0 ? (

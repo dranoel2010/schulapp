@@ -187,7 +187,7 @@ export default async function InboxPage({
   const ueberholt = count(firstValue(query.ueberholt));
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="space-y-6">
       <Link
         href="/material"
         className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
@@ -208,7 +208,7 @@ export default async function InboxPage({
       </Link>
 
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Eingangskorb</h1>
+        <h1 className="page-heading">Eingangskorb</h1>
         <p className="text-sm text-muted">
           Hier liegt, was noch eine Entscheidung braucht: frisch aufgenommene
           Blätter, die niemand durchgesehen hat, und Vorschläge, über die noch

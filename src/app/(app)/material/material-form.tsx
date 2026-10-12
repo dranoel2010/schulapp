@@ -141,7 +141,7 @@ export type MaterialPagesProps = {
  */
 export function MaterialPages({ pages, title }: MaterialPagesProps) {
   return (
-    <div className="space-y-6">
+    <div className="form-surface space-y-6">
       {pages.map((page, index) => (
         <div key={page.id} className="space-y-2">
           <figure className="space-y-2">

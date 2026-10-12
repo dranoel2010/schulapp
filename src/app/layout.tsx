@@ -33,7 +33,7 @@ export const metadata: Metadata = {
 };
 
 /** Die beiden Grundfarben, mit denen Android die Systemleisten einfärbt. */
-const THEME_COLOR = { light: "#faf9f7", dark: "#121110" } as const;
+const THEME_COLOR = { light: "#f5f5ef", dark: "#111c18" } as const;
 
 /**
  * Die Farbe der Systemleiste folgt der Wahl des Nutzers. Ohne Wahl bleiben

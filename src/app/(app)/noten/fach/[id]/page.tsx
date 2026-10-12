@@ -106,7 +106,7 @@ export default async function SubjectGradesPage({
     `/noten/fach/${subject.id}?ziel=${nextTarget}&art=${nextKind}`;
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="space-y-6">
       <Link
         href="/noten"
         className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
@@ -143,7 +143,7 @@ export default async function SubjectGradesPage({
             aria-hidden="true"
             className="size-3 shrink-0 rounded-full bg-[var(--subject)]"
           />
-          <h1 className="min-w-0 truncate font-semibold text-foreground">
+          <h1 className="page-heading">
             {subject.name}
           </h1>
           {subject.archived ? (

@@ -92,7 +92,7 @@ export function PeriodForm({ action, rows: saved }: PeriodFormProps) {
   }
 
   return (
-    <form action={formAction} className="space-y-6" noValidate>
+    <form action={formAction} className="form-surface space-y-6" noValidate>
       {state.message ? (
         <p
           role="alert"

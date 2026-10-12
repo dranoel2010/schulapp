@@ -77,9 +77,9 @@ export default async function KlausurStoffPage({
     );
 
     return (
-      <div className="space-y-6 md:max-w-3xl">
+      <div className="space-y-6">
         <header className="space-y-1">
-          <h1 className="text-xl font-semibold text-foreground">
+          <h1 className="page-heading">
             Stoff der Klausur
           </h1>
           <p className="text-sm text-muted">
@@ -230,9 +230,9 @@ export default async function KlausurStoffPage({
   }
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">
+        <h1 className="page-heading">
           Stoff einer Klausur
         </h1>
         <p className="text-sm text-muted">

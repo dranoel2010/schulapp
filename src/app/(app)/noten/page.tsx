@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/page-header";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
@@ -149,37 +150,22 @@ export default async function GradesPage() {
   const recent = recentGrades(bySubject, RECENT_LIMIT);
 
   return (
-    <div className="space-y-6 md:max-w-4xl">
-      <header className="md:space-y-1">
-        {/* Am Handy trägt die Kopfzeile der App den Namen des Bereichs, und
-            der Entwurf beginnt dort sofort mit dem Schnitt. Die Überschrift
-            bleibt trotzdem im Dokument — für Vorleseprogramme. */}
-        <h1 className="text-[24px] font-semibold leading-tight tracking-[-0.02em] text-foreground max-md:sr-only">
-          Noten
-        </h1>
-
-        {countedGrades > 0 ? (
-          <div className="md:hidden">
-            <p className="text-[13px] text-muted">Schnitt</p>
-            <p className="flex items-end justify-between gap-3">
-              <span className="text-[60px] font-semibold leading-[0.9] tracking-[-0.04em] tabular-nums text-foreground">
-                {overall === null ? "—" : formatAverage(overall, 1)}
-              </span>
-              <span className="pb-2 text-[13px] text-muted">
-                {countedGrades === 1
-                  ? "aus 1 Note"
-                  : `aus ${countedGrades} Noten`}
-              </span>
-            </p>
+    <div className="space-y-6">
+      <PageHeader
+        title="Noten im Blick"
+        eyebrow="Deine Entwicklung"
+        description={overall === null ? "Deine Ergebnisse und Ziele, Fach für Fach." : `Schnitt ${formatAverage(overall, 1)} · schriftlich und mündlich gewichtet`}
+        action={bySubject.length > 0 ? <ButtonLink href="/noten/neu">+ Note eintragen</ButtonLink> : undefined}
+      />
+      {countedGrades > 0 && (
+        <div className="rounded-card border border-border bg-surface p-5 md:hidden">
+          <p className="eyebrow">Dein Gesamtschnitt</p>
+          <div className="mt-3 flex items-end justify-between gap-3">
+            <p className="text-6xl leading-none font-semibold tracking-tight tabular-nums">{overall === null ? "—" : formatAverage(overall, 1)}</p>
+            <p className="text-sm text-muted">{countedGrades === 1 ? "aus 1 Note" : `aus ${countedGrades} Noten`}</p>
           </div>
-        ) : null}
-
-        <p className="hidden text-[14px] text-muted md:block">
-          {overall === null
-            ? "Noch kein Schnitt — sobald eine Note drinsteht, steht er hier."
-            : `Schnitt ${formatAverage(overall, 1)} · schriftlich und mündlich gewichtet`}
-        </p>
-      </header>
+        </div>
+      )}
 
       {bySubject.length === 0 ? (
         <EmptyState

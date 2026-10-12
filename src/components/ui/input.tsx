@@ -15,7 +15,7 @@ function cn(...parts: Array<string | false | null | undefined>) {
 
 const CONTROL =
   "block w-full rounded-control border border-border bg-surface text-base text-foreground " +
-  "placeholder:text-subtle transition-colors hover:border-border-strong " +
+  "placeholder:text-subtle focus:border-accent focus:bg-surface transition-colors hover:border-border-strong " +
   "disabled:cursor-not-allowed disabled:bg-surface-muted disabled:opacity-70 " +
   "aria-[invalid=true]:border-danger";
 
@@ -23,7 +23,7 @@ export type InputProps = ComponentProps<"input">;
 
 export function Input({ className, ...props }: InputProps) {
   return (
-    <input className={cn(CONTROL, "min-h-11 px-3.5 py-2.5", className)} {...props} />
+    <input className={cn(CONTROL, "min-h-12 px-3.5 py-2.5", className)} {...props} />
   );
 }
 
@@ -51,7 +51,7 @@ export function Select({ className, children, ...props }: SelectProps) {
       <select
         className={cn(
           CONTROL,
-          "min-h-11 cursor-pointer appearance-none py-2.5 pl-3.5 pr-10",
+          "min-h-12 cursor-pointer appearance-none py-2.5 pl-3.5 pr-10",
           className,
         )}
         {...props}

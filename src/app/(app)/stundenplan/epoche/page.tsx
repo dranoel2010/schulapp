@@ -97,7 +97,7 @@ export default async function EpochPage() {
         >
           ← Stundenplan
         </Link>
-        <h1 className="text-xl font-semibold text-foreground">
+        <h1 className="page-heading">
           Epoche wechseln
         </h1>
         <p className="text-sm text-muted">

@@ -1,3 +1,4 @@
+import { Icon } from "@/components/ui/icon";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
@@ -21,15 +22,13 @@ export default async function SetupPage() {
       {/* Links (am Handy: alles) — das Formular. */}
       <section className="flex flex-1 flex-col justify-center px-[30px] pt-safe pb-safe md:px-8">
         <div className="mx-auto w-full max-w-[420px] py-12 md:max-w-[360px] md:py-10">
-          <span
-            aria-hidden="true"
-            className="mb-5 flex size-[52px] items-center justify-center rounded-[16px] bg-accent text-[22px] font-semibold text-accent-foreground md:size-11 md:rounded-[14px]"
-          >
-            S
-          </span>
+          <div className="mb-8 flex items-center gap-3">
+            <span className="brand-mark"><Icon name="learn" className="size-6" /></span>
+            <span className="text-xl font-semibold tracking-tight">schulapp.</span>
+          </div>
 
           <h1 className="text-[34px] font-semibold leading-[1.1] tracking-[-0.03em] md:text-[28px] md:tracking-[-0.02em]">
-            Schulapp
+            Dein Alltag. Dein Überblick.
           </h1>
           <p className="mt-2.5 text-base leading-[1.5] text-muted">
             Einmal einrichten, dann gehört die App dir.
@@ -44,15 +43,15 @@ export default async function SetupPage() {
       {/* Rechts, erst ab mittlerer Breite. Vor der Einrichtung gibt es keine
           Daten, über die sich etwas sagen ließe — hier steht deshalb nur, was
           beim Anlegen des Kontos passiert. */}
-      <aside className="hidden border-l border-border bg-surface-muted p-12 md:flex md:flex-col md:justify-center">
+      <aside className="hidden p-12 md:flex md:flex-col md:justify-center">
         <div className="mx-auto w-full max-w-[380px]">
-          <p className="text-[13px] uppercase tracking-[0.1em] text-subtle">
+          <p className="text-[13px] uppercase tracking-[0.1em] text-[#c5edac]">
             Erste Einrichtung
           </p>
           <p className="mt-4 text-[32px] font-semibold leading-[1.15] tracking-[-0.03em]">
             Ein Konto, ein Passwort — mehr verlangt die App nicht.
           </p>
-          <p className="mt-5 text-[15px] leading-relaxed text-muted">
+          <p className="mt-5 text-[15px] leading-relaxed text-[#c0d0c3]">
             Keine E-Mail, keine Anmeldung bei einem fremden Dienst: Name und
             Passwort bleiben in dieser App. Zurücksetzen lässt sich das Passwort
             nicht — schreib es dir auf, bevor du weitermachst.

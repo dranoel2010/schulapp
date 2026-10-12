@@ -78,7 +78,7 @@ export function LessonForm({
   const color = subjectColor(subject?.color);
 
   return (
-    <div className="space-y-6">
+    <div className="form-surface space-y-6">
       <form action={formAction} className="space-y-6" noValidate>
         {state.message ? (
           <p

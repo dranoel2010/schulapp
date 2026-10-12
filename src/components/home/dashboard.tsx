@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
 import { setBlockStatusAction } from "@/app/(app)/lernen/actions";
 import { AverageBar } from "@/components/grades/average-bar";
 import { HomeworkCheck } from "@/components/homework/homework-check";
-import { ButtonLink } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { subjectColor } from "@/lib/colors";
 import { formatGerman } from "@/lib/dates";
 import { dueLabel, dueTone, type DueTone } from "@/lib/due-label";
@@ -17,16 +17,7 @@ import {
 } from "@/lib/home";
 import { mergeDoubleLessons, periodTimes } from "@/lib/timetable";
 
-/**
- * Die Startansicht am großen Bildschirm: alles auf einen Blick, in Karten
- * nebeneinander, ohne Scrollen. Am Handy übernimmt das Kachelmenü — dort wird
- * diese Ansicht von der Startseite ausgeblendet.
- *
- * Alle Zahlen kommen aus @/lib/home, und gezeigt wird nur, was dort auch
- * steht: keine erfundene Schulstunde, solange kein Stundenplan eingetragen
- * ist, und neben dem Notenschnitt keine Bewegung — die App hebt keinen alten
- * Stand auf, gegen den sie rechnen könnte.
- */
+/** Responsive Tagesübersicht mit denselben Daten und Aktionen auf allen Geräten. */
 
 type Block = HomeData["todayBlocks"][number];
 type Lesson = HomeData["todayLessons"][number];
@@ -39,16 +30,16 @@ function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
-/** Das Maß aus dem Entwurf: 18px Polster, eine Haarlinie, keine Schatten. */
-const CARD = "rounded-card border border-border bg-surface p-[18px]";
+/** Gemeinsame Kartenfläche für alle Übersichtsmodule. */
+const CARD = "dashboard-card";
 const CARD_LINK = cn(CARD, "block transition-colors hover:border-border-strong");
 
-/** So viele Termine passen in die Spalte, ohne dass die Seite wächst. */
+/** Die Übersicht zeigt eine Vorschau; die vollständige Liste bleibt verlinkt. */
 const UPCOMING_LIMIT = 5;
 
 /**
  * So viele Aufgaben passen in die Karte, ohne dass sie wächst. Der Rest ist
- * einen Knopf entfernt — das Dashboard soll auf einen Bildschirm passen.
+ * einen Knopf entfernt.
  */
 const HOMEWORK_LIMIT = 4;
 
@@ -101,6 +92,7 @@ const COVER_HEIGHT = 48;
  * "1 offene Aufgaben" liest man einmal zu oft.
  */
 function headlineFor(data: HomeData): string {
+  if (data.subjectCount === 0) return "Dein Schulalltag beginnt hier.";
   const open = data.homeworkCounts.open;
   const blocks = data.todayBlocks.length;
 
@@ -110,8 +102,8 @@ function headlineFor(data: HomeData): string {
     }
 
     return blocks === 1
-      ? "Alles abgehakt. Heute nur noch der Lernblock."
-      : `Alles abgehakt. Heute noch ${blocks} Lernblöcke.`;
+      ? "Alles abgehakt. Heute ist ein Lernblock geplant."
+      : `Alles abgehakt. Heute sind ${blocks} Lernblöcke geplant.`;
   }
 
   const tasks = open === 1 ? "1 offene Aufgabe" : `${open} offene Aufgaben`;
@@ -148,7 +140,7 @@ function RecallCard({ due }: { due: number }) {
       </p>
       <Link
         href={due === 0 ? "/abruf/bausteine/neu" : "/abruf/sitzung"}
-        className="mt-3 inline-block text-[13px] font-medium text-accent hover:underline"
+        className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-accent hover:underline"
       >
         {due === 0 ? "Baustein anlegen" : "Abend anfangen"}
       </Link>
@@ -158,41 +150,42 @@ function RecallCard({ due }: { due: number }) {
 
 export function HomeDashboard({ data }: { data: HomeData }) {
   const upcoming = data.upcoming.slice(0, UPCOMING_LIMIT);
-
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <header className="flex items-end justify-between gap-4">
-        <div className="min-w-0">
-          <h2 className="text-[24px] font-semibold leading-tight tracking-[-0.02em] text-foreground">
-            {formatGerman(data.today, "lang")}
-          </h2>
-          <p className="mt-1 text-[14px] text-muted">{headlineFor(data)}</p>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-3">
-          <ButtonLink href="/hausaufgaben" variant="secondary">
-            Hausaufgaben
-          </ButtonLink>
-          <ButtonLink href="/klausuren/neu">Klausur eintragen</ButtonLink>
-        </div>
-      </header>
-
-      <div className="grid min-h-0 flex-1 grid-cols-[1.15fr_1fr_1fr] gap-4">
-        <div className="flex min-h-0 flex-col gap-4">
-          <NextExamCard exam={data.nextExam} days={data.daysToNextExam} />
+    <div className="space-y-5">
+      {data.subjectCount === 0 && (
+        <Link href="/faecher" className="flex items-center justify-between gap-4 rounded-card border border-accent/30 bg-accent-soft p-5 text-accent">
+          <span><span className="block font-semibold">Starte mit deinen Fächern</span><span className="mt-1 block text-sm">Danach kannst du Stunden, Aufgaben und Prüfungen eintragen.</span></span><Icon name="arrow" className="size-5 shrink-0" />
+        </Link>
+      )}
+      <div className="grid gap-4 xl:grid-cols-[1.65fr_1fr]">
+        <section className="dashboard-hero">
+          <p className="text-[11px] font-semibold tracking-[.16em] text-[#c5edac] uppercase">Platz für das Wesentliche</p>
+          <h2 className="relative mt-3 max-w-lg text-[clamp(1.5rem,3vw,2rem)] leading-tight font-semibold tracking-tight">{headlineFor(data)}</h2>
+          <p className="mt-3 max-w-md text-sm leading-relaxed text-[#c0d0c3]">{data.todayOpenMinutes > 0 ? `${data.todayOpenMinutes} Minuten Lernzeit sind heute noch geplant. Du kannst direkt loslegen.` : "Hier findest du alles für deinen Schultag — und behältst den Kopf frei."}</p>
+          <Link href={data.todayOpenMinutes > 0 ? "/lernen" : "/hausaufgaben"} className="mt-5 inline-flex min-h-11 items-center gap-3 rounded-control bg-[#c5edac] px-4 text-sm font-semibold text-[#203c33] hover:bg-[#d7f4c7]">
+            {data.todayOpenMinutes > 0 ? "Zum heutigen Lernplan" : "Aufgaben ansehen"}<Icon name="arrow" className="size-4" />
+          </Link>
+        </section>
+        <NextExamCard exam={data.nextExam} days={data.daysToNextExam} />
+      </div>
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <Link href="/hausaufgaben" className="summary-link"><span className="summary-number">{data.homeworkCounts.open}</span><span className="text-xs text-muted sm:text-sm">Aufgaben offen</span></Link>
+        <Link href="/lernen" className="summary-link"><span className="summary-number">{data.todayOpenMinutes}<span className="ml-1 text-xs font-normal tracking-normal text-muted">min</span></span><span className="text-xs text-muted sm:text-sm">Lernzeit offen</span></Link>
+        <Link href="/abruf" className="summary-link"><span className="summary-number">{data.recallDue}</span><span className="text-xs text-muted sm:text-sm">Zum Abrufen</span></Link>
+      </div>
+      <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-4">
           <TodayCard data={data} />
           <RecallCard due={data.recallDue} />
         </div>
-
-        <div className="flex min-h-0 flex-col gap-4">
+        <div className="space-y-4">
           <HomeworkCard data={data} />
           <UpcomingCard exams={upcoming} total={data.upcoming.length} />
         </div>
-
-        <div className="flex min-h-0 flex-col gap-4">
-          <SubjectsCard count={data.subjectCount} />
+        <div className="space-y-4 md:col-span-2 md:grid md:grid-cols-2 md:gap-4 md:space-y-0 xl:col-span-1 xl:block xl:space-y-4">
           <MaterialCard sheets={data.materials} inboxCount={data.inboxCount} />
           <AverageCard grades={data.grades} />
+          <SubjectsCard count={data.subjectCount} />
         </div>
       </div>
     </div>
@@ -220,7 +213,7 @@ function NextExamCard({
         </p>
         <Link
           href="/klausuren/neu"
-          className="mt-3 inline-block text-[13px] font-medium text-accent hover:underline"
+          className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-accent hover:underline"
         >
           Prüfung eintragen
         </Link>
@@ -310,7 +303,7 @@ function TodayCard({ data }: { data: HomeData }) {
           Heute steht nichts an — weder eine Schulstunde noch ein Lernblock.
         </p>
       ) : (
-        <ul className="mt-3 max-h-[40vh] min-h-0 space-y-2 overflow-y-auto">
+        <ul className="mt-3 min-h-0 space-y-3">
           {lessons.map((block) => (
             <LessonRow
               key={block.lesson.id}
@@ -335,7 +328,7 @@ function TodayCard({ data }: { data: HomeData }) {
       {data.hasTimetable ? null : (
         <Link
           href="/stundenplan"
-          className="mt-3 inline-block text-[13px] font-medium text-accent hover:underline"
+          className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-accent hover:underline"
         >
           Stundenplan eintragen
         </Link>
@@ -421,6 +414,7 @@ function HomeworkCard({ data }: { data: HomeData }) {
         </ul>
       )}
 
+      <Link href="/hausaufgaben" className="mt-3 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-accent">Alle Aufgaben ansehen <Icon name="arrow" className="size-4" /></Link>
       {open > items.length ? (
         <p className="mt-2.5 text-[13px] text-subtle">
           und {open - items.length} weitere
@@ -433,12 +427,11 @@ function HomeworkCard({ data }: { data: HomeData }) {
 /**
  * Eine Zeile des Widgets — ohne Fach, anders als auf der Hausaufgabenseite.
  * Hier zählt, was zu tun ist; wohin es gehört, steht dort, wo man es
- * bearbeitet. Der Titel ist bewusst kein Link: das Kästchen bringt sein
- * eigenes Formular mit, und ein Formular in einem Link wäre ungültiges HTML.
+ * bearbeitet. Häkchen und Titel-Link sind getrennte Bedienflächen.
  */
 function HomeworkRow({ item, today }: { item: Task; today: string }) {
   return (
-    <li className="flex items-center gap-2.5">
+    <li className="flex min-h-11 items-center gap-3">
       <HomeworkCheck
         id={item.id}
         done={item.done}
@@ -446,14 +439,15 @@ function HomeworkRow({ item, today }: { item: Task; today: string }) {
         size="sm"
       />
 
-      <span
+      <Link
+        href={`/hausaufgaben/${item.id}`}
         className={cn(
-          "min-w-0 flex-1 truncate text-[14px]",
+          "flex min-h-11 min-w-0 flex-1 items-center text-[14px] hover:text-accent",
           item.done ? "text-subtle line-through" : "text-foreground",
         )}
       >
-        {item.title}
-      </span>
+        <span className="line-clamp-2">{item.title}</span>
+      </Link>
 
       <span
         className={cn(
@@ -498,7 +492,7 @@ function BlockRow({ block }: { block: Block }) {
               : `${block.subject.name}: ${title} als erledigt abhaken`
           }
           className={cn(
-            "flex w-full items-center gap-2.5 rounded-control py-0.5 text-left transition-colors",
+            "flex min-h-11 w-full items-center gap-2.5 rounded-control py-2 text-left transition-colors",
             "hover:bg-surface-muted focus-visible:bg-surface-muted",
             done && "opacity-55",
           )}
@@ -573,7 +567,7 @@ function UpcomingCard({ exams, total }: { exams: Exam[]; total: number }) {
             >
               <Link
                 href={`/klausuren/${exam.id}`}
-                className="-mx-2 flex items-center gap-2.5 rounded-control px-2 py-1.5 transition-colors hover:bg-surface-muted"
+                className="-mx-2 flex items-center gap-2.5 rounded-control px-2 min-h-11 py-1.5 transition-colors hover:bg-surface-muted"
               >
                 <span className="w-[62px] shrink-0 text-[14px] tabular-nums text-muted">
                   {formatGerman(exam.date, "kurz")}
@@ -626,10 +620,7 @@ function SubjectsCard({ count }: { count: number }) {
  * aufgenommenen: @/lib/home sortiert diese Liste nach dem Zeitpunkt der
  * Aufnahme und nicht nach dem Schultag, von dem ein Blatt stammt.
  *
- * Am Handy liegt die Kamera eine Wischgeste neben dem Kachelmenü; am großen
- * Bildschirm gibt es diese Geste nicht, und ohne diese Karte wäre die Ablage
- * dort allein über die Seitenspalte zu finden. Aufgenommen wird hier trotzdem
- * nichts — dafür braucht es eine Kamera, und die steckt im Handy.
+ * Aufnahmen sind im Kamera-Tab möglich. Diese Karte verlinkt die Ablage.
  *
  * Vorne steht das Vorschaubild, wie in der Ablage selbst: ein abfotografiertes
  * Blatt erkennt man am Bild wieder und nicht am Titel, denn „Blatt vom 21.8.“
@@ -688,11 +679,11 @@ function MaterialCard({
         <>
           <p className="mt-3 text-[14px] text-muted">
             Noch kein Blatt aufgenommen. Fotografiert wird am Handy, auf der
-            Kamera-Seite neben den Kacheln.
+            Register „Kamera“ oben auf dieser Seite.
           </p>
           <Link
             href="/material"
-            className="mt-3 inline-block text-[13px] font-medium text-accent hover:underline"
+            className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-accent hover:underline"
           >
             Zur Ablage
           </Link>
@@ -787,7 +778,7 @@ function AverageCard({ grades }: { grades: HomeData["grades"] }) {
         </p>
         <Link
           href="/noten"
-          className="mt-3 inline-block text-[13px] font-medium text-accent hover:underline"
+          className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-accent hover:underline"
         >
           Note eintragen
         </Link>

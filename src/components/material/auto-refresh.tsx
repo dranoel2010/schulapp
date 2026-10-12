@@ -337,7 +337,7 @@ export function AutoRefresh({ stand, inArbeit, leseZeile }: AutoRefreshProps) {
       {/* Unten am Rand und `fixed`: verschiebt nichts auf der Seite. Unter
           dem Sucher (z-50), nicht darüber. */}
       {zeigeHinweis ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4rem_+_env(safe-area-inset-bottom))] z-40 lg:bottom-0 flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <div
             role="status"
             className="pointer-events-auto flex max-w-full items-center gap-3 rounded-pill border border-border bg-surface py-1.5 pl-4 pr-1.5 text-sm text-foreground shadow-lift"

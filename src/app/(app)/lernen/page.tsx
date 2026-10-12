@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/page-header";
 import type { Metadata } from "next";
 
 import { BlockItem } from "@/components/study/block-item";
@@ -183,13 +184,8 @@ export default async function LearnPage() {
   const missedEntries = groupMissed(missed);
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
-      <header>
-        <h1 className="text-xl font-semibold text-foreground">Lernen</h1>
-        <p className="mt-1 text-muted">
-          {daySummary(todayBlocks, openMinutes, exams[0], today)}
-        </p>
-      </header>
+    <div className="space-y-6">
+      <PageHeader title="Dein Lernplan" eyebrow="Schritt für Schritt" description={daySummary(todayBlocks, openMinutes, exams[0], today)} action={<ButtonLink href="/abruf" variant="secondary">Wissen abrufen</ButtonLink>} />
 
       {missedEntries.length > 0 ? (
         <div className="space-y-4">

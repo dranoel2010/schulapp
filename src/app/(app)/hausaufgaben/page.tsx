@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/page-header";
 import type { Metadata } from "next";
 
 import { ButtonLink } from "@/components/ui/button";
@@ -59,14 +60,8 @@ export default async function HomeworkPage() {
   );
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Hausaufgaben</h1>
-        <p className="text-sm text-muted">
-          Antippen öffnet die Aufgabe. Das Kästchen hakt sie ab — erledigte
-          bleiben zwei Wochen stehen.
-        </p>
-      </header>
+    <div className="space-y-6">
+      <PageHeader title="Hausaufgaben" eyebrow="Dein Tag" description="Was ansteht, was geschafft ist. Deine Aufgaben nach Fälligkeit sortiert." action={subjects.length > 0 ? <ButtonLink href="/hausaufgaben/neu">+ Aufgabe</ButtonLink> : undefined} />
 
       {visible.length === 0 ? (
         subjects.length === 0 ? (
@@ -104,15 +99,7 @@ export default async function HomeworkPage() {
         <>
           <HomeworkList items={visible} today={today} />
 
-          {/* Der Akzentknopf steht unten: am Handy liegt er da, wo der Daumen
-              ohnehin ist, und die Liste bleibt das Erste, was man sieht. */}
-          <ButtonLink
-            href="/hausaufgaben/neu"
-            size="lg"
-            className="w-full sm:w-auto"
-          >
-            + Aufgabe
-          </ButtonLink>
+
         </>
       )}
     </div>

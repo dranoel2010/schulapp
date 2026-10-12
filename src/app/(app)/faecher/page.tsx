@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/page-header";
 import type { Metadata } from "next";
 
 import { ButtonLink } from "@/components/ui/button";
@@ -21,15 +22,8 @@ export default async function SubjectsPage() {
   const archived = subjects.filter((subject) => subject.archived);
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
-      <header className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-foreground">Fächer</h1>
-        {subjects.length > 0 ? (
-          <ButtonLink href="/faecher/neu" variant="secondary">
-            Fach anlegen
-          </ButtonLink>
-        ) : null}
-      </header>
+    <div className="space-y-6">
+      <PageHeader title="Deine Fächer" eyebrow="Organisation" description="Lehrkräfte, Räume und Notengewichtung — alles am richtigen Platz." action={subjects.length > 0 ? <ButtonLink href="/faecher/neu">+ Fach anlegen</ButtonLink> : undefined} />
 
       {subjects.length === 0 ? (
         <div className="space-y-4">

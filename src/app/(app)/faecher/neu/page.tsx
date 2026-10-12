@@ -13,9 +13,9 @@ export default async function NewSubjectPage() {
   await requireUser();
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Neues Fach</h1>
+        <h1 className="page-heading">Neues Fach</h1>
         <p className="text-sm text-muted">
           Kürzel und Farbe tauchen später als Kachel im Stundenplan wieder auf.
         </p>

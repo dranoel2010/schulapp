@@ -58,10 +58,11 @@ export default async function AbrufPage() {
   const ueberfaellig = faellig.filter((f) => f.dueOn < heute).length;
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
-      <header>
-        <h1 className="text-xl font-semibold text-foreground">Abruf</h1>
-        <p className="mt-1 text-muted">
+    <div className="space-y-6">
+      <header className="rounded-card border border-border bg-accent-soft p-5 sm:p-7">
+        <p className="eyebrow mb-2">Aktiv wiederholen</p>
+        <h1 className="page-heading">Wissen abrufen</h1>
+        <p className="mt-3 max-w-xl text-muted">
           {aktive.length === 0
             ? zurueckgezogen > 0
               ? // „Noch keine" hieße: es gab noch nie welche. Bei

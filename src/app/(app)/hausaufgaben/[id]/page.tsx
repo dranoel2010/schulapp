@@ -44,7 +44,7 @@ export default async function HomeworkPage({
   const today = todayInBerlin();
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="space-y-6">
       <Link
         href="/hausaufgaben"
         className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
@@ -67,7 +67,7 @@ export default async function HomeworkPage({
       <header className="rounded-card border border-border bg-surface p-5 sm:p-6">
         <p className="text-sm text-muted">{item.subject.name}</p>
 
-        <h1 className="mt-1.5 text-xl font-semibold text-foreground">
+        <h1 className="page-heading">
           {item.title}
         </h1>
 

@@ -54,9 +54,9 @@ export default async function EingangPage({
     );
 
     return (
-      <div className="space-y-6 md:max-w-3xl">
+      <div className="space-y-6">
         <header className="space-y-1">
-          <h1 className="text-xl font-semibold text-foreground">Übernommen</h1>
+          <h1 className="page-heading">Übernommen</h1>
           <p className="text-sm text-muted">
             {ergebnis.uebernommen === 1
               ? "Eine Frage ist jetzt ein Baustein"
@@ -137,9 +137,9 @@ export default async function EingangPage({
   const vorschlaege = await offeneVorschlaege(user.id);
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Vorschläge</h1>
+        <h1 className="page-heading">Vorschläge</h1>
         <p className="text-sm text-muted">
           {vorschlaege.length === 0
             ? "Nichts durchzusehen."

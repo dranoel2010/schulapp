@@ -61,7 +61,7 @@ export default async function GradePage({ params }: PageProps<"/noten/[id]">) {
   const subjectHref = `/noten/fach/${item.subjectId}`;
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="space-y-6">
       <Link
         href={subjectHref}
         className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
@@ -84,7 +84,7 @@ export default async function GradePage({ params }: PageProps<"/noten/[id]">) {
       <header className="rounded-card border border-border bg-surface p-5 sm:p-6">
         <p className="text-sm text-muted">{item.subject.name}</p>
 
-        <h1 className="mt-1.5 text-3xl font-semibold tracking-tight text-foreground">
+        <h1 className="page-heading">
           {label}
         </h1>
 

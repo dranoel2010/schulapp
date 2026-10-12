@@ -36,7 +36,7 @@ export default async function PeriodsPage() {
   const untouched = isDefaultPeriods(rows);
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="space-y-6">
       <Link
         href="/stundenplan"
         className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
@@ -57,7 +57,7 @@ export default async function PeriodsPage() {
       </Link>
 
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Stundenzeiten</h1>
+        <h1 className="page-heading">Stundenzeiten</h1>
         <p className="text-sm text-muted">
           Wann deine Stunden anfangen und aufhören. Im Wochenraster stehen die
           Zeiten nicht — gebraucht werden sie für den Tagesplan auf der

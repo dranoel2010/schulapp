@@ -10,7 +10,7 @@
  */
 export default function AuthLayout({ children }: LayoutProps<"/">) {
   return (
-    <main className="flex flex-1 flex-col md:grid md:grid-cols-2">
+    <main className="auth-layout flex flex-1 flex-col md:grid md:grid-cols-2">
       {children}
     </main>
   );

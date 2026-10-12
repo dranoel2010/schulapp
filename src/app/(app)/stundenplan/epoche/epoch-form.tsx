@@ -116,7 +116,7 @@ export function EpochForm({
   );
 
   return (
-    <form action={formAction} className="space-y-6" noValidate>
+    <form action={formAction} className="form-surface space-y-6" noValidate>
       {state.message ? (
         <p className="rounded-control border border-danger/40 bg-danger-soft px-3.5 py-3 text-sm text-danger">
           {state.message}

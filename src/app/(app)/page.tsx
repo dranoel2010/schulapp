@@ -7,32 +7,16 @@ import {
 import { CapturePane } from "@/components/home/capture-pane";
 import { HomeDashboard } from "@/components/home/dashboard";
 import { DayTimeline } from "@/components/home/day-timeline";
-import { SwipePager } from "@/components/home/swipe-pager";
-import { HomeTiles } from "@/components/home/tile-grid";
+import { HomeWorkspace } from "@/components/home/home-workspace";
+import { ButtonLink } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 import { MissedPrompt } from "@/components/study/missed-prompt";
 import { requireUser } from "@/lib/auth";
 import { subjectColor } from "@/lib/colors";
-import { todayInBerlin } from "@/lib/dates";
+import { formatGerman, todayInBerlin } from "@/lib/dates";
 import { loadHomeData } from "@/lib/home";
 
-/**
- * Die Startseite. Sie lädt ihre Daten genau einmal und zeigt sie in zwei
- * Anordnungen: am Handy drei wischbare Seiten (Kamera, Kachelmenü und
- * Tageskalender), am großen Bildschirm das Dashboard.
- *
- * Die Kamera liegt links vom Kachelmenü, der Kalender rechts. Warum diese
- * Reihenfolge und keine andere, steht im Kopf von SwipePager.
- *
- * Umgeschaltet wird allein per CSS. Die Seite wird auf dem Server gerendert,
- * dort gibt es keine Fensterbreite — eine Messung im Browser käme erst nach
- * dem ersten Bild und würde sichtbar umspringen. Beide Ansichten bekommen
- * dasselbe bereits geladene HomeData, es entsteht also keine zweite Abfrage.
- *
- * SwipePager ist die einzige Hülle mit "use client". Kachelmenü und Kalender
- * kommen als fertig gerenderte Knoten hinein — sie bleiben damit Server
- * Components, obwohl die Hülle ums Wischen herum interaktiv ist.
- */
-
+/** Die gleichen Tagesdaten versorgen Übersicht, Tagesablauf und Kamera. */
 export const metadata: Metadata = {
   title: "Start",
 };
@@ -78,16 +62,17 @@ export default async function StartPage() {
   const missed = [...missedByExam.values()];
 
   return (
-    // Am Handy laufen die drei Seiten von Rand zu Rand: nur so gleitet die
-    // Spur beim Wischen sauber durch. Das Layout hält die Startseite dort
-    // deshalb randlos (PageBody), die Ränder aus dem Entwurf bringen die
-    // Seiten selbst mit. Ab md setzt das Layout den Rand ums Dashboard.
-    <div className="flex flex-1 flex-col">
+    <div className="space-y-6">
+      <header className="page-header">
+        <div className="min-w-0">
+          <p className="eyebrow">{formatGerman(data.today, "lang")}</p>
+          <h1 className="page-heading mt-2">Hallo, {data.userName}.</h1>
+          <p className="page-description">Dein Tag, deine Aufgaben. Ein Schritt nach dem anderen.</p>
+        </div>
+        <ButtonLink href="/hausaufgaben/neu" variant="secondary"><Icon name="plus" />Aufgabe eintragen</ButtonLink>
+      </header>
       {missed.length > 0 && (
-        // Die Nachfrage liegt über der Wischhülle und bringt ihren eigenen
-        // Rand mit — die Hülle darunter bleibt randlos. Die 20px oben sind
-        // dieselben, mit denen auch die drei Seiten beginnen.
-        <div className="flex flex-col gap-6 px-[22px] pt-[20px] pb-6 md:px-0 md:pt-0">
+        <div className="flex flex-col gap-4">
           {missed.map((entry) => (
             <MissedPrompt
               key={entry.examId}
@@ -103,21 +88,11 @@ export default async function StartPage() {
           ))}
         </div>
       )}
-
-      {/* Die Wischhülle füllt die Resthöhe: die Flex-Kette läuft von <main>
-          über diese Zwischenebene bis in den Pager durch, min-h-0 hält die
-          Spur davon ab, über den Bildschirm hinauszuwachsen. */}
-      <div className="flex min-h-0 flex-1 flex-col md:hidden">
-        <SwipePager
-          camera={<CapturePane data={data} />}
-          start={<HomeTiles data={data} />}
-          calendar={<DayTimeline data={data} />}
-        />
-      </div>
-
-      <div className="hidden flex-1 flex-col md:flex">
-        <HomeDashboard data={data} />
-      </div>
+      <HomeWorkspace
+        camera={<CapturePane data={data} />}
+        overview={<HomeDashboard data={data} />}
+        calendar={<DayTimeline data={data} />}
+      />
     </div>
   );
 }

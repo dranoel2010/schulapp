@@ -79,6 +79,8 @@ function CheckButton({
       // Vorleser nicht, es ist ein Knopf.
       aria-label={done ? `${label} wieder öffnen` : `${label} abhaken`}
       aria-busy={pending || undefined}
+      aria-pressed={done}
+      disabled={pending}
       className={cn(
         // p-3 macht aus 22px eine Trefferfläche von 46px, -m-3 nimmt den
         // zusätzlichen Platz im Layout wieder zurück: gezeichnet wird nur das

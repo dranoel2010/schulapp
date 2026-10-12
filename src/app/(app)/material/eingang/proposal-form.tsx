@@ -195,7 +195,7 @@ export function ProposalForm({
   return (
     <form
       action={formAction}
-      className="space-y-6"
+      className="form-surface space-y-6"
       noValidate
       onInput={() => setGeaendert(true)}
       data-ungespeichert={geaendert || pending ? "" : undefined}

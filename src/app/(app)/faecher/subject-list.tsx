@@ -31,7 +31,7 @@ function SubjectRow({ subject }: { subject: Subject }) {
     <li>
       <Link
         href={`/faecher/${subject.id}`}
-        className="flex min-h-16 items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-muted"
+        className="flex min-h-28 flex-wrap items-center gap-3 rounded-card border border-border bg-surface p-5 transition-colors hover:border-accent"
       >
         <span
           aria-hidden="true"
@@ -64,7 +64,7 @@ function SubjectRow({ subject }: { subject: Subject }) {
           ) : null}
         </span>
 
-        <span className="shrink-0 text-sm text-muted">
+        <span className="order-last w-full border-t border-border pt-3 text-xs text-muted">
           {weightLabel(subject.weightWritten)}
         </span>
 
@@ -95,7 +95,7 @@ function SubjectRows({
   return (
     <ul
       className={cn(
-        "divide-y divide-border overflow-hidden rounded-card border border-border bg-surface",
+        "grid gap-3 sm:grid-cols-2",
         className,
       )}
     >

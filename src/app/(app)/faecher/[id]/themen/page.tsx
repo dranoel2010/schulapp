@@ -114,7 +114,7 @@ export default async function SubjectTopicsPage({
   const color = subjectColor(subject.color);
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="space-y-6">
       {/* Zurück zum Fach und nicht zur Fächerliste: diese Seite ist die
           Unterseite genau dieses Fachs, und von dort kam man her. */}
       <Link
@@ -137,7 +137,7 @@ export default async function SubjectTopicsPage({
       </Link>
 
       <header className="space-y-1">
-        <h1 className="flex items-center gap-2 text-xl font-semibold text-foreground">
+        <h1 className="page-heading">
           {/* Die Fachfarbe als Punkt — dieselbe Geste wie in der Fächerliste
               und auf der Notenseite eines Fachs. Farbiger Text wäre in einer
               der beiden Ansichten immer zu blass. */}

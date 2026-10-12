@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+import { Input } from "@/components/ui/input";
 import Link from "next/link";
 
 import { HomeworkCheck } from "@/components/homework/homework-check";
@@ -5,7 +9,7 @@ import { dueLabel, dueTone, type DueTone } from "@/lib/due-label";
 import type { HomeworkItem } from "@/lib/homework";
 
 /**
- * Die Aufgabenliste — reine Anzeige, deshalb eine Server Component.
+ * Die Aufgabenliste mit lokalen Such- und Statusfiltern.
  *
  * Angefasst wird sie an zwei Stellen: das Kästchen hakt ab (es bringt seine
  * Action selbst mit), der Rest der Zeile führt zur Aufgabe. Beides darf
@@ -60,7 +64,7 @@ function HomeworkRow({ item, today }: { item: HomeworkItem; today: string }) {
         <span className="flex min-w-0 flex-1 flex-col gap-0.5 md:flex-row md:items-baseline md:gap-2.5">
           <span
             className={cn(
-              "truncate text-[0.9375rem] md:min-w-0 md:flex-1",
+              "break-words text-[0.9375rem] font-medium md:min-w-0 md:flex-1",
               item.done ? "text-muted line-through" : "text-foreground",
             )}
           >
@@ -73,7 +77,7 @@ function HomeworkRow({ item, today }: { item: HomeworkItem; today: string }) {
 
         <span
           className={cn(
-            "shrink-0 font-mono text-xs md:w-15 md:text-right",
+            "shrink-0 rounded-pill bg-surface-muted px-2.5 py-1.5 text-xs font-medium",
             TONE_CLASSES[tone],
           )}
         >
@@ -91,27 +95,42 @@ export type HomeworkListProps = {
 };
 
 export function HomeworkList({ items, today }: HomeworkListProps) {
+  const [filter, setFilter] = useState<"all" | "open" | "done">("all");
+  const [query, setQuery] = useState("");
   const open = items.filter((item) => !item.done).length;
   const done = items.length - open;
-
-  // Die Zusammenfassung zählt, was zu sehen ist — nicht, was in der Datenbank
-  // steht. „0 erledigt“ wäre eine Zahl ohne Aussage und bleibt weg.
-  const summary =
-    open === 0
-      ? "Alles erledigt."
-      : done === 0
-        ? `${open} offen`
-        : `${open} offen, ${done} erledigt`;
+  const search = query.trim().toLocaleLowerCase("de");
+  const visible = items.filter((item) =>
+    (filter === "all" || (filter === "done" ? item.done : !item.done)) &&
+    `${item.title} ${item.subject.name}`.toLocaleLowerCase("de").includes(search),
+  );
 
   return (
-    <div>
-      <ul className="space-y-2.5 md:space-y-0 md:overflow-hidden md:rounded-card md:border md:border-border md:bg-surface">
-        {items.map((item) => (
-          <HomeworkRow key={item.id} item={item} today={today} />
-        ))}
-      </ul>
-
-      <p className="mt-3 text-sm text-subtle">{summary}</p>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex gap-1 rounded-control border border-border bg-surface p-1" role="group" aria-label="Aufgabenstatus">
+          {([{ id: "all", label: "Alle", count: items.length }, { id: "open", label: "Offen", count: open }, { id: "done", label: "Erledigt", count: done }] as const).map((option) => (
+            <button key={option.id} type="button" aria-pressed={filter === option.id} onClick={() => setFilter(option.id)} className={`min-h-11 rounded-[10px] px-3 text-sm transition-colors ${filter === option.id ? "bg-accent text-accent-foreground" : "text-muted hover:bg-surface-muted"}`}>
+              {option.label} <span className="ml-1 text-xs opacity-75">{option.count}</span>
+            </button>
+          ))}
+        </div>
+        <div className="w-full sm:w-64">
+          <label htmlFor="homework-search" className="mb-1.5 block text-xs font-medium text-muted">Aufgabe oder Fach suchen</label>
+          <Input id="homework-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="z. B. Mathematik" />
+        </div>
+      </div>
+      {visible.length > 0 ? (
+        <ul className="space-y-2.5 md:space-y-0 md:overflow-hidden md:rounded-card md:border md:border-border md:bg-surface">
+          {visible.map((item) => <HomeworkRow key={item.id} item={item} today={today} />)}
+        </ul>
+      ) : (
+        <div className="rounded-card border border-border bg-surface p-8 text-center">
+          <p className="font-medium">{filter === "open" && !query ? "Alles erledigt." : "Keine passenden Aufgaben."}</p>
+          <button type="button" onClick={() => { setQuery(""); setFilter("all"); }} className="mt-3 min-h-11 text-sm font-medium text-accent">Alle Aufgaben anzeigen</button>
+        </div>
+      )}
+      <p aria-live="polite" role="status" className="text-sm text-muted">{visible.length} angezeigt · {open} offen · {done} erledigt</p>
     </div>
   );
 }

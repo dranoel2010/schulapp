@@ -2,397 +2,142 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Icon, type IconName } from "@/components/ui/icon";
 
-/**
- * Die Navigation der App.
- *
- * Am Handy gibt es keine feste Leiste unten mehr: dort ist das Kachelmenü der
- * Startseite selbst das Menü. Jede Kachel führt in ihren Bereich, zurück geht
- * es über den Knopf oben links (`MobileTopBar`). So bleibt der ganze Bildschirm
- * für den Inhalt frei.
- *
- * Ab Tablet-Breite bleibt die schmale Seitenspalte links. Dort stehen alle
- * neun Bereiche der App.
- *
- * Lernen und Klausuren sind zwei Bereiche, nicht einer: unter "Lernen" steht
- * der Lernplan zum Abhaken, unter "Klausuren" werden die Termine verwaltet.
- */
-
-type NavItem = {
-  href: string;
-  label: string;
-  /** Nur die Striche — die Größe bestimmt der Ort, an dem das Symbol steht. */
-  icon: ReactNode;
-};
-
-/** Ein Symbol in der gewünschten Größe: in der Spalte 18px. */
-function NavIcon({
-  className,
-  children,
-}: {
-  className: string;
-  children: ReactNode;
-}) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-      className={className}
-    >
-      {children}
-    </svg>
-  );
-}
-
-/**
- * Die Reihenfolge folgt dem Tag, nicht dem Alphabet: erst was täglich
- * ansteht — der Stundenplan, die Hausaufgaben und das Material —, dann was
- * verwaltet wird — Lernplan, Klausuren, Noten, Fächer —, und zuletzt die
- * Einstellungen. Wer die Liste umsortieren will, ändert damit diese Aussage,
- * nicht nur die Optik.
- *
- * Das Material steht deshalb bei den Hausaufgaben und nicht bei den Fächern:
- * ein Blatt wird im Unterricht abfotografiert, an jedem Schultag, so wie eine
- * Aufgabe aufgeschrieben wird. Dass es später nach Fach und Thema sortiert
- * dasteht, macht es noch nicht zur Verwaltung.
- *
- * Die Noten stehen hinter den Klausuren und vor den Fächern: sie sind das
- * Ergebnis der Prüfungen und hängen an den Fächern — genau dazwischen also.
- */
-const ITEMS: NavItem[] = [
-  {
-    href: "/",
-    label: "Start",
-    icon: (
-      <>
-        <path d="M3.5 10.2 12 3.5l8.5 6.7" />
-        <path d="M5.5 9v10.5h13V9" />
-        <path d="M9.75 19.5V14h4.5v5.5" />
-      </>
-    ),
-  },
-  {
-    href: "/stundenplan",
-    label: "Stundenplan",
-    // Ein Raster mit Kopfzeile: genau das, was die Seite zeigt. Kein Kalender —
-    // der steht schon für die Klausuren und meint einzelne Termine, nicht die
-    // Woche, die sich wiederholt.
-    icon: (
-      <>
-        <path d="M3.5 7A2.5 2.5 0 0 1 6 4.5h12A2.5 2.5 0 0 1 20.5 7v10a2.5 2.5 0 0 1-2.5 2.5H6A2.5 2.5 0 0 1 3.5 17V7Z" />
-        <path d="M3.5 9.5h17" />
-        <path d="M9.5 9.5v10" />
-        <path d="M15 9.5v10" />
-        <path d="M3.5 14.5h17" />
-      </>
-    ),
-  },
-  {
-    href: "/hausaufgaben",
-    label: "Hausaufgaben",
-    // Kästchen mit Zeile, zweimal: eine Liste zum Abhaken. Die beiden anderen
-    // Häkchen der Leiste stecken in einem Kreis (Lernen) und in einem Kalender
-    // (Klausuren) — das leere Kästchen bleibt davon unterscheidbar.
-    icon: (
-      <>
-        <rect x="3.5" y="4.75" width="5.5" height="5.5" rx="1.5" />
-        <path d="M12.5 7.5h8" />
-        <rect x="3.5" y="13.75" width="5.5" height="5.5" rx="1.5" />
-        <path d="M12.5 16.5h8" />
-      </>
-    ),
-  },
-  {
-    href: "/material",
-    label: "Material",
-    // Zwei Blätter übereinander: der Stapel, der sich im Laufe des Halbjahrs
-    // ansammelt. Kein Fotoapparat — die Kamera ist der Weg hinein, nicht der
-    // Bereich. Und keins der anderen Symbole ist ein Blatt: das Buch steht für
-    // die Fächer, das Kästchen für die Hausaufgaben, das Raster für die Woche.
-    icon: (
-      <>
-        <path d="M8.25 4.25h7.5A1.75 1.75 0 0 1 17.5 6v9.5" />
-        <rect x="4.5" y="7" width="11.5" height="12.75" rx="1.75" />
-      </>
-    ),
-  },
-  {
-    href: "/lernen",
-    label: "Lernen",
-    // Ein Häkchen im Kreis: hier wird abgehakt. Der Kalender daneben steht
-    // für die Termine, dieser Punkt für das Tun.
-    icon: (
-      <>
-        <circle cx="12" cy="12" r="8.25" />
-        <path d="m8.5 12.15 2.35 2.35 4.65-4.9" />
-      </>
-    ),
-  },
-  {
-    href: "/abruf",
-    label: "Abruf",
-    // Ein Pfeil, der aus einem Blatt herauszeigt: hier wird herausgeholt, was
-    // darin steht. Nicht noch ein Häkchen — der Punkt daneben hakt ab, dieser
-    // fragt ab, und zwei gleiche Symbole nebeneinander wären zwei Namen für
-    // dieselbe Sache.
-    icon: (
-      <>
-        <path d="M7.5 3.75h6.25L19 9v11.25H7.5z" />
-        <path d="M13.5 3.75V9H19" />
-        <path d="M5 14.5h7" />
-        <path d="m9.25 11.75 2.75 2.75-2.75 2.75" />
-      </>
-    ),
-  },
-  {
-    href: "/klausuren",
-    label: "Klausuren",
-    icon: (
-      <>
-        <path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h11A2.5 2.5 0 0 1 20 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-9Z" />
-        <path d="M4 10.5h16" />
-        <path d="M8.5 3.5v3" />
-        <path d="M15.5 3.5v3" />
-        <path d="m9.5 14.75 1.75 1.75 3.25-3.5" />
-      </>
-    ),
-  },
-  {
-    href: "/noten",
-    label: "Noten",
-    // Drei Balken, von links nach rechts kürzer werdend: der Schnitt je Fach,
-    // so wie ihn die Seite zeigt. Ein Balkenbild und kein Zeugnisblatt — das
-    // Buch daneben steht schon für die Fächer.
-    icon: (
-      <>
-        <path d="M4 19.5h16" />
-        <path d="M7.25 16.5V8" />
-        <path d="M12 16.5V4.5" />
-        <path d="M16.75 16.5v-5.5" />
-      </>
-    ),
-  },
-  {
-    href: "/faecher",
-    label: "Fächer",
-    icon: (
-      <>
-        <path d="M4 19.25A2.25 2.25 0 0 1 6.25 17H20" />
-        <path d="M6.25 3H20v18H6.25A2.25 2.25 0 0 1 4 18.75V5.25A2.25 2.25 0 0 1 6.25 3Z" />
-      </>
-    ),
-  },
-  {
-    href: "/einstellungen",
-    label: "Einstellungen",
-    icon: (
-      <>
-        <path d="M20 7h-8.5" />
-        <path d="M13.5 17H4" />
-        <circle cx="7.5" cy="7" r="2.5" />
-        <circle cx="16.5" cy="17" r="2.5" />
-      </>
-    ),
-  },
+const ITEMS: { href: string; label: string; icon: IconName; group: string }[] = [
+  { href: "/", label: "Übersicht", icon: "home", group: "Dein Tag" },
+  { href: "/stundenplan", label: "Stundenplan", icon: "calendar", group: "Dein Tag" },
+  { href: "/hausaufgaben", label: "Hausaufgaben", icon: "tasks", group: "Dein Tag" },
+  { href: "/material", label: "Material", icon: "material", group: "Dein Tag" },
+  { href: "/lernen", label: "Lernplan", icon: "learn", group: "Dein Lernen" },
+  { href: "/abruf", label: "Wissen abrufen", icon: "recall", group: "Dein Lernen" },
+  { href: "/klausuren", label: "Klausuren", icon: "calendar", group: "Dein Lernen" },
+  { href: "/noten", label: "Noten", icon: "grades", group: "Dein Lernen" },
+  { href: "/faecher", label: "Fächer", icon: "subjects", group: "Organisation" },
+  { href: "/einstellungen", label: "Einstellungen", icon: "settings", group: "Organisation" },
 ];
+const PRIMARY = [ITEMS[0], ITEMS[1], ITEMS[2], ITEMS[4]];
 
-/** Unterseiten färben ihren Oberpunkt mit ein, „/“ nur sich selbst. */
-function isActive(pathname: string, href: string): boolean {
-  if (href === "/") return pathname === "/";
-  return pathname === href || pathname.startsWith(`${href}/`);
+function isActive(path: string, href: string) {
+  return href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`);
 }
 
-export type AppNavProps = {
-  /** Steht am Laptop klein unter dem App-Namen. */
-  userName: string;
-};
-
-export function AppNav({ userName }: AppNavProps) {
+export function AppNav({ userName }: { userName: string }) {
   const pathname = usePathname();
-
   return (
-    // Ab Tablet: schmale Spalte links, bleibt beim Scrollen stehen.
-    // Sie trägt den Namen der App — deshalb hat der Inhalt daneben
-    // ab dieser Breite keine eigene Kopfleiste mehr.
-    <aside className="sticky top-0 hidden h-dvh w-[226px] shrink-0 flex-col gap-1 border-r border-border bg-surface px-3 pt-[calc(1.25rem_+_env(safe-area-inset-top))] pb-5 md:flex">
-      <div className="px-3 pb-[18px]">
-        <p className="text-[15px] font-semibold tracking-tight">Schulapp</p>
-        <p className="mt-0.5 truncate text-[13px] text-muted">{userName}</p>
-      </div>
-
-      <nav aria-label="Hauptbereiche">
-        <ul className="flex flex-col gap-1">
-          {ITEMS.map((item) => {
-            const active = isActive(pathname, item.href);
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={`flex min-h-11 items-center gap-[10px] rounded-control px-3 text-left text-[15px] transition-colors ${
-                    active
-                      ? "bg-accent-soft font-medium text-accent"
-                      : "bg-transparent text-muted hover:bg-surface-muted hover:text-foreground"
-                  }`}
-                >
-                  <NavIcon className="size-[18px] shrink-0">{item.icon}</NavIcon>
-                  <span className="truncate">{item.label}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
-      <div className="flex-1" />
-
-      {/* Der Entwurf zeigt hier eine Uhrzeit der letzten Synchronisierung.
-          So etwas gibt es nicht — also steht hier etwas Wahres. */}
-      <p className="px-3 text-[12px] leading-snug text-subtle">
-        Alle Daten liegen auf deinem eigenen Server.
-      </p>
-    </aside>
+    <>
+      <aside className="app-sidebar">
+        <Link href="/" className="flex items-center gap-3 px-3 py-3">
+          <span className="brand-mark"><Icon name="learn" className="size-6" /></span>
+          <span className="text-xl font-semibold tracking-tight">schulapp<span className="text-[#c5edac]">.</span></span>
+        </Link>
+        <nav aria-label="Hauptnavigation" className="mt-8 flex-1 space-y-6">
+          {["Dein Tag", "Dein Lernen", "Organisation"].map((group) => (
+            <div key={group}>
+              <p className="mb-2 px-4 text-[10px] font-semibold tracking-[0.16em] text-[#a4b8b0] uppercase">{group}</p>
+              <ul className="space-y-1">
+                {ITEMS.filter((item) => item.group === group).map((item) => (
+                  <li key={item.href}>
+                    <Link href={item.href} aria-current={isActive(pathname, item.href) ? "page" : undefined} className="sidebar-link">
+                      <Icon name={item.icon} /><span>{item.label}</span>
+                      {isActive(pathname, item.href) && <span className="ml-auto size-1.5 rounded-full bg-current" />}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </nav>
+        <Link href="/einstellungen" className="mt-8 flex items-center gap-3 border-t border-white/15 px-3 pt-5">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/10 font-semibold">{userName.slice(0, 1).toUpperCase()}</span>
+          <span className="min-w-0"><span className="block truncate text-sm font-medium">{userName}</span><span className="text-xs text-[#a4b8b0]">Dein persönlicher Schulalltag</span></span>
+        </Link>
+      </aside>
+      <MobileNavigation key={pathname} pathname={pathname} userName={userName} />
+    </>
   );
 }
 
-/** Feste Namen für die Seiten, die es genau einmal gibt. */
-const SECTION_TITLES: Record<string, string> = {
-  "/stundenplan": "Stundenplan",
-  "/stundenplan/zeiten": "Stundenzeiten",
-  "/stundenplan/epoche": "Epoche wechseln",
-  "/lernen": "Lernen",
-  "/abruf": "Abruf",
-  "/abruf/sitzung": "Abend",
-  "/abruf/bausteine": "Bausteine",
-  "/abruf/bausteine/neu": "Baustein anlegen",
-  "/abruf/klausur": "Stoff einer Klausur",
-  "/abruf/eingang": "Vorschläge",
-  "/klausuren": "Klausuren",
-  "/klausuren/neu": "Neue Klausur",
-  "/hausaufgaben": "Hausaufgaben",
-  "/hausaufgaben/neu": "Neue Aufgabe",
-  "/material": "Material",
-  "/material/eingang": "Eingangskorb",
-  "/material/eingang/neu": "Vorschlag anlegen",
-  "/noten": "Noten",
-  "/noten/neu": "Neue Note",
-  "/faecher": "Fächer",
-  "/faecher/neu": "Neues Fach",
-  "/einstellungen": "Einstellungen",
-};
+function MobileNavigation({ pathname, userName }: { pathname: string; userName: string }) {
+  const [open, setOpen] = useState(false);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const moreActive = !PRIMARY.some((item) => isActive(pathname, item.href));
 
-/**
- * Der Name des Bereichs für die Kopfzeile am Handy — `null` auf der
- * Startseite, die keine Kopfzeile hat.
- *
- * Detailseiten tragen keinen Titel aus der Datenbank: die Kopfzeile wird im
- * Layout gerendert und weiß nichts von Fach oder Klausur. Sie bleibt deshalb
- * allgemein; den genauen Namen zeigt die Seite selbst in ihrer Überschrift.
- */
-function sectionTitle(pathname: string): string | null {
-  if (pathname === "/") return null;
+  useEffect(() => {
+    if (!open) return;
+    const element = dialog.current;
+    const previousOverflow = document.body.style.overflow;
+    element?.showModal();
+    document.body.style.overflow = "hidden";
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const closeOnDesktop = () => { if (desktop.matches) setOpen(false); };
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => {
+      element?.close();
+      document.body.style.overflow = previousOverflow;
+      desktop.removeEventListener("change", closeOnDesktop);
+    };
+  }, [open]);
 
-  const exact = SECTION_TITLES[pathname];
-  if (exact) return exact;
-
-  // Eine Prüfung oder ein Fach antippen heißt: bearbeiten. Eine eigene
-  // Unterseite dafür gibt es nicht mehr, die Detailseite ist das Formular.
-  if (pathname.startsWith("/klausuren/")) return "Klausur bearbeiten";
-  // Ein Fach hat genau eine echte Unterseite: seine Themen. Sie liegt unter
-  // /faecher/, meint aber nicht das Fach, sondern seine Themenliste — die
-  // Regel darunter würde sie „Fach bearbeiten“ nennen. Als Muster und nicht
-  // als fester Eintrag, weil die Fach-id mitten in der Adresse steht.
-  if (pathname.startsWith("/faecher/") && pathname.endsWith("/themen")) {
-    return "Themen";
-  }
-  if (pathname.startsWith("/faecher/")) return "Fach bearbeiten";
-  if (pathname.startsWith("/hausaufgaben/")) return "Aufgabe bearbeiten";
-  // Der Eingangskorb hat eine echte Unterseite: einen einzelnen Vorschlag.
-  // Sie muss VOR der Regel darunter stehen — die zieht sonst jede Adresse
-  // unter /material/ nach "Blatt", und über einem Vorschlag stünde dann in der
-  // Kopfzeile der Name einer ganz anderen Sache. Dieselbe Reihenfolge gilt
-  // schon bei den Themen eines Fachs, ein paar Zeilen weiter oben.
-  if (pathname.startsWith("/material/eingang/")) return "Vorschlag";
-  // Ein Blatt antippen heißt: die Seiten ansehen und nebenbei richtigstellen,
-  // wohin es gehört. "Blatt bearbeiten" verspräche einen Bildbearbeiter —
-  // hier steht das Blatt selbst im Mittelpunkt.
-  if (pathname.startsWith("/material/")) return "Blatt";
-  // Ein Fach unter den Noten ist keine Bearbeitung, sondern die Liste seiner
-  // Noten — deshalb steht dort der Bereichsname und nicht "bearbeiten".
-  if (pathname.startsWith("/noten/fach/")) return "Noten";
-  if (pathname.startsWith("/noten/")) return "Note bearbeiten";
-  // Ein Feld im Wochenraster: /stundenplan/<tag>/<stunde>
-  if (pathname.startsWith("/stundenplan/")) return "Stunde bearbeiten";
-
-  return "Schulapp";
+  return (
+    <>
+      <nav aria-label="Mobile Hauptnavigation" className="mobile-nav">
+        {PRIMARY.map((item) => (
+          <Link key={item.href} href={item.href} aria-label={item.label} aria-current={isActive(pathname, item.href) ? "page" : undefined} className="mobile-nav-item">
+            <Icon name={item.icon} />
+            <span>{item.href === "/" ? "Heute" : item.href === "/stundenplan" ? "Plan" : item.href === "/hausaufgaben" ? "Aufgaben" : "Lernen"}</span>
+          </Link>
+        ))}
+        <button type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-expanded={open} className={`mobile-nav-item ${moreActive ? "is-active" : ""}`}>
+          <Icon name="grid" /><span>Mehr</span>
+        </button>
+      </nav>
+      <dialog ref={dialog} onClose={() => setOpen(false)} onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }} aria-labelledby="menu-title" className="navigation-dialog">
+        <div className="p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+          <div className="mb-6 flex items-center justify-between gap-3">
+            <div><p className="eyebrow">Deine Schulapp</p><h2 id="menu-title" className="mt-1 text-2xl font-semibold">Alle Bereiche</h2></div>
+            <button type="button" onClick={() => setOpen(false)} aria-label="Menü schließen" className="flex size-11 items-center justify-center rounded-full bg-surface-muted"><Icon name="close" /></button>
+          </div>
+          <nav aria-label="Alle Bereiche" className="grid grid-cols-2 gap-2">
+            {ITEMS.map((item) => (
+              <Link key={item.href} href={item.href} onClick={() => setOpen(false)} aria-current={isActive(pathname, item.href) ? "page" : undefined} className="menu-link">
+                <Icon name={item.icon} /><span>{item.label}</span>
+              </Link>
+            ))}
+          </nav>
+          <p className="mt-5 truncate text-sm text-muted">Angemeldet als {userName}</p>
+        </div>
+      </dialog>
+    </>
+  );
 }
 
-/**
- * Die Kopfzeile am Handy: ein Knopf zurück zur Startseite und der Name des
- * Bereichs. Auf der Startseite selbst gibt es sie nicht — dort beginnt das
- * Kachelmenü direkt unter der Statusleiste und bringt seine eigene
- * Überschrift mit.
- *
- * Sie bleibt beim Scrollen stehen: seit die Leiste unten fehlt, ist dieser
- * Knopf der einzige Weg zurück innerhalb der App, er darf nicht oben aus dem
- * Bild laufen. Zum oberen Rand kommt die Statusleiste dazu, im Browser ist
- * dieser Wert 0 — dort bleiben es genau die 14px aus dem Entwurf.
- *
- * Der Name ist bewusst keine Überschrift: jede Seite hat ihr eigenes h1.
- */
+/** Der übergeordnete Bereich ist auch bei direkt geöffneten Detailseiten erreichbar. */
 export function MobileTopBar() {
   const pathname = usePathname();
-  const title = sectionTitle(pathname);
-
-  if (title === null) return null;
-
+  const section = ITEMS.find((item) => item.href !== "/" && isActive(pathname, item.href));
+  const parent = pathname.startsWith("/stundenplan/")
+    ? "/stundenplan"
+    : pathname.startsWith("/noten/fach/")
+      ? "/noten"
+      : pathname.slice(0, pathname.lastIndexOf("/")) || "/";
   return (
-    <header className="sticky top-0 z-20 flex items-center gap-3 bg-background px-[22px] pt-[calc(14px_+_env(safe-area-inset-top))] pb-[14px] md:hidden">
-      <Link
-        href="/"
-        aria-label="Zur Startseite"
-        className="inline-flex min-h-10 shrink-0 items-center rounded-control border border-border bg-surface px-3 text-[14px] leading-none text-foreground transition-colors duration-150 hover:bg-surface-muted"
-      >
-        ← Start
-      </Link>
-
-      <span className="min-w-0 truncate text-[15px] font-semibold">
-        {title}
-      </span>
+    <header className="app-topbar">
+      <div className="flex min-w-0 items-center gap-3">
+        {pathname === "/" ? <span className="brand-mark lg:hidden"><Icon name="learn" /></span> : (
+          <Link href={parent} aria-label={parent === "/" ? "Zur Übersicht" : "Zur übergeordneten Seite"} className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border bg-surface hover:bg-surface-muted"><Icon name="back" /></Link>
+        )}
+        <span className="truncate text-sm font-medium">{pathname === "/" ? "Dein Schulalltag" : section?.label ?? "Schulapp"}</span>
+        <span className="hidden text-sm text-subtle lg:inline">/ {pathname === "/" ? "Alles im Blick" : "Dein Bereich"}</span>
+      </div>
+      <Link href="/material" className="flex min-h-11 shrink-0 items-center gap-2 rounded-full px-3 text-sm font-medium text-accent hover:bg-accent-soft"><Icon name="material" /><span className="hidden sm:inline">Meine Materialien</span></Link>
     </header>
   );
 }
 
-/**
- * Der Rahmen um den Seiteninhalt am Handy.
- *
- * Die Startseite bekommt keinen seitlichen Rand: das Kachelmenü bringt seine
- * eigenen 14px mit und die Kacheln sollen bis an den Bildschirmrand laufen
- * können. Sie beginnt dafür direkt unter der Statusleiste. Alle anderen
- * Seiten behalten ihre gewohnten 16px und den Abstand nach oben — und
- * unten denselben Abstand, den früher die Leiste dort mitbrachte: ohne ihn
- * klebt die letzte Zeile am Bildschirmrand.
- *
- * Ab md gibt das <main> die Ränder vor — deshalb hängt hier alles an `max-md`.
- * Die Flex-Kette läuft durch: sonst könnte das Kachelmenü den Bildschirm nicht
- * ausfüllen.
- */
 export function PageBody({ children }: { children: ReactNode }) {
-  const isHome = usePathname() === "/";
-
-  return (
-    <div
-      className={`flex min-w-0 flex-1 flex-col ${
-        isHome ? "max-md:pt-safe" : "max-md:px-4 max-md:pt-6 max-md:pb-6"
-      }`}
-    >
-      {children}
-    </div>
-  );
+  const pathname = usePathname();
+  const wide = pathname === "/" || pathname === "/stundenplan";
+  return <div className={`page-content ${wide ? "page-content-wide" : ""}`}>{children}</div>;
 }

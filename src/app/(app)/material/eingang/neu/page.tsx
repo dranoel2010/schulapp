@@ -67,7 +67,7 @@ export default async function NewProposalPage({
     : [item.subject, ...active];
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="space-y-6">
       <Link
         href="/material/eingang"
         className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
@@ -88,7 +88,7 @@ export default async function NewProposalPage({
       </Link>
 
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">
+        <h1 className="page-heading">
           Vorschlag anlegen
         </h1>
         <p className="text-sm text-muted">

@@ -79,7 +79,7 @@ export default async function ExamPage({
   const label = exam.title ? `${subject.name} · ${exam.title}` : subject.name;
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="space-y-6">
       <Link
         href="/klausuren"
         className="-ml-1 inline-flex min-h-11 items-center gap-1 pr-2 text-sm text-muted transition-colors hover:text-foreground"
@@ -114,7 +114,7 @@ export default async function ExamPage({
           {subject.name}
         </p>
 
-        <h1 className="mt-1.5 text-xl font-semibold text-foreground">
+        <h1 className="page-heading">
           {exam.title ?? kindLabel}
         </h1>
 

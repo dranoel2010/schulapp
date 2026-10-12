@@ -23,7 +23,7 @@ export function Card({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "rounded-card border border-border bg-surface p-4 sm:p-5",
+        "rounded-card border border-border bg-surface p-5 sm:p-6",
         className,
       )}
       {...props}
@@ -35,7 +35,7 @@ export function Card({ className, ...props }: ComponentProps<"div">) {
 export function CardHeader({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
-      className={cn("mb-3 flex items-start justify-between gap-3", className)}
+      className={cn("mb-4 flex flex-wrap items-start justify-between gap-3", className)}
       {...props}
     />
   );
@@ -52,7 +52,7 @@ export function CardTitle({ className, ...props }: ComponentProps<"h3">) {
 
 /** Ein Satz unter dem Titel. */
 export function CardDescription({ className, ...props }: ComponentProps<"p">) {
-  return <p className={cn("text-sm text-muted", className)} {...props} />;
+  return <p className={cn("basis-full text-sm leading-relaxed text-muted", className)} {...props} />;
 }
 
 /** Inhalt mit ruhigem Zeilenabstand zwischen den Kindern. */

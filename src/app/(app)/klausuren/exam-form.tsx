@@ -307,7 +307,7 @@ export function ExamForm({
       : `${topics.length} ${topics.length === 1 ? "Thema" : "Themen"} — daraus baut die App den Lernplan. Vier bis zehn funktionieren gut.`;
 
   return (
-    <form action={formAction} className="space-y-6" noValidate>
+    <form action={formAction} className="form-surface space-y-6" noValidate>
       {state.message ? (
         <p
           role="alert"

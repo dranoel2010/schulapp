@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui/page-header";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -89,13 +90,8 @@ export default async function TimetablePage() {
   const isEmpty = subjects.length === 0 && !hasLessons;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 md:max-w-3xl">
-      <div className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Stundenplan</h1>
-        <p className="text-sm text-muted">
-          KW {isoWeekNumber(today)} · fester Wochenplan, Mo–Fr
-        </p>
-      </div>
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <PageHeader title="Stundenplan" eyebrow="Deine Woche" description={`KW ${isoWeekNumber(today)} · Dein fester Wochenplan von Montag bis Freitag.`} action={<ButtonLink href="/stundenplan/zeiten" variant="secondary">Stundenzeiten</ButtonLink>} />
 
       {isEmpty ? (
         <EmptyState
@@ -141,6 +137,7 @@ export default async function TimetablePage() {
           )}
 
           <WeekGrid
+            times={week.periods}
             days={week.days}
             rowCount={rowCount}
             todayWeekday={todayWeekday}

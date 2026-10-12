@@ -23,9 +23,9 @@ export default async function NewExamPage() {
   // speichern.
   if (subjects.length === 0) {
     return (
-      <div className="space-y-6 md:max-w-3xl">
+      <div className="space-y-6">
         <header className="space-y-1">
-          <h1 className="text-xl font-semibold text-foreground">
+          <h1 className="page-heading">
             Neue Klausur
           </h1>
         </header>
@@ -56,9 +56,9 @@ export default async function NewExamPage() {
   );
 
   return (
-    <div className="space-y-6 md:max-w-3xl">
+    <div className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-foreground">Neue Klausur</h1>
+        <h1 className="page-heading">Neue Klausur</h1>
         <p className="text-sm text-muted">
           Termin und Themen eintragen — den Lernplan baut die App daraus selbst.
         </p>

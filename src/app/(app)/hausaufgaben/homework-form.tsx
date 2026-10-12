@@ -122,7 +122,7 @@ export function HomeworkForm({
     [dayLabel(dueDate), suggestion].filter(Boolean).join(" · ") || undefined;
 
   return (
-    <form action={formAction} className="space-y-6" noValidate>
+    <form action={formAction} className="form-surface space-y-6" noValidate>
       {state.message ? (
         <p
           role="alert"

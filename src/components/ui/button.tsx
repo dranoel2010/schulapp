@@ -20,8 +20,8 @@ function cn(...parts: Array<string | false | null | undefined>) {
 }
 
 const BASE =
-  "inline-flex select-none items-center justify-center gap-2 rounded-control font-medium leading-none " +
-  "transition-colors duration-150 disabled:pointer-events-none disabled:opacity-55 " +
+  "inline-flex select-none items-center justify-center gap-2 rounded-control font-semibold leading-snug text-center " +
+  "transition duration-150 active:translate-y-px disabled:pointer-events-none disabled:opacity-55 " +
   "aria-disabled:pointer-events-none aria-disabled:opacity-55";
 
 const VARIANTS: Record<Variant, string> = {
@@ -33,8 +33,8 @@ const VARIANTS: Record<Variant, string> = {
 };
 
 const SIZES: Record<Size, string> = {
-  md: "min-h-11 px-4 text-[0.9375rem]",
-  lg: "min-h-12 px-5 text-base",
+  md: "min-h-12 px-4 text-[0.9375rem]",
+  lg: "min-h-[52px] px-5 text-base",
 };
 
 function classesFor(variant: Variant, size: Size, className?: string) {
