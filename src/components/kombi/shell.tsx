@@ -226,9 +226,12 @@ export function KombiShell({ children }: { children: ReactNode }) {
       const el = toastRef.current;
       const z = document.getElementById("zeile");
       if (!el || !toastTextRef.current || !toastActRef.current) return;
-      const bottom = z?.classList.contains("hide")
-        ? 16
-        : (z ? parseFloat(getComputedStyle(z).bottom) || 16 : 16) + 52 + 10;
+      const camTop = document.body.classList.contains("cam-offen") ? document.querySelector(".cam-top") : null;
+      const bottom = camTop
+        ? window.innerHeight - camTop.getBoundingClientRect().bottom - 8 - 44
+        : z?.classList.contains("hide")
+          ? 16
+          : (z ? parseFloat(getComputedStyle(z).bottom) || 16 : 16) + 52 + 10;
       el.style.bottom = `${Math.round(bottom)}px`;
       toastTextRef.current.textContent = text;
       const t = toastZustand.current;
@@ -915,6 +918,8 @@ export function KombiShell({ children }: { children: ReactNode }) {
           pushStapel([], "/");
         }
         h?.({ ansicht, ...o });
+        // die Ebene `flow` (Abschnitt C) zeigt oder verbirgt den Ablauf
+        handler.current.get("ablauf")?.({ ansicht, ...o });
       },
       openZeile: () => zeileRef.current?.oeffnen(),
       closeMenu: () => zeileRef.current?.schliessen(),

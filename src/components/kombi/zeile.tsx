@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, useSyncExternalStore, type Ref } from "react";
 
+import { ablaufAusMenuMerken, ablaufStore } from "@/components/kombi/ablauf/ablauf-store";
 import { Icon } from "@/components/kombi/icon";
+import { warmCamera } from "@/components/kombi/kamera/stream";
 import { useKombi } from "@/components/kombi/kontext";
 import { E, reduce, springOpts } from "@/lib/kombi/motion";
 
@@ -236,6 +238,22 @@ export function Zeile({
     if (!reduce()) menu.animate([{ transform: `translateY(${s.dy}px)` }, { transform: "none" }], springOpts());
   };
 
+  // Vorschläge des Ablaufs (Prototyp suggestions(), Z. 2595–2608); den Rest bringt Abschnitt D
+  const ablauf = useSyncExternalStore(ablaufStore.subscribe, ablaufStore.get, ablaufStore.getServer);
+  const vorschlaege: { key: "ablauf" | "cam"; l1: string; l2?: string }[] = [];
+  if (ablauf.nachDerSchule && !ablauf.sichtbar) {
+    vorschlaege.push({ key: "ablauf", l1: "Nach der Schule", l2: "Blätter und Hausaufgaben" });
+  }
+  if (ablauf.sichtbar && ablauf.schritt === "blaetter") vorschlaege.push({ key: "cam", l1: "Blatt aufnehmen" });
+
+  function vorschlagWaehlen(key: "ablauf" | "cam") {
+    schliessen();
+    if (key === "ablauf") {
+      ablaufAusMenuMerken();
+      kombi.setView("ablauf", { dir: -1 });
+    } else kombi.openCam({ ziel: { kind: "liste" } });
+  }
+
   /** „Wohin?“: die neun Bereiche (Prototyp AREAS, Z. 2359) */
   function bereichWaehlen(key: string) {
     if (key === "ueberblick") {
@@ -275,6 +293,30 @@ export function Zeile({
           />
           <div className="m-scroll" id="mScroll" ref={scrollRef}>
             <div className="m-layer" id="mLeer" role="listbox" aria-label="Wohin?" ref={leerRef}>
+              {vorschlaege.length ? (
+                <div className="m-group" role="group" aria-label="Vorschläge">
+                  <p className="m-gl">Vorschläge</p>
+                  <div>
+                    {vorschlaege.map((o, i) => (
+                      <div
+                        key={o.key}
+                        className={`opt${i === 0 ? " first" : ""}`}
+                        role="option"
+                        aria-selected="false"
+                        id={`o-v-${o.key}`}
+                        onPointerDown={o.key === "cam" ? () => void warmCamera() : undefined}
+                        onClick={() => vorschlagWaehlen(o.key)}
+                      >
+                        <div>
+                          <p className="o1">{o.l1}</p>
+                          {o.l2 ? <p className="o2">{o.l2}</p> : null}
+                        </div>
+                        <span className="o-end" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <div className="m-group" role="group" aria-label="Wohin?">
                 <p className="m-gl">Wohin?</p>
                 <div className="m-grid">
@@ -352,6 +394,7 @@ export function Zeile({
             id="camBtn"
             type="button"
             aria-label="Blatt aufnehmen"
+            onPointerDown={() => void warmCamera()}
             onClick={() => {
               schliessen();
               kombi.openCam({ ziel: "zeile" });

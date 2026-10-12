@@ -2811,7 +2811,7 @@ async function withTopics(
  * Lösen dabei zwei Themen eines Blattes auf dasselbe Ziel auf, steht es
  * einmal da.
  */
-async function loadTopics(
+export async function loadTopics(
   userId: string,
   materialIds: string[],
 ): Promise<Map<string, MaterialTopicRef[]>> {
