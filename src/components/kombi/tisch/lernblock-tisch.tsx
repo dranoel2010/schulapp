@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import {
   lernblockBeendenAction,
+  lernblockBlattAction,
   lernblockErledigtAction,
   lernblockStartenAction,
   lernblockTischAction,
@@ -23,7 +24,8 @@ import {
   useSekunde,
   zustand,
 } from "@/components/kombi/lernblock/uhr";
-import { BlockKarten } from "@/components/kombi/tisch/block-karten";
+import { Abschrift } from "@/components/kombi/abschrift";
+import { BlockKarten, blockKartenErgebnis, type BlockKartenDeps } from "@/components/kombi/tisch/block-karten";
 import { LernblockUhr } from "@/components/kombi/tisch/lernblock-uhr";
 import type { BlockDaten, LernblockTischDaten, MaterialDaten } from "@/lib/kombi/lernblock-daten";
 import { buzz, E, reduce } from "@/lib/kombi/motion";
@@ -230,7 +232,7 @@ export function LernblockTisch() {
           setDaten(r.daten);
           if (r.daten.fragen.length === 0) {
             // Ohne offene Fragen: direkt das Ende des Blocks und das Material
-            setEnde({ n: 0, ok: 0 });
+            setEnde(blockKartenErgebnis(blockId));
             if (r.daten.material) {
               const m = r.daten.material;
               setTimeout(() => {
@@ -328,16 +330,21 @@ export function LernblockTisch() {
     return () => window.removeEventListener("popstate", onPop);
   }, [frage, schliessen]);
 
-  // Escape wie im Prototyp (Z. 4620ff.): Bestätigung, dann Tisch
+  // Escape wie im Prototyp (Z. 4620–4687): nur die oberste Ebene — Sheet
+  // (schließt die Shell), dann Bestätigung, dann der Tisch. In der
+  // Capture-Phase am Fenster und danach gestoppt, damit die Shell nicht
+  // zugleich die Seite unter dem Tisch vom Stapel nimmt.
   useEffect(() => {
     if (!sitzung) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || document.querySelector("#sheet.open")) return;
+      if (e.key !== "Escape" || document.querySelector(".sheet.open")) return;
+      e.preventDefault();
+      e.stopPropagation();
       if (frage) setFrage(null);
       else schliessen();
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [sitzung, frage, schliessen]);
 
   // ── Erledigt zählen ──────────────────────────────────────────────────────
@@ -420,6 +427,28 @@ export function LernblockTisch() {
     void senden();
   }, [block, kombi]);
 
+  // „Blatt ansehen“ auf der Rückseite einer Karte: das Blatt als Sheet auf dem Tisch
+  const kartenDeps = useMemo<BlockKartenDeps>(
+    () => ({
+      toast: kombi.toast,
+      blattAnsehen: (materialId) => {
+        if (material && material.id === materialId) {
+          kombi.openSheet(<MaterialSheet m={material} />, true);
+          return;
+        }
+        lernblockBlattAction(materialId).then(
+          (r) => {
+            if (r.ok && offenRef.current) kombi.openSheet(<MaterialSheet m={r.blatt} />, true);
+            else if (!r.ok) kombi.toast(r.fehler);
+          },
+          () => kombi.fehlerToast("Keine Verbindung", () => {}, "Erneut"),
+        );
+      },
+    }),
+    [kombi, material],
+  );
+  const kartenEnde = useCallback((e: { n: number; ok: number }) => setEnde(e), []);
+
   const fach = daten?.fach ?? sitzung?.fach ?? "";
   const datum = daten?.klausurDatum ?? sitzung?.klausurDatum ?? "";
 
@@ -444,9 +473,10 @@ export function LernblockTisch() {
               <p className="t-thema">Lernblock · {block?.titel ?? ""}</p>
             </div>
             {daten && !ende && daten.fragen.length > 0 ? (
-              <BlockKarten blockId={daten.block.id} fragen={daten.fragen} onEnde={(e) => setEnde(e)} />
-            ) : null}
-            <div style={{ flex: "1 1 auto" }} />
+              <BlockKarten blockId={daten.block.id} fragen={daten.fragen} onEnde={kartenEnde} deps={kartenDeps} />
+            ) : (
+              <div style={{ flex: "1 1 auto" }} />
+            )}
             {material && !ende ? (
               <button className="t-mat" type="button" onClick={openMaterial}>
                 <span>
@@ -513,15 +543,7 @@ function MaterialSheet({ m }: { m: MaterialDaten }) {
       <p className="p-sub">
         {m.fach}, {m.seiten} {m.seiten === 1 ? "Seite" : "Seiten"}
       </p>
-      <div className="abschrift">
-        {m.abschrift.length === 0 ? (
-          <p className="p-sub">Abschrift folgt</p>
-        ) : (
-          m.abschrift.map((a, i) =>
-            /^#+\s/.test(a) ? <h3 key={i}>{a.replace(/^#+\s*/, "")}</h3> : <p key={i}>{a}</p>,
-          )
-        )}
-      </div>
+      <Abschrift absaetze={m.abschrift} />
     </>
   );
 }

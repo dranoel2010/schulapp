@@ -6,6 +6,7 @@ import { useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import {
   auslassenAction,
   blockStatusAction,
+  blockZurueckAction,
   lernplanNeuAction,
   nachholenAction,
   termineNeuAction,
@@ -14,6 +15,7 @@ import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import { blockMerken, useBlock, zustand } from "@/components/kombi/lernblock/uhr";
 import { useOptimistischeAktion } from "@/lib/kombi/aktion";
+import type { BlockVorher } from "@/app/(app)/lernblock-actions";
 import type { BlockDaten } from "@/lib/kombi/lernblock-daten";
 import { E, moveTo, reduce, rubber } from "@/lib/kombi/motion";
 import { cap, diffDays, dm, lang, TAG, TK, wd, weekdayOrDate, zahl } from "@/lib/kombi/text";
@@ -53,6 +55,17 @@ export const klausurUntertitel = (_p: Record<string, string>, d: unknown): strin
   return k ? `${lang(k.datum)} · ${relTageSeite(k.heute, k.datum)}` : null;
 };
 
+/**
+ * Der Tag links in der Planzeile (Prototyp `planRows`: „Mo“, „Heute“). In der
+ * laufenden Woche das Kürzel wie im Prototyp; vergangene Tage und Tage ab
+ * einer Woche Abstand tragen das Datum dazu („Fr 9.10.“), sonst stünden ein
+ * verpasster Freitag und der Klausurfreitag beide als „Fr“ da.
+ */
+function planTag(tag: string, heute: string): string {
+  const n = diffDays(heute, tag);
+  return n < 0 || n > 6 ? `${TK[wd(tag)]} ${dm(tag)}` : TK[wd(tag)];
+}
+
 /** Unterzeile einer Planzeile (Prototyp `planRows`). */
 function planUnterzeile(b: BlockDaten): string {
   const erledigt = b.status === "done" ? ", erledigt" : "";
@@ -89,10 +102,29 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
       { id: b.id, status },
       () => blockStatusAction(b.id, status),
       (r) => {
+        const { block: neu, vorher } = r as Extract<Awaited<ReturnType<typeof blockStatusAction>>, { ok: true }>;
+        setBloecke((l) => l.map((x) => (x.id === b.id ? neu : x)));
+        blockMerken(neu);
+        // Rückgängig stellt den alten Stand ganz her: nach dem Wiederöffnen
+        // auch die gelernten Minuten, den Uhrstand und die Einträge im Protokoll
+        kombi.toast(
+          status === "done" ? "Lernblock erledigt" : "Lernblock wieder offen",
+          vorher ? () => zurueck(neu, vorher) : () => schalten(neu),
+          b.titel,
+        );
+        void kombi.neuLaden();
+      },
+    );
+  }
+
+  function zurueck(b: BlockDaten, vorher: BlockVorher) {
+    ausfuehren(
+      { id: b.id, status: "done" },
+      () => blockZurueckAction(b.id, vorher),
+      (r) => {
         const neu = (r as { ok: true; block: BlockDaten }).block;
         setBloecke((l) => l.map((x) => (x.id === b.id ? neu : x)));
         blockMerken(neu);
-        kombi.toast(status === "done" ? "Lernblock erledigt" : "Lernblock wieder offen", () => schalten(neu), b.titel);
         void kombi.neuLaden();
       },
     );
@@ -158,7 +190,9 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
                 {daten.verpasst.anzahl === 1
                   ? `Ein Lernblock von ${weekdayOrDate(daten.verpasst.tag, heute)} ist offen.`
                   : `${cap(zahl(daten.verpasst.anzahl))} Lernblöcke sind offen.`}{" "}
-                Nachholen verteilt sie auf die Tage bis zur Klausur, Auslassen streicht sie.
+                {daten.verpasst.anzahl === 1
+                  ? "Nachholen verteilt ihn auf die Tage bis zur Klausur, Auslassen streicht ihn."
+                  : "Nachholen verteilt sie auf die Tage bis zur Klausur, Auslassen streicht sie."}
               </p>
               <div style={{ display: "flex", gap: 24 }}>
                 <button
@@ -196,6 +230,7 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
               <PlanZeile
                 key={b.id}
                 block={b}
+                geschaltet={b.status !== bloecke.find((x) => x.id === b.id)?.status}
                 heute={heute}
                 zeigeTag={ersteJeTag.has(b.id)}
                 fach={daten.fach}
@@ -205,7 +240,7 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
             ))}
             <div className="prow exday">
               <span className="pday" aria-label={TAG[wd(daten.datum)]}>
-                {daten.datum === heute ? "Heute" : TK[wd(daten.datum)]}
+                {daten.datum === heute ? "Heute" : planTag(daten.datum, heute)}
               </span>
               <div className="pbody">
                 <b>{daten.art}</b>
@@ -274,7 +309,6 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
         >
           <span>
             <b>{geplant > 0 ? "Lernplan neu erstellen" : "Lernplan erstellen"}</b>
-            <span className="s">Erledigtes und Angefangenes bleibt stehen</span>
           </span>
           <span />
         </button>
@@ -291,13 +325,13 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
       >
         <span>
           <b>Termine neu rechnen</b>
-          <span className="s">
-            Nach einer neuen oder verschobenen Klausur: legt die Wiederholungstermine wieder vor die Klausur. Am Takt ändert
-            sich nichts.
-          </span>
         </span>
         <span />
       </button>
+      <p className="p-sub">
+        Nach einer neuen oder verschobenen Klausur: legt die Wiederholungstermine wieder vor die Klausur. Am Takt ändert sich
+        nichts.
+      </p>
       <Link className="lrow plain" href={`/abruf/klausur?id=${daten.id}`}>
         <span>
           <b>Stoff und Fragen</b>
@@ -321,6 +355,7 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
  */
 function PlanZeile({
   block: vomServer,
+  geschaltet,
   heute,
   zeigeTag,
   fach,
@@ -328,6 +363,8 @@ function PlanZeile({
   onSchalten,
 }: {
   block: BlockDaten;
+  /** Der Status ist gerade optimistisch geschaltet (Tipp/Wisch auf dieser Seite) */
+  geschaltet: boolean;
   heute: string;
   zeigeTag: boolean;
   fach: string;
@@ -336,8 +373,10 @@ function PlanZeile({
 }) {
   const kombi = useKombi();
   const block = useBlock(vomServer)!;
-  // Der Status kommt optimistisch von der Seite, die Uhr aus dem Speicher
-  const b = { ...block, status: vomServer.status };
+  // Die Uhr und der Status kommen aus dem Speicher, den auch der Tisch
+  // schreibt („Als erledigt zählen?“ → Ja steht sofort hier); nur solange ein
+  // Tipp auf dieser Seite optimistisch schaltet, gilt der Status der Seite.
+  const b = geschaltet ? { ...block, status: vomServer.status } : block;
   const z = zustand(b);
   const istHeute = b.tag === heute;
   const angefangen = b.status === "open" && !!b.laeuftSeit;
@@ -401,7 +440,8 @@ function PlanZeile({
       tabIndex={0}
       aria-pressed={b.status === "done"}
       aria-label={`${b.titel}, ${planUnterzeile(b)}${angefangen ? ", Uhr öffnen" : b.status === "done" ? ", wieder öffnen" : ", abhaken"}`}
-      style={{ touchAction: "pan-y" }}
+      // Vergangene Tage treten zurück, wie bisher auf /lernen (opacity .6)
+      style={{ touchAction: "pan-y", opacity: b.tag < heute ? 0.6 : undefined }}
       onClick={tippen}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -415,7 +455,7 @@ function PlanZeile({
       onPointerCancel={los}
     >
       <span className="pday" aria-label={TAG[wd(b.tag)]}>
-        {zeigeTag ? (istHeute ? "Heute" : TK[wd(b.tag)]) : ""}
+        {zeigeTag ? (istHeute ? "Heute" : planTag(b.tag, heute)) : ""}
       </span>
       <div className="pbody">
         <b>{b.titel}</b>

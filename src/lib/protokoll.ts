@@ -201,3 +201,74 @@ export async function lernblockEreignisseLoeschen(
     .returning({ id: tagesprotokoll.id });
   return weg.length;
 }
+
+/** Ein Eintrag, wie er beim Wiederöffnen eines Blocks zurückgegeben wird (serialisierbar). */
+export type LernblockEintrag = {
+  id: string;
+  tag: string;
+  typ: string;
+  daten: Record<string, unknown> | null;
+  /** ISO */
+  createdAt: string;
+};
+
+/**
+ * Wiederöffnen eines erledigten Blocks (Klausurseite): alle Einträge
+ * `lernblock_*` dieses Blocks verschwinden, an jedem Tag. Sie kommen als
+ * Liste zurück, damit „Rückgängig“ sie mit `lernblockEintraegeZurueck`
+ * unverändert (gleiche ID, gleiche Zeit) wieder einsetzen kann.
+ */
+export async function lernblockEintraegeAbnehmen(
+  userId: string,
+  blockId: string,
+): Promise<LernblockEintrag[]> {
+  const weg = await db
+    .delete(tagesprotokoll)
+    .where(
+      and(
+        eq(tagesprotokoll.userId, userId),
+        eq(tagesprotokoll.ref, blockId),
+        like(tagesprotokoll.typ, "lernblock\\_%"),
+      ),
+    )
+    .returning();
+  return weg
+    .map((z) => ({ id: z.id, tag: z.tag, typ: z.typ, daten: z.daten ?? null, createdAt: z.createdAt.toISOString() }))
+    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+}
+
+const zurueckSchema = z
+  .array(
+    z.object({
+      id: z.uuid(),
+      tag: z.iso.date(),
+      typ: z.enum(["lernblock_gestartet", "lernblock_pausiert", "lernblock_fortgesetzt", "lernblock_erledigt"]),
+      daten: z.record(z.string(), z.unknown()).nullable(),
+      createdAt: z.iso.datetime({ offset: true }),
+    }),
+  )
+  .max(500);
+
+/** Rückgängig zu `lernblockEintraegeAbnehmen`: dieselben Einträge wieder einsetzen. */
+export async function lernblockEintraegeZurueck(
+  userId: string,
+  blockId: string,
+  eintraege: unknown,
+): Promise<void> {
+  const liste = zurueckSchema.parse(eintraege);
+  if (liste.length === 0) return;
+  await db
+    .insert(tagesprotokoll)
+    .values(
+      liste.map((e) => ({
+        id: e.id,
+        userId,
+        tag: e.tag,
+        typ: e.typ,
+        ref: blockId,
+        daten: e.daten,
+        createdAt: new Date(e.createdAt),
+      })),
+    )
+    .onConflictDoNothing();
+}

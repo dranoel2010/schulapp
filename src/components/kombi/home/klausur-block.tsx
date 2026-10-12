@@ -14,7 +14,9 @@ import { cap, diffDays, esc, kurz, tn, weekdayOrDate, zahl } from "@/lib/kombi/t
  * `updateBlockUI`, Z. 1970–2014): Klausurzeile, darunter die Lernblockzeile
  * mit „Starten“, der Restzeit, „Weiter“, „Auswerten“ oder „Erledigt“; ohne
  * Block heute „Nächster Lernblock Mittwoch · Wiederholung“. Dazu „Und eine
- * weitere …“ und die verpassten Blöcke (Plan 3.5) in derselben Gestalt.
+ * weitere …“, die verpassten Blöcke (Plan 3.5) und die Lernblöcke heute zu
+ * weiteren Klausuren („Noch ein Lernblock heute: Mathe ›“, wie bisher unter
+ * „Heute“ auf /lernen) in derselben Gestalt.
  *
  * Abschnitt B setzt ihn in die Ansicht `ueberblick`; die Daten kommen aus
  * `TagDaten.lernblock`.
@@ -57,10 +59,22 @@ export function KlausurBlock({ daten, heute }: { daten: LernblockUeberblick; heu
       ) : daten.naechster ? (
         <div className="lb-row">
           <p>
-            Nächster Lernblock {weekdayOrDate(daten.naechster.tag, heute)} · {daten.naechster.titel}
+            Nächster Lernblock {weekdayOrDate(daten.naechster.tag, heute)} · {daten.naechster.art}
           </p>
         </div>
       ) : null}
+      {daten.heuteWeitere.map((w) => (
+        <button
+          key={w.examId}
+          className="textline more"
+          type="button"
+          onPointerDown={() => kombi.vorladen("klausur", { id: w.examId })}
+          onClick={() => kombi.openPage("klausur", { id: w.examId })}
+        >
+          Noch ein Lernblock heute: {w.kurz}
+          <Icon name="chevron_right" />
+        </button>
+      ))}
       {daten.verpasst.map((v) => (
         <button
           key={v.examId}

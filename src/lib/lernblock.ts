@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, lt, or } from "drizzle-orm";
 
 import { db } from "@/db";
 import { examTopics, exams, studyBlocks, type StudyBlock } from "@/db/schema";
@@ -218,6 +218,38 @@ export async function blockErledigt(
     { n: block.minutenGelernt, perWH },
   );
   return { block, protokollId };
+}
+
+/**
+ * „Nachholen“ auf der Klausurseite: Ein Block von einem vergangenen Tag, der
+ * angefangen und nie beendet wurde, zählt als verpasst. Damit `catchUpMissed`
+ * ihn verlegen darf (angefangene Blöcke lässt es sonst stehen, Plan 3.5),
+ * geht seine Uhr zuerst zurück auf Ruhe. Das Protokoll jenes Tages bleibt.
+ * Gibt die Zahl der zurückgesetzten Blöcke zurück.
+ */
+export async function vergangeneUhrenZuruecksetzen(
+  userId: string,
+  examId: string,
+  vor: string,
+): Promise<number> {
+  const [klausur] = await db
+    .select({ id: exams.id })
+    .from(exams)
+    .where(and(eq(exams.id, examId), eq(exams.userId, userId)));
+  if (!klausur) return 0;
+  const neu = await db
+    .update(studyBlocks)
+    .set({ laeuftSeit: null, pausiertSeit: null, pauseMs: 0 })
+    .where(
+      and(
+        eq(studyBlocks.examId, examId),
+        eq(studyBlocks.status, "open"),
+        lt(studyBlocks.date, vor),
+        or(isNotNull(studyBlocks.laeuftSeit), gt(studyBlocks.pauseMs, 0)),
+      ),
+    )
+    .returning({ id: studyBlocks.id });
+  return neu.length;
 }
 
 // ── Fragen im Block ──────────────────────────────────────────────────────────

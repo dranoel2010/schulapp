@@ -122,8 +122,14 @@ export type LernblockUeberblick = {
   klausur: { id: string; fach: string; kurz: string; datum: string } | null;
   /** Der heutige Block dieser Klausur (Prototyp `planHeute()`), auch erledigt */
   heute: BlockDaten | null;
-  /** Ohne Block heute: der nächste Block dieser Klausur */
-  naechster: { tag: string; titel: string } | null;
+  /** Ohne Block heute: der nächste Block dieser Klausur, „Lernblock“ oder „Wiederholung“ (Prototyp `nx.art`) */
+  naechster: { tag: string; art: string } | null;
+  /**
+   * Weitere Klausuren mit einem offenen Block heute (das alte /lernen zeigte
+   * unter „Heute“ die Blöcke aller Klausuren). Je Klausur eine Zeile in der
+   * Gestalt von „Und eine weitere …“: „Noch ein Lernblock heute: Mathe ›“.
+   */
+  heuteWeitere: { examId: string; kurz: string }[];
   /** „Und eine weitere am Do 22.10.“ */
   weitere: { anzahl: number; datum: string } | null;
   /** Verpasste offene Blöcke je Klausur (Plan 3.5) */
@@ -155,8 +161,6 @@ export async function lernblockUeberblick(
   }
   const verpasst = [...jeKlausur.values()];
 
-  if (bald.length === 0 && verpasst.length === 0) return null;
-
   const k = bald[0] ?? null;
   let heute: BlockDaten | null = null;
   let naechster: LernblockUeberblick["naechster"] = null;
@@ -177,9 +181,25 @@ export async function lernblockUeberblick(
       heute = blockDaten(ph, staende.get(ph.id) ?? null);
     } else {
       const nx = bloecke.find((b) => b.date > tag && b.status === "open");
-      if (nx) naechster = { tag: nx.date, titel: blockTitel(nx.kind, nx.topic?.title ?? null) };
+      if (nx) naechster = { tag: nx.date, art: nx.kind === "review" ? "Wiederholung" : "Lernblock" };
     }
   }
+
+  // Offene Blöcke heute zu anderen Klausuren als der obersten
+  const andere = await db
+    .select({ examId: studyBlocks.examId, fach: subjects.name, datum: exams.date })
+    .from(studyBlocks)
+    .innerJoin(exams, and(eq(exams.id, studyBlocks.examId), eq(exams.userId, userId)))
+    .innerJoin(subjects, eq(subjects.id, exams.subjectId))
+    .where(and(eq(studyBlocks.date, tag), eq(studyBlocks.status, "open"), sql`${exams.date} >= ${tag}`))
+    .orderBy(asc(exams.date), asc(exams.createdAt));
+  const heuteWeitere: LernblockUeberblick["heuteWeitere"] = [];
+  for (const a of andere) {
+    if (a.examId === k?.id || heuteWeitere.some((h) => h.examId === a.examId)) continue;
+    heuteWeitere.push({ examId: a.examId, kurz: fachKurz(a.fach) });
+  }
+
+  if (!k && verpasst.length === 0 && heuteWeitere.length === 0) return null;
 
   const rest = bald.slice(1);
   return {
@@ -187,6 +207,7 @@ export async function lernblockUeberblick(
     heute,
     naechster,
     weitere: rest.length ? { anzahl: rest.length, datum: rest[0].datum } : null,
+    heuteWeitere,
     verpasst,
   };
 }
@@ -202,13 +223,23 @@ export type MaterialDaten = {
   abschrift: string[];
 };
 
+/** Eine Karte im Block: nur die Frage, die Lösung kommt erst nach dem Versuch (A2). */
+export type BlockFrage = {
+  scheduleId: string;
+  itemId: string;
+  /** Text der Frage; `{…}` markiert eine Formel */
+  frage: string;
+  /** wie oft heute schon „Daneben“ */
+  heuteDaneben: number;
+};
+
 export type LernblockTischDaten = {
   block: BlockDaten;
   /** „Mathematik · Klausur Fr 16.10.“ */
   fach: string;
   klausurDatum: string;
   /** Die heute offenen Fragen der Klausurthemen, ohne Lösung (A2) */
-  fragen: { scheduleId: string; itemId: string }[];
+  fragen: BlockFrage[];
   material: MaterialDaten | null;
 };
 
@@ -233,12 +264,22 @@ export async function materialFuerLernblock(
   if (vokabeln.length === 0) return null;
 
   const [blatt] = await db
-    .select({ id: materials.id, titel: materials.title, fach: subjects.name })
+    .select({ id: materials.id })
     .from(materials)
     .innerJoin(materialTopics, eq(materialTopics.materialId, materials.id))
-    .innerJoin(subjects, eq(subjects.id, materials.subjectId))
     .where(and(eq(materials.userId, userId), inArray(materialTopics.subjectTopicId, vokabeln)))
     .orderBy(desc(materials.capturedOn), desc(materials.createdAt))
+    .limit(1);
+  return blatt ? materialDaten(userId, blatt.id) : null;
+}
+
+/** Ein Blatt als Sheet auf dem Tisch: Titel, Fach, Seitenzahl, Abschrift in Absätzen. */
+export async function materialDaten(userId: string, materialId: string): Promise<MaterialDaten | null> {
+  const [blatt] = await db
+    .select({ id: materials.id, titel: materials.title, fach: subjects.name })
+    .from(materials)
+    .innerJoin(subjects, eq(subjects.id, materials.subjectId))
+    .where(and(eq(materials.userId, userId), eq(materials.id, materialId)))
     .limit(1);
   if (!blatt) return null;
 
@@ -287,7 +328,13 @@ export async function lernblockTisch(
     block: blockDaten({ ...zeile.block, topic: zeile.topic ?? null }, staende.get(blockId) ?? null),
     fach: zeile.fach,
     klausurDatum: zeile.datum,
-    fragen: fragen.map((f) => ({ scheduleId: f.scheduleId, itemId: f.itemId })),
+    fragen: fragen.map((f) => ({
+      scheduleId: f.scheduleId,
+      itemId: f.itemId,
+      frage: f.promptFree,
+      heuteDaneben: f.heuteDaneben,
+      // solution, misconception und sourceQuote stehen hier ABSICHTLICH nicht (A2)
+    })),
     material,
   };
 }
