@@ -80,3 +80,7 @@ rueckblick.html
 # man nicht zurück. Gelöscht wird er nicht von hier aus; das ist deine
 # Entscheidung, und bis dahin ist er wenigstens außer Reichweite.
 install.sh
+
+# Prüf-Screenshots der UI-Entwürfe: über 100 MB, sie bleiben lokal
+/entwurf-modelle/*/screens/
+/entwurf-modelle/*/final/

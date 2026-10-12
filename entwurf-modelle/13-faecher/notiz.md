@@ -1,0 +1,9 @@
+# 13 Fächer
+
+Die Startseite ist eine ruhige Liste der Fächer. Jede Zeile sagt in Klartext, was dort offen ist („S. 84, Nr. 3–5“, „Nichts offen, 2 Blätter“), und darüber steht in einer Zeile, was morgen dran ist. Ein Fach ist ein Raum: Tippt man die Zeile an, öffnet sich der Raum aus genau dieser Zeile. Zuerst kommen die Aufgaben des Fachs mit „+ Aufgabe für Mathematik“, dann die Klausur, typografisch gesetzt („Freitag“ groß, darunter die Lerntage als Punkte), mit dem Knopf „Lernblock starten, 25 Min“, danach Blätter und Noten. Leere Bereiche stehen gesammelt in einer Fußzeile. Unten liegen fest Aufgaben, Blätter (eine Suche über alle Abschriften) und die Kamera.
+
+Die Schrift ist nur Bricolage Grotesque mit optischer Größe: Titel 34 px in 600, Fließtext 16 px in 400, Laufweite −0,01 em. Die Startseite ist neutrales Graphit. Jedes Fach hat einen 4 px breiten Streifen in einer gedämpften Farbe. Alle sechs Farben haben die gleiche Helligkeit (OKLCH L 0,72). Dazu hat jedes Fach einen tief eingefärbten Raum. Blätter sehen aus wie Papier mit Karo oder Linien und zeigen die ersten Zeilen der echten Abschrift, mit einer feinen Kante, ohne Schatten und ohne Drehung.
+
+Die wichtigste Animation ist das Öffnen. In 320 ms wächst die Raumfarbe per clip-path aus der Zeile, und der Fachname fliegt an seinen Platz. Die Inhalte blenden ohne Staffelung ein. Das Schließen ist eine eigene Bewegung zurück in die Zeile (260 ms, Ease-out) und spielt das Öffnen nicht rückwärts ab. Beim Abfragen fliegt „Wusste ich“ nach rechts weg und „Nochmal“ sinkt in den Stapel. Nach 12 Fragen kommt ein Abschluss. Ein fotografiertes Blatt landet sichtbar in der Vorschau und fliegt danach in den Streifen seines Fachs.
+
+Nach Vorlage sieht das nicht aus: Es gibt keine Karten auf Grau, keine Monogramm-Kacheln, keine Überzeilen und keine Zahlen, die die App nicht kennt (der Notenschnitt ist weg). Die Farbe bedeutet überall das Fach.

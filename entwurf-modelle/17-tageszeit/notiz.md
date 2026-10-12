@@ -1,0 +1,8 @@
+Die Startseite ordnet sich nach der Tageszeit: um 16:40 stehen die Hausaufgaben für Dienstag vorn, abends der Lernblock mit Abfrage, und die Ansicht für morgens zeigt den nächsten Morgen (Dienstag) mit dem, was abzugeben ist, und den Stunden als kompakte Zeilen.
+Die Tageszeit wählt man in der Datumszeile: „Montag, 12. Oktober · Nachmittag ⌄“ klappt ein kleines Menü mit drei Einträgen auf; schaut man eine andere Tageszeit an, steht dort „abends“ oder „morgens“ in blasser Schrift, und „Jetzt“ führt zurück.
+Hausaufgaben hakt man per Kreis oder Wischen nach rechts ab; neue trägt man mit Fach (aus dem Text vorgewählt, sonst „Ohne Fach“) und Abgabetag Di oder Mi ein.
+Blätter findet man über „Zuletzt abgelegt“, über „Blätter zum Thema“ auf der Klausurseite, über die Liste mit Fachfilter und Suche in der Abschrift, und direkt aus dem Hinweis „Ansehen“ nach dem Ablegen.
+Die Schrift ist Schibsted Grotesk für alles, die Symbole kommen aus Material Symbols Rounded und stehen nur noch dort, wo sie etwas bedeuten (Abhaken, Kamera, Zurück).
+Jede Tageszeit hat eine eigene Fläche und genau einen Akzent: morgens kühles Graublau mit Korallrot, nachmittags helles Grau mit Signalgelb, abends Nachtblau mit hellem Blau; die Farben wechseln hart, nie als Übergang.
+Die wichtigste Animation ist der Wechsel der Tageszeit: die neue Fläche geht in 280 ms vom Punkt vor der Tageszeit aus kreisförmig auf, der alte Inhalt blendet in 120 ms aus, der neue kommt gleichzeitig 24 px aus der Richtung, in die die Zeit läuft (260 ms, 30 ms Staffel), und die Überschrift tauscht im selben Zug.
+Es gibt keine Kacheln, keine Icon-Quadrate und keine Leiste unten; Weiterzeilen sind reine Textzeilen mit einer Menge rechts, und die Liste hat genau zwei Kanten: Rand bei 20 px und Text bei 70 px.
