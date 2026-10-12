@@ -104,6 +104,12 @@ const kleinHA = await page.evaluate(() =>
 );
 p.ok(kleinHA.length === 0, `Tippflächen in Schritt 2 ≥ 44 (${kleinHA.join("; ")})`);
 
+// Kriterium 5: in Schritt 2 verlassen → beim nächsten Öffnen Schritt 2
+await page.reload();
+await page.waitForSelector("#flow.on", { timeout: 8000 }).catch(() => {});
+await ruhe(page, 800);
+p.ok((await page.locator("#s-ha.vis").count()) === 1, "nach Neuladen wieder bei Schritt 2");
+
 // Abhaken mit Toast und Rückgängig
 await page.locator("#haOffen .check").first().click();
 await page.waitForTimeout(150);

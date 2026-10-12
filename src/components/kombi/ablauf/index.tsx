@@ -98,12 +98,14 @@ export function AblaufEbene() {
     animNext: false,
     waitT: undefined as ReturnType<typeof setTimeout> | undefined,
     gestartet: false,
+    daten: null as AblaufDaten | null,
   });
 
   const laden = useCallback(
     () =>
       ablaufHolen().then((d) => {
         if (d) {
+          z.current.daten = d;
           setDaten(d);
           setAenderung(new Map());
         }
@@ -224,7 +226,7 @@ export function AblaufEbene() {
       const gen = ++z.current.viewGen;
       if (zuAblauf) {
         // prepareAblauf: Schritt vom Server, ohne Bewegung
-        goStep(daten?.schritt ?? "blaetter", { instant: true });
+        goStep(z.current.daten?.schritt ?? "blaetter", { instant: true });
         void laden();
       }
       home.classList.toggle("on", !zuAblauf);
@@ -262,7 +264,7 @@ export function AblaufEbene() {
         }),
       );
     },
-    [daten?.schritt, goStep, hideToast, laden],
+    [goStep, hideToast, laden],
   );
 
   useEffect(
@@ -461,10 +463,10 @@ export function AblaufEbene() {
   // Vor der Landung: der Sucher ist schon flach, „Weiter“ wartet (Prototyp Z. 3595–3602)
   useEffect(
     () =>
-      vorLandungMelden(() => {
+      vorLandungMelden((ausSucher) => {
         const su = sucherRef.current;
         const box = nextBoxRef.current;
-        if (su && !su.classList.contains("compact") && z.current.sichtbar && z.current.schritt === "blaetter") {
+        if (su && ausSucher && !su.classList.contains("compact")) {
           su.classList.add("compact");
           if (suLabelRef.current) suLabelRef.current.textContent = "Noch ein Blatt";
           su.setAttribute("aria-label", "Noch ein Blatt fotografieren");

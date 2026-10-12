@@ -252,7 +252,7 @@ export function KameraEbene() {
       );
     });
     // Kommt die Kamera aus dem großen Sucher, wird er schon jetzt flach
-    if (neu.length) vorLandungAusloesen();
+    if (neu.length) vorLandungAusloesen(s.origin?.id === "blShoot");
     closeCam();
     window.setTimeout(
       () => {

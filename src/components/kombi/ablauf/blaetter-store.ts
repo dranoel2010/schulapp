@@ -185,12 +185,12 @@ export function landen(l: Landung): boolean {
   return false;
 }
 
-/** Nach „Fertig“ im Sucher: die Liste macht den Sucher schon flach (Prototyp Z. 3595). */
-const vorLandung = new Set<() => void>();
-export function vorLandungMelden(f: () => void): () => void {
+/** Nach „Fertig“: kam die Kamera aus dem großen Sucher, wird er schon jetzt flach (Prototyp Z. 3595). */
+const vorLandung = new Set<(ausSucher: boolean) => void>();
+export function vorLandungMelden(f: (ausSucher: boolean) => void): () => void {
   vorLandung.add(f);
   return () => vorLandung.delete(f);
 }
-export function vorLandungAusloesen(): void {
-  vorLandung.forEach((f) => f());
+export function vorLandungAusloesen(ausSucher: boolean): void {
+  vorLandung.forEach((f) => f(ausSucher));
 }

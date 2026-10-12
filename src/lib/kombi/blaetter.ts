@@ -2,10 +2,11 @@ import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { leserLaeufe, materialPages, materialTopics, materials, subjects } from "@/db/schema";
-import { IN_ARBEIT_MINUTEN } from "@/lib/blaetter-stand";
+import { IN_ARBEIT_MINUTEN, KORB_FRISCH_MINUTEN } from "@/lib/blaetter-stand";
 import { claudeConfigured } from "@/lib/claude/client";
 import { markFiled } from "@/lib/inbox";
-import { claudeBeschaeftigt, claudeEingeplant, claudeLiestGerade } from "@/lib/leser/claude-zustand";
+import { jevConfigured } from "@/lib/jev";
+import { claudeBeschaeftigt, claudeEingeplant, claudeLiestGerade, claudePausiert } from "@/lib/leser/claude-zustand";
 import { loadTopics, ownsSubject } from "@/lib/materials";
 
 /**
@@ -153,6 +154,7 @@ async function kurzMachen(userId: string, zeilen: Zeile[]): Promise<BlattKurz[]>
         ungelesen: sql<boolean>`${materialPages.transcript} is null`,
         frischOffen: sql<boolean>`(${materialPages.leser} = 'offen' and ${materialPages.createdAt} > ${frischSeit})`,
         frischClaude: sql<boolean>`(${materialPages.leser} = 'claude' and ${materialPages.transcript} is null and ${materialPages.createdAt} > ${frischSeit})`,
+        ungelesenClaude: sql<boolean>`(coalesce(${materialPages.leser}, 'claude') = 'claude' and ${materialPages.transcript} is null)`,
         erstellt: materialPages.createdAt,
       })
       .from(materialPages)
@@ -172,8 +174,10 @@ async function kurzMachen(userId: string, zeilen: Zeile[]): Promise<BlattKurz[]>
       .orderBy(leserLaeufe.materialId, desc(leserLaeufe.createdAt), desc(leserLaeufe.id)),
   ]);
 
-  const claudeLiest = claudeConfigured();
+  const claudeLiest = claudeConfigured() && !claudePausiert();
   const beschaeftigt = claudeBeschaeftigt(userId);
+  const jev = jevConfigured();
+  const korbFrischSeit = Date.now() - KORB_FRISCH_MINUTEN * 60_000;
 
   return zeilen.map((z) => {
     const s = seiten.filter((p) => p.materialId === z.id);
@@ -190,11 +194,21 @@ async function kurzMachen(userId: string, zeilen: Zeile[]): Promise<BlattKurz[]>
     const liest =
       (beschaeftigt && (claudeLiestGerade(z.id) || claudeEingeplant(z.id))) ||
       (laufGilt?.ergebnis === "laeuft" && !gescheitert);
+    const eingeordnet = z.filedAt !== null;
+    // Ein frisches Korbblatt wartet auf den Vorschlag der App und auf Jev (wie
+    // `frischImKorb` in `blaetterStand()`): nicht, wenn niemand mehr kommt —
+    // ohne Jev, nach einem erledigenden Lauf, oder mit Claude-Seiten, die
+    // niemand liest (kein Schlüssel, Pause).
+    const erledigt = laufGilt?.ergebnis === "kein-vorschlag" || laufGilt?.ergebnis === "nichts";
+    const claudeOhneLeser = !claudeLiest && s.some((p) => Boolean(p.ungelesenClaude));
+    const korbFrisch =
+      !eingeordnet && jev && !gescheitert && !erledigt && !claudeOhneLeser &&
+      !!juengsteSeite && juengsteSeite.getTime() > korbFrischSeit;
     const inArbeit =
       liest ||
+      korbFrisch ||
       s.some((p) => Boolean(p.frischOffen)) ||
       (claudeLiest && !gescheitert && !laufGilt && s.some((p) => Boolean(p.frischClaude)));
-    const eingeordnet = z.filedAt !== null;
     return {
       id: z.id,
       titel: z.title,
