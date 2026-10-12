@@ -9,7 +9,7 @@
     "lint": "eslint",
     "db:push": "mkdir -p .data && drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "test": "SCHULAPP_TESTLAUF=1 node --import tsx --test \"src/**/*.test.ts\" \"scripts/**/*.test.ts\"",
     "db:backup": "mkdir -p .backups && cp -R .data \".backups/$(date +%Y-%m-%d-%H%M%S)\" && echo \"Gesichert nach .backups/\""
   },
   "dependencies": {

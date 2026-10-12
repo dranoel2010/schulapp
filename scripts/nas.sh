@@ -397,8 +397,18 @@ stand() {
 # `frist_bis` und nicht nach `schluessel`: die kam erst mit der Abnahme vom
 # 11.10.2026 in die Datei, und eine Tabelle aus einer Fassung davor hielte
 # sonst als „da“ — und jeder Lauf schiene an einer fehlenden Spalte.
+#
+# Modell 23 (Plan 5.7): je neue SQL-Datei eine Zeile. Den getauschten CHECK
+# (kombi-arbeitsblaetter-checks.sql) und die GIN-Indizes (kombi-suche.sql)
+# prüft `hoch` nicht: ohne Index ist die Suche nur langsamer, ein fehlender
+# CHECK-Tausch zeigt sich beim ersten Arbeitsblatt-Lauf als Fehler im Lauf.
 PFLICHTSPALTEN="material_pages leser scripts/leser-tabellen.sql
-leser_laeufe frist_bis scripts/leser-laeufe-tabelle.sql"
+leser_laeufe frist_bis scripts/leser-laeufe-tabelle.sql
+tagesprotokoll typ scripts/kombi-tagesprotokoll.sql
+study_blocks pause_ms scripts/kombi-lernblock-uhr.sql
+subject_topics art scripts/kombi-themen-art.sql
+arbeitsblaetter inhalt scripts/kombi-arbeitsblaetter.sql
+leser_laeufe arbeitsblatt_id scripts/kombi-arbeitsblaetter.sql"
 
 # Postgres im db-Container, Benutzer und Datenbank aus SEINER Umgebung — wie
 # psql_db() in scripts/kalender-einrichten.sh; "schulapp" nur als Rückfall.

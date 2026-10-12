@@ -19,6 +19,11 @@
  * ganzen Text: `ON DELETE cascade` ist eine Fremdschlüssel-Regel und darf
  * durch, sonst läge genau die Datei draußen, für die es das Skript gibt.
  *
+ * Eine einzige, enge Ausnahme gibt es seit Modell 23: der Tausch einer
+ * Bedingung — `DROP CONSTRAINT "x"`, dem unmittelbar `ADD CONSTRAINT "x"` auf
+ * derselben Tabelle folgt (`istBedingungsTausch`, unten). Postgres kann eine
+ * CHECK-Bedingung nicht ändern, nur ersetzen.
+ *
  * **Der Entwicklungsserver muss aus sein.** PGlite öffnet das Verzeichnis
  * exklusiv, und zwei Prozesse darauf machen die Datenbank kaputt — nicht
  * theoretisch, das ist schon passiert. Vorher lohnt sich `npm run db:backup`.
@@ -181,9 +186,13 @@ export function ohneKommentare(sql: string): string {
  * die er irren soll.
  */
 export function beanstandung(sql: string): string | null {
-  for (const anweisung of ohneKommentare(sql).split(";")) {
-    const text = anweisung.trim().replace(/\s+/g, " ");
-    if (!text) continue;
+  const anweisungen = ohneKommentare(sql)
+    .split(";")
+    .map((anweisung) => anweisung.trim().replace(/\s+/g, " "))
+    .filter(Boolean);
+
+  for (const [i, text] of anweisungen.entries()) {
+    if (istBedingungsTausch(text, anweisungen[i + 1])) continue;
 
     for (const { muster, satz } of VERBOTEN) {
       const treffer = text.match(muster);
@@ -192,6 +201,46 @@ export function beanstandung(sql: string): string | null {
   }
 
   return null;
+}
+
+/**
+ * Die eine, enge Ausnahme vom Verbot: der **Tausch einer Bedingung**.
+ *
+ * Eine CHECK-Bedingung lässt sich in Postgres nicht ändern, nur löschen und
+ * neu setzen. Modell 23 braucht das genau einmal
+ * (scripts/kombi-arbeitsblaetter-checks.sql: die Lauf-Art 'arbeitsblatt').
+ * Durch geht ein `ALTER TABLE "t" DROP CONSTRAINT "x"` deshalb nur, wenn die
+ * **unmittelbar folgende** Anweisung `ALTER TABLE "t" ADD CONSTRAINT "x" …`
+ * auf derselben Tabelle mit demselben Namen ist. Weil alles in einer
+ * Transaktion läuft, steht danach wieder eine Bedingung dieses Namens da —
+ * es geht nichts verloren, es wird nur ersetzt.
+ *
+ * Alles andere bleibt verboten: ein nacktes `DROP CONSTRAINT`, eins mit
+ * anderem Namen dahinter, eins mit `IF EXISTS` oder `CASCADE` (das nähme
+ * abhängige Fremdschlüssel mit), und selbstverständlich `DROP TABLE` und
+ * seinesgleichen.
+ */
+const DROP_CONSTRAINT =
+  /^alter table (?:only )?("[^"]+"|[a-z_][a-z0-9_]*) drop constraint ("[^"]+"|[a-z_][a-z0-9_]*)$/i;
+const ADD_CONSTRAINT =
+  /^alter table (?:only )?("[^"]+"|[a-z_][a-z0-9_]*) add constraint ("[^"]+"|[a-z_][a-z0-9_]*) /i;
+
+function bezeichner(roh: string): string {
+  return roh.startsWith('"') ? roh.slice(1, -1) : roh.toLowerCase();
+}
+
+export function istBedingungsTausch(
+  anweisung: string,
+  naechste: string | undefined,
+): boolean {
+  const drop = DROP_CONSTRAINT.exec(anweisung);
+  if (!drop || !naechste) return false;
+  const add = ADD_CONSTRAINT.exec(naechste);
+  if (!add) return false;
+  return (
+    bezeichner(drop[1]) === bezeichner(add[1]) &&
+    bezeichner(drop[2]) === bezeichner(add[2])
+  );
 }
 
 async function main() {

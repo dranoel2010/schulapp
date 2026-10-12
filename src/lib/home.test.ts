@@ -232,6 +232,10 @@ function block(id: string): TodayBlock {
     kind: "learn",
     status: "open",
     sortOrder: 0,
+    laeuftSeit: null,
+    pausiertSeit: null,
+    pauseMs: 0,
+    minutenGelernt: null,
     createdAt: STAMP,
   };
 

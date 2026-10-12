@@ -23,6 +23,15 @@ function createDatabase(): Database {
     return drizzlePostgres(client, { schema }) as unknown as Database;
   }
 
+  // Wächter für `npm test` (setzt SCHULAPP_TESTLAUF=1): ein Test darf nie die
+  // echte Datei-Datenbank öffnen — schon gar nicht neben einem laufenden
+  // Server. Tests holen ihre Datenbank aus src/test/db-harness.ts.
+  if (process.env.SCHULAPP_TESTLAUF === "1") {
+    throw new Error(
+      "Test ohne db-harness: .data/pglite bleibt zu. Erster Import der Testdatei: @/test/db-harness",
+    );
+  }
+
   const dataDir = path.join(process.cwd(), ".data", "pglite");
   mkdirSync(dataDir, { recursive: true });
   return drizzlePglite(new PGlite(dataDir), { schema });

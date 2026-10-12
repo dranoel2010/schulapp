@@ -1,0 +1,2205 @@
+import { relations, sql } from "drizzle-orm";
+import {
+  boolean,
+  check,
+  customType,
+  date,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  unique,
+  uniqueIndex,
+  uuid,
+  type AnyPgColumn,
+} from "drizzle-orm/pg-core";
+
+/**
+ * Rohe Bytes als `bytea` — die Spalte, die drizzle-orm nicht mitbringt.
+ *
+ * `drizzle-orm/pg-core` hat für jeden Postgres-Typ eine eigene Spalte, nur für
+ * rohe Bytes nicht. Der vorgesehene Weg dorthin ist `customType`, und was er
+ * ausgleichen muss, sind die beiden Treiber: PGlite reicht beim Lesen ein
+ * Uint8Array herauf, postgres-js einen Node-Buffer aus einem gemeinsam
+ * genutzten Pool. Dessen `byteOffset` ist bei kleinen Werten nicht null —
+ * gemessen: 21272 bei 64 Bytes. Deshalb wird der Blick auf die Bytes immer mit
+ * Offset und Länge gebaut. Wer stattdessen `value.buffer` allein nähme,
+ * lieferte bei einem Vorschaubild den halben Pool aus, also fremden Speicher.
+ * Kopiert wird dabei nichts, es entsteht nur ein zweiter Blick.
+ *
+ * Der Zeichenketten-Zweig ist der Fallback, falls ein Treiber die Textform
+ * "\x2a3f…" durchreicht, statt sie selbst zu lesen. Heute tut das keiner von
+ * beiden; der Zweig kostet nichts und macht die Spalte gegen einen
+ * Treiberwechsel unempfindlich.
+ *
+ * `Uint8Array<ArrayBuffer>` statt einfach `Uint8Array` ist keine Ziererei,
+ * sondern die Bedingung dafür, dass `new Response(page.image)` im Route
+ * Handler ohne Umtypen durchgeht: `BodyInit` verlangt seit TypeScript 5.7 ein
+ * `ArrayBufferView<ArrayBuffer>`, und das voreingestellte `Uint8Array` ist
+ * `Uint8Array<ArrayBufferLike>` — der wird abgelehnt, ein Node-Buffer
+ * ebenfalls.
+ *
+ * `toDriver` gibt den Wert unverändert weiter: beide Treiber erkennen ein
+ * Uint8Array von selbst als `bytea`. Ein blanker ArrayBuffer wird dagegen von
+ * keinem der beiden erkannt und liefe als Text in die Spalte — deshalb geht
+ * hier ein View hinein und nie ein Puffer.
+ */
+const bytea = customType<{
+  data: Uint8Array<ArrayBuffer>;
+  driverData: Uint8Array | string;
+}>({
+  dataType() {
+    return "bytea";
+  },
+  toDriver(value) {
+    return value;
+  },
+  fromDriver(value) {
+    if (typeof value === "string") {
+      const hex = value.startsWith("\\x") ? value.slice(2) : value;
+      const bytes = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < bytes.length; i += 1) {
+        bytes[i] = Number.parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+      }
+      return bytes;
+    }
+
+    return new Uint8Array(
+      value.buffer as ArrayBuffer,
+      value.byteOffset,
+      value.byteLength,
+    );
+  },
+});
+
+/**
+ * Ein Nutzer. Die App ist für eine Person gedacht, die Tabelle hält uns aber
+ * den Weg offen und verankert alle Daten an einem Besitzer.
+ */
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  /** Uhrzeit der täglichen Lern-Erinnerung, volle Stunde 0–23 */
+  reminderHour: integer("reminder_hour").notNull().default(17),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Angemeldete Sitzung. Das Token steht im httpOnly-Cookie. */
+export const sessions = pgTable(
+  "sessions",
+  {
+    token: text("token").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("sessions_user_idx").on(t.userId)],
+);
+
+/**
+ * Ein Schulfach — der Kern der App. Stundenplan, Hausaufgaben, Klausuren und
+ * Noten hängen später alle hier dran.
+ */
+export const subjects = pgTable(
+  "subjects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Voller Name, z.B. "Mathematik" */
+    name: text("name").notNull(),
+    /** Kürzel für Stundenplan-Kacheln, z.B. "M" oder "Ma" */
+    short: text("short").notNull(),
+    /** Schlüssel aus der Farbpalette in src/lib/colors.ts, z.B. "blue" */
+    color: text("color").notNull().default("slate"),
+    teacher: text("teacher"),
+    room: text("room"),
+    /**
+     * Gewicht der schriftlichen Noten in Prozent (0–100).
+     * Mündlich ergibt sich als 100 − weightWritten, dadurch kann die
+     * Gewichtung nie widersprüchlich werden.
+     */
+    weightWritten: integer("weight_written").notNull().default(50),
+    /** Reihenfolge in der Fächerliste */
+    sortOrder: integer("sort_order").notNull().default(0),
+    /** Abgewählte Fächer bleiben für alte Noten erhalten, sind aber weg aus dem Alltag */
+    archived: boolean("archived").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("subjects_user_idx").on(t.userId)],
+);
+
+/**
+ * Eine Prüfung: Klausur, Test, Referat oder mündliche Prüfung.
+ *
+ * Das Datum ist bewusst ein reines Kalenderdatum als Zeichenkette
+ * ("2026-09-14"), kein Zeitstempel. Eine Klausur findet an einem Tag statt,
+ * nicht zu einer Uhrzeit in einer Zeitzone — damit fällt eine ganze Klasse von
+ * Verschiebungsfehlern weg.
+ */
+export const exams = pgTable(
+  "exams",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    /** Optionaler Titel, z.B. "Analysis" — sonst reicht das Fach */
+    title: text("title"),
+    /** klausur | test | referat | muendlich */
+    kind: text("kind").notNull().default("klausur"),
+    date: date("date", { mode: "string" }).notNull(),
+    /** Wie viele Tage vor der Prüfung gelernt wird */
+    leadDays: integer("lead_days").notNull().default(10),
+    /** Lernzeit pro Lerntag in Minuten */
+    minutesPerDay: integer("minutes_per_day").notNull().default(45),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("exams_user_date_idx").on(t.userId, t.date)],
+);
+
+/**
+ * Ein Thema eines Fachs — das Vokabular, aus dem Klausuren und später die
+ * Arbeitsblätter schöpfen.
+ *
+ * Das ist bewusst etwas anderes als `exam_topics`. Dort steht ein **Posten**:
+ * dieses Thema, in dieser Klausur, an dieser Stelle — mit Reihenfolge, und mit
+ * den Lernblöcken daran. Hier steht ein **Verzeichnis**: dieses Thema gibt es
+ * in diesem Fach. Ein Verzeichnis darf umbenannt und zusammengelegt werden,
+ * ohne dass irgendwo Geschichte verloren geht; ein Posten nicht.
+ *
+ * `matchKey` ist die einzige Spalte, über die verglichen wird — die
+ * Inhaltswörter des Titels, gefaltet und sortiert (siehe src/lib/topics.ts).
+ * Der eindeutige Schlüssel darüber macht „pro Fach nur einmal dasselbe Thema"
+ * zu einer Zusage der Datenbank statt zu einer Hoffnung.
+ *
+ * `mergedInto` zeigt auf das Thema, in das dieses zusammengelegt wurde. Die
+ * Zeile bleibt dabei stehen und behält ihren Schlüssel — dadurch löst dieselbe
+ * Schreibweise beim nächsten Mal von selbst auf das Ziel auf. Trennen heißt:
+ * die Spalte wieder leeren. Deshalb ein Zeiger und kein Umschreiben.
+ */
+export const subjectTopics = pgTable(
+  "subject_topics",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    /** Die Anzeigeform, z.B. "Kettenregel" — das Einzige, was auf dem Bildschirm steht */
+    title: text("title").notNull(),
+    /** Nur zum Vergleichen, nie zur Anzeige. Nie leer. */
+    matchKey: text("match_key").notNull(),
+    /** klausur | manuell | blatt — woher das Thema zuerst kam */
+    origin: text("origin").notNull().default("klausur"),
+    /** Zusammengelegt in dieses Thema; leer heißt eigenständig */
+    mergedInto: uuid("merged_into").references(
+      (): AnyPgColumn => subjectTopics.id,
+      { onDelete: "set null" },
+    ),
+    /** Kalendertag, an dem das Thema zuletzt vorkam — sortiert die Vorschläge */
+    lastSeenAt: date("last_seen_at", { mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("subject_topics_key").on(t.subjectId, t.matchKey),
+    index("subject_topics_subject_idx").on(t.subjectId, t.lastSeenAt),
+  ],
+);
+
+/** Ein Thema, das für eine Prüfung gelernt werden muss. */
+export const examTopics = pgTable(
+  "exam_topics",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    examId: uuid("exam_id")
+      .notNull()
+      .references(() => exams.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    /**
+     * Das Fach-Thema, aus dem dieses Klausurthema stammt. Leer ist erlaubt und
+     * völlig normal: alte Einträge haben keins, und eine von Hand getippte
+     * Sonderformulierung bekommt keins aufgezwungen.
+     *
+     * "set null" ist hier kein Detail, sondern der Grund für den ganzen
+     * Zuschnitt: an diesem Klausurthema hängen über study_blocks.topic_id die
+     * erledigten Lernblöcke. Ein Thema aus dem Verzeichnis zu löschen darf sie
+     * unter keinen Umständen mitnehmen.
+     */
+    subjectTopicId: uuid("subject_topic_id").references(
+      () => subjectTopics.id,
+      { onDelete: "set null" },
+    ),
+  },
+  (t) => [
+    index("exam_topics_exam_idx").on(t.examId),
+    index("exam_topics_subject_topic_idx").on(t.subjectTopicId),
+  ],
+);
+
+/**
+ * Ein geplanter Lernblock an einem Tag. Der Lernplan besteht aus diesen
+ * Blöcken; er wird berechnet, aber gespeichert — sonst würde jede Verschiebung
+ * eines Tages den ganzen Plan unter dem Nutzer wegziehen.
+ */
+export const studyBlocks = pgTable(
+  "study_blocks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    examId: uuid("exam_id")
+      .notNull()
+      .references(() => exams.id, { onDelete: "cascade" }),
+    /** Leer bei einer Gesamtwiederholung, die kein einzelnes Thema meint */
+    topicId: uuid("topic_id").references(() => examTopics.id, {
+      onDelete: "cascade",
+    }),
+    date: date("date", { mode: "string" }).notNull(),
+    minutes: integer("minutes").notNull().default(45),
+    /** learn = erstes Durcharbeiten, review = Wiederholung */
+    kind: text("kind").notNull().default("learn"),
+    /** open | done | skipped */
+    status: text("status").notNull().default("open"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("study_blocks_exam_idx").on(t.examId),
+    index("study_blocks_date_idx").on(t.date),
+  ],
+);
+
+/**
+ * Das Stundenraster: wann die 1., 2., 3. Stunde beginnt und endet.
+ *
+ * Es steht pro Nutzer in der Datenbank und nicht als Konstante im Code, weil
+ * jede Schule andere Zeiten hat — und weil ein falsches Raster den ganzen
+ * Stundenplan wertlos macht. Beim ersten Öffnen wird es aus
+ * `DEFAULT_PERIODS` (src/lib/timetable.ts) angelegt und ist danach änderbar.
+ *
+ * Die Uhrzeiten sind Zeichenketten im Format "HH:MM" — dieselbe Entscheidung
+ * wie bei den Kalenderdaten: eine Schulstunde beginnt um 8 Uhr, nicht zu einem
+ * Zeitpunkt in einer Zeitzone.
+ */
+export const periods = pgTable(
+  "periods",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Die wievielte Stunde, beginnend bei 1 */
+    number: integer("number").notNull(),
+    /** "08:00" */
+    startsAt: text("starts_at").notNull(),
+    /** "08:45" */
+    endsAt: text("ends_at").notNull(),
+  },
+  (t) => [
+    unique("periods_user_number_key").on(t.userId, t.number),
+    index("periods_user_idx").on(t.userId),
+  ],
+);
+
+/**
+ * Eine Stunde im festen Wochenplan: dieses Fach, an diesem Wochentag, in
+ * dieser Stunde.
+ *
+ * Der Plan ist eine Woche lang und wiederholt sich — es gibt bewusst keine
+ * Datumsangabe. Eine Doppelstunde sind zwei Einträge in aufeinanderfolgenden
+ * Stunden; das hält das Modell einfach und die Anzeige kann sie zusammenfassen.
+ *
+ * Pro Wochentag und Stunde gibt es höchstens einen Eintrag. Die App gehört
+ * einer Person, die nicht in zwei Räumen gleichzeitig sitzt — der eindeutige
+ * Schlüssel macht daraus eine Zusage der Datenbank statt einer Hoffnung.
+ */
+export const lessons = pgTable(
+  "lessons",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    /** 1 = Montag … 5 = Freitag (ISO-Zählung, passend zu getUTCDay()) */
+    weekday: integer("weekday").notNull(),
+    /** Verweist auf periods.number, nicht auf eine Zeile — das Raster darf sich ändern */
+    period: integer("period").notNull(),
+    /** Leer heißt: der Raum des Fachs gilt */
+    room: text("room"),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("lessons_user_slot_key").on(t.userId, t.weekday, t.period),
+    index("lessons_user_idx").on(t.userId),
+  ],
+);
+
+/**
+ * Ein freier Zeitraum: Ferien, Klassenfahrt oder ein anderer Tag ohne Schule.
+ *
+ * Frei heißt hier ganz frei — kein Unterricht, keine Lernblöcke, kein Abruf,
+ * keine Erinnerung. Der Lernplan und der Abruf weichen auf die Tage davor und
+ * danach aus. Entschieden am 4.10.2026: auch in den Ferien wird nicht gelernt.
+ *
+ * Beide Enden zählen mit: eine Klassenfahrt von Montag bis Freitag steht als
+ * startsOn = Montag, endsOn = Freitag hier, nicht bis Samstag.
+ */
+export const freePeriods = pgTable(
+  "free_periods",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** ferien | klassenfahrt | frei */
+    kind: text("kind").notNull().default("ferien"),
+    /** Leer heißt: die Art ist der Name ("Klassenfahrt") */
+    title: text("title"),
+    startsOn: date("starts_on", { mode: "string" }).notNull(),
+    endsOn: date("ends_on", { mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("free_periods_user_idx").on(t.userId)],
+);
+
+/**
+ * Eine Hausaufgabe: was bis wann für welches Fach zu tun ist.
+ *
+ * Fällig ist sie an einem Kalendertag, nicht zu einer Uhrzeit — dieselbe
+ * Zeichenkette "YYYY-MM-DD" wie bei Prüfungen und Lernblöcken.
+ *
+ * Erledigt wird über `doneAt` festgehalten und nicht über ein zusätzliches
+ * Ja/Nein: ein Zeitpunkt kann nicht in Widerspruch zu einem Häkchen geraten,
+ * und "heute abgehakt" lässt sich daraus ablesen. Leer heißt offen.
+ */
+export const homework = pgTable(
+  "homework",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    /** Längere Beschreibung, z.B. "S. 42 Nr. 3–7" passt schon in den Titel */
+    details: text("details"),
+    dueDate: date("due_date", { mode: "string" }).notNull(),
+    /** Wann abgehakt wurde; leer = offen */
+    doneAt: timestamp("done_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("homework_user_due_idx").on(t.userId, t.dueDate),
+    index("homework_subject_idx").on(t.subjectId),
+  ],
+);
+
+/**
+ * Eine Note.
+ *
+ * Der Wert steht als ganze Zahl in Zehnteln: 7 ist eine 1+, 10 eine 1, 13
+ * eine 1−, 60 eine 6. Der Grund ist der Schnitt: 1,3 + 2,3 ergibt in
+ * Fließkomma 3,5999999999999996 und nicht 3,6 — in Zehnteln dagegen genau 36.
+ * Welche Werte es gibt und wie sie heißen, steht in src/lib/grade-scale.ts —
+ * die Datenbank kennt nur die Zahl.
+ *
+ * Die Skala endet bei 5− und springt dann auf 6: eine 6 trägt keine Tendenz,
+ * das ist in Deutschland so und keine Lücke.
+ *
+ * `weight` ist das Gewicht innerhalb seiner Art: eine Klausur zählt doppelt
+ * gegenüber einem Test, beide sind schriftlich. Wie schriftlich und mündlich
+ * zueinander stehen, hängt dagegen am Fach (`subjects.weightWritten`) — das
+ * ist eine Eigenschaft des Fachs und nicht der einzelnen Note.
+ *
+ * Das Datum ist ein reines Kalenderdatum wie überall sonst: eine Note wird an
+ * einem Tag zurückgegeben, nicht zu einer Uhrzeit in einer Zeitzone.
+ */
+export const grades = pgTable(
+  "grades",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    /** Note in Zehnteln: 7 = 1+, 10 = 1, 13 = 1−, … 53 = 5−, 60 = 6 */
+    value: integer("value").notNull(),
+    /** schriftlich | muendlich */
+    kind: text("kind").notNull().default("schriftlich"),
+    /** Gewicht innerhalb der Art, 1 = einfach, 2 = doppelt, … */
+    weight: integer("weight").notNull().default(1),
+    date: date("date", { mode: "string" }).notNull(),
+    /** Wofür es sie gab, z.B. "2. Klausur" — das Fach steht schon daneben */
+    title: text("title"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("grades_user_date_idx").on(t.userId, t.date),
+    index("grades_subject_idx").on(t.subjectId),
+  ],
+);
+
+/** Ein Gerät, das Push-Nachrichten empfangen darf. */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    /** Zur Anzeige in den Einstellungen, z.B. "Chrome auf Android" */
+    label: text("label"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [unique("push_subscriptions_endpoint_key").on(t.endpoint)],
+);
+
+/**
+ * Ein abfotografiertes Blatt: das Arbeitsblatt aus dem Unterricht, die
+ * Mitschrift, die Kopie mit den Aufgaben.
+ *
+ * Ein Blatt gehört zu genau einem Fach — ohne Fach wäre es ein Foto in der
+ * Galerie und nichts, was die App wiederfindet. Themen kommen beliebig viele
+ * dazu, aber keins muss.
+ *
+ * `capturedOn` ist ein reines Kalenderdatum als Zeichenkette ("2026-09-14"),
+ * dieselbe Entscheidung wie bei Prüfungen, Hausaufgaben und Noten: ein Blatt
+ * wird an einem Schultag ausgeteilt, nicht zu einer Uhrzeit in einer Zeitzone.
+ * Es ist ausdrücklich nicht der Zeitpunkt der Aufnahme — wer am Abend
+ * nachfotografiert, was er morgens bekommen hat, kann den Tag richtigstellen.
+ * `createdAt` hält daneben fest, wann die App das Blatt bekommen hat; das ist
+ * eine andere Frage und deshalb eine andere Spalte.
+ *
+ * Es gibt bewusst keine Spalte für die Art des Blattes. Das Konzept nennt
+ * keine, und jede Spalte muss sich begründen lassen — "Arbeitsblatt oder
+ * Mitschrift?" ist eine Frage, die im Unterricht Zeit kostet und keine
+ * Antwort trägt, nach der später jemand sucht.
+ */
+export const materials = pgTable(
+  "materials",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    /** Wie das Blatt in der Ablage heißt, z.B. "Kettenregel Übungen" */
+    title: text("title").notNull(),
+    /** Der Schultag, an dem es ausgeteilt wurde */
+    capturedOn: date("captured_on", { mode: "string" }).notNull(),
+    note: text("note"),
+    /**
+     * Wann das Blatt durchgesehen wurde. Leer heißt: es liegt noch im
+     * Eingangskorb.
+     *
+     * Ein Zeitpunkt und kein Ja/Nein, aus demselben Grund wie bei den
+     * Hausaufgaben: ein Häkchen kann mit dem Rest der Zeile in Widerspruch
+     * geraten, ein Zeitpunkt nicht. Und die Frage "seit wann liegt das da?",
+     * die ein Eingangskorb beantworten muss, steht damit ohne eine zweite
+     * Spalte in der Zeile.
+     *
+     * Gesetzt wird die Spalte an drei Stellen, und alle drei heißen dasselbe —
+     * ein Mensch hat hingesehen: beim Abhaken im Eingangskorb, beim Speichern
+     * des Blattformulars und beim Übernehmen eines Vorschlags. Zurückgenommen
+     * wird sie über "wieder in den Eingangskorb"; gelöscht wird dabei nichts,
+     * die Spalte geht nur wieder auf leer.
+     *
+     * Ausdrücklich NICHT gesetzt wird sie beim Aufnehmen. Ein frisch
+     * ausgelöstes Foto heißt "Blatt vom 21.8." und trägt kein Thema — genau
+     * das ist der Zustand, für den der Korb da ist.
+     */
+    filedAt: timestamp("filed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("materials_user_captured_idx").on(t.userId, t.capturedOn),
+    index("materials_subject_idx").on(t.subjectId),
+    // Die Startseite fragt bei jedem Aufruf von "/" nach den sechs zuletzt
+    // aufgenommenen Blättern — `where user_id = ? order by created_at desc
+    // limit 6`. Ohne diesen Index liest Postgres dafür alle Blätter des
+    // Nutzers und sortiert sie, für sechs Zeilen. Der Index über
+    // (user_id, captured_on) trägt das nicht: er sortiert nach dem Schultag,
+    // und das ist ausdrücklich eine andere Spalte als der Zeitpunkt der
+    // Aufnahme.
+    index("materials_user_created_idx").on(t.userId, t.createdAt),
+    // Der Eingangskorb fragt `where user_id = ? and filed_at is null` und
+    // sortiert nach dem Zeitpunkt der Aufnahme. Ohne diesen Index liest
+    // Postgres dafür alle Blätter des Nutzers — und der Korb ist die Liste,
+    // die nach jeder Aufnahme neu geladen wird. Die Spalte steht hinten und
+    // nicht vorne: gefiltert wird auf einen einzigen Wert (leer), sortiert
+    // wird nach der Aufnahme.
+    index("materials_user_filed_idx").on(t.userId, t.filedAt, t.createdAt),
+  ],
+);
+
+/**
+ * Eine Seite eines Blattes — das Foto selbst.
+ *
+ * **Die Bytes liegen in der Datenbank und nicht in einem Speicherdienst.** Ein
+ * Ort, ein Backup: `npm run db:backup` nimmt die Fotos mit, ohne davon zu
+ * wissen. Kein zusätzlicher Dienst, kein Token, keine Adresse, die abläuft —
+ * und lokal auf PGlite läuft derselbe Code wie in der Cloud auf Postgres. Das
+ * ist auch die Zusage, die in der Seitenspalte steht: alle Daten liegen auf
+ * deinem eigenen Server. Ein Blatt wiegt nach dem Verkleinern im Browser rund
+ * 200 bis 300 KB; ein Schuljahr voller Blätter bleibt damit im
+ * zweistelligen Megabyte-Bereich und ist für eine Datenbank nichts.
+ *
+ * **`image` und `thumb` stehen getrennt da, und das ist der Grund für die
+ * zweite Spalte:** die Ablage zeigt bis zu zweihundert Vorschauen auf einmal —
+ * `LIST_LIMIT` in @/lib/materials, und jede geholte Zeile bekommt ihre Kachel.
+ * Als Vorschauen zu je rund 15 KB sind das rund 3 MB. Mit nur einer Spalte
+ * müsste dieselbe Seite zweihundert Vollbilder zu je rund 250 KB laden und im
+ * Browser herunterrechnen: rund 50 MB für Bilder, die 320 Pixel breit
+ * angezeigt werden. Gemessen: fünfzehn Vorschaubilder zu lesen dauert 9 ms,
+ * ein einziges Vollbild 14 ms. Daraus folgt die Regel für jede Abfrage in
+ * @/lib/materials: für Listen niemals `image` mitselektieren.
+ *
+ * **Seit dem Web MCP steht eine dritte Spalte daneben, `reading`.** Dieselbe
+ * Begründung, nur für einen anderen Leser: der Agent bekommt ein Bild als
+ * Base64 in ein Tool-Ergebnis, und das ist in der Claude-App bei rund 150 000
+ * Zeichen zu Ende. Warum daraus eine gespeicherte Spalte wird und keine
+ * Rechnung beim Ausliefern, steht an der Spalte selbst.
+ *
+ * `width` und `height` sind die des Vollbildes und stehen dabei, damit die
+ * Seite den Platz reservieren kann, bevor das Bild da ist — sonst springt die
+ * ganze Ablage beim Laden.
+ *
+ * "cascade" ist hier die richtige Wahl, anders als bei den Klausurthemen. An
+ * einem Foto hängt keine Geschichte: kein Lernblock, keine Note, kein
+ * abgehakter Termin. Wer das Blatt löscht, meint das Foto mit — es allein
+ * stehen zu lassen ergäbe eine Seite ohne Blatt, die niemand mehr zuordnen
+ * kann.
+ */
+export const materialPages = pgTable(
+  "material_pages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => materials.id, { onDelete: "cascade" }),
+    /** Reihenfolge innerhalb des Blattes, beginnend bei 0 */
+    sortOrder: integer("sort_order").notNull().default(0),
+    /**
+     * Das Format — für Vollbild UND Vorschau. Eine Spalte für beide Blobs, weil
+     * beide aus demselben Canvas fallen und deshalb nie auseinandergehen
+     * können. Wer diese Zeile über einen anderen Weg als das Formular befüllt,
+     * muss das einhalten: unter zwei Formaten läge `/api/material/<id>/vorschau`
+     * über seine eigenen Bytes, und weil dort `nosniff` steht, weigert sich der
+     * Browser zu raten und zeigt ein kaputtes Bild. Geprüft wird es an der Tür,
+     * in `readPage()` in src/app/(app)/material/actions.ts.
+     */
+    mimeType: text("mime_type").notNull().default("image/jpeg"),
+    /** Maße des Vollbildes, nicht der Vorschau */
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    /** Größe des Vollbildes in Bytes, für die ehrliche Anzeige "248 KB" */
+    byteSize: integer("byte_size").notNull(),
+    /** Das Blatt, lange Kante 1600px */
+    image: bytea("image").notNull(),
+    /**
+     * Dasselbe Blatt, lange Kante 1000px — die Fassung für den Agenten.
+     *
+     * Sie steht hier, weil ein Tool-Ergebnis in der Claude-App bei rund
+     * 150 000 Zeichen endet und ein Bild dort als Base64 reist: das Vollbild
+     * wiegt an einem gemessenen Blatt 212 KB, also rund 290 000 Zeichen, und
+     * käme nie an; die Vorschau käme an und wäre unlesbar. Die dritte Spalte ist der einzige Weg, auf dem
+     * „lies dieses Blatt" beides sein kann — lesbar und klein genug.
+     *
+     * Gerechnet wird sie im Browser aus demselben Bitmap wie die anderen
+     * beiden, mit einer Qualitätsleiter, die auf rund 100 KB zielt
+     * (`READING_QUALITIES` in @/lib/images). Genau deshalb braucht der Server
+     * auch für sie keine Bildbibliothek.
+     */
+    reading: bytea("reading").notNull(),
+    /** Dasselbe Blatt, lange Kante 320px — für Listen */
+    thumb: bytea("thumb").notNull(),
+    /**
+     * Was auf dieser Seite steht — wörtlich abgeschrieben.
+     *
+     * Sie ist der eine neue Fakt, aus dem das Fach-PDF und die tägliche
+     * Wiki-Übergabe beide entstehen. Keine der beiden Ausgaben leitet etwas her
+     * und keine ruft ein Modell; sie lesen diese Spalte. Unterscheiden sie sich,
+     * ist das ein Fehler und keine Einstellung.
+     *
+     * Sie steht an der SEITE und nicht am Blatt, weil der Agent je Seite liest
+     * (`read_page`) und ein Blatt bis zu zwölf Seiten trägt (`MAX_PAGES` in
+     * @/lib/images).
+     *
+     * NULL und leerer String heißen NICHT dasselbe, und der Unterschied ist der
+     * Grund, warum hier kein `.notNull().default("")` steht. NULL heißt „noch
+     * niemand hat diese Seite gelesen" — der Normalzustand jeder Seite, die es
+     * vor dieser Spalte schon gab. Der leere String heißt „gelesen, und es stand
+     * nichts darauf". Fielen beide zusammen, käme jede leere Seite bei jedem Lauf
+     * wieder an die Reihe.
+     *
+     * Geschrieben wird sie auf drei Wegen, und keiner davon ist ein Agent:
+     *
+     * - von einem Menschen im Formular an der Blattseite;
+     * - beim Übernehmen eines Vorschlags — der Weg über
+     *   `material_proposal_transcripts`, durch Formular oder Knopf im Korb
+     *   oder das Einordnen durch Jev (@/lib/auto-file);
+     * - von der Zuteilung der App (@/lib/leser/zuteilung), wenn Docling die
+     *   Seite allein liest (seit dem 6.10.2026). Dann nur in eine Seite, die
+     *   noch keine Abschrift hat, und mit `maschinell` = true. Docling ist
+     *   kein Agent: es befolgt keine Sätze auf dem Blatt, und was es liefert,
+     *   hat vorher eine feste Regel samt Einstufung durch Jev bestanden. Der
+     *   benannte Anlass für diesen direkten Weg steht in KONZEPT.md.
+     */
+    transcript: text("transcript"),
+    /**
+     * Wer diese Seite liest — entschieden von der App, nicht von einem
+     * Agenten (seit dem 6.10.2026).
+     *
+     * - `'offen'`: die App hat noch nicht entschieden. Docling rechnet
+     *   gerade, oder der Anstoß steht noch aus. Eine solche Seite geht nie an
+     *   Claude; ein Blatt mit einer offenen Seite lässt der Claude-Leser
+     *   liegen, bis sie entschieden ist.
+     * - `'docling'`: Docling liest allein. Die Abschrift hat die Zuteilung
+     *   geschrieben; Claude sieht die Seite nie.
+     * - `'claude'`: Claude liest vom Foto, ohne Vorlage.
+     * - NULL: eine Seite von vor dem 6.10.2026. Für sie gilt, was vorher galt
+     *   — Claude liest, was ungelesen ist, samt dem Schutz der Altblätter in
+     *   `nachgereichtUngelesen()` (@/lib/materials).
+     *
+     * Deshalb nullbar und mit Vorgabe `'offen'`: jede NEUE Seite beginnt
+     * offen, der Bestand bleibt NULL. In der Wanderung
+     * (scripts/leser-tabellen.sql) kommt die Vorgabe erst NACH dem Anlegen
+     * der Spalte — mit ihr im ADD füllte Postgres jede vorhandene Seite mit
+     * `'offen'`, und die App schickte den ganzen Altbestand durch Docling.
+     * Die erlaubten Werte hält die CHECK-Bedingung unten fest.
+     */
+    leser: text("leser").$type<Leser>().default("offen"),
+    /**
+     * Warum die App so entschieden hat — für das Nachmessen im Betrieb, nicht
+     * für eine Entscheidung. Regelversion, Wortzahl, Formelverdacht,
+     * Jev-Wahrscheinlichkeit, Grund (`LeserGrund`). NULL, solange `leser`
+     * NULL oder `'offen'` ist.
+     */
+    leserGrund: jsonb("leser_grund").$type<LeserGrund>(),
+    /**
+     * Was Docling auf dieser Seite gelesen hat, roh als Markdown — genau
+     * einmal gerechnet, nie neu.
+     *
+     * Gespeichert, damit sich die Regel später an echten Seiten nachmessen
+     * lässt, ohne Docling ein zweites Mal rechnen zu lassen, und damit eine
+     * Docling-Seite ihre erste Überschrift als Titel hergeben kann. Er steht
+     * in keiner Liste und geht nie an Claude: an ein Modell geht er nur zur
+     * Einstufung an Jev, und das nur, wenn die feste Regel davor bestanden
+     * ist. Gelesen wird er ausschließlich in `ersteSeiteDocling()` und
+     * `korbblattStand()` in @/lib/materials.
+     */
+    doclingText: text("docling_text"),
+    /**
+     * Hat die heutige Abschrift die Zuteilung aus Docling geschrieben?
+     *
+     * Nur dann steht hier true. Jede andere Schreibung — ein Mensch im
+     * Formular, Claude über einen Vorschlag — setzt false, sobald sich der
+     * Text dabei ändert; schickt das Formular eine Docling-Seite unverändert
+     * mit, bleibt die Kennzeichnung (`setMaterialTranscripts()`). Daran
+     * hängt der Vermerk „maschinell gelesen (Docling)" an Blattseite, Korb,
+     * PDF, Wiki und Fragen-Eingang: eine solche Abschrift hat niemand
+     * gegengelesen, und Lesefehler stehen darin ohne ⟨⟩.
+     */
+    maschinell: boolean("maschinell").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("material_pages_material_idx").on(t.materialId, t.sortOrder),
+    check(
+      "material_pages_leser_check",
+      sql`${t.leser} in ('offen', 'docling', 'claude')`,
+    ),
+  ],
+);
+
+/**
+ * Welche Themen auf einem Blatt stehen.
+ *
+ * Der Verweis geht auf `subject_topics`, also auf das Vokabular des Fachs, und
+ * ausdrücklich nicht auf freien Text. Freier Text hieße: "Kettenregel" auf dem
+ * einen Blatt und "kettenregel " auf dem nächsten sind zwei Themen, und die
+ * Frage "was habe ich zur Kettenregel?" findet die Hälfte. Über das Vokabular
+ * ist es ein Eintrag, der sich umbenennen und zusammenlegen lässt — und
+ * dieselben Themen, aus denen auch die Klausuren schöpfen. Genau dafür wurde
+ * `subject_topics` in Stufe 1 gebaut.
+ *
+ * Der zusammengesetzte Primärschlüssel ist die ganze Zeile: dieses Thema, auf
+ * diesem Blatt, einmal. Es gibt hier nichts weiter festzuhalten — keine
+ * Reihenfolge, kein Datum, keinen Zustand. Deshalb trägt die Zeile auch keine
+ * Geschichte, und deshalb dürfen beide Fremdschlüssel "cascade" tragen: fällt
+ * das Blatt oder das Thema weg, ist die Paarung sinnlos und nicht etwa
+ * verloren.
+ */
+export const materialTopics = pgTable(
+  "material_topics",
+  {
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => materials.id, { onDelete: "cascade" }),
+    subjectTopicId: uuid("subject_topic_id")
+      .notNull()
+      .references(() => subjectTopics.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({
+      name: "material_topics_pk",
+      columns: [t.materialId, t.subjectTopicId],
+    }),
+    index("material_topics_topic_idx").on(t.subjectTopicId),
+  ],
+);
+
+/**
+ * Ein Vorschlag zu einem Blatt — der Eingangskorb.
+ *
+ * **Der Bestand wird nur durch die Bestätigung geschrieben, nie direkt.** Ein
+ * Vorschlag steht neben dem Blatt und nicht darin; er ändert nichts, bis ein
+ * Mensch ihn übernimmt, und dann geht er durch dieselbe Tür wie ein Formular
+ * (`materialInputSchema`, `updateMaterial()`, `setMaterialTopics()`). Das ist
+ * keine Vorsichtsmaßnahme, sondern die Bedingung des ganzen KI-Anschlusses:
+ * wer nicht vertrauenswürdige Blätter liest und gleichzeitig schreiben darf,
+ * ist über das Blatt selbst angreifbar.
+ *
+ * **Jede Spalte ist optional, und das ist die Aussage der Tabelle:** ein
+ * Vorschlag schlägt vor, was er weiß, und schweigt über den Rest. Wer nur
+ * Themen erkennt, muss keinen Titel erfinden. Leer heißt an jeder Spalte
+ * dasselbe — "dazu sage ich nichts, es bleibt, wie es am Blatt steht"; was
+ * daraus im Formular wird, entscheidet `prefillFromProposal()` in
+ * @/lib/inbox, an einer Stelle und nicht an vier.
+ *
+ * `origin` hält fest, woher der Vorschlag kam: "manuell" von Hand über die
+ * Oberfläche, "agent" von einem Agenten, "app" von der App selbst (seit dem
+ * 6.10.2026). Die Spalte ist keine Statistik. Ein Vorschlag vom Agenten ist
+ * aus dem Inhalt eines Blattes abgeleitet, also aus etwas, das die App nicht
+ * geschrieben hat; einer von Hand nicht. Auf dem Bildschirm steht deshalb,
+ * welcher gerade vor einem liegt — das ist der ganze Zweck.
+ *
+ * "app" ist der Weg, den diese Spalte von Anfang an offenhielt: ein weiterer
+ * Schreiber auf diese Tabelle, ohne dass der Korb sich ändern muss. Die
+ * Zuteilung (@/lib/leser/zuteilung) legt ihn an, wenn Docling ALLE Seiten
+ * eines Blattes im Korb gelesen hat und kein Agent mehr kommt — mit einem
+ * Titel aus der ersten Überschrift, sonst nichts —, und lässt Jev einordnen.
+ * Kein Agent, aber aus Blattinhalt abgeleitet; auf dem Bildschirm steht er
+ * deshalb wie einer vom Agenten in der Akzentfarbe, mit eigenem Namen.
+ *
+ * **Es gibt keinen Zustand "übernommen" oder "verworfen".** Eine Zeile in
+ * dieser Tabelle ist ein offener Vorschlag, sonst nichts — entschieden heißt
+ * hier: die Zeile ist weg. Ein Vorschlag ist ein Entwurf eines Formulars und
+ * kein Vorgang; was aus ihm wurde, steht danach am Blatt, und das Blatt ist
+ * die Sache, die Geschichte trägt. Mit einem Zustand müsste jede Abfrage des
+ * Korbs danach filtern, und die Tabelle liefe mit toten Entwürfen voll, die
+ * niemand mehr liest. Wer wissen will, was der Agent gesagt hat, sieht es beim
+ * Übernehmen: das Formular steht ausgefüllt da, Feld für Feld.
+ *
+ * Keine `userId` an der Zeile — sie hängt am Blatt, so wie bei
+ * `material_pages` und `material_topics`. Jede Abfrage hier verbindet deshalb
+ * über `materials` und filtert dort nach dem Nutzer; der Grund steht im Kopf
+ * von @/lib/materials.
+ */
+export const materialProposals = pgTable(
+  "material_proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => materials.id, { onDelete: "cascade" }),
+    /** manuell | agent | app — wer den Vorschlag geschrieben hat */
+    origin: text("origin").notNull().default("manuell"),
+    /**
+     * Das vorgeschlagene Fach. Leer heißt: das Fach des Blattes bleibt.
+     *
+     * "set null" und nicht "cascade", anders als am Blatt. Ein gelöschtes Fach
+     * nimmt sein Blatt mit, und mit dem Blatt geht auch der Vorschlag — das ist
+     * der häufige Fall und über `materialId` schon geregelt. Diese Spalte
+     * betrifft den seltenen anderen: der Vorschlag will das Blatt in ein
+     * ANDERES Fach schieben, und genau dieses andere wird gelöscht. Dann
+     * fällt der Fachvorschlag weg und der Rest der Zeile — Titel, Tag, Notiz,
+     * Themen — bleibt stehen. "cascade" nähme hier einen brauchbaren Vorschlag
+     * mit, weil ein Fach verschwand, das mit dem Blatt nie etwas zu tun hatte.
+     */
+    subjectId: uuid("subject_id").references(() => subjects.id, {
+      onDelete: "set null",
+    }),
+    /** Der vorgeschlagene Titel. Leer heißt: der Titel des Blattes bleibt. */
+    title: text("title"),
+    /** Der vorgeschlagene Schultag. Leer heißt: der Tag des Blattes bleibt. */
+    capturedOn: date("captured_on", { mode: "string" }),
+    /** Die vorgeschlagene Notiz. Leer heißt: die Notiz des Blattes bleibt. */
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("material_proposals_material_idx").on(t.materialId, t.createdAt)],
+);
+
+/**
+ * Ein vorgeschlagenes Thema — freier Text, kein Verweis ins Vokabular.
+ *
+ * Das ist der eine Punkt, an dem diese Tabelle von `material_topics` abweicht,
+ * und er ist beabsichtigt. Am Blatt steht ein Verweis auf `subject_topics`,
+ * damit "Kettenregel" und "kettenregel " dasselbe Thema sind. Ein Vorschlag
+ * kann aber ein Thema nennen, das es im Vokabular noch gar nicht gibt — das
+ * ist der Normalfall, wenn ein Agent ein Blatt liest. Müsste er dafür eine
+ * Vokabel anlegen, schriebe er in den Bestand, und zwar bevor irgendjemand
+ * zugestimmt hat.
+ *
+ * Aus dem Text wird eine Vokabel erst beim Übernehmen, über
+ * `setMaterialTopics()` und `ensureTopics()` — dieselbe Tür wie beim Tippen im
+ * Formular, mit derselben Prüfung auf ein Fachwort und derselben Faltung
+ * gleichbedeutender Schreibweisen. Was dabei durchfällt, sagt das Formular.
+ *
+ * `sortOrder`, damit die Chips in der Reihenfolge stehen, in der sie
+ * vorgeschlagen wurden. Bei Themen ist das keine Kosmetik: die ersten sind die
+ * naheliegenden.
+ */
+export const materialProposalTopics = pgTable(
+  "material_proposal_topics",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    proposalId: uuid("proposal_id")
+      .notNull()
+      .references(() => materialProposals.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [
+    index("material_proposal_topics_proposal_idx").on(t.proposalId, t.sortOrder),
+  ],
+);
+
+/**
+ * Die vorgeschlagene Abschrift einer Seite — ein Transportweg, kein Aufbewahrungsort.
+ *
+ * Ein Vorschlag wird beim Übernehmen gelöscht. Diese Zeile trägt die Abschrift
+ * also nur so lange, bis ein Mensch sie gesehen und bestätigt hat; danach steht
+ * sie in `material_pages.transcript` und hier nichts mehr. Das ist dieselbe
+ * Regel wie für Fach, Titel und Themen — der Bestand wird nur durch die
+ * Bestätigung geschrieben, nie direkt.
+ *
+ * Warum eine eigene Tabelle und nicht eine Spalte an `material_proposals`: die
+ * Abschrift gehört zu einer SEITE, und ein Blatt hat bis zu zwölf. Eine Spalte
+ * am Vorschlag müsste zwölf Texte in einem Feld unterbringen und beim
+ * Übernehmen wieder auseinandernehmen — ohne verlässlich zu wissen, welcher
+ * Text zu welcher Seite gehört. Genau das geht schief, sobald jemand zwischen
+ * Vorschlag und Bestätigung eine Seite löscht.
+ *
+ * Der zusammengesetzte Primärschlüssel ist die ganze Zeile: dieser Vorschlag,
+ * diese Seite, einmal. Beide Fremdschlüssel tragen "cascade", und für die Seite
+ * ist das die wichtigere Hälfte: wer eine unscharfe Aufnahme wegwirft und neu
+ * fotografiert, will nicht die Abschrift der alten übernehmen.
+ */
+export const materialProposalTranscripts = pgTable(
+  "material_proposal_transcripts",
+  {
+    proposalId: uuid("proposal_id")
+      .notNull()
+      .references(() => materialProposals.id, { onDelete: "cascade" }),
+    pageId: uuid("page_id")
+      .notNull()
+      .references(() => materialPages.id, { onDelete: "cascade" }),
+    /**
+     * Der Text. `notNull`, anders als an der Seite: hier gibt es den Zustand
+     * „noch nicht gelesen" nicht — wer nichts vorzuschlagen hat, legt keine
+     * Zeile an.
+     */
+    transcript: text("transcript").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      name: "material_proposal_transcripts_pk",
+      columns: [t.proposalId, t.pageId],
+    }),
+    index("material_proposal_transcripts_page_idx").on(t.pageId),
+  ],
+);
+
+/**
+ * Was der Claude-Leser der App schon versucht hat — das Gedächtnis, damit kein
+ * Blatt zweimal bezahlt wird (seit dem 11.10.2026).
+ *
+ * Bis dahin las ein eigener Dienst neben der App, der Postbote, über ein
+ * Claude-Abo, und sein Gedächtnis war eine Datei neben ihm (`gesehen.json`).
+ * Seit die App das Modell selbst ruft, kostet jeder Lauf Geld vom
+ * API-Schlüssel — und das Gedächtnis gehört dorthin, wo der Zustand der Seiten
+ * schon liegt. Eine Liste im Speicher überlebte keinen Neustart: nach jedem
+ * `nas.sh hoch` würde jedes Blatt, an dem schon einmal „nichts“ herauskam, neu
+ * gelesen und neu bezahlt.
+ *
+ * ── Eine Zeile je Lauf, gemerkt sind nur drei Ergebnisse ────────────────────
+ *
+ * Jeder Lauf steht hier, auch `pause` und `spaeter`: sie sind die Spur für
+ * die Anzeige am Blatt („zuletzt: …“) und für `nas.sh stand`. Als GEMERKT —
+ * „für diesen Stand des Blattes nicht noch einmal“ — gelten nur `vorschlag`,
+ * `kein-vorschlag` und `nichts`. `pause` (Kontingent, Schlüssel, API weg)
+ * liegt nicht am Blatt, `spaeter` (Frist) nur an diesem einen Versuch; beide
+ * kommen beim nächsten Anstoß wieder dran. Dieselbe Trennung wie im Käfig
+ * des Postboten, und aus demselben Grund: ein Schlüsselfehler, der als
+ * „nichts“ gemerkt würde, legte jedes Blatt des Ausfalls für immer still.
+ *
+ * ── `laeuft`: die Zeile steht VOR dem Aufruf ────────────────────────────────
+ *
+ * Seit der Abnahme vom 11.10.2026 legt der Abschreiber seine Zeile an, bevor
+ * er Opus ruft — mit `ergebnis = 'laeuft'` und `frist_bis`, der eigenen Frist
+ * des Aufrufs —, und schreibt danach das Ergebnis in DIESELBE Zeile. Bis dahin
+ * stand sie erst hinter dem Aufruf, und ein Neustart mitten im Strom (`nas.sh
+ * hoch`, das DSM-Update am Donnerstag) hinterließ einen bezahlten Versuch ohne
+ * jede Spur: das Blatt kam gleich wieder dran, bei jedem Neustart von vorn
+ * bezahlt. Jetzt bleibt eine `laeuft`-Zeile stehen, und ist ihre Frist um,
+ * zählt sie wie ein bezahlter Abbruch (`abbruch` unten). Solange sie frisch
+ * ist, nimmt kein zweiter Lauf das Blatt.
+ *
+ * ── `abbruch`: was Geld gekostet hat, ohne etwas zu ergeben ─────────────────
+ *
+ * Gesetzt nur, wenn ein Versuch bezahlt war — das Modell hatte zu schreiben
+ * begonnen — und trotzdem nicht gemerkt ist: `frist` (die eigene Frist lief
+ * ab), `strom` (der Strom brach mitten in der Antwort ab, und am Blatt
+ * ausgeschlossen ist es nicht: ein `api_error` oder ein 400 im Strom, eine
+ * abreißende Verbindung), `ausfall` (dasselbe, aber mit einer Art, die nie am
+ * Blatt liegt: Überlastung, Grenzen, Konto, Schlüssel), `rueckfall`
+ * (abgelehnt, und das Rückfallmodell war selbst ausgelastet) und `ablage` (die
+ * Antwort kam, ließ sich aber nicht speichern). An ihnen sieht die
+ * Monatssumme, dass ihr etwas fehlen kann („mindestens …“). Auf die Grenze je
+ * Stand (`SPAETER_HOECHSTENS` in @/lib/leser/claude-ablauf) zählen alle außer
+ * `ausfall` — gleich, ob die Zeile `spaeter` oder `pause` heißt. Ein Ausfall
+ * von Anthropic legt so kein Blatt still, und ein Blatt, an dem der Strom
+ * jedes Mal abreißt, wird höchstens zweimal bezahlt (Regression vom
+ * 11.10.2026: zählte `strom` nicht, kostete so ein Blatt jeden Anstoß aufs
+ * Neue). Was vor dem Inhalt scheitert — ein 400 vor dem Strom, ein 429,
+ * keine Verbindung —, kostet nichts und hat keinen `abbruch`.
+ *
+ * ── `abgeschrieben`: welche Seiten der Lauf wirklich abgeschrieben hat ──────
+ *
+ * Die ids der Seiten, deren Abschrift durch die Tür in einen Vorschlag kam —
+ * nicht, was das Modell nannte. Das Gedächtnis braucht sie für die eine
+ * Ausnahme: ein Einordnen erledigt das Blatt auch für die Nachlese, nur eine
+ * Seite, die es NICHT abschreiben konnte, bekommt am eingeordneten Blatt
+ * ihren zweiten Versuch (`gedaechtnisAus()` in @/lib/leser/claude-ablauf).
+ * Leer oder NULL heißt: keine. An einem gemerkten Einordnen kommen die Seiten
+ * jedes Vorschlags von außen dazu, den ein Mensch in diesem Stand verwirft
+ * (unten): dann heißt die Liste „zu diesen Seiten lag in diesem Stand schon
+ * eine Abschrift vor“, vom Lauf selbst oder von einem Verworfenen.
+ *
+ * ── Zwei Sorten Zeilen ohne Aufruf ──────────────────────────────────────────
+ *
+ * `einordnen` / `kein-vorschlag`, ohne Messung: „vor dem Wechsel gesehen“
+ * (scripts/claude-einrichten.sh, Schritt 4b — die Korbblätter, die der
+ * Postbote schon gesehen hatte) und die Spur eines verworfenen Vorschlags von
+ * außen (`verworfenVermerken()` in @/lib/leser/laeufe, seit der Nachprüfung
+ * vom 11.10.2026: ein Vorschlag aus einem Chat oder vom Postboten, den ein
+ * Mensch verworfen hat). Beide sagen dem Gedächtnis „in diesem Stand
+ * gesehen“, mit den Seiten in `abgeschrieben`, die nicht noch einmal gelesen
+ * werden sollen. Gekostet haben sie nichts. Steht für den Stand schon ein
+ * gemerktes Einordnen, entsteht keine zweite Zeile (der Teilindex unten), die
+ * Spur erweitert dessen `abgeschrieben` — seit der zweiten Nachprüfung vom
+ * 11.10.2026; bis dahin fiel sie dann weg, und die Reihenfolge des Verwerfens
+ * entschied, ob eine verworfene Abschrift bezahlt nachgelesen wurde.
+ *
+ * ── `schluessel`: wann ein Blatt wieder dran ist ────────────────────────────
+ *
+ * `lastPageAt` des Blattes beim Lauf, so wie `listPageActivity()` ihn liefert
+ * (ISO, Millisekunden, UTC) — leer, wo es keinen gibt (der Fragenlauf). Eine
+ * neue Seite macht einen neuen Schlüssel und damit einen neuen Fall.
+ * Verwerfen eines Vorschlags, „wieder in den Korb“ oder ein Neustart ändern
+ * ihn nicht, und deshalb löst keines davon ein neues, bezahltes Lesen aus —
+ * ein gemerktes Ergebnis gleich welcher Art erledigt den Stand für Einordnen
+ * UND Nachlese. Gelesen wird der Stand VOR den Seiten (dieselbe Reihenfolge
+ * wie read_sheet in @/lib/mcp/run): früher gelesen ist er höchstens älter, und
+ * das Blatt kommt einmal zu viel dran; später gelesen könnte eine Seite hinter
+ * dem Schlüssel verschwinden, ohne je gelesen zu werden.
+ *
+ * ── Der Teilindex ───────────────────────────────────────────────────────────
+ *
+ * Eindeutig über (material_id, art, schluessel) — aber nur für die gemerkten
+ * Ergebnisse und nur für die beiden Arten, die das Gedächtnis befragen
+ * (`einordnen`, `nachlese`). Zwei Läufe, die sich nach einem Neustart
+ * überschneiden, können so nicht beide ein Ergebnis für denselben Stand
+ * eintragen; gesichert in der Datenbank und nicht nur in der Queue des
+ * Prozesses. `von-hand` steht nicht darin: der Knopf fragt das Gedächtnis
+ * nicht, und ein zweiter Druck nach einem „nichts“ muss sich eintragen lassen.
+ * `fragen` hängt an keinem Blatt, und NULL ist in Postgres keinem NULL gleich.
+ * Eine `laeuft`-Zeile fällt nicht darunter; erst ihr Ergebnis. Stößt es dort
+ * an, war der Lauf doppelt, und die Zeile endet als `spaeter` mit diesem Grund
+ * (`laufAbschliessen()` in @/lib/leser/laeufe).
+ *
+ * ── Woran eine Zeile hängt ──────────────────────────────────────────────────
+ *
+ * An genau einem Ziel: ein Blatt für die drei Arten des Abschreibers, eine
+ * Klausur für den Fragenlauf — das hält die CHECK-Bedingung fest. Alle drei
+ * Fremdschlüssel tragen „cascade“: ohne Nutzer, Blatt oder Klausur ist eine
+ * Zeile darüber, was mit ihnen versucht wurde, sinnlos. Ein neu fotografiertes
+ * Blatt ist ein neues Blatt und beginnt ohne Gedächtnis.
+ *
+ * ── `modell`, `kosten_usd`, `messung` ───────────────────────────────────────
+ *
+ * `modell` ist, wer WIRKLICH geantwortet hat — nach einem Rückfall
+ * (`fallbacks` in @/lib/claude/client) ein anderes Modell als das bestellte.
+ * `kosten_usd` NULL heißt „unbekannt“ (kein Aufruf, oder ein Modell ohne
+ * bekannten Preis) und ausdrücklich nicht „kostenlos“. `messung` ist die ganze
+ * Messung (@/lib/claude/ergebnis) zum Nachrechnen; Spalten für Modell und
+ * Kosten stehen trotzdem daneben, weil „was hat der Monat gekostet?“ eine
+ * Summe über eine Spalte sein soll und keine über jsonb.
+ *
+ * Keine `relations()`, aus demselben Grund wie bei `wiki_deliveries`: keine
+ * Abfrage liest diese Tabelle über `db.query`.
+ */
+export const leserLaeufe = pgTable(
+  "leser_laeufe",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    materialId: uuid("material_id").references(() => materials.id, {
+      onDelete: "cascade",
+    }),
+    examId: uuid("exam_id").references(() => exams.id, { onDelete: "cascade" }),
+    /** einordnen | nachlese | von-hand | fragen */
+    art: text("art").$type<LeserLaufArt>().notNull(),
+    /** `lastPageAt` beim Lauf, ISO; '' ohne Blatt */
+    schluessel: text("schluessel").notNull().default(""),
+    /** vorschlag | kein-vorschlag | nichts | spaeter | pause | laeuft */
+    ergebnis: text("ergebnis").$type<LeserLaufErgebnis>().notNull(),
+    /** Ein Satz, warum — leer, wenn es nichts zu sagen gibt. */
+    grund: text("grund").notNull().default(""),
+    /** frist | strom | ausfall | rueckfall | ablage — nur ein bezahlter Versuch ohne gemerktes Ergebnis. */
+    abbruch: text("abbruch").$type<LeserLaufAbbruch>(),
+    /** Die Seiten, deren Abschrift dieser Lauf durch die Tür brachte — und, an einem Einordnen, die verworfener Vorschläge desselben Stands. */
+    abgeschrieben: jsonb("abgeschrieben").$type<string[]>(),
+    /** Bis wann der Aufruf höchstens dauert (seine Frist) — gesetzt mit `laeuft`. */
+    fristBis: timestamp("frist_bis", { withTimezone: true }),
+    /** Wer geantwortet hat; NULL, wenn keine Antwort kam. */
+    modell: text("modell"),
+    kostenUsd: numeric("kosten_usd", {
+      precision: 10,
+      scale: 6,
+      mode: "number",
+    }),
+    messung: jsonb("messung").$type<LeserLaufMessung>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("leser_laeufe_gemerkt_key")
+      .on(t.materialId, t.art, t.schluessel)
+      .where(
+        sql`${t.ergebnis} in ('vorschlag', 'kein-vorschlag', 'nichts') and ${t.art} in ('einordnen', 'nachlese')`,
+      ),
+    index("leser_laeufe_material_idx").on(t.materialId, t.createdAt),
+    index("leser_laeufe_exam_idx").on(t.examId, t.createdAt),
+    index("leser_laeufe_user_idx").on(t.userId, t.createdAt),
+    check(
+      "leser_laeufe_art_check",
+      sql`${t.art} in ('einordnen', 'nachlese', 'von-hand', 'fragen')`,
+    ),
+    check(
+      "leser_laeufe_ergebnis_check",
+      sql`${t.ergebnis} in ('vorschlag', 'kein-vorschlag', 'nichts', 'spaeter', 'pause', 'laeuft')`,
+    ),
+    check(
+      "leser_laeufe_abbruch_check",
+      sql`${t.abbruch} is null or ${t.abbruch} in ('frist', 'strom', 'ausfall', 'rueckfall', 'ablage')`,
+    ),
+    check(
+      "leser_laeufe_ziel_check",
+      sql`(${t.art} = 'fragen' and ${t.examId} is not null and ${t.materialId} is null) or (${t.art} <> 'fragen' and ${t.materialId} is not null and ${t.examId} is null)`,
+    ),
+  ],
+);
+
+/**
+ * Ein Programm, das sich für den Zugriff auf die App angemeldet hat — heute
+ * genau eins: Claude.
+ *
+ * **Diese Zeile entsteht, bevor irgendjemand zugestimmt hat.** So ist OAuth
+ * gebaut: ein Client meldet sich zuerst an (Dynamic Client Registration, RFC
+ * 7591) und schickt den Nutzer erst danach zur Zustimmung. Die Anmeldung
+ * verlangt deshalb kein Passwort und kann von jedem im Netz aufgerufen werden;
+ * sie darf entsprechend auch nichts können. Eine Zeile hier ist ein Name, eine
+ * Rückadresse und sonst nichts — kein Zugriff, kein Nutzer, kein Recht. Erst
+ * eine Zeile in `oauth_grants` bedeutet, dass ein Mensch ja gesagt hat.
+ *
+ * Deshalb hängt hier auch **keine `userId`**: zum Zeitpunkt der Anmeldung gibt
+ * es keinen Nutzer, der gefragt worden wäre. Wem ein Client etwas darf, steht
+ * eine Tabelle weiter.
+ *
+ * **`redirectUris` ist eine Zeichenkette mit Leerzeichen dazwischen**, keine
+ * eigene Tabelle und kein Array. Eine Adresse enthält nie ein Leerzeichen, die
+ * Liste ist immer kurz (Claude nennt eine, Claude Code zwei), und sie wird nur
+ * als Ganzes gelesen und als Ganzes verglichen. Eine Kindtabelle wäre ein
+ * Verzeichnis für zwei Zeilen, die nie einzeln jemanden interessieren.
+ *
+ * Gegen ein `client_secret` hat sich das hier entschieden: Claude läuft als
+ * öffentlicher Client, das Geheimnis läge also in fremder Hand und schützte
+ * nichts. Was den Tausch von Code gegen Token absichert, ist PKCE — der
+ * Prüfwert, den nur derjenige kennt, der die Anmeldung angestoßen hat.
+ */
+export const oauthClients = pgTable("oauth_clients", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Wie der Client sich nennt, z.B. "Claude". Steht auf der Zustimmungsseite. */
+  name: text("name").notNull(),
+  /** Erlaubte Rückadressen, durch Leerzeichen getrennt. Verglichen wird Zeichen für Zeichen. */
+  redirectUris: text("redirect_uris").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Ein Zustimmungs-Code: die Quittung dafür, dass ein Mensch gerade „erlauben"
+ * gedrückt hat, gültig für eine Minute und für genau einen Tausch.
+ *
+ * **Gespeichert wird nur der Abdruck (`codeHash`), nie der Code selbst.** Der
+ * Code reist durch den Browser des Nutzers und steht dabei in einer Adresszeile
+ * — in der Chronik, womöglich in einem Serverlog. Wer später die Datenbank
+ * liest, soll damit nichts anfangen können; verglichen wird deshalb der
+ * SHA-256-Abdruck. Dasselbe gilt eine Tabelle weiter für die Token. Anders als
+ * das Sitzungs-Token in `sessions`, das im eigenen httpOnly-Cookie liegt und
+ * dieses Gerät nie verlässt, gehen diese Zeichenketten durch fremde Hände.
+ *
+ * **`redeemedAt` ist ein Zeitpunkt und kein Häkchen**, aus demselben Grund wie
+ * `materials.filedAt`. Er trägt hier zusätzlich die Einmaligkeit: eingelöst
+ * wird mit `update … where redeemed_at is null`, und die Datenbank entscheidet,
+ * wer von zwei gleichzeitigen Versuchen gewinnt. Gelöscht wird die Zeile beim
+ * Einlösen ausdrücklich nicht — ein zweiter Versuch mit demselben Code ist der
+ * Verdachtsfall, den OAuth 2.1 kennt (ein abgefangener Code), und den kann nur
+ * beantworten, wer die Zeile noch hat.
+ *
+ * `codeChallenge` ist der PKCE-Prüfwert. Er steht an der Zeile und nicht am
+ * Client, weil er zu diesem einen Tausch gehört: wer den Code hat, kommt damit
+ * nur weiter, wenn er auch das Geheimnis kennt, aus dem dieser Wert gerechnet
+ * wurde. Nur S256 wird angenommen; `plain` wäre ein Prüfwert, der sich aus dem
+ * Prüfwert ergibt.
+ *
+ * `resource` ist die Adresse, für die das spätere Token gelten soll (RFC 8707).
+ * Sie steht schon hier, damit das Token nicht später eine andere bekommen kann
+ * als die, die dem Nutzer auf der Zustimmungsseite genannt wurde.
+ */
+export const oauthCodes = pgTable(
+  "oauth_codes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** SHA-256 des Codes, hex. Nie der Code selbst. */
+    codeHash: text("code_hash").notNull(),
+    /** Die Rückadresse dieses Tausches — beim Einlösen muss dieselbe dastehen. */
+    redirectUri: text("redirect_uri").notNull(),
+    /** PKCE, base64url des SHA-256 über den code_verifier des Clients. */
+    codeChallenge: text("code_challenge").notNull(),
+    /** Rechte, durch Leerzeichen getrennt. Heute immer "mcp". */
+    scope: text("scope").notNull().default(""),
+    /** Für welche Adresse das Token gelten wird, z.B. "https://…/api/mcp". */
+    resource: text("resource").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    /** Wann eingelöst; leer heißt: noch offen. Ein zweites Einlösen gibt es nicht. */
+    redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("oauth_codes_hash_key").on(t.codeHash),
+    // Abgelaufene Codes werden beim nächsten Einlösen mit weggeräumt; dafür
+    // wird nach dem Zeitpunkt gesucht und nicht nach dem Abdruck.
+    index("oauth_codes_expires_idx").on(t.expiresAt),
+  ],
+);
+
+/**
+ * Was ein Client für einen Nutzer wirklich in der Hand hat: die Verbindung.
+ *
+ * Eine Zeile ist eine erteilte Erlaubnis, und sie trägt beide Schlüssel dazu —
+ * das kurzlebige Zugriffs-Token und das langlebige Erneuerungs-Token. Zwei
+ * Tabellen wären genauer im Sinne des Lehrbuchs und hier eine Trennung ohne
+ * Unterschied: die beiden entstehen zusammen, laufen zusammen ab und werden
+ * zusammen zurückgezogen.
+ *
+ * **Erneuern schreibt dieselbe Zeile um.** OAuth 2.1 verlangt für öffentliche
+ * Clients, dass ein Erneuerungs-Token nach Gebrauch nicht mehr gilt; genau das
+ * tut ein `update` auf beide Abdrücke. Ein abgefangenes altes Token passt danach
+ * auf keine Zeile mehr und bekommt „invalid_grant" — der Client fragt dann neu
+ * nach Zustimmung, und der Mensch sieht es.
+ *
+ * Kein `lastUsedAt`: es stünde für eine Schreiboperation bei jedem einzelnen
+ * Tool-Aufruf, also für viele Schreibvorgänge auf eine Zeile, die niemand
+ * liest. Die Einstellungsseite zeigt stattdessen, seit wann die Verbindung
+ * steht — das ist die Frage, die man an eine Verbindung wirklich hat.
+ *
+ * `revokedAt` ist wieder ein Zeitpunkt statt eines Ja/Nein; leer heißt gültig.
+ * Getrennt wird eine Verbindung über die Einstellungen, und dieselbe Spalte
+ * beantwortet danach die Frage, seit wann sie getrennt ist.
+ */
+export const oauthGrants = pgTable(
+  "oauth_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** SHA-256 des Zugriffs-Tokens, hex. */
+    accessTokenHash: text("access_token_hash").notNull(),
+    /** SHA-256 des Erneuerungs-Tokens, hex. */
+    refreshTokenHash: text("refresh_token_hash").notNull(),
+    /**
+     * Der Abdruck des VORIGEN Erneuerungs-Tokens — die Falle für ein
+     * gestohlenes.
+     *
+     * Beim Erneuern wird das alte Token ungültig; wer es danach noch einmal
+     * vorzeigt, hat entweder eine Antwort verloren oder das Token gestohlen.
+     * Ohne diese Spalte wären beide Fälle von „kenne ich nicht" nicht zu
+     * unterscheiden, und ein Dieb, der als Erster erneuert, behielte seine
+     * Kette für immer. Mit ihr fällt die ganze Verbindung, sobald ein
+     * verbrauchtes Token wiederkommt — beide Seiten müssen dann neu fragen,
+     * und der Mensch sieht es.
+     *
+     * Leer bei einer frisch erteilten Verbindung: davor gab es kein voriges.
+     */
+    previousRefreshTokenHash: text("previous_refresh_token_hash"),
+    /** Rechte, durch Leerzeichen getrennt. Heute immer "mcp". */
+    scope: text("scope").notNull().default(""),
+    /** Für welche Adresse das Token gilt — geprüft bei jeder Anfrage. */
+    resource: text("resource").notNull(),
+    /** Wann das Zugriffs-Token abläuft. */
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    /** Wann das Erneuerungs-Token abläuft; danach ist die Verbindung zu Ende. */
+    refreshExpiresAt: timestamp("refresh_expires_at", {
+      withTimezone: true,
+    }).notNull(),
+    /** Wann getrennt; leer heißt: die Verbindung steht. */
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("oauth_grants_access_key").on(t.accessTokenHash),
+    unique("oauth_grants_refresh_key").on(t.refreshTokenHash),
+    // Die Einstellungsseite listet die Verbindungen eines Nutzers, die neueste
+    // zuerst.
+    index("oauth_grants_user_idx").on(t.userId, t.createdAt),
+  ],
+);
+
+/**
+ * Was schon im Wiki liegt — das Gedächtnis der täglichen Übergabe.
+ *
+ * Einmal am Tag legt die App alles in einen flachen, datierten Ordner im
+ * Eingang des Vaults, `topics/schule/inbox`; ein eigener Agent räumt es von
+ * dort an seinen Platz ein. Ohne diese Tabelle wäre jede Übergabe eine
+ * vollständige: nach vierzehn Tagen lägen vierzehn Fassungen desselben
+ * Blattes im Vault, und der Agent müsste jeden Morgen alles noch einmal
+ * einsortieren. Mit ihr enthält der Ordner ab dem zweiten Lauf nur noch das,
+ * was sich wirklich unterscheidet.
+ *
+ * ── `doc_id`: die feste Kennung ──────────────────────────────────────────────
+ *
+ * Sie ist dreierlei in einem: der Schlüssel dieser Zeile, der Dateiname im
+ * Übergabeordner (mit „.md" dahinter) und das Feld `id` im Frontmatter, an dem
+ * der Agent das Dokument wiedererkennt. Ihr Aufbau ist „<art>-<uuid>", also
+ * „blatt-3f2a…", „fach-9c11…", „stundenplan-<nutzer-uuid>".
+ *
+ * Die UUID ist die der Datenbank und ändert sich nie. Genau darauf steht und
+ * fällt die ganze Stufe: ohne stabile Kennung kann der Agent „neu" nicht von
+ * „liegt schon da, hat sich nur geändert" unterscheiden. Ein Dateiname aus dem
+ * Titel („Kettenregel Übungen.md") könnte das nicht — eine Umbenennung sähe aus
+ * wie ein neues Blatt, und nach zwei Wochen läge alles vierzehnfach im Vault.
+ *
+ * Der Dateiname wird deshalb NIE aus einem Titel oder einem Fachnamen gebaut.
+ * Das ist zugleich die Sicherung gegen einen Pfad, der aus dem Übergabeordner
+ * herausführt: ein Fach „Deutsch/Französisch" oder ein Titel „../../autostart"
+ * kann keinen Dateinamen beeinflussen, weil in ihn nur eine Art und eine UUID
+ * eingehen. Geprüft wird es trotzdem ein zweites Mal, in `fileNameFor()` in
+ * @/lib/wiki/folder.
+ *
+ * `kind` steht als eigene Spalte daneben und nicht bloß als Vorsilbe in der
+ * `doc_id`. Wenn eine Entität gelöscht wurde, meldet das MANIFEST sie nach Art
+ * gruppiert — und diese Zeile ist dann das Einzige, was von ihr übrig ist. Sie
+ * dafür an einem Bindestrich aufzutrennen wäre eine Zeichenkettenrechnung an
+ * der Stelle, an der man am wenigsten raten will.
+ *
+ * ── `hash`: woran „geändert" erkannt wird ────────────────────────────────────
+ *
+ * SHA-256 über den FERTIG GERENDERTEN Text der Datei, hexadezimal. Nicht über
+ * die Datenbankzeile: der Agent liest die gerenderte Datei, und nur ein Hash
+ * darüber erfasst auch eine Änderung an der Darstellung selbst — wer die
+ * Renderer anfasst, liefert die betroffenen Dateien dadurch von selbst neu aus.
+ *
+ * Daraus folgt eine Regel für @/lib/wiki, und sie ist scharf: **in einer
+ * gerenderten Datei darf nichts stehen, was sich von Tag zu Tag ändert, ohne
+ * dass sich der Inhalt ändert.** Kein „übergeben am", kein Zeitstempel des
+ * Laufs, keine Zählung wie „seit 12 Tagen". Stünde eines davon darin,
+ * unterschiede sich jede Datei jeden Tag von sich selbst, und die Übergabe wäre
+ * wieder eine vollständige — der Fehler wäre still, denn herauskommen würde
+ * etwas Richtiges, nur zu viel davon.
+ *
+ * Der Hash heilt außerdem den ausgefallenen Lauf: fällt eine Nacht aus, ist der
+ * nächste Lauf von selbst der Nachholer, weil alles verglichen wird und nicht
+ * bloß das seit gestern Angefasste. Dasselbe gilt für eine Korrektur, die einen
+ * alten Eintrag von vor einem halben Jahr betrifft.
+ *
+ * ── `title`, `folder`, `delivered_at` ────────────────────────────────────────
+ *
+ * `title` ist die zuletzt übergebene Überschrift, und sie steht hier für genau
+ * einen Fall: Wird eine Klausur gelöscht, soll im MANIFEST stehen, WELCHE
+ * entfallen ist. Zu diesem Zeitpunkt ist die Zeile in `exams` weg — aus der
+ * Datenbank ist nichts mehr zu holen, was einen Namen ergäbe. Ohne diese Spalte
+ * stünde dort eine nackte UUID, und der Agent müsste im Vault danach suchen.
+ *
+ * `folder` und `delivered_at` beantworten „wann und wo lag das zuletzt?". Das
+ * ist die Frage, die man stellt, wenn im Vault etwas fehlt: sie sagen, in
+ * welchem Übergabeordner nachzusehen ist.
+ *
+ * ── Was passiert, wenn ein Lauf mittendrin abbricht ──────────────────────────
+ *
+ * Hier wird erst geschrieben, wenn der fertige Übergabeordner an seinem Platz
+ * steht (siehe `publishHandover()` in @/lib/wiki/folder). Die umgekehrte
+ * Reihenfolge wäre die gefährliche: die App hielte Dateien für abgeliefert, die
+ * nie ankamen, und lieferte sie nie wieder — der Vault hätte eine Lücke, die
+ * niemand mehr sieht. So herum ist der schlimmste Fall eine doppelte Lieferung
+ * desselben Inhalts, und die erkennt der Agent an der `doc_id`.
+ *
+ * Eine Zeile für eine gelöschte Entität wird ebenfalls erst danach entfernt,
+ * also nachdem das MANIFEST, das den Wegfall meldet, im Ordner liegt.
+ *
+ * ── Was diese Tabelle NICHT weiß: wohin geliefert wurde ──────────────────────
+ *
+ * Sie merkt sich, WAS abgeliefert wurde, und nicht, in welchen Vault. Das ist
+ * eine bewusste Grenze und hat eine Folge, die man kennen muss: Zeigt
+ * `WIKI_EXPORT_DIR` plötzlich auf einen anderen, leeren Ordner, hält die App
+ * alles für längst geliefert und schreibt dorthin nichts mehr. Wer den Vault
+ * umzieht, nimmt seinen Inhalt mit.
+ *
+ * Wer wirklich alles noch einmal haben will — nach einem verlorenen Vault, oder
+ * um eine geänderte Darstellung im Ganzen auszurollen —, leert diese Tabelle:
+ *
+ *   delete from wiki_deliveries;
+ *
+ * Der nächste Lauf übergibt danach den vollständigen Bestand, so wie der
+ * allererste. Verloren geht dabei nichts: die Tabelle trägt keine Daten, nur
+ * Abdrücke von Daten, die anderswo stehen.
+ *
+ * ── Kein Index, keine `relations()` ──────────────────────────────────────────
+ *
+ * Gelesen wird ausschließlich „alle Zeilen eines Nutzers", und dafür ist der
+ * Primärschlüssel (user_id, doc_id) schon der richtige Index: `user_id` steht
+ * vorn. Ein zweiter wäre Schreiblast ohne Leser.
+ *
+ * `relations()` gibt es nicht, weil keine Abfrage diese Tabelle über
+ * `db.query` liest — und die eine Seite ohne die andere anzulegen hieße,
+ * `usersRelations` anzufassen. Der Fremdschlüssel mit „cascade" steht trotzdem:
+ * ohne den Nutzer ist eine Zeile darüber, was er im Wiki liegen hat, sinnlos.
+ */
+export const wikiDeliveries = pgTable(
+  "wiki_deliveries",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** „blatt-<uuid>" — Dateiname ohne „.md" und Kennung im Frontmatter */
+    docId: text("doc_id").notNull(),
+    /** fach | stundenplan | hausaufgabe | klausur | noten | blatt */
+    kind: text("kind").notNull(),
+    /** Die zuletzt übergebene Überschrift — für die Meldung „entfallen" */
+    title: text("title").notNull(),
+    /** SHA-256 über den gerenderten Dateitext, hex */
+    hash: text("hash").notNull(),
+    /** Name des Übergabeordners, in dem die Datei zuletzt lag, z.B. "2026-09-05" */
+    folder: text("folder").notNull(),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({
+      name: "wiki_deliveries_pk",
+      columns: [t.userId, t.docId],
+    }),
+  ],
+);
+
+/**
+ * Die Verbindung zum Google Kalender — eine Zeile je Nutzer.
+ *
+ * Die App trägt Klausuren, offene Hausaufgaben und freie Tage in einen eigenen
+ * Kalender „Schule" im Google Kalender des Schülers ein. Sie ist dort die
+ * Quelle und Google das Ziel; wie der Abgleich läuft, steht in
+ * @/lib/calendar/sync, und was er sich je Termin merkt, eine Tabelle weiter.
+ *
+ * ── `refresh_token_enc`: der eine Schlüssel, verschlossen ────────────────────
+ *
+ * Das Refresh Token ist der dauerhafte Zugang zum Kalender. Es steht hier
+ * verschlüsselt (AES-256-GCM, siehe @/lib/calendar/token-crypto), und der
+ * Schlüssel dazu steht NUR in der Umgebungsvariablen `GOOGLE_TOKEN_KEY` — nie
+ * in der Datenbank, nie im Repo. Wer einen Abzug der Datenbank in die Hände
+ * bekommt, hat damit keinen Zugang zum Kalender. Die Nutzer-ID ist als AAD in
+ * die Verschlüsselung eingebunden: Ein Token, das von einer Zeile in eine
+ * andere kopiert wird, lässt sich dort nicht öffnen.
+ *
+ * Leer heißt getrennt. `calendar_id` bleibt beim Trennen stehen, und das mit
+ * Absicht: Wer neu verbindet, bekommt denselben Kalender „Schule" weitergeführt,
+ * samt allem, was er dort gelöscht hat und was deshalb draußen bleibt.
+ *
+ * Ein Access Token wird nie gespeichert. Jeder Lauf holt sich einen frischen,
+ * und dieser Refresh ist zugleich die stündliche Gesundheitsprüfung: Hat der
+ * Nutzer den Zugang entzogen, merkt es der nächste Lauf, auch wenn er sonst
+ * nichts zu tun hätte.
+ *
+ * ── `blocked_*`: „Verbindung unterbrochen" ──────────────────────────────────
+ *
+ * Gesetzt, wenn ohne einen Handgriff des Menschen nichts mehr geht: Google
+ * nimmt den Zugang nicht mehr an (`zugang`, invalid_grant), der gespeicherte
+ * Zugang lässt sich nicht entschlüsseln (`schluessel`), oder den Kalender gibt
+ * es nicht mehr (`kalender`). Solange die Spalte gesetzt ist, ruft kein Lauf
+ * Google an.
+ *
+ * Gesetzt wird sie mit `where blocked_at is null` — die Datenbank entscheidet
+ * also, welcher von zwei gleichzeitigen Läufen die EINE Push-Nachricht
+ * schickt. Ein Lauf, der jede Stunde scheitert, darf nicht jede Stunde
+ * klingeln; einer, der still scheitert, ist aber genau der Fehler, den das
+ * Projekt schon einmal hatte (die Erinnerungen, zwölf Läufe tot).
+ *
+ * ── `last_*` ─────────────────────────────────────────────────────────────────
+ *
+ * Was die Einstellungen anzeigen: wann zuletzt abgeglichen wurde, mit welchem
+ * Ergebnis und welcher Fehler zuletzt auftrat. `last_cron_at` setzt nur der
+ * stündliche Lauf; bleibt es stehen, ist die Crontab-Zeile auf dem NAS
+ * verloren gegangen, und die Karte sagt das.
+ *
+ * Keine `relations()`, aus demselben Grund wie bei `wiki_deliveries`: keine
+ * Abfrage liest diese Tabelle über `db.query`.
+ */
+export const googleCalendarConnections = pgTable("google_calendar_connections", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** "v1.<iv>.<tag>.<daten>", base64url; leer = getrennt */
+  refreshTokenEnc: text("refresh_token_enc"),
+  /** Was Google erteilt hat, durch Leerzeichen getrennt */
+  scope: text("scope").notNull().default(""),
+  /** Der Kalender „Schule", z.B. "…@group.calendar.google.com" */
+  calendarId: text("calendar_id"),
+  /** creator.email des ersten angelegten Termins — nur zur Anzeige */
+  googleEmail: text("google_email"),
+  connectedAt: timestamp("connected_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  blockedAt: timestamp("blocked_at", { withTimezone: true }),
+  /** zugang | schluessel | kalender */
+  blockedReason: text("blocked_reason"),
+  lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  /** „2 neu, 1 geändert" — ohne Zeitstempel darin */
+  lastSummary: text("last_summary"),
+  lastError: text("last_error"),
+  lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+  lastCronAt: timestamp("last_cron_at", { withTimezone: true }),
+});
+
+/**
+ * Das Gedächtnis des Abgleichs mit Google — nach dem Muster von
+ * `wiki_deliveries`.
+ *
+ * Eine Zeile je Termin, den die App in Google angelegt hat oder anlegen
+ * wollte. Ohne sie wüsste die App nicht, welche Termine in Google ihr gehören,
+ * was sich geändert hat und — der eigentliche Grund — was der Nutzer dort
+ * gelöscht hat und deshalb NIE wieder eingetragen werden darf.
+ *
+ * ── Die Spalten ──────────────────────────────────────────────────────────────
+ *
+ * `key` ist „<art>-<uuid>", also „klausur-3f2a…", im Stil der `doc_id` der
+ * Wiki-Übergabe. `kind` steht als eigene Spalte daneben und nicht bloß als
+ * Vorsilbe im Schlüssel, aus demselben Grund wie dort: Ist die Quelle einer Art
+ * in einem Lauf gescheitert, bleiben genau die Zeilen dieser Art unberührt, und
+ * das an einem Bindestrich auszurechnen wäre die Stelle, an der man am
+ * wenigsten raten will.
+ *
+ * `calendar_id` hält fest, in welchem Kalender der Termin liegt. Wird der
+ * Kalender „Schule" neu angelegt, räumt der nächste Lauf die Zeilen des alten
+ * weg — ein Lauf, der beim Neuanlegen noch unterwegs war, kann sonst Zeilen
+ * hinterlassen, die zu keinem Kalender mehr passen.
+ *
+ * `event_id` wird gespeichert und nicht jedes Mal gerechnet. Ändert sich die
+ * Rechnung je einmal, bleiben die alten Termine trotzdem erreichbar. Sie
+ * entsteht aus der UUID und der `generation` (siehe @/lib/calendar/events):
+ * Eine gelöschte ID verwendet die App nie wieder, wer eine abgehakte
+ * Hausaufgabe wieder öffnet, bekommt Generation + 1 und damit eine neue ID.
+ *
+ * `hash` ist der SHA-256 über den zuletzt an Google gesendeten Termin. Dieselbe
+ * Regel wie beim Wiki: Im gesendeten Termin steht nichts, was sich ändert, ohne
+ * dass sich der Inhalt ändert — sonst schriebe jeder Lauf alles neu.
+ *
+ * `title` ist der zuletzt gesendete Titel, für die Anzeige „in Google gelöscht"
+ * in den Einstellungen; die Klausur dahinter kann es dann längst nicht mehr
+ * geben.
+ *
+ * ── Die vier Zustände ────────────────────────────────────────────────────────
+ *
+ *   geliefert  steht so in Google
+ *   entfernen  die App löscht gerade (Absicht geschrieben, Ergebnis offen)
+ *   entfernt   die App hat gelöscht
+ *   verworfen  der Nutzer hat in Google gelöscht — NIE wieder eintragen
+ *
+ * `entfernen` wird VOR dem Löschen geschrieben. Bricht der Lauf danach ab, weiß
+ * der nächste, dass ein „schon gelöscht" von Google sein eigener erster Versuch
+ * war und keine Löschung durch den Nutzer.
+ *
+ * ── ⚠ Diese Tabelle darf NIE allein geleert werden ───────────────────────────
+ *
+ * Anders als `wiki_deliveries`. Dort hieße leeren: alles wird noch einmal
+ * geliefert, und verloren geht nichts. Hier hieße es: Was der Nutzer in Google
+ * gelöscht hat, käme beim nächsten Lauf zurück, und Termine, die es in der App
+ * nicht mehr gibt, blieben in Google für immer stehen, weil niemand mehr weiß,
+ * dass sie der App gehören. Zurückgesetzt wird nur über „Kalender neu anlegen"
+ * in den Einstellungen: ein frischer Kalender, und die Zeilen gehen mit.
+ *
+ * Kein Index über den Primärschlüssel hinaus und keine `relations()`, aus
+ * demselben Grund wie bei `wiki_deliveries`: Gelesen wird ausschließlich
+ * „alle Zeilen eines Nutzers", und dafür steht `user_id` im Primärschlüssel
+ * vorn.
+ */
+export const googleCalendarEvents = pgTable(
+  "google_calendar_events",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** "klausur-<uuid>" | "hausaufgabe-<uuid>" | "frei-<uuid>" */
+    key: text("key").notNull(),
+    /** klausur | hausaufgabe | frei | iserv (später: blatt, schule) */
+    kind: text("kind").notNull(),
+    calendarId: text("calendar_id").notNull(),
+    eventId: text("event_id").notNull(),
+    generation: integer("generation").notNull().default(0),
+    /** SHA-256 hex über den zuletzt gesendeten Termin */
+    hash: text("hash").notNull(),
+    /** geliefert | entfernen | entfernt | verworfen */
+    state: text("state").notNull(),
+    /** Zuletzt gesendeter Titel — für die Anzeige „in Google gelöscht" */
+    title: text("title").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({
+      name: "google_calendar_events_pk",
+      columns: [t.userId, t.key],
+    }),
+  ],
+);
+
+/**
+ * IServ — der Zustand der Anbindung, eine Zeile je Nutzer.
+ *
+ * Die App meldet sich mit dem Konto des Schülers bei IServ an und liest — nur
+ * lesen — den Gruppenkalender seiner Klasse, den öffentlichen Schulkalender
+ * und seine Aufgaben. Was davon seine Klasse betrifft, landet im Kalender
+ * „Schule" in Google (Art `iserv`, siehe @/lib/iserv/auswahl). Wie ein Abruf
+ * läuft, steht in @/lib/iserv/abruf.
+ *
+ * ── Was hier NICHT steht ─────────────────────────────────────────────────────
+ *
+ * Benutzer und Passwort stehen NUR in der Umgebung (ISERV_USER,
+ * ISERV_PASSWORD), die Session-Cookies nur im Speicher des Prozesses. Diese
+ * Zeile sagt, wie es um die Anbindung steht, nicht, wie man hineinkommt.
+ * `last_error` ist ein fester Satz, durch `schwaerze()` gezogen.
+ *
+ * ── `blocked_*`: „IServ lässt die App nicht mehr hinein" ─────────────────────
+ *
+ * Gesetzt bei einer abgelehnten Anmeldung (falsches Passwort, zweiter Faktor,
+ * Captcha, Sperre, abgelaufenes Passwort). Solange die Spalte gesetzt ist,
+ * fragt kein Lauf IServ — ein zweiter Versuch mit einem falschen Passwort
+ * brächte das Konto des Schülers der Sperre näher. Gesetzt wird mit `where
+ * blocked_at is null`, damit genau EIN Lauf die Push-Nachricht schickt — wie
+ * bei `google_calendar_connections`. Aufgehoben wird nur durch „Erneut
+ * versuchen" in den Einstellungen oder `iserv-einrichten.sh --neues-passwort`.
+ *
+ * ── `last_*`, `failures_in_row`, `stale_notified_at` ─────────────────────────
+ *
+ * Für den Takt (@/lib/iserv/takt: höchstens alle drei Stunden, nach genau
+ * einem Fehlschlag eine schnelle Wiederholung) und für die Karte. Kam seit 24
+ * Stunden kein Stand an, geht EINE Push-Nachricht hinaus;
+ * `stale_notified_at` hält fest, dass sie für diese Durststrecke schon
+ * verschickt ist.
+ *
+ * `sources_json` ist die Liste der erkannten Kalender aus `eventsources`, ohne
+ * die Query der Feed-Adressen; `exercise_fields` die Feldnamen der ersten nicht
+ * leeren Aufgaben-Antwort — nur die Namen, damit sich das angenommene Format
+ * bestätigen lässt.
+ *
+ * Keine `relations()`, wie bei `google_calendar_connections`.
+ */
+export const iservState = pgTable("iserv_state", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  blockedAt: timestamp("blocked_at", { withTimezone: true }),
+  /** abgelehnt | zweiter-faktor | gesperrt | captcha | passwort-abgelaufen */
+  blockedReason: text("blocked_reason"),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+  /** eventsources und öffentlicher Kalender gelesen */
+  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  failuresInRow: integer("failures_in_row").notNull().default(0),
+  /** Fester Satz, geschwärzt */
+  lastError: text("last_error"),
+  lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+  /** Satz des Schutzes oder der Klassenkalender-Erkennung */
+  lastWarning: text("last_warning"),
+  /** Push „seit 24 h nicht gelesen" schon verschickt */
+  staleNotifiedAt: timestamp("stale_notified_at", { withTimezone: true }),
+  /** ErkannteQuelle[] ohne Query der Feed-Adressen */
+  sourcesJson: text("sources_json").notNull().default("[]"),
+  /** Schlüsselnamen der ersten nicht leeren Aufgaben-Antwort, durch Komma getrennt */
+  exerciseFields: text("exercise_fields"),
+});
+
+/**
+ * Der letzte gute Stand aus IServ — eine Zeile je Nutzer und Quelle
+ * (`klasse`, `oeffentlich`, `aufgaben`).
+ *
+ * Der Abgleich mit Google liest NUR diese Tabelle, nie IServ selbst: „Jetzt
+ * abgleichen" und die Läufe nach einer Änderung kosten so keine Anfrage bei
+ * IServ, und ein IServ, das gerade nicht antwortet, friert die Termine auf dem
+ * letzten guten Stand ein, statt sie zu löschen.
+ *
+ * `items_json` hält die Termine normalisiert (`IservItem[]`, geprüft mit
+ * `iservItemSchema` beim Lesen): gesäuberte Titel, Berliner Tage, kein HTML,
+ * kein `creator`, `organizer` oder Teilnehmer. JSON in `text` und nicht in
+ * `jsonb`: Die App sucht nie darin, sie liest immer die ganze Zeile, und
+ * PGlite und postgres-js reichen `jsonb` verschieden herauf — Text liest sich
+ * überall gleich.
+ *
+ * `fetched_at` ist, wann dieser Stand übernommen wurde, `last_seen_at` die
+ * letzte Antwort dieser Quelle, auch eine zurückgehaltene. `pending_*` ist der
+ * Schutz gegen „alles gelöscht" (@/lib/iserv/schutz): Eine verdächtig leere
+ * Antwort wird hier gemerkt und erst übernommen, wenn sie dreimal gleich kommt.
+ *
+ * ── ⚠ Leeren ist KEIN Reset-Hebel ────────────────────────────────────────────
+ *
+ * Fehlt der Snapshot des öffentlichen Kalenders, wirft die Quelle `iserv`
+ * im Abgleich, und die ganze Art bleibt eingefroren — aber nur bis zum
+ * nächsten Abruf. Der holt einen frischen Stand, und der reicht nur 14 Tage
+ * zurück: Alles Ältere, das hier eingefroren stand, verschwindet dann aus
+ * Google. Löscht man nur die Zeile `klasse` oder `aufgaben`, gilt der Rest als
+ * vollständig, und deren Termine verschwinden sofort. Was IServ nicht mehr
+ * liefert, kommt danach nie zurück.
+ */
+export const iservSnapshots = pgTable(
+  "iserv_snapshots",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** klasse | oeffentlich | aufgaben */
+    source: text("source").notNull(),
+    /** Die id des Kalenders in IServ, z.B. "/+public/calendar" */
+    remoteId: text("remote_id").notNull(),
+    /** Sein Label, gesäubert */
+    label: text("label").notNull(),
+    /** IservItem[]; normalisiert, ohne creator/organizer/participants */
+    itemsJson: text("items_json").notNull(),
+    itemCount: integer("item_count").notNull(),
+    /** Wann dieser Stand übernommen wurde */
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+    /** Letzte Antwort dieser Quelle, auch eine zurückgehaltene */
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+    pendingFingerprint: text("pending_fingerprint"),
+    pendingCount: integer("pending_count").notNull().default(0),
+    pendingSince: timestamp("pending_since", { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({
+      name: "iserv_snapshots_pk",
+      columns: [t.userId, t.source],
+    }),
+  ],
+);
+
+export const usersRelations = relations(users, ({ many }) => ({
+  sessions: many(sessions),
+  oauthGrants: many(oauthGrants),
+  subjects: many(subjects),
+  exams: many(exams),
+  periods: many(periods),
+  lessons: many(lessons),
+  homework: many(homework),
+  grades: many(grades),
+  subjectTopics: many(subjectTopics),
+  materials: many(materials),
+  pushSubscriptions: many(pushSubscriptions),
+}));
+
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  user: one(users, { fields: [sessions.userId], references: [users.id] }),
+}));
+
+export const subjectsRelations = relations(subjects, ({ one, many }) => ({
+  user: one(users, { fields: [subjects.userId], references: [users.id] }),
+  exams: many(exams),
+  lessons: many(lessons),
+  homework: many(homework),
+  grades: many(grades),
+  topics: many(subjectTopics),
+  materials: many(materials),
+}));
+
+export const examsRelations = relations(exams, ({ one, many }) => ({
+  user: one(users, { fields: [exams.userId], references: [users.id] }),
+  subject: one(subjects, {
+    fields: [exams.subjectId],
+    references: [subjects.id],
+  }),
+  topics: many(examTopics),
+  blocks: many(studyBlocks),
+}));
+
+export const examTopicsRelations = relations(examTopics, ({ one, many }) => ({
+  exam: one(exams, { fields: [examTopics.examId], references: [exams.id] }),
+  subjectTopic: one(subjectTopics, {
+    fields: [examTopics.subjectTopicId],
+    references: [subjectTopics.id],
+  }),
+  blocks: many(studyBlocks),
+}));
+
+export const subjectTopicsRelations = relations(
+  subjectTopics,
+  ({ one, many }) => ({
+    user: one(users, { fields: [subjectTopics.userId], references: [users.id] }),
+    subject: one(subjects, {
+      fields: [subjectTopics.subjectId],
+      references: [subjects.id],
+    }),
+    examTopics: many(examTopics),
+    materialTopics: many(materialTopics),
+  }),
+);
+
+export const studyBlocksRelations = relations(studyBlocks, ({ one }) => ({
+  exam: one(exams, { fields: [studyBlocks.examId], references: [exams.id] }),
+  topic: one(examTopics, {
+    fields: [studyBlocks.topicId],
+    references: [examTopics.id],
+  }),
+}));
+
+export const periodsRelations = relations(periods, ({ one }) => ({
+  user: one(users, { fields: [periods.userId], references: [users.id] }),
+}));
+
+export const lessonsRelations = relations(lessons, ({ one }) => ({
+  user: one(users, { fields: [lessons.userId], references: [users.id] }),
+  subject: one(subjects, {
+    fields: [lessons.subjectId],
+    references: [subjects.id],
+  }),
+}));
+
+export const homeworkRelations = relations(homework, ({ one }) => ({
+  user: one(users, { fields: [homework.userId], references: [users.id] }),
+  subject: one(subjects, {
+    fields: [homework.subjectId],
+    references: [subjects.id],
+  }),
+}));
+
+export const gradesRelations = relations(grades, ({ one }) => ({
+  user: one(users, { fields: [grades.userId], references: [users.id] }),
+  subject: one(subjects, {
+    fields: [grades.subjectId],
+    references: [subjects.id],
+  }),
+}));
+
+export const materialsRelations = relations(materials, ({ one, many }) => ({
+  user: one(users, { fields: [materials.userId], references: [users.id] }),
+  subject: one(subjects, {
+    fields: [materials.subjectId],
+    references: [subjects.id],
+  }),
+  pages: many(materialPages),
+  topics: many(materialTopics),
+  proposals: many(materialProposals),
+}));
+
+export const materialPagesRelations = relations(materialPages, ({ one }) => ({
+  material: one(materials, {
+    fields: [materialPages.materialId],
+    references: [materials.id],
+  }),
+}));
+
+export const materialTopicsRelations = relations(materialTopics, ({ one }) => ({
+  material: one(materials, {
+    fields: [materialTopics.materialId],
+    references: [materials.id],
+  }),
+  subjectTopic: one(subjectTopics, {
+    fields: [materialTopics.subjectTopicId],
+    references: [subjectTopics.id],
+  }),
+}));
+
+export const materialProposalsRelations = relations(
+  materialProposals,
+  ({ one, many }) => ({
+    material: one(materials, {
+      fields: [materialProposals.materialId],
+      references: [materials.id],
+    }),
+    subject: one(subjects, {
+      fields: [materialProposals.subjectId],
+      references: [subjects.id],
+    }),
+    topics: many(materialProposalTopics),
+    transcripts: many(materialProposalTranscripts),
+  }),
+);
+
+export const materialProposalTopicsRelations = relations(
+  materialProposalTopics,
+  ({ one }) => ({
+    proposal: one(materialProposals, {
+      fields: [materialProposalTopics.proposalId],
+      references: [materialProposals.id],
+    }),
+  }),
+);
+
+export const materialProposalTranscriptsRelations = relations(
+  materialProposalTranscripts,
+  ({ one }) => ({
+    proposal: one(materialProposals, {
+      fields: [materialProposalTranscripts.proposalId],
+      references: [materialProposals.id],
+    }),
+    page: one(materialPages, {
+      fields: [materialProposalTranscripts.pageId],
+      references: [materialPages.id],
+    }),
+  }),
+);
+
+export const oauthClientsRelations = relations(oauthClients, ({ many }) => ({
+  codes: many(oauthCodes),
+  grants: many(oauthGrants),
+}));
+
+export const oauthCodesRelations = relations(oauthCodes, ({ one }) => ({
+  client: one(oauthClients, {
+    fields: [oauthCodes.clientId],
+    references: [oauthClients.id],
+  }),
+  user: one(users, { fields: [oauthCodes.userId], references: [users.id] }),
+}));
+
+export const oauthGrantsRelations = relations(oauthGrants, ({ one }) => ({
+  client: one(oauthClients, {
+    fields: [oauthGrants.clientId],
+    references: [oauthClients.id],
+  }),
+  user: one(users, { fields: [oauthGrants.userId], references: [users.id] }),
+}));
+
+export const pushSubscriptionsRelations = relations(
+  pushSubscriptions,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [pushSubscriptions.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+export type Session = typeof sessions.$inferSelect;
+export type Subject = typeof subjects.$inferSelect;
+export type NewSubject = typeof subjects.$inferInsert;
+export type Exam = typeof exams.$inferSelect;
+export type NewExam = typeof exams.$inferInsert;
+export type ExamTopic = typeof examTopics.$inferSelect;
+export type NewExamTopic = typeof examTopics.$inferInsert;
+export type StudyBlock = typeof studyBlocks.$inferSelect;
+export type NewStudyBlock = typeof studyBlocks.$inferInsert;
+export type Period = typeof periods.$inferSelect;
+export type NewPeriod = typeof periods.$inferInsert;
+export type Lesson = typeof lessons.$inferSelect;
+export type NewLesson = typeof lessons.$inferInsert;
+export type FreePeriod = typeof freePeriods.$inferSelect;
+export type Homework = typeof homework.$inferSelect;
+export type NewHomework = typeof homework.$inferInsert;
+export type SubjectTopic = typeof subjectTopics.$inferSelect;
+export type NewSubjectTopic = typeof subjectTopics.$inferInsert;
+export type Grade = typeof grades.$inferSelect;
+export type NewGrade = typeof grades.$inferInsert;
+export type Material = typeof materials.$inferSelect;
+export type NewMaterial = typeof materials.$inferInsert;
+export type MaterialPage = typeof materialPages.$inferSelect;
+export type NewMaterialPage = typeof materialPages.$inferInsert;
+export type MaterialTopic = typeof materialTopics.$inferSelect;
+export type MaterialProposal = typeof materialProposals.$inferSelect;
+export type NewMaterialProposal = typeof materialProposals.$inferInsert;
+export type MaterialProposalTopic = typeof materialProposalTopics.$inferSelect;
+export type MaterialProposalTranscript =
+  typeof materialProposalTranscripts.$inferSelect;
+export type NewMaterialProposalTranscript =
+  typeof materialProposalTranscripts.$inferInsert;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type OauthClient = typeof oauthClients.$inferSelect;
+export type NewOauthClient = typeof oauthClients.$inferInsert;
+export type OauthCode = typeof oauthCodes.$inferSelect;
+export type NewOauthCode = typeof oauthCodes.$inferInsert;
+export type OauthGrant = typeof oauthGrants.$inferSelect;
+export type NewOauthGrant = typeof oauthGrants.$inferInsert;
+export type WikiDelivery = typeof wikiDeliveries.$inferSelect;
+export type NewWikiDelivery = typeof wikiDeliveries.$inferInsert;
+export type GoogleCalendarConnection =
+  typeof googleCalendarConnections.$inferSelect;
+export type GoogleCalendarEventRow = typeof googleCalendarEvents.$inferSelect;
+export type IservStateRow = typeof iservState.$inferSelect;
+export type IservSnapshotRow = typeof iservSnapshots.$inferSelect;
+export type LeserLauf = typeof leserLaeufe.$inferSelect;
+export type NewLeserLauf = typeof leserLaeufe.$inferInsert;
+
+/** Art einer Prüfung */
+export type ExamKind = "klausur" | "test" | "referat" | "muendlich";
+/** Art eines Lernblocks */
+export type StudyBlockKind = "learn" | "review";
+/** Zustand eines Lernblocks */
+export type StudyBlockStatus = "open" | "done" | "skipped";
+
+/**
+ * Wer einen Vorschlag geschrieben hat.
+ *
+ * "manuell" heißt: über die Oberfläche, von Hand. "agent" heißt: aus dem
+ * Inhalt eines Blattes abgeleitet — also aus etwas, das die App nicht
+ * geschrieben hat. "app" heißt: die App selbst, für ein Blatt, das Docling
+ * ganz gelesen hat (seit dem 6.10.2026) — kein Agent, aber ebenfalls aus dem
+ * Blattinhalt abgeleitet. Warum dieser Unterschied auf dem Bildschirm steht,
+ * sagt der Kommentar an `materialProposals`.
+ */
+export type ProposalOrigin = "manuell" | "agent" | "app";
+
+/**
+ * Wer eine Seite liest — die Werte der Spalte `material_pages.leser`. Was
+ * jeder bedeutet und warum NULL ein vierter Zustand ist, steht dort.
+ */
+export type Leser = "offen" | "docling" | "claude";
+
+/**
+ * Warum die App eine Seite so zugeteilt hat — ein Wort je Ausgang, in der
+ * Reihenfolge, in der @/lib/leser/zuteilung prüft:
+ *
+ * - `aus`: Notbremse `LESER_REGEL=aus`, Docling wurde nicht gefragt.
+ * - `docling-fehlt`, `docling-pause`: Docling ist nicht eingerichtet oder
+ *   ruht nach einem Ausfall.
+ * - `docling-ausfall`, `docling-fehler`: Docling hat es versucht und ist
+ *   gescheitert — als Ganzes (Zeitablauf, 404, 5xx) oder nur an dieser
+ *   Seite.
+ * - `nicht-erfolg`, `leer`, `zu-wenig-woerter`, `formel`, `zu-lang`: die
+ *   feste Regel a bis d (@/lib/leser/regel).
+ * - `jev-fehlt`, `jev-fehler`, `jev-unsicher`: die Einstufung durch Jev ging
+ *   nicht oder blieb unter der Schwelle.
+ * - `sauber`: alles bestanden — Docling liest allein.
+ * - `fehler`: die Zuteilung selbst brach unerwartet ab.
+ * - `schon-gelesen`: an der Seite stand schon eine Abschrift von Hand oder
+ *   von Claude, bevor die App entschied — sie hat sie nicht noch einmal
+ *   gelesen (Docling nicht gefragt) oder ihre Abschrift nicht mehr
+ *   geschrieben. `leser` ist dann `'claude'`, weil Docling es nicht war;
+ *   lesen muss die Seite niemand mehr.
+ * - `nachgeholt`: Doclings Abschrift stand schon an der Seite, nur die
+ *   Entscheidung fehlte (ein Abbruch zwischen den beiden Schritten). Sie
+ *   wird ohne zweite Rechnung als `'docling'` festgehalten.
+ *
+ * Alle außer `sauber` und `nachgeholt` heißen `leser = 'claude'`.
+ */
+export type LeserGrundCode =
+  | "aus"
+  | "docling-fehlt"
+  | "docling-pause"
+  | "docling-ausfall"
+  | "docling-fehler"
+  | "nicht-erfolg"
+  | "leer"
+  | "zu-wenig-woerter"
+  | "formel"
+  | "zu-lang"
+  | "jev-fehlt"
+  | "jev-fehler"
+  | "jev-unsicher"
+  | "sauber"
+  | "fehler"
+  | "schon-gelesen"
+  | "nachgeholt";
+
+/**
+ * Was in `material_pages.leser_grund` steht. Jede Zahl ist `null`, wenn es
+ * bis zu ihr nicht kam — eine Seite, die Docling nie gesehen hat, hat keine
+ * Wortzahl, und eine, die schon an der Wortzahl scheiterte, keine
+ * Jev-Wahrscheinlichkeit.
+ */
+export type LeserGrund = {
+  /** Die Fassung der Regel (`REGEL_VERSION` in @/lib/leser/regel). */
+  regel: number;
+  grund: LeserGrundCode;
+  /** Wörter aus mindestens drei Buchstaben in Doclings Text. */
+  woerter: number | null;
+  /** Name des ersten Formelmusters, das traf — oder `null`. */
+  formel: string | null;
+  /** Länge der Abschrift nach der Umwandlung, in Zeichen. */
+  zeichen: number | null;
+  /** Wahrscheinlichkeit, mit der Jev den Text für sauber hält. */
+  jev: number | null;
+  /** Wie lange Docling nach eigener Angabe gerechnet hat. */
+  sekunden: number | null;
+};
+
+/**
+ * Was ein Lauf des Claude-Lesers war — die Werte von `leser_laeufe.art`.
+ *
+ * - `einordnen`: ein Blatt im Korb ohne Vorschlag; das Modell schreibt ab und
+ *   schlägt Titel, ein Thema und die Notiz vor, Jev ordnet danach ein.
+ * - `nachlese`: nachgereichte, ungelesene Seiten an einem eingeordneten
+ *   Blatt; das Modell schreibt NUR ab.
+ * - `von-hand`: ein Mensch hat den Knopf gedrückt — läuft, ohne das
+ *   Gedächtnis zu fragen (der Weg nach einem „nichts“ und für die Altblätter).
+ * - `fragen`: der Fragenlauf zu einer Klausur (@/recall bleibt dabei frei
+ *   von jedem Modellaufruf).
+ */
+export type LeserLaufArt = "einordnen" | "nachlese" | "von-hand" | "fragen";
+
+/**
+ * Wie ein Lauf ausging — die Werte von `leser_laeufe.ergebnis`. Gemerkt
+ * werden nur die ersten drei; warum, steht an der Tabelle. `laeuft` ist kein
+ * Ausgang, sondern die Zeile, solange der Aufruf noch unterwegs ist (seit dem
+ * 11.10.2026, ebenfalls an der Tabelle).
+ */
+export type LeserLaufErgebnis =
+  | "vorschlag"
+  | "kein-vorschlag"
+  | "nichts"
+  | "spaeter"
+  | "pause"
+  | "laeuft";
+
+/**
+ * Warum ein bezahlter Versuch nichts Gemerktes ergab — die Werte von
+ * `leser_laeufe.abbruch`. Diese Zeilen machen die Monatssumme zu einer
+ * Untergrenze; welche davon auf die Grenze je Stand zählen und was jeder Wert
+ * heißt, steht an der Tabelle.
+ */
+export type LeserLaufAbbruch = "frist" | "strom" | "ausfall" | "rueckfall" | "ablage";
+
+/**
+ * Was in `leser_laeufe.messung` steht: die Zahlen eines Aufrufs, aus `usage`
+ * der Antwort gelesen und hier nicht weiter gedeutet. Geschrieben von
+ * @/lib/claude/ergebnis; dort steht, woher jede Zahl kommt.
+ */
+export type LeserLaufMessung = {
+  /** Wer geantwortet hat (`model` der Antwort) — nach einem Rückfall nicht das bestellte. */
+  modell: string;
+  /** Hat ein Rückfallmodell geantwortet (`fallback_message` in `usage.iterations`)? */
+  rueckfall: boolean;
+  /** Die Modelle, die abgelehnt und weitergegeben haben, in ihrer Reihenfolge. */
+  abgelehntVon: string[];
+  /** `stop_reason` der Antwort; leer, wenn keiner dastand. */
+  stopGrund: string;
+  /** Bei `refusal` die Kategorie aus `stop_details`, sonst `null`. */
+  ablehnung: string | null;
+  /** Tokens über alle Anläufe dieses Aufrufs, auch die abgelehnten. */
+  eingabe: number;
+  ausgabe: number;
+  /** Davon Denken (`output_tokens_details.thinking_tokens`, nur der letzte Anlauf). */
+  denken: number;
+  cacheGelesen: number;
+  cacheGeschrieben: number;
+  /** In US-Dollar über alle Anläufe; `null` heißt unbekannt, nicht kostenlos. */
+  kostenUsd: number | null;
+  /** Modelle, für die kein Preis bekannt ist — leer, wenn die Kosten feststehen. */
+  ohnePreis: string[];
+  /** Hier gemessen, vom Absenden bis zur fertigen Antwort. */
+  wandMs: number;
+};
+
+/**
+ * Art einer Note. Schriftlich und mündlich sind die beiden Töpfe, aus denen
+ * sich der Fachschnitt zusammensetzt — wie stark jeder wiegt, steht am Fach.
+ */
+export type GradeKind = "schriftlich" | "muendlich";
+
+/**
+ * Woher ein Fach-Thema zuerst kam. Alle drei Werte kommen vor: "klausur" aus
+ * den Themen einer eingetragenen Prüfung, "manuell" aus der Themenpflege und
+ * "blatt" von einem abfotografierten Blatt — geschrieben beim Aufnehmen in
+ * `setMaterialTopics()` in @/lib/materials.
+ */
+export type TopicOrigin = "klausur" | "manuell" | "blatt";
+
+/** Wochentag im Stundenplan: 1 = Montag … 5 = Freitag */
+export type Weekday = 1 | 2 | 3 | 4 | 5;

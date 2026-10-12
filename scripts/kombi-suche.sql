@@ -1,0 +1,34 @@
+-- Volltextsuche der Zeile für Modell 23 (Plan 3.7): zwei GIN-Indizes über
+-- Titel und Abschrift.
+--
+-- Rein additiv. Ohne diese Indizes läuft die Suche trotzdem, nur langsamer;
+-- `nas.sh hoch` prüft sie deshalb nicht. Der Ausdruck muss wörtlich derselbe
+-- sein wie in `sucheBlaetter()` (src/lib/suche.ts), sonst nimmt Postgres den
+-- Index nicht.
+--
+-- Die Anweisungen sind aus `drizzle-kit generate` kopiert, nicht getippt:
+-- in einen Ordner außerhalb des Repos, mit dem Stand vor der Änderung
+-- (src/test/schema-basis/) als Basis und danach Schritt für Schritt über
+-- src/db/schema.ts. Die Namen der Fremdschlüssel, CHECKs und Indizes sind
+-- damit die, die drizzle-kit selbst vergibt; ein späteres `db:push` oder
+-- `generate` sieht keinen Unterschied (geprüft in
+-- src/test/kombi-sql.db.test.ts).
+--
+-- ── Wie sie in die Datenbank kommt ──────────────────────────────────────────
+--
+-- Lokal (Entwicklungsserver AUS, vorher `npm run db:backup`):
+--
+--   npx tsx scripts/sql-einspielen.ts scripts/kombi-suche.sql
+--
+-- Auf dem NAS — erst nach der Abnahme von Abschnitt H (Plan 5.7), in der
+-- Reihenfolge tagesprotokoll, lernblock-uhr, suche, themen-art,
+-- arbeitsblaetter, arbeitsblaetter-checks; ZUERST einspielen, DANN bauen:
+--
+--   sudo docker compose exec -T db \
+--     psql -v ON_ERROR_STOP=1 --single-transaction -U schulapp -d schulapp \
+--     < repo/scripts/kombi-suche.sql
+--
+-- Danach nachsehen: \di *volltext*
+
+CREATE INDEX "material_pages_volltext_idx" ON "material_pages" USING gin (to_tsvector('german', coalesce("transcript", '')));
+CREATE INDEX "materials_titel_volltext_idx" ON "materials" USING gin (to_tsvector('german', coalesce("title", '')));

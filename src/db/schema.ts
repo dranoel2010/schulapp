@@ -221,6 +221,14 @@ export const subjectTopics = pgTable(
     ),
     /** Kalendertag, an dem das Thema zuletzt vorkam — sortiert die Vorschläge */
     lastSeenAt: date("last_seen_at", { mode: "string" }).notNull(),
+    /**
+     * Wie das Thema wiederholt wird: `abfragen` (Karten) oder `ueben`
+     * (Arbeitsblatt). Leer heißt: abgeleitet aus Fach und Titel
+     * (`themaArt()` in src/lib/themen-art.ts). Gesetzt wird die Spalte nur,
+     * wenn der Nutzer umstellt. Modell 23, Plan 3.6;
+     * scripts/kombi-themen-art.sql.
+     */
+    art: text("art").$type<ThemaArt>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -228,6 +236,10 @@ export const subjectTopics = pgTable(
   (t) => [
     unique("subject_topics_key").on(t.subjectId, t.matchKey),
     index("subject_topics_subject_idx").on(t.subjectId, t.lastSeenAt),
+    check(
+      "subject_topics_art_check",
+      sql`${t.art} is null or ${t.art} in ('abfragen', 'ueben')`,
+    ),
   ],
 );
 
@@ -285,6 +297,18 @@ export const studyBlocks = pgTable(
     /** open | done | skipped */
     status: text("status").notNull().default("open"),
     sortOrder: integer("sort_order").notNull().default(0),
+    /**
+     * Der Uhrstand eines angefangenen Blocks (Modell 23, Plan 3.5;
+     * scripts/kombi-lernblock-uhr.sql). `laeuft_seit` ist nur Uhrstand und
+     * wird **nie** als Tageszeit angezeigt oder geplant — Lernblöcke haben
+     * keine Uhrzeit. Ein Block mit `laeuft_seit` oder `pause_ms > 0` gilt als
+     * angefangen und übersteht jedes Neuplanen (`blockAngefangen`).
+     */
+    laeuftSeit: timestamp("laeuft_seit", { withTimezone: true }),
+    pausiertSeit: timestamp("pausiert_seit", { withTimezone: true }),
+    pauseMs: integer("pause_ms").notNull().default(0),
+    /** Gezählte Minuten, gesetzt mit „Als erledigt zählen?“ */
+    minutenGelernt: integer("minuten_gelernt"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -580,6 +604,13 @@ export const materials = pgTable(
     // nicht vorne: gefiltert wird auf einen einzigen Wert (leer), sortiert
     // wird nach der Aufnahme.
     index("materials_user_filed_idx").on(t.userId, t.filedAt, t.createdAt),
+    // Volltextsuche der Zeile (Modell 23, Plan 3.7; scripts/kombi-suche.sql).
+    // Der Ausdruck muss wörtlich derselbe sein wie in `sucheBlaetter()`,
+    // sonst nimmt Postgres den Index nicht.
+    index("materials_titel_volltext_idx").using(
+      "gin",
+      sql`to_tsvector('german', coalesce(${t.title}, ''))`,
+    ),
   ],
 );
 
@@ -758,6 +789,12 @@ export const materialPages = pgTable(
   },
   (t) => [
     index("material_pages_material_idx").on(t.materialId, t.sortOrder),
+    // Volltextsuche in der Abschrift (Modell 23, Plan 3.7). Derselbe Ausdruck
+    // wie in `sucheBlaetter()`.
+    index("material_pages_volltext_idx").using(
+      "gin",
+      sql`to_tsvector('german', coalesce(${t.transcript}, ''))`,
+    ),
     check(
       "material_pages_leser_check",
       sql`${t.leser} in ('offen', 'docling', 'claude')`,
@@ -1107,7 +1144,12 @@ export const leserLaeufe = pgTable(
       onDelete: "cascade",
     }),
     examId: uuid("exam_id").references(() => exams.id, { onDelete: "cascade" }),
-    /** einordnen | nachlese | von-hand | fragen */
+    /** Der Bau eines Arbeitsblatts (art = 'arbeitsblatt'); Modell 23, Plan 3.6 */
+    arbeitsblattId: uuid("arbeitsblatt_id").references(
+      (): AnyPgColumn => arbeitsblaetter.id,
+      { onDelete: "set null" },
+    ),
+    /** einordnen | nachlese | von-hand | fragen | arbeitsblatt */
     art: text("art").$type<LeserLaufArt>().notNull(),
     /** `lastPageAt` beim Lauf, ISO; '' ohne Blatt */
     schluessel: text("schluessel").notNull().default(""),
@@ -1144,7 +1186,7 @@ export const leserLaeufe = pgTable(
     index("leser_laeufe_user_idx").on(t.userId, t.createdAt),
     check(
       "leser_laeufe_art_check",
-      sql`${t.art} in ('einordnen', 'nachlese', 'von-hand', 'fragen')`,
+      sql`${t.art} in ('einordnen', 'nachlese', 'von-hand', 'fragen', 'arbeitsblatt')`,
     ),
     check(
       "leser_laeufe_ergebnis_check",
@@ -1156,7 +1198,10 @@ export const leserLaeufe = pgTable(
     ),
     check(
       "leser_laeufe_ziel_check",
-      sql`(${t.art} = 'fragen' and ${t.examId} is not null and ${t.materialId} is null) or (${t.art} <> 'fragen' and ${t.materialId} is not null and ${t.examId} is null)`,
+      // Getauscht in scripts/kombi-arbeitsblaetter-checks.sql (Modell 23,
+      // Plan 3.6): ein Arbeitsblatt-Lauf hängt am Blatt, nicht an Material
+      // oder Klausur.
+      sql`(${t.art} = 'fragen' and ${t.examId} is not null and ${t.materialId} is null) or (${t.art} = 'arbeitsblatt' and ${t.arbeitsblattId} is not null and ${t.materialId} is null and ${t.examId} is null) or (${t.art} not in ('fragen', 'arbeitsblatt') and ${t.materialId} is not null and ${t.examId} is null)`,
     ),
   ],
 );
@@ -1780,6 +1825,125 @@ export const iservSnapshots = pgTable(
   ],
 );
 
+/**
+ * Das Tagesprotokoll (Modell 23, Plan 3.3): was an einem App-Tag geschah.
+ *
+ * Aus ihm rechnet der Server die Ansicht der Startseite (Ablauf erledigt oder
+ * übersprungen?), den Schritt, auf dem der Ablauf stand, und was heute
+ * eingetragen wurde. Angezeigt wird es nie als Liste.
+ *
+ * `tag` ist der App-Tag mit Wechsel um 04:00 Europe/Berlin, nicht der
+ * Kalendertag — wer um 00:30 noch abhakt, gehört zum Abend davor.
+ *
+ * `typ` hat bewusst **keinen** CHECK: die erlaubten Werte stehen als
+ * `PROTOKOLL_TYPEN` in `src/lib/protokoll.ts` und werden dort per zod geprüft.
+ * Ein neuer Typ bleibt so additiv und braucht kein `DROP CONSTRAINT`.
+ *
+ * Wanderung: scripts/kombi-tagesprotokoll.sql. Keine `relations()`: keine
+ * Abfrage liest diese Tabelle über `db.query`.
+ */
+export const tagesprotokoll = pgTable(
+  "tagesprotokoll",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** App-Tag, Wechsel 04:00 */
+    tag: date("tag", { mode: "string" }).notNull(),
+    /** einer aus PROTOKOLL_TYPEN — geprüft im Code, nicht in der Datenbank */
+    typ: text("typ").notNull(),
+    /** Worauf sich der Eintrag bezieht: Aufgabe, Blatt, Thema, Block … */
+    ref: text("ref"),
+    daten: jsonb("daten").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("tagesprotokoll_user_tag_idx").on(t.userId, t.tag)],
+);
+
+/**
+ * Ein Arbeitsblatt zum Ausdrucken (Modell 23, Plan 3.6; Zusatz
+ * Arbeitsblätter): für ein Übungsthema beim Wiederholen oder für einen
+ * Lernblock. Höchstens eins je Thema und App-Tag und eins je Block.
+ *
+ * Ein Blatt für einen Block ohne Fach-Thema (Gesamtwiederholung) hängt nur am
+ * Block, deshalb ist `subject_topic_id` frei; eins von beiden muss stehen.
+ *
+ * `status`: wartet → laeuft → fertig | fehlgeschlagen. Eine Zeile mit
+ * `laeuft` und abgelaufener `frist_bis` gilt als hängen geblieben (die
+ * Warteschlange an `globalThis` überlebt keinen Neustart). Neu angestoßen
+ * wird per UPDATE, nie per neuer Zeile, höchstens 2 Versuche je Blatt und Tag.
+ *
+ * Wanderung: scripts/kombi-arbeitsblaetter.sql. Keine `relations()`.
+ */
+export const arbeitsblaetter = pgTable(
+  "arbeitsblaetter",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** leer bei Gesamtwiederholung / Klausurthema ohne Fach-Thema */
+    subjectTopicId: uuid("subject_topic_id").references(
+      () => subjectTopics.id,
+      { onDelete: "cascade" },
+    ),
+    studyBlockId: uuid("study_block_id").references(() => studyBlocks.id, {
+      onDelete: "set null",
+    }),
+    /** App-Tag, für den das Blatt gebaut wurde */
+    tag: date("tag", { mode: "string" }).notNull(),
+    status: text("status")
+      .$type<ArbeitsblattStatus>()
+      .notNull()
+      .default("wartet"),
+    /** wie leser_laeufe: danach gilt `laeuft` als hängen geblieben */
+    fristBis: timestamp("frist_bis", { withTimezone: true }),
+    /** Bau-Versuche an diesem Tag, Obergrenze 2 */
+    versuche: integer("versuche").notNull().default(0),
+    /** Form wie UEBUNG im Prototyp: ArbeitsblattInhalt */
+    inhalt: jsonb("inhalt").$type<Record<string, unknown>>(),
+    erzeugtAm: timestamp("erzeugt_am", { withTimezone: true }),
+    gedrucktAm: timestamp("gedruckt_am", { withTimezone: true }),
+    ausgewertetAm: timestamp("ausgewertet_am", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("arbeitsblaetter_thema_tag_idx")
+      .on(t.userId, t.subjectTopicId, t.tag)
+      .where(sql`${t.subjectTopicId} is not null`),
+    uniqueIndex("arbeitsblaetter_block_idx")
+      .on(t.userId, t.studyBlockId)
+      .where(sql`${t.studyBlockId} is not null`),
+    check(
+      "arbeitsblaetter_status_check",
+      sql`${t.status} in ('wartet', 'laeuft', 'fertig', 'fehlgeschlagen')`,
+    ),
+    check(
+      "arbeitsblaetter_ziel_check",
+      sql`${t.subjectTopicId} is not null or ${t.studyBlockId} is not null`,
+    ),
+  ],
+);
+
+/** Die Selbstwertung je Aufgabe: „Wie lief es?“ — richtig oder falsch. */
+export const arbeitsblattWertung = pgTable(
+  "arbeitsblatt_wertung",
+  {
+    arbeitsblattId: uuid("arbeitsblatt_id")
+      .notNull()
+      .references(() => arbeitsblaetter.id, { onDelete: "cascade" }),
+    /** Nummer der Aufgabe, ab 1 */
+    nr: integer("nr").notNull(),
+    richtig: boolean("richtig").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.arbeitsblattId, t.nr] })],
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   oauthGrants: many(oauthGrants),
@@ -2132,7 +2296,18 @@ export type LeserGrund = {
  * - `fragen`: der Fragenlauf zu einer Klausur (@/recall bleibt dabei frei
  *   von jedem Modellaufruf).
  */
-export type LeserLaufArt = "einordnen" | "nachlese" | "von-hand" | "fragen";
+export type LeserLaufArt =
+  | "einordnen"
+  | "nachlese"
+  | "von-hand"
+  | "fragen"
+  | "arbeitsblatt";
+
+/** Wie ein Thema wiederholt wird — `subject_topics.art` (Modell 23, Plan 3.6). */
+export type ThemaArt = "abfragen" | "ueben";
+
+/** Der Stand eines Arbeitsblatts — `arbeitsblaetter.status`. */
+export type ArbeitsblattStatus = "wartet" | "laeuft" | "fertig" | "fehlgeschlagen";
 
 /**
  * Wie ein Lauf ausging — die Werte von `leser_laeufe.ergebnis`. Gemerkt

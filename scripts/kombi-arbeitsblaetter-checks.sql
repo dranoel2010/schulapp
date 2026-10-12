@@ -1,0 +1,46 @@
+-- Die zwei CHECKs von `leser_laeufe` für die Lauf-Art 'arbeitsblatt'
+-- (Modell 23, Plan 3.6).
+--
+-- NICHT additiv: jede Bedingung wird gelöscht und unter demselben Namen neu
+-- gesetzt. `scripts/sql-einspielen.ts` lässt genau das als enge Ausnahme
+-- durch — ein `DROP CONSTRAINT "x"`, dem unmittelbar ein
+-- `ADD CONSTRAINT "x"` folgt (Tausch einer Bedingung). Alles andere bleibt
+-- dort verboten.
+--
+-- drizzle-kit erzeugt erst beide DROP, dann beide ADD. Hier stehen dieselben
+-- vier Anweisungen wörtlich, nur je DROP und ADD paarweise hintereinander;
+-- in einer Transaktion ist das gleichbedeutend.
+--
+-- Erst NACH scripts/kombi-arbeitsblaetter.sql einspielen: die neue
+-- Bedingung nennt die Spalte `arbeitsblatt_id`. Bestehende Läufe erfüllen
+-- sie alle (ihre Art ist nicht 'arbeitsblatt', sie haben `material_id` bzw.
+-- `exam_id` wie bisher).
+--
+-- Die Anweisungen sind aus `drizzle-kit generate` kopiert, nicht getippt:
+-- in einen Ordner außerhalb des Repos, mit dem Stand vor der Änderung
+-- (src/test/schema-basis/) als Basis und danach Schritt für Schritt über
+-- src/db/schema.ts. Die Namen der Fremdschlüssel, CHECKs und Indizes sind
+-- damit die, die drizzle-kit selbst vergibt; ein späteres `db:push` oder
+-- `generate` sieht keinen Unterschied (geprüft in
+-- src/test/kombi-sql.db.test.ts).
+--
+-- ── Wie sie in die Datenbank kommt ──────────────────────────────────────────
+--
+-- Lokal (Entwicklungsserver AUS, vorher `npm run db:backup`):
+--
+--   npx tsx scripts/sql-einspielen.ts scripts/kombi-arbeitsblaetter-checks.sql
+--
+-- Auf dem NAS — erst nach der Abnahme von Abschnitt H (Plan 5.7), in der
+-- Reihenfolge tagesprotokoll, lernblock-uhr, suche, themen-art,
+-- arbeitsblaetter, arbeitsblaetter-checks; ZUERST einspielen, DANN bauen:
+--
+--   sudo docker compose exec -T db \
+--     psql -v ON_ERROR_STOP=1 --single-transaction -U schulapp -d schulapp \
+--     < repo/scripts/kombi-arbeitsblaetter-checks.sql
+--
+-- Danach nachsehen: \d leser_laeufe
+
+ALTER TABLE "leser_laeufe" DROP CONSTRAINT "leser_laeufe_art_check";
+ALTER TABLE "leser_laeufe" ADD CONSTRAINT "leser_laeufe_art_check" CHECK ("leser_laeufe"."art" in ('einordnen', 'nachlese', 'von-hand', 'fragen', 'arbeitsblatt'));
+ALTER TABLE "leser_laeufe" DROP CONSTRAINT "leser_laeufe_ziel_check";
+ALTER TABLE "leser_laeufe" ADD CONSTRAINT "leser_laeufe_ziel_check" CHECK (("leser_laeufe"."art" = 'fragen' and "leser_laeufe"."exam_id" is not null and "leser_laeufe"."material_id" is null) or ("leser_laeufe"."art" = 'arbeitsblatt' and "leser_laeufe"."arbeitsblatt_id" is not null and "leser_laeufe"."material_id" is null and "leser_laeufe"."exam_id" is null) or ("leser_laeufe"."art" not in ('fragen', 'arbeitsblatt') and "leser_laeufe"."material_id" is not null and "leser_laeufe"."exam_id" is null));

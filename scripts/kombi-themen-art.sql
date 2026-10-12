@@ -1,0 +1,32 @@
+-- Art je Thema für Modell 23 (Plan 3.6): `abfragen` (Karten) oder `ueben`
+-- (Arbeitsblatt). Eine Spalte und ein CHECK an `subject_topics`.
+--
+-- Rein additiv. Leer heißt „abgeleitet aus Fach und Titel“ (`themaArt()`),
+-- also ändert sich für bestehende Themen nichts.
+--
+-- Die Anweisungen sind aus `drizzle-kit generate` kopiert, nicht getippt:
+-- in einen Ordner außerhalb des Repos, mit dem Stand vor der Änderung
+-- (src/test/schema-basis/) als Basis und danach Schritt für Schritt über
+-- src/db/schema.ts. Die Namen der Fremdschlüssel, CHECKs und Indizes sind
+-- damit die, die drizzle-kit selbst vergibt; ein späteres `db:push` oder
+-- `generate` sieht keinen Unterschied (geprüft in
+-- src/test/kombi-sql.db.test.ts).
+--
+-- ── Wie sie in die Datenbank kommt ──────────────────────────────────────────
+--
+-- Lokal (Entwicklungsserver AUS, vorher `npm run db:backup`):
+--
+--   npx tsx scripts/sql-einspielen.ts scripts/kombi-themen-art.sql
+--
+-- Auf dem NAS — erst nach der Abnahme von Abschnitt H (Plan 5.7), in der
+-- Reihenfolge tagesprotokoll, lernblock-uhr, suche, themen-art,
+-- arbeitsblaetter, arbeitsblaetter-checks; ZUERST einspielen, DANN bauen:
+--
+--   sudo docker compose exec -T db \
+--     psql -v ON_ERROR_STOP=1 --single-transaction -U schulapp -d schulapp \
+--     < repo/scripts/kombi-themen-art.sql
+--
+-- Danach nachsehen: \d subject_topics
+
+ALTER TABLE "subject_topics" ADD COLUMN "art" text;
+ALTER TABLE "subject_topics" ADD CONSTRAINT "subject_topics_art_check" CHECK ("subject_topics"."art" is null or "subject_topics"."art" in ('abfragen', 'ueben'));
