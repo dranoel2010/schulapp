@@ -26,6 +26,13 @@
 --     psql -v ON_ERROR_STOP=1 --single-transaction -U schulapp -d schulapp \
 --     < repo/scripts/kombi-themen-art.sql
 --
+-- ── Vorher zählen (ändert nichts) ───────────────────────────────────────────
+--
+--   SELECT count(*) AS themen FROM subject_topics;
+--
+-- Danach: dieselbe Zahl; `SELECT count(*) FROM subject_topics WHERE art IS NOT
+-- NULL` gibt 0 (die App leitet die Art ab, bis jemand sie setzt).
+--
 -- Danach nachsehen: \d subject_topics
 
 ALTER TABLE "subject_topics" ADD COLUMN "art" text;

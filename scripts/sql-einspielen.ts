@@ -21,8 +21,9 @@
  *
  * Eine einzige, enge Ausnahme gibt es seit Modell 23: der Tausch einer
  * Bedingung — `DROP CONSTRAINT "x"`, dem unmittelbar `ADD CONSTRAINT "x"` auf
- * derselben Tabelle folgt (`istBedingungsTausch`, unten). Postgres kann eine
- * CHECK-Bedingung nicht ändern, nur ersetzen.
+ * derselben Tabelle folgt, und zwar als `CHECK (…)` (`istBedingungsTausch`,
+ * unten). Postgres kann eine CHECK-Bedingung nicht ändern, nur ersetzen. Dass
+ * auch die alte Bedingung ein CHECK war, prüft das Skript vorher im Katalog.
  *
  * **Der Entwicklungsserver muss aus sein.** PGlite öffnet das Verzeichnis
  * exklusiv, und zwei Prozesse darauf machen die Datenbank kaputt — nicht
@@ -223,7 +224,7 @@ export function beanstandung(sql: string): string | null {
 const DROP_CONSTRAINT =
   /^alter table (?:only )?("[^"]+"|[a-z_][a-z0-9_]*) drop constraint ("[^"]+"|[a-z_][a-z0-9_]*)$/i;
 const ADD_CONSTRAINT =
-  /^alter table (?:only )?("[^"]+"|[a-z_][a-z0-9_]*) add constraint ("[^"]+"|[a-z_][a-z0-9_]*) /i;
+  /^alter table (?:only )?("[^"]+"|[a-z_][a-z0-9_]*) add constraint ("[^"]+"|[a-z_][a-z0-9_]*) check\s*\(/i;
 
 function bezeichner(roh: string): string {
   return roh.startsWith('"') ? roh.slice(1, -1) : roh.toLowerCase();
@@ -241,6 +242,54 @@ export function istBedingungsTausch(
     bezeichner(drop[1]) === bezeichner(add[1]) &&
     bezeichner(drop[2]) === bezeichner(add[2])
   );
+}
+
+/**
+ * Die Bedingungen, die eine Datei per Tausch ersetzt. Der Text allein zeigt
+ * nur, dass die NEUE Bedingung ein CHECK ist; ob die alte auch einer war (und
+ * nicht ein Fremdschlüssel, Primärschlüssel oder Unique-Index gleichen
+ * Namens), prüft `main()` vor dem Einspielen im Katalog.
+ */
+export function getauschteBedingungen(
+  sql: string,
+): { tabelle: string; name: string }[] {
+  const anweisungen = ohneKommentare(sql)
+    .split(";")
+    .map((anweisung) => anweisung.trim().replace(/\s+/g, " "))
+    .filter(Boolean);
+  const ergebnis: { tabelle: string; name: string }[] = [];
+  for (const [i, text] of anweisungen.entries()) {
+    if (!istBedingungsTausch(text, anweisungen[i + 1])) continue;
+    const drop = DROP_CONSTRAINT.exec(text)!;
+    ergebnis.push({ tabelle: bezeichner(drop[1]), name: bezeichner(drop[2]) });
+  }
+  return ergebnis;
+}
+
+/**
+ * Ein Tausch darf nur einen CHECK durch einen CHECK ersetzen — nie einen
+ * Fremdschlüssel, Primärschlüssel oder Unique-Index gleichen Namens. Wirft,
+ * wenn die alte Bedingung im Katalog eine andere Art hat.
+ */
+export async function tauschArtPruefen(
+  db: Pick<PGlite, "query">,
+  sql: string,
+  datei = "der Datei",
+): Promise<void> {
+  for (const { tabelle, name } of getauschteBedingungen(sql)) {
+    const art = await db.query<{ contype: string }>(
+      "select c.contype from pg_constraint c join pg_class t on t.oid = c.conrelid " +
+        "join pg_namespace n on n.oid = t.relnamespace " +
+        "where n.nspname = 'public' and t.relname = $1 and c.conname = $2",
+      [tabelle, name],
+    );
+    const typ = art.rows[0]?.contype;
+    if (typ !== undefined && typ !== "c") {
+      throw new Error(
+        `In ${datei} wird „${name}" auf ${tabelle} getauscht, das ist aber keine CHECK-Bedingung (contype ${typ}).`,
+      );
+    }
+  }
 }
 
 async function main() {
@@ -281,6 +330,13 @@ async function main() {
   );
   console.log(`Tabellen vorher (${vorher.rows.length}):`);
   console.log("  " + vorher.rows.map((zeile) => zeile.table_name).join(", "));
+
+  try {
+    await tauschArtPruefen(db, sql, datei);
+  } catch (fehler) {
+    await db.close();
+    throw fehler;
+  }
 
   await db.exec(`begin;\n${anweisungen}\ncommit;`);
 

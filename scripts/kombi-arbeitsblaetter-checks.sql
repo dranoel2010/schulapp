@@ -38,6 +38,16 @@
 --     psql -v ON_ERROR_STOP=1 --single-transaction -U schulapp -d schulapp \
 --     < repo/scripts/kombi-arbeitsblaetter-checks.sql
 --
+-- ── Vorher zählen (ändert nichts) ───────────────────────────────────────────
+--
+--   SELECT art, count(*) FROM leser_laeufe GROUP BY art ORDER BY art;
+--   SELECT pg_get_constraintdef(oid) FROM pg_constraint
+--    WHERE conname = 'leser_laeufe_art_check';  -- vorher ohne 'arbeitsblatt'
+--
+-- Jede Art aus der ersten Abfrage muss in der neuen Liste stehen, sonst
+-- scheitert der Tausch (gut so: die Transaktion nimmt dann alles zurück).
+-- Danach: dieselben Zahlen, und die Bedingung nennt 'arbeitsblatt'.
+--
 -- Danach nachsehen: \d leser_laeufe
 
 ALTER TABLE "leser_laeufe" DROP CONSTRAINT "leser_laeufe_art_check";

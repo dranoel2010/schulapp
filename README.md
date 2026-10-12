@@ -1438,6 +1438,38 @@ npm run db:backup
 
 Die Sicherungen liegen unter `.backups/` und sind nicht in Git.
 
+### Modell 23 auf dem NAS
+
+Modell 23 (Bauplan `entwurf-modelle/23-kombi-v2/UMSETZUNG.md`, 5.7) bringt
+sechs SQL-Dateien. Auf dem NAS kommen sie **erst nach der Abnahme von
+Abschnitt H**, per psql, **vor** dem Neubau und in genau dieser Reihenfolge:
+
+1. `scripts/kombi-tagesprotokoll.sql` — Tabelle `tagesprotokoll`
+2. `scripts/kombi-lernblock-uhr.sql` — Uhr-Spalten an `study_blocks`
+3. `scripts/kombi-suche.sql` — zwei GIN-Indizes für die Suche
+4. `scripts/kombi-themen-art.sql` — Spalte `subject_topics.art`
+5. `scripts/kombi-arbeitsblaetter.sql` — `arbeitsblaetter`, `arbeitsblatt_wertung`, `leser_laeufe.arbeitsblatt_id`
+6. `scripts/kombi-arbeitsblaetter-checks.sql` — tauscht `leser_laeufe_art_check` und `leser_laeufe_ziel_check` (braucht 5)
+
+Jede Datei hat im Kopf einen Abschnitt „Vorher zählen“: vorher sichern,
+zählen, einspielen, dieselben Zahlen wieder zählen. Eingespielt wird jede wie
+die Leser-Dateien, in einer Transaktion und mit Abbruch beim ersten Fehler:
+
+```bash
+sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose exec -T db sh -c "exec psql -X -v ON_ERROR_STOP=1 --single-transaction -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -f -" < repo/scripts/kombi-tagesprotokoll.sql'
+```
+
+`nas.sh hoch` hält an, wenn eine Pflichtspalte der Dateien 1, 2, 4 oder 5
+fehlt, und eigens, wenn `leser_laeufe_art_check` die Art `'arbeitsblatt'`
+nicht kennt (Datei 6). Die Indizes aus Datei 3 prüft es nicht.
+
+**Lokal** setzen die Dateien 5 und 6 die älteren Tabellen von `main` voraus
+(`leser_laeufe` aus `scripts/leser-laeufe-tabelle.sql`, davor
+`scripts/leser-tabellen.sql`). Fehlen sie in `.data/pglite`, scheitern 5 und 6
+mit `relation "leser_laeufe" does not exist`. Für die Browserprüfung dann
+eine frische Datenbank: Server aus, `npm run db:backup`, `.data/pglite`
+beiseite legen, `npm run db:push`, danach `npx tsx scripts/saat-abruf.mts`.
+
 ## Erinnerungen (Push)
 
 Die tägliche Lern-Erinnerung läuft über Web-Push. Dafür braucht es einmalig

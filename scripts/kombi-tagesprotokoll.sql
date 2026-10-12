@@ -31,6 +31,14 @@
 --     psql -v ON_ERROR_STOP=1 --single-transaction -U schulapp -d schulapp \
 --     < repo/scripts/kombi-tagesprotokoll.sql
 --
+-- ── Vorher zählen (ändert nichts) ───────────────────────────────────────────
+--
+--   SELECT to_regclass('tagesprotokoll');      -- vorher leer (NULL)
+--   SELECT count(*) AS nutzer FROM users;
+--
+-- Danach: to_regclass zeigt die Tabelle, `SELECT count(*) FROM tagesprotokoll`
+-- gibt 0, die Zahl der Nutzer ist unverändert.
+--
 -- Danach nachsehen: \d tagesprotokoll
 
 CREATE TABLE "tagesprotokoll" (

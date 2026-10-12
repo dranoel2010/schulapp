@@ -18,7 +18,9 @@ import {
   bauFehlgeschlagen,
   bauStarten,
   darfBauen,
+  gedrucktSetzen,
   istHaengend,
+  wertungLesen,
   wertungSetzen,
   weiterNachfragen,
 } from "@/lib/arbeitsblatt/stand";
@@ -32,6 +34,15 @@ const MIN = 60_000;
 let nutzer = "";
 let thema = "";
 let block = "";
+let klausur = "";
+
+async function neuerBlock(date: string): Promise<string> {
+  const [b] = await testDb
+    .insert(studyBlocks)
+    .values({ examId: klausur, date, minutes: 25, kind: "review" })
+    .returning({ id: studyBlocks.id });
+  return b.id;
+}
 
 before(async () => {
   await dbBereit();
@@ -49,6 +60,7 @@ before(async () => {
     .insert(exams)
     .values({ userId: nutzer, subjectId: f.id, date: "2026-10-16" })
     .returning({ id: exams.id });
+  klausur = k.id;
   const [b] = await testDb
     .insert(studyBlocks)
     .values({ examId: k.id, date: TAG, minutes: 25, kind: "review" })
@@ -121,5 +133,62 @@ describe("Arbeitsblatt-Stand", () => {
     const blatt = await arbeitsblattFuer(nutzer, { subjectTopicId: thema }, "2026-10-16");
     const fremd = await testNutzer("Fremd");
     await assert.rejects(wertungSetzen(fremd, blatt.id, 1, true), /nicht gefunden/);
+  });
+
+  it("Thema und Block an zwei Tagen: dasselbe Blatt, keine Endlosschleife", async () => {
+    const b = await neuerBlock("2026-10-20");
+    const a = await arbeitsblattFuer(nutzer, { subjectTopicId: thema, studyBlockId: b }, "2026-10-20");
+    const zweit = await arbeitsblattFuer(nutzer, { subjectTopicId: thema, studyBlockId: b }, "2026-10-21");
+    assert.equal(zweit.id, a.id, "der Block hat genau ein Blatt");
+    const zeilen = await testDb.select().from(arbeitsblaetter).where(eq(arbeitsblaetter.studyBlockId, b));
+    assert.equal(zeilen.length, 1);
+  });
+
+  it("Blockblatt unter einem anderen Thema: der Block findet sein Blatt", async () => {
+    const [anders] = await testDb
+      .select({ subjectId: subjectTopics.subjectId })
+      .from(subjectTopics)
+      .where(eq(subjectTopics.id, thema));
+    const [t2] = await testDb
+      .insert(subjectTopics)
+      .values({ userId: nutzer, subjectId: anders.subjectId, title: "Parabeln", matchKey: "parabeln", lastSeenAt: TAG })
+      .returning({ id: subjectTopics.id });
+    const b = await neuerBlock("2026-10-22");
+    const a = await arbeitsblattFuer(nutzer, { subjectTopicId: thema, studyBlockId: b }, "2026-10-22");
+    const zweit = await arbeitsblattFuer(nutzer, { subjectTopicId: t2.id, studyBlockId: b }, "2026-10-22");
+    assert.equal(zweit.id, a.id);
+  });
+
+  it("WH-Blatt des Themas existiert heute schon: der Block übernimmt es", async () => {
+    const wh = await arbeitsblattFuer(nutzer, { subjectTopicId: thema }, "2026-10-23");
+    assert.equal(wh.studyBlockId, null);
+    const b = await neuerBlock("2026-10-23");
+    const amBlock = await arbeitsblattFuer(nutzer, { subjectTopicId: thema, studyBlockId: b }, "2026-10-23");
+    assert.equal(amBlock.id, wh.id);
+    assert.equal(amBlock.studyBlockId, b, "study_block_id nachgetragen");
+
+    // Ein zweiter Block am selben Tag und Thema teilt sich das Blatt.
+    const b2 = await neuerBlock("2026-10-23");
+    const geteilt = await arbeitsblattFuer(nutzer, { subjectTopicId: thema, studyBlockId: b2 }, "2026-10-23");
+    assert.equal(geteilt.id, wh.id);
+    assert.equal(geteilt.studyBlockId, b);
+  });
+
+  it("fremde Nutzer: drucken, lesen und auswerten scheitern ohne Protokoll", async () => {
+    const blatt = await arbeitsblattFuer(nutzer, { subjectTopicId: thema }, "2026-10-24");
+    const fremd = await testNutzer("Fremd2");
+    await assert.rejects(gedrucktSetzen(fremd, blatt.id, T0, "2026-10-24"), /nicht gefunden/);
+    await assert.rejects(wertungLesen(fremd, blatt.id), /nicht gefunden/);
+    await assert.rejects(auswerten(fremd, blatt.id, 0, T0, "2026-10-24"), /nicht gefunden/);
+    assert.equal((await protokollVomTag(fremd, "2026-10-24")).length, 0);
+  });
+
+  it("zweimal auswerten: der zweite Aufruf wird abgelehnt, ein Protokolleintrag", async () => {
+    const blatt = await arbeitsblattFuer(nutzer, { subjectTopicId: thema }, "2026-10-25");
+    await wertungSetzen(nutzer, blatt.id, 1, true);
+    await auswerten(nutzer, blatt.id, 1, T0, "2026-10-25");
+    await assert.rejects(auswerten(nutzer, blatt.id, 1, plus(MIN), "2026-10-25"), /schon ausgewertet/);
+    const eintraege = (await protokollVomTag(nutzer, "2026-10-25")).filter((e) => e.typ === "blatt_ausgewertet");
+    assert.equal(eintraege.length, 1);
   });
 });

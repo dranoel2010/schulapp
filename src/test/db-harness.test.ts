@@ -3,6 +3,8 @@ import { dbBereit, testClient, testDb } from "@/test/db-harness";
 import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
 
+import { spawnSync } from "node:child_process";
+
 import { sql } from "drizzle-orm";
 
 import { db } from "@/db";
@@ -27,6 +29,27 @@ describe("db-harness (Wächter)", () => {
 
   it("npm test setzt den Riegel gegen die Datei-Datenbank", () => {
     assert.equal(process.env.SCHULAPP_TESTLAUF, "1");
+  });
+
+  it("ohne Harness wirft @/db im Testlauf, auch wenn DATABASE_URL gesetzt ist", () => {
+    // Eigener Prozess ohne Harness: die erste Abfrage muss am Riegel scheitern,
+    // bevor eine Verbindung zu einem Postgres aufgebaut wird.
+    const lauf = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "--input-type=module",
+        "-e",
+        'const { db } = await import("@/db"); try { db.select; console.log("OFFEN"); } catch (e) { console.log(String(e.message)); }',
+      ],
+      {
+        cwd: process.cwd(),
+        env: { ...process.env, SCHULAPP_TESTLAUF: "1", DATABASE_URL: "postgres://niemand@127.0.0.1:1/keine" },
+        encoding: "utf8",
+      },
+    );
+    assert.match(lauf.stdout, /Test ohne db-harness/, lauf.stderr);
   });
 
   it("das Schema steht: Tabellen aus beiden Schema-Dateien", async () => {

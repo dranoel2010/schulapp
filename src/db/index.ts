@@ -16,20 +16,22 @@ export type Database = PgliteDatabase<typeof schema>;
  * echten Postgres. Beide sprechen dieselbe SQL-Sprache, der Code bleibt gleich.
  */
 function createDatabase(): Database {
+  // Wächter für `npm test` (setzt SCHULAPP_TESTLAUF=1): ein Test darf nie die
+  // echte Datenbank öffnen — weder die Datei-Datenbank (schon gar nicht neben
+  // einem laufenden Server) noch ein Postgres aus DATABASE_URL, das zufällig in
+  // der Shell steht. Darum steht er VOR dem DATABASE_URL-Zweig. Tests holen
+  // ihre Datenbank aus src/test/db-harness.ts.
+  if (process.env.SCHULAPP_TESTLAUF === "1") {
+    throw new Error(
+      "Test ohne db-harness: keine echte Datenbank im Testlauf. Erster Import der Testdatei: @/test/db-harness",
+    );
+  }
+
   const url = process.env.DATABASE_URL;
 
   if (url) {
     const client = postgres(url, { prepare: false });
     return drizzlePostgres(client, { schema }) as unknown as Database;
-  }
-
-  // Wächter für `npm test` (setzt SCHULAPP_TESTLAUF=1): ein Test darf nie die
-  // echte Datei-Datenbank öffnen — schon gar nicht neben einem laufenden
-  // Server. Tests holen ihre Datenbank aus src/test/db-harness.ts.
-  if (process.env.SCHULAPP_TESTLAUF === "1") {
-    throw new Error(
-      "Test ohne db-harness: .data/pglite bleibt zu. Erster Import der Testdatei: @/test/db-harness",
-    );
   }
 
   const dataDir = path.join(process.cwd(), ".data", "pglite");

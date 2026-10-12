@@ -78,38 +78,79 @@ export type Ziel =
 /**
  * Das Blatt für dieses Ziel an diesem Tag — angelegt, falls es noch keins
  * gibt. Ein Blatt für einen Block ohne Fach-Thema hängt nur am Block.
+ *
+ * Die Suche deckt beide Unique-Indizes ab, sonst scheitert das INSERT still
+ * am anderen Index und nichts wird gefunden:
+ * - mit Block zuerst nach (user_id, study_block_id) — der Block hat genau
+ *   ein Blatt, auch wenn es an einem anderen Tag oder Thema angelegt wurde;
+ * - mit Thema nach (user_id, subject_topic_id, tag). Gibt es dort heute
+ *   schon ein Blatt ohne Block (Wiederholung des Themas), übernimmt der Block
+ *   dieses Blatt: `study_block_id` wird nachgetragen. Hängt es schon an einem
+ *   anderen Block, teilen sich beide das Blatt — höchstens eins je Thema und
+ *   Tag gilt vor „eins je Block“.
+ * Danach gibt es höchstens einen Wiederholungsversuch (ein paralleler Aufruf
+ * war schneller), dann einen Fehler.
  */
 export async function arbeitsblattFuer(
   userId: string,
   ziel: Ziel,
   tag: string,
+  versuch = 0,
 ): Promise<ArbeitsblattZeile> {
   const themaId = ziel.subjectTopicId ?? null;
   const blockId = ziel.studyBlockId ?? null;
+  if (!themaId && !blockId) throw new Error("Arbeitsblatt ohne Thema und Block");
 
-  const vorhanden = await db
-    .select()
-    .from(arbeitsblaetter)
-    .where(
-      and(
-        eq(arbeitsblaetter.userId, userId),
-        themaId
-          ? and(eq(arbeitsblaetter.subjectTopicId, themaId), eq(arbeitsblaetter.tag, tag))
-          : eq(arbeitsblaetter.studyBlockId, blockId!),
-      ),
-    )
-    .limit(1);
-  if (vorhanden[0]) return vorhanden[0];
+  if (blockId) {
+    const [amBlock] = await db
+      .select()
+      .from(arbeitsblaetter)
+      .where(and(eq(arbeitsblaetter.userId, userId), eq(arbeitsblaetter.studyBlockId, blockId)))
+      .limit(1);
+    if (amBlock) return amBlock;
+  }
 
-  const [neu] = await db
-    .insert(arbeitsblaetter)
-    .values({ userId, subjectTopicId: themaId, studyBlockId: blockId, tag })
-    .onConflictDoNothing()
-    .returning();
-  if (neu) return neu;
+  if (themaId) {
+    const [amThema] = await db
+      .select()
+      .from(arbeitsblaetter)
+      .where(
+        and(
+          eq(arbeitsblaetter.userId, userId),
+          eq(arbeitsblaetter.subjectTopicId, themaId),
+          eq(arbeitsblaetter.tag, tag),
+        ),
+      )
+      .limit(1);
+    if (amThema) {
+      if (!blockId || amThema.studyBlockId) return amThema;
+      const [uebernommen] = await db
+        .update(arbeitsblaetter)
+        .set({ studyBlockId: blockId })
+        .where(and(eq(arbeitsblaetter.id, amThema.id), isNull(arbeitsblaetter.studyBlockId)))
+        .returning();
+      if (uebernommen) return uebernommen;
+      // Ein anderer Block war schneller: neu lesen.
+    } else {
+      const [neu] = await db
+        .insert(arbeitsblaetter)
+        .values({ userId, subjectTopicId: themaId, studyBlockId: blockId, tag })
+        .onConflictDoNothing()
+        .returning();
+      if (neu) return neu;
+    }
+  } else {
+    const [neu] = await db
+      .insert(arbeitsblaetter)
+      .values({ userId, subjectTopicId: null, studyBlockId: blockId, tag })
+      .onConflictDoNothing()
+      .returning();
+    if (neu) return neu;
+  }
 
-  // Ein zweiter Aufruf war schneller: dessen Zeile gilt.
-  return arbeitsblattFuer(userId, ziel, tag);
+  // Ein zweiter Aufruf war schneller: dessen Zeile gilt. Nur einmal.
+  if (versuch >= 1) throw new Error("Arbeitsblatt ließ sich weder finden noch anlegen");
+  return arbeitsblattFuer(userId, ziel, tag, versuch + 1);
 }
 
 /**
@@ -179,10 +220,12 @@ export async function gedrucktSetzen(
   now: Date,
   tag: string,
 ): Promise<string> {
-  await db
+  const [getroffen] = await db
     .update(arbeitsblaetter)
     .set({ gedrucktAm: now })
-    .where(and(eq(arbeitsblaetter.userId, userId), eq(arbeitsblaetter.id, id)));
+    .where(and(eq(arbeitsblaetter.userId, userId), eq(arbeitsblaetter.id, id)))
+    .returning({ id: arbeitsblaetter.id });
+  if (!getroffen) throw new Error("Arbeitsblatt nicht gefunden");
   return protokollieren(userId, tag, "blatt_gedruckt", id);
 }
 
@@ -193,11 +236,7 @@ export async function wertungSetzen(
   nr: number,
   richtig: boolean,
 ): Promise<void> {
-  const [eigen] = await db
-    .select({ id: arbeitsblaetter.id })
-    .from(arbeitsblaetter)
-    .where(and(eq(arbeitsblaetter.userId, userId), eq(arbeitsblaetter.id, id)));
-  if (!eigen) throw new Error("Arbeitsblatt nicht gefunden");
+  await besitzPruefen(userId, id);
 
   await db
     .insert(arbeitsblattWertung)
@@ -208,9 +247,19 @@ export async function wertungSetzen(
     });
 }
 
+async function besitzPruefen(userId: string, id: string): Promise<void> {
+  const [eigen] = await db
+    .select({ id: arbeitsblaetter.id })
+    .from(arbeitsblaetter)
+    .where(and(eq(arbeitsblaetter.userId, userId), eq(arbeitsblaetter.id, id)));
+  if (!eigen) throw new Error("Arbeitsblatt nicht gefunden");
+}
+
 export async function wertungLesen(
+  userId: string,
   id: string,
 ): Promise<Map<number, boolean>> {
+  await besitzPruefen(userId, id);
   const zeilen = await db
     .select()
     .from(arbeitsblattWertung)
@@ -231,7 +280,7 @@ export async function auswerten(
   now: Date,
   tag: string,
 ): Promise<{ n: number; richtig: number; protokollId: string }> {
-  const wertung = await wertungLesen(id);
+  const wertung = await wertungLesen(userId, id);
   for (let nr = 1; nr <= aufgabenZahl; nr += 1) {
     if (!wertung.has(nr)) throw new Error(`Aufgabe ${nr} ist noch nicht bewertet`);
   }
@@ -239,10 +288,18 @@ export async function auswerten(
     ([nr, ok]) => nr <= aufgabenZahl && ok,
   ).length;
 
-  await db
+  const [getroffen] = await db
     .update(arbeitsblaetter)
     .set({ ausgewertetAm: now })
-    .where(and(eq(arbeitsblaetter.userId, userId), eq(arbeitsblaetter.id, id)));
+    .where(
+      and(
+        eq(arbeitsblaetter.userId, userId),
+        eq(arbeitsblaetter.id, id),
+        isNull(arbeitsblaetter.ausgewertetAm),
+      ),
+    )
+    .returning({ id: arbeitsblaetter.id });
+  if (!getroffen) throw new Error("Arbeitsblatt ist schon ausgewertet");
   const protokollId = await protokollieren(userId, tag, "blatt_ausgewertet", id, {
     n: aufgabenZahl,
     richtig,

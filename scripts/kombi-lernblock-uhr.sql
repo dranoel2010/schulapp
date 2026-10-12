@@ -29,6 +29,13 @@
 --     psql -v ON_ERROR_STOP=1 --single-transaction -U schulapp -d schulapp \
 --     < repo/scripts/kombi-lernblock-uhr.sql
 --
+-- ── Vorher zählen (ändert nichts) ───────────────────────────────────────────
+--
+--   SELECT count(*) AS bloecke FROM study_blocks;
+--
+-- Danach: dieselbe Zahl; `SELECT count(*) FROM study_blocks WHERE pause_ms <> 0
+-- OR laeuft_seit IS NOT NULL` gibt 0.
+--
 -- Danach nachsehen: \d study_blocks
 
 ALTER TABLE "study_blocks" ADD COLUMN "laeuft_seit" timestamp with time zone;

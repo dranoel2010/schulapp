@@ -22,8 +22,8 @@
  *   before(dbBereit);
  *
  * Der zweite Riegel steht in `src/db/index.ts`: mit `SCHULAPP_TESTLAUF=1`
- * (gesetzt von `npm test`) weigert sich `@/db`, eine Datei-Datenbank zu
- * öffnen. Vergisst ein Test den Harness, scheitert er laut, statt still die
+ * (gesetzt von `npm test`) weigert sich `@/db`, irgendeine echte Datenbank
+ * zu öffnen — die Datei-Datenbank ebenso wie ein Postgres aus DATABASE_URL. Vergisst ein Test den Harness, scheitert er laut, statt still die
  * echten Daten zu benutzen.
  */
 

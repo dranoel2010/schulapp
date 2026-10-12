@@ -102,7 +102,7 @@ export function Zeile({
     // Treffer und Gruppen kommen nach (13.3 Nr. 14): ab 80 ms, je 25 ms, höchstens 4 Stufen
     if (!reduce() && leerRef.current) {
       const frisch = [...leerRef.current.querySelectorAll<HTMLElement>(".m-group, .opt")].slice(0, 12);
-      frisch.forEach((n, i) =>
+      const staffel = frisch.map((n, i) =>
         n.animate([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], {
           duration: 200,
           delay: 80 + Math.min(i, 3) * 25,
@@ -110,8 +110,11 @@ export function Zeile({
           fill: "backwards",
         }),
       );
+      // Solange die Staffel läuft, zählt ihr translateY(6px) zum Überlauf; ihr
+      // Ende löst weder ResizeObserver noch Scroll aus. Darum danach einmal
+      // nachmessen, sonst bliebe der Verlauf (.more) ohne Überlauf stehen.
+      Promise.all(staffel.map((a) => a.finished)).then(mehrAnzeigen, () => {});
     }
-    requestAnimationFrame(mehrAnzeigen);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kombi, onOffen, sizeMenu, mehrAnzeigen]);
 

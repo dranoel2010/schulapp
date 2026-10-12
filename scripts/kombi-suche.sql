@@ -28,6 +28,13 @@
 --     psql -v ON_ERROR_STOP=1 --single-transaction -U schulapp -d schulapp \
 --     < repo/scripts/kombi-suche.sql
 --
+-- ── Vorher zählen (ändert nichts) ───────────────────────────────────────────
+--
+--   SELECT count(*) AS seiten FROM material_pages;
+--   SELECT count(*) AS blaetter FROM materials;
+--
+-- Danach: beide Zahlen unverändert (nur zwei Indizes kommen dazu).
+--
 -- Danach nachsehen: \di *volltext*
 
 CREATE INDEX "material_pages_volltext_idx" ON "material_pages" USING gin (to_tsvector('german', coalesce("transcript", '')));

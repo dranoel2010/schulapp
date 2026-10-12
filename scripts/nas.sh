@@ -398,10 +398,10 @@ stand() {
 # 11.10.2026 in die Datei, und eine Tabelle aus einer Fassung davor hielte
 # sonst als „da“ — und jeder Lauf schiene an einer fehlenden Spalte.
 #
-# Modell 23 (Plan 5.7): je neue SQL-Datei eine Zeile. Den getauschten CHECK
-# (kombi-arbeitsblaetter-checks.sql) und die GIN-Indizes (kombi-suche.sql)
-# prüft `hoch` nicht: ohne Index ist die Suche nur langsamer, ein fehlender
-# CHECK-Tausch zeigt sich beim ersten Arbeitsblatt-Lauf als Fehler im Lauf.
+# Modell 23 (Plan 5.7): je neue SQL-Datei eine Zeile. Die GIN-Indizes
+# (kombi-suche.sql) prüft `hoch` nicht: ohne Index ist die Suche nur
+# langsamer. Den getauschten CHECK (kombi-arbeitsblaetter-checks.sql) prüft
+# `spalten_pruefen` eigens am Ende, er hat keine Spalte.
 PFLICHTSPALTEN="material_pages leser scripts/leser-tabellen.sql
 leser_laeufe frist_bis scripts/leser-laeufe-tabelle.sql
 tagesprotokoll typ scripts/kombi-tagesprotokoll.sql
@@ -472,6 +472,14 @@ spalten_pruefen() {
         echo "die ganze Reihenfolge im README. Dann einspielen, in einer Transaktion, mit" >&2
         echo "Abbruch beim ersten Fehler und mit Benutzer und Datenbank aus dem db-Container:" >&2
         echo "  sudo sh -c 'cd $APP && $DC exec -T db psql -X -v ON_ERROR_STOP=1 --single-transaction -U $benutzer -d $datenbank -f - < repo/$datei'" >&2
+        case "$datei" in
+          scripts/kombi-*)
+            echo "Modell 23: sechs Dateien in fester Reihenfolge, README „Modell 23 auf dem NAS“." >&2 ;;
+        esac
+        if [ "$datei" = "scripts/kombi-arbeitsblaetter.sql" ]; then
+          echo "Gleich danach, genauso, die Folgedatei (tauscht zwei CHECKs an leser_laeufe):" >&2
+          echo "  sudo sh -c 'cd $APP && $DC exec -T db psql -X -v ON_ERROR_STOP=1 --single-transaction -U $benutzer -d $datenbank -f - < repo/scripts/kombi-arbeitsblaetter-checks.sql'" >&2
+        fi
         if [ "${2:-}" = "laeuft" ]; then
           echo "Danach noch einmal:  sudo $0 hoch   — es sieht dann noch einmal nach." >&2
         else
@@ -483,6 +491,27 @@ spalten_pruefen() {
         echo " Ich mache trotzdem weiter. Fehlt sie, scheitert danach jede Seite: dann $datei einspielen.)" ;;
     esac
   done <<< "$PFLICHTSPALTEN"
+
+  # Der CHECK-Tausch steht in keiner Spalte: ohne ihn scheitert erst der erste
+  # Arbeitsblatt-Lauf. Darum hier eigens nachsehen, sobald der Stand die
+  # Datei hat und die Tabelle leser_laeufe da ist.
+  if git -C "$APP/repo" cat-file -e "$1:scripts/kombi-arbeitsblaetter-checks.sql" 2>/dev/null; then
+    antwort=$(db_abfrage "select count(*) from pg_constraint where conname = 'leser_laeufe_art_check' and pg_get_constraintdef(oid) like '%arbeitsblatt%'" | tr -d '[:space:]')
+    case "$antwort" in
+      1) echo "Datenbank: leser_laeufe_art_check kennt 'arbeitsblatt'." ;;
+      0)
+        read -r benutzer datenbank <<< "$(db_namen)"
+        echo >&2
+        echo "HALT: leser_laeufe_art_check kennt die Lauf-Art 'arbeitsblatt' nicht — der Tausch fehlt." >&2
+        echo "Zählzeilen im Kopf von scripts/kombi-arbeitsblaetter-checks.sql, Reihenfolge im README" >&2
+        echo "(„Modell 23 auf dem NAS“). Einspielen:" >&2
+        echo "  sudo sh -c 'cd $APP && $DC exec -T db psql -X -v ON_ERROR_STOP=1 --single-transaction -U $benutzer -d $datenbank -f - < repo/scripts/kombi-arbeitsblaetter-checks.sql'" >&2
+        echo "Danach noch einmal:  sudo $0 hoch" >&2
+        return 1 ;;
+      *)
+        echo "(Ob leser_laeufe_art_check 'arbeitsblatt' kennt, ließ sich nicht nachsehen — ich mache weiter.)" ;;
+    esac
+  fi
   return 0
 }
 

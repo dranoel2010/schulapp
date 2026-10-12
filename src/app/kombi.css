@@ -47,6 +47,8 @@ body.toast-on .step .scroll,body.toast-on .page .scroll{padding-bottom:calc(var(
 .gear:active{transform:scale(.92)}
 @media (hover:hover){.gear:hover{color:var(--ink)}}
 
+/* Prototyp stützt sich auf den UA-Standard für h1; Tailwind-Preflight setzt ihn zurück */
+h1.hl{font-size:2em;font-weight:700;line-height:1.4}
 h1.hl{display:grid;margin:0 0 2px;min-height:40px}
 h1.hl .swap{grid-area:1/1;font-family:var(--sans);font-size:28px;line-height:1.12;font-weight:650;letter-spacing:-.03em;text-wrap:balance}
 .modes{display:grid}

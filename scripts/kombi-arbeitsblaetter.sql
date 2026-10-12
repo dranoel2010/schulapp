@@ -29,6 +29,14 @@
 --     psql -v ON_ERROR_STOP=1 --single-transaction -U schulapp -d schulapp \
 --     < repo/scripts/kombi-arbeitsblaetter.sql
 --
+-- ── Vorher zählen (ändert nichts) ───────────────────────────────────────────
+--
+--   SELECT count(*) AS laeufe FROM leser_laeufe;
+--   SELECT to_regclass('arbeitsblaetter');     -- vorher leer (NULL)
+--
+-- Danach: dieselbe Zahl Läufe, alle mit `arbeitsblatt_id IS NULL`; die beiden
+-- neuen Tabellen sind leer. Gleich danach kombi-arbeitsblaetter-checks.sql.
+--
 -- Danach nachsehen: \d arbeitsblaetter
 
 CREATE TABLE "arbeitsblaetter" (
