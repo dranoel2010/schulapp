@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Arbeitskopien und Werkzeug-Ordner der Agenten (nicht Teil des Repos)
+    ".claude/**",
+    ".agents/**",
+    ".codex/**",
+    ".impeccable/**",
   ]),
 ]);
 
