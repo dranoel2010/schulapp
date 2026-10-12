@@ -105,3 +105,30 @@ export function zahl(n: number, g?: "n"): string {
   return n <= 12 ? ZAHL[n] : String(n);
 }
 export const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * Ein Absatz einer Abschrift als fließender Text (Prototyp `abschriftEl`):
+ * Die Transkription übernimmt jeden Zeilenumbruch des Blatts; im Absatz wird
+ * daraus ein Leerzeichen, sonst flattern Halbzeilen. Stehen bleibt der Umbruch
+ * vor einem Listenpunkt und vor oder nach einer Formelzeile. Ein am Zeilenende
+ * getrenntes Wort („Ablei-“ / „tung“) wird wieder zusammengesetzt.
+ */
+export function fliesstext(absatz: string): string {
+  const zeilen = absatz
+    .split("\n")
+    .map((z) => z.trim())
+    .filter(Boolean);
+  const liste = (z: string) => /^([-–•*·]|\d{1,2}[.)]|[a-zA-Z][.)])\s/.test(z);
+  const formel = (z: string) =>
+    /^\$|\$$/.test(z) ||
+    (/[=≈≤≥<>]/.test(z) && z.split(/\s+/).filter((w) => /\p{L}{3,}/u.test(w)).length <= 3);
+  let text = zeilen[0] ?? "";
+  for (let i = 1; i < zeilen.length; i++) {
+    const vorher = zeilen[i - 1];
+    const z = zeilen[i];
+    if (liste(z) || formel(z) || formel(vorher)) text += `\n${z}`;
+    else if (/\p{Ll}-$/u.test(vorher) && /^\p{Ll}/u.test(z)) text = `${text.slice(0, -1)}${z}`;
+    else text += ` ${z}`;
+  }
+  return text;
+}

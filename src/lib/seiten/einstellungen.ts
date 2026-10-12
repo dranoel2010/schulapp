@@ -4,7 +4,6 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { loadCalendarStatus } from "@/lib/calendar/sync";
 import { claudeConfigured } from "@/lib/claude/client";
-import { freeLabel, listFreePeriods } from "@/lib/free-days";
 import { iservConfigured } from "@/lib/iserv/config";
 import { listConnections } from "@/lib/oauth";
 import { getSubject } from "@/lib/subjects";
@@ -22,7 +21,6 @@ export type EinstellungenDaten = {
   stunden: number;
   epoche: { id: string; name: string } | null;
   erinnerung: string;
-  ferien: string;
   abschrift: string;
   kalender: string;
   iserv: string;
@@ -40,24 +38,19 @@ const KALENDER: Record<string, string> = {
 
 export async function einstellungenSeite(userId: string): Promise<EinstellungenDaten> {
   const heute = heuteApp();
-  const [kal, freie, kalender, verbindungen, vorschlaege, nutzer] = await Promise.all([
+  const [kal, kalender, verbindungen, vorschlaege, nutzer] = await Promise.all([
     schulKalender(userId, heute),
-    listFreePeriods(userId, heute),
     loadCalendarStatus(userId),
     listConnections(userId),
     offeneVorschlaege(userId).catch(() => []),
     db.select({ name: users.name, reminderHour: users.reminderHour }).from(users).where(eq(users.id, userId)),
   ]);
   const epochenFach = kal.epoche ? await getSubject(userId, kal.epoche) : null;
-  const naechste = freie[0];
 
   return {
     stunden: kal.week.days.reduce((s, d) => s + d.lessons.length, 0),
     epoche: epochenFach ? { id: epochenFach.id, name: epochenFach.name } : null,
     erinnerung: `Lernerinnerung um ${nutzer[0]?.reminderHour ?? 17} Uhr`,
-    ferien: naechste
-      ? `${freeLabel(naechste)}${naechste.startsOn <= heute ? ", gerade" : ""}`
-      : "Nichts eingetragen",
     abschrift: claudeConfigured() ? "Claude ist eingerichtet" : "Claude ist nicht eingerichtet",
     kalender: KALENDER[kalender.state.kind] ?? "",
     iserv: iservConfigured() ? "Eingerichtet" : "Auf diesem Server nicht eingerichtet",

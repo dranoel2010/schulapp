@@ -40,7 +40,6 @@ export function EinstellungenInhalt({ daten }: { daten: EinstellungenDaten }) {
 
       <PLab>Schule</PLab>
       <RowBtn titel="Stundenplan bearbeiten" sub="Raster, Räume, Stundenzeiten" ziel={{ href: "/stundenplan/bearbeiten" }} />
-      <RowBtn titel="Ferien und freie Tage" sub={daten.ferien} ziel={{ href: "/einstellungen/ferien" }} />
       <RowBtn titel="Erinnerungen" sub={daten.erinnerung} ziel={{ href: "/einstellungen/erinnerungen" }} />
       {daten.vorschlaege > 0 ? (
         <RowBtn

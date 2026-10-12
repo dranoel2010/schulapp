@@ -67,6 +67,12 @@ export type PlanZeile = {
   tag: string;
   /** Zeile fett: Thema, „Wiederholung“ oder „Gesamtwiederholung“ */
   titel: string;
+  /**
+   * Unterzeile vor den Minuten (Prototyp `planRows`): beim Lernblock
+   * „Lernblock“, bei einer Wiederholung ihr Umfang, damit mehrere
+   * Wiederholungen untereinander zu unterscheiden sind.
+   */
+  unter: string;
   minuten: number;
   erledigt: boolean;
   /** Läuft oder pausiert: ein Tipp öffnet die Uhr statt abzuhaken */
@@ -160,6 +166,11 @@ export async function klausurSeite(
         b.kind === "review"
           ? "Wiederholung"
           : (b.topic?.title ?? "Gesamtwiederholung"),
+      unter:
+        b.kind === "review"
+          ? (b.topic?.title ??
+            (topics.length > 0 ? `Alles bis ${topics[topics.length - 1].title}` : "Alle Themen"))
+          : "Lernblock",
       minuten: b.minutes,
       erledigt: b.status === "done",
       angefangen: b.status !== "done" && blockAngefangen(b),

@@ -6,6 +6,7 @@ import { Button } from "@/components/kombi/form";
 import { AbbrechenKnopf, FertigBeiErfolg } from "@/components/kombi/form/fertig";
 import { Field } from "@/components/kombi/form";
 import { Select } from "@/components/kombi/form";
+import { Tn } from "@/components/kombi/tn";
 
 /**
  * Den Hauptunterricht in einem Zug auf ein anderes Fach umtragen.
@@ -178,11 +179,11 @@ export function EpochForm({
                     <span className="w-8 shrink-0 text-[15px] font-[560]">
                       {lesson.weekday}
                     </span>
-                    <span className="w-8 shrink-0 text-[15px] text-ink-2 tabular-nums">
-                      {lesson.period}
+                    <span className="min-w-[5.5rem] shrink-0 whitespace-nowrap text-[15px] text-ink-2 tabular-nums">
+                      <Tn s={lesson.period} />
                     </span>
-                    <span className="text-[15px] text-ink-2 tabular-nums">
-                      {lesson.time ?? "ohne Zeit"}
+                    <span className="whitespace-nowrap text-[15px] text-ink-2 tabular-nums">
+                      {lesson.time ? <Tn s={lesson.time} /> : "ohne Zeit"}
                     </span>
                   </label>
                 </li>

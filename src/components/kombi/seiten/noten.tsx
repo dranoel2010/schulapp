@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { Tn } from "@/components/kombi/tn";
 import { formatAverage } from "@/lib/grade-scale";
 import { dm } from "@/lib/kombi/text";
 import type { NotenDaten, NotenfachDaten } from "@/lib/seiten/noten";
@@ -14,23 +15,6 @@ import { PLab, RowBtn, TextLine } from "./zeilen";
  * die beiden Töpfe und ihre Gewichtung. „Note eintragen“ führt zum Formular,
  * der Zielrechner steht als Zeile „Was brauche ich für …?“ (Plan 2.2).
  */
-
-/** Ziffern mit eigenen Trennzeichen (Prototyp `tn`) */
-function Tn({ s }: { s: string }) {
-  return (
-    <>
-      {s.split(/([:.,])/).map((t, i) =>
-        /^[:.,]$/.test(t) ? (
-          <span className="c" key={i}>
-            {t}
-          </span>
-        ) : (
-          t
-        ),
-      )}
-    </>
-  );
-}
 
 const avg = (x: number) => formatAverage(x, 1);
 
@@ -115,7 +99,7 @@ export function NotenfachInhalt({ daten }: { daten: NotenfachDaten }) {
         </p>
       ) : null}
       <p className="split" style={{ marginTop: 4 }}>
-        {`Schriftlich zählt ${daten.anteil} %, mündlich ${100 - daten.anteil} %`}
+        <Tn s={`Schriftlich zählt ${daten.anteil} %, mündlich ${100 - daten.anteil} %`} />
       </p>
       <Link className="textbtn" href={`/noten/neu?fach=${daten.id}`} style={{ marginTop: 14 }}>
         Note eintragen

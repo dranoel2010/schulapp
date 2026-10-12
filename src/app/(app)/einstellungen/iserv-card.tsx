@@ -1,11 +1,6 @@
 import type { ReactNode } from "react";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-} from "@/components/kombi/form";
+import { CardContent, SeitenKopf } from "@/components/kombi/form";
 import { addDays, berlinDay, formatGerman, timeInBerlin, todayInBerlin } from "@/lib/dates";
 import type { Eintrag } from "@/lib/iserv/auswahl";
 import { BLOCK_TEXT, type IservStatus } from "@/lib/iserv/report";
@@ -125,19 +120,22 @@ export function IservCard({ status }: { status: IservStatus }) {
     rolle === "klasse" || rolle === "oeffentlich" || rolle === "aufgaben" ? status.zahlen[rolle] : 0;
 
   return (
-    <Card>
-      <CardHeader>
-        <h2 className="p-title">IServ</h2>
-        <CardDescription>
-          Die App meldet sich mit deinem IServ-Konto an und liest — nur lesen —
-          den Kalender deiner Klasse, den öffentlichen Schulkalender und deine
-          Aufgaben, höchstens alle drei Stunden zwischen 6 und 21 Uhr. In
-          „Schule“ landet nur, was deine Klasse betrifft; im Zweifel bleibt ein
-          Termin draußen. Das Passwort steht nur auf dem Server.
-        </CardDescription>
-      </CardHeader>
+    <>
+      {/* Derselbe Seitenkopf wie auf den übrigen Unterseiten: ohne Rahmen darüber, sonst springt der Titel. */}
+      <SeitenKopf
+        titel="IServ"
+        sub={
+          <>
+              Die App meldet sich mit deinem IServ-Konto an und liest — nur lesen —
+              den Kalender deiner Klasse, den öffentlichen Schulkalender und deine
+              Aufgaben, höchstens alle drei Stunden zwischen 6 und 21 Uhr. In
+              „Schule“ landet nur, was deine Klasse betrifft; im Zweifel bleibt ein
+              Termin draußen. Das Passwort steht nur auf dem Server.
+          </>
+        }
+      />
 
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4" style={{ marginTop: 16 }}>
         {state.kind === "nicht-eingerichtet" ? (
           <p className="text-[15px] text-ink-2">
             Auf diesem Server ist IServ nicht eingerichtet — es fehlt{" "}
@@ -275,6 +273,6 @@ export function IservCard({ status }: { status: IservStatus }) {
           </p>
         ) : null}
       </CardContent>
-    </Card>
+    </>
   );
 }

@@ -10,7 +10,8 @@
 .kf-input::placeholder{color:var(--ink-3);opacity:1}
 .kf-input[aria-invalid="true"]{border-color:var(--error)}
 .kf-input:disabled{opacity:.6}
-input.kf-input[type="date"],input.kf-input[type="time"],input.kf-input[type="number"]{font-variant-numeric:tabular-nums}
+/* Datum und Uhrzeit ohne tabular-nums: Schibsted setzt sonst Punkt und Doppelpunkt auf Ziffernbreite („08 : 00“), und in ein Eingabefeld reicht kein <Tn>. */
+input.kf-input[type="number"]{font-variant-numeric:tabular-nums}
 .kf-area{height:auto;min-height:104px;padding:13px 14px;line-height:1.45;resize:vertical}
 .kf-select{position:relative;display:block}
 .kf-select select{padding-right:42px;cursor:pointer}

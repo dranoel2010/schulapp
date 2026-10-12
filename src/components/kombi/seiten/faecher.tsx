@@ -115,6 +115,19 @@ export function FachInhalt({ daten }: { daten: FachDaten }) {
   const { anwenden, schalten, loeschen } = useAufgaben(daten);
   const offen = anwenden(daten.offen).filter((a) => !a.done);
 
+  // Benannt, damit „Erneut“ im Fehlertoast denselben Weg noch einmal geht
+  // (Plan 2.4 Punkt 9), wie umlegen() und schalten().
+  const wiederAufnehmen = () => {
+    wiederAufnehmenAction(daten.id).then(
+      (r) => {
+        if (!r.ok) throw new Error("abgewiesen");
+        kombi.toast(`${daten.name} wieder aufgenommen`);
+        void kombi.neuLaden();
+      },
+      () => kombi.fehlerToast("Nicht gespeichert", wiederAufnehmen, "Erneut"),
+    );
+  };
+
   return (
     <>
       {offen.length ? (
@@ -153,17 +166,7 @@ export function FachInhalt({ daten }: { daten: FachDaten }) {
           titel="Wieder aufnehmen"
           sub="Das Fach steht dann wieder in allen Listen"
           rechts={<span />}
-          ziel={{
-            onClick: () =>
-              wiederAufnehmenAction(daten.id).then(
-                (r) => {
-                  if (!r.ok) throw new Error("abgewiesen");
-                  kombi.toast(`${daten.name} wieder aufgenommen`);
-                  void kombi.neuLaden();
-                },
-                () => kombi.fehlerToast("Nicht gespeichert", () => {}, "Erneut"),
-              ),
-          }}
+          ziel={{ onClick: wiederAufnehmen }}
         />
       ) : null}
       <RowBtn titel="Themen verwalten" sub="Schreibweisen zusammenlegen, eigene Themen ergänzen" ziel={{ href: `/faecher/${daten.id}/themen` }} />

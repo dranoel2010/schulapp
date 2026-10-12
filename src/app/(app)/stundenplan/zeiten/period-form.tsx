@@ -5,6 +5,7 @@ import { useActionState, useState } from "react";
 import { Button } from "@/components/kombi/form";
 import { AbbrechenKnopf, FertigBeiErfolg } from "@/components/kombi/form/fertig";
 import { Input } from "@/components/kombi/form";
+import { Tn } from "@/components/kombi/tn";
 
 /**
  * Das Stundenraster als Liste: eine Zeile je Stunde, Beginn und Ende
@@ -122,8 +123,8 @@ export function PeriodForm({ action, rows: saved }: PeriodFormProps) {
           return (
             <li key={number} className="px-4 py-3">
               <div className="grid grid-cols-[2rem_1fr_1fr] items-center gap-3">
-                <span className="text-[15px] tabular-nums text-ink-3">
-                  {number}.
+                <span className="whitespace-nowrap text-[15px] tabular-nums text-ink-3">
+                  <Tn s={`${number}.`} />
                 </span>
 
                 <Input

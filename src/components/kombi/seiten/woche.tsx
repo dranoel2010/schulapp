@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 
+import { Tn } from "@/components/kombi/tn";
 import { E, moveTo, reduce } from "@/lib/kombi/motion";
 import { dm, lang, TAG, TK, wd } from "@/lib/kombi/text";
 import type { WocheDaten } from "@/lib/seiten/woche";
@@ -15,23 +16,6 @@ import { TextLine } from "./zeilen";
  * Liste 20px zur Seite und blendet über. Am Ende die Zeile „Stundenplan
  * bearbeiten“ (Plan 2.2).
  */
-
-/** Zahlen mit eigenen Trennzeichen (Prototyp `tn`) */
-function Tn({ s }: { s: string }) {
-  return (
-    <>
-      {s.split(/([:.,])/).map((t, i) =>
-        /^[:.,]$/.test(t) ? (
-          <span className="c" key={i}>
-            {t}
-          </span>
-        ) : (
-          t
-        ),
-      )}
-    </>
-  );
-}
 
 export const wocheTitel = () => "Woche";
 export const wocheSub = (d: WocheDaten) => `${dm(d.tage[0].tag)} bis ${dm(d.tage[4].tag)}`;

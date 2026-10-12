@@ -10,7 +10,7 @@ import {
 } from "@/app/(app)/material/seite-actions";
 import { useKombi } from "@/components/kombi/kontext";
 import { formatGerman } from "@/lib/dates";
-import { dm } from "@/lib/kombi/text";
+import { dm, fliesstext } from "@/lib/kombi/text";
 import type { AblageDaten, BlattDaten } from "@/lib/seiten/ablage";
 
 import { Bestaetigung, BlattRow, PLab, RowBtn, TextLine } from "./zeilen";
@@ -45,8 +45,10 @@ function Abschrift({ text }: { text: string }) {
         istUeberschrift(b) ? (
           <h3 key={i}>{b.replace(/^#{1,6}\s+/, "")}</h3>
         ) : (
+          // Was nach fliesstext() noch an Umbrüchen steht, ist gewollt
+          // (Listenpunkt, Formelzeile); alle anderen fließen.
           <p key={i} style={{ whiteSpace: "pre-line" }}>
-            {b}
+            {fliesstext(b)}
           </p>
         ),
       )}

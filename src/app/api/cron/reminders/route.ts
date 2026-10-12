@@ -162,7 +162,8 @@ function dailyMessage(blocks: PlannedBlock[]): PushPayload {
   return {
     title: blocks.length === 1 ? "Heute lernen" : `Heute lernen — ${total} min`,
     body: blocks.map(blockLine).join("\n"),
-    url: "/lernen",
+    // Die Blöcke sind nach Klausurdatum sortiert: der erste gehört zur nächsten.
+    url: klausurUrl(blocks[0]?.exam.id),
     tag: "schulapp-lernen",
   };
 }
@@ -186,7 +187,7 @@ function countdownMessage(exams: UpcomingExam[], today: string): PushPayload {
     return {
       title: `${examLabel(exam)} — ${formatCountdown(today, exam.date)}`,
       body: exam.title ? `${exam.title} · ${when}` : when,
-      url: "/lernen",
+      url: klausurUrl(exam.id),
       tag: "schulapp-countdown",
     };
   }
@@ -196,9 +197,19 @@ function countdownMessage(exams: UpcomingExam[], today: string): PushPayload {
     body: exams
       .map((exam) => `${examLabel(exam)} — ${formatCountdown(today, exam.date)}`)
       .join("\n"),
-    url: "/lernen",
+    // upcomingExams liefert nach Datum sortiert: die erste ist die nächste.
+    url: klausurUrl(exams[0]?.id),
     tag: "schulapp-countdown",
   };
+}
+
+/**
+ * Wohin ein Tipp auf die Erinnerung führt: auf die Klausurseite mit ihrem
+ * Lernplan. /lernen gibt es seit Modell 23 nicht mehr als eigene Seite (Plan
+ * 2.2); ohne Klausur bleibt die Startseite.
+ */
+function klausurUrl(examId: string | undefined): string {
+  return examId ? `/klausuren/${examId}` : "/";
 }
 
 /** "Klausur in Mathe" */

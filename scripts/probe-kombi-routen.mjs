@@ -83,7 +83,6 @@ const ROUTEN = [
   klausur && `/abruf/klausur?klausur=${klausur}`,
   "/einstellungen",
   "/einstellungen/erinnerungen",
-  "/einstellungen/ferien",
   "/einstellungen/abschrift",
   "/einstellungen/installieren",
   "/einstellungen/verbindungen",

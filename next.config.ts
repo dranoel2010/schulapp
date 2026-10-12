@@ -10,7 +10,10 @@ const nextConfig: NextConfig = {
    * ID sehen (Dockerfile reicht sie in beide Stufen; `nas.sh hoch` setzt sie
    * auf den Commit). Leer schaltet Next den Schutz einfach ab.
    *
-   * Lokal: `NEXT_DEPLOYMENT_ID=$(git rev-parse HEAD) npm run build`.
+   * Lokal: `export NEXT_DEPLOYMENT_ID=$(git rev-parse HEAD)`, dann Bau UND
+   * Start (`npm run build && npm run start`) in derselben Shell. Fehlt die ID
+   * beim Start, wird jeder Link zur harten Navigation und der Stapel geht
+   * verloren (README, „Das echte App-Gefühl“).
    */
   deploymentId: process.env.NEXT_DEPLOYMENT_ID || undefined,
 

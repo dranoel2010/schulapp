@@ -160,14 +160,14 @@ export function KlausurInhalt({ daten }: { daten: KlausurDaten }) {
                 type="button"
                 style={{ textAlign: "left", minHeight: 44 }}
                 aria-pressed={done}
-                aria-label={`${p.titel}, ${p.minuten} Minuten, ${done ? "wieder öffnen" : "als erledigt abhaken"}`}
+                aria-label={`${p.titel}, ${p.unter === p.titel ? "" : `${p.unter}, `}${p.minuten} Minuten, ${done ? "wieder öffnen" : "als erledigt abhaken"}`}
                 onClick={() => {
                   if (p.angefangen) kombi.openTisch({ mode: "block", blockId: p.id });
                   else schalten(p, !done);
                 }}
               >
                 <b>{p.titel}</b>
-                <span>{`Lernblock, ${p.minuten} Minuten${done ? ", erledigt" : ""}`}</span>
+                <span>{`${p.unter}, ${p.minuten} Minuten${done ? ", erledigt" : ""}`}</span>
               </button>
               {heute && !done ? (
                 <button

@@ -125,6 +125,40 @@ export const SEITEN: Record<string, SeitenArt | undefined> = {
  */
 export const ROUTE_STATT_STAPEL: Record<string, (p: Record<string, string>) => string> = {};
 
+const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Die Umkehrung von `url(params)` für die Segmente einer Route
+ * (`useSelectedLayoutSegments`): welche Stapelseite zeigt diese Adresse?
+ * Gebraucht, wenn eine Route (etwa ein per URL geöffnetes Blatt) von einer
+ * anderen Route abgelöst wird: die bisherige legt sich dann als Stapelseite
+ * darunter (Plan 2.4, Punkt 5). Abfrageteile kennen die Segmente nicht; die
+ * Ablage kommt hier also ohne Filter zurück.
+ */
+export function artAusSegmenten(segmente: string[]): { art: string; params: Record<string, string> } | null {
+  const s = segmente.filter((x) => !/^\(.*\)$/.test(x)).map((x) => decodeURIComponent(x));
+  const [a, b, c] = s;
+  if (s.length === 1) {
+    const einfach: Record<string, string> = {
+      stundenplan: "woche",
+      hausaufgaben: "hausaufgaben",
+      klausuren: "klausuren",
+      noten: "noten",
+      material: "ablage",
+      faecher: "faecher",
+      einstellungen: "einstellungen",
+    };
+    return Object.hasOwn(einfach, a) ? { art: einfach[a], params: {} } : null;
+  }
+  if (s.length === 2 && ID.test(b)) {
+    if (a === "klausuren") return { art: "klausur", params: { id: b } };
+    if (a === "material") return { art: "blatt", params: { id: b } };
+    if (a === "faecher") return { art: "fach", params: { id: b } };
+  }
+  if (s.length === 3 && a === "noten" && b === "fach" && ID.test(c)) return { art: "notenfach", params: { id: c } };
+  return null;
+}
+
 export function seitenArt(art: string): SeitenArt | undefined {
   return Object.hasOwn(SEITEN, art) ? SEITEN[art] : undefined;
 }

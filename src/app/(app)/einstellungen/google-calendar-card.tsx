@@ -1,12 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Button } from "@/components/kombi/form";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-} from "@/components/kombi/form";
+import { Button, CardContent, SeitenKopf } from "@/components/kombi/form";
 import type { CalendarStatus } from "@/lib/calendar/report";
 import { addDays, berlinDay, timeInBerlin, todayInBerlin } from "@/lib/dates";
 
@@ -172,22 +166,25 @@ export function GoogleCalendarCard({
   const { state } = status;
 
   return (
-    <Card>
-      <CardHeader>
-        <h2 className="p-title">Google Kalender</h2>
-        <CardDescription>
-          Klausuren, offene Hausaufgaben und freie Tage erscheinen als
-          Termine in einem eigenen Kalender „Schule“ in deinem Google
-          Kalender — ganztägig, denn die App kennt dafür keine Uhrzeit — und,
-          wenn IServ eingerichtet ist, Termine deiner Klasse aus IServ (mit
-          Uhrzeit, wenn IServ eine nennt). Die App trägt dort ein, ändert und
-          löscht — an deine anderen Kalender kommt sie nicht heran. Was du in
-          Google löschst, trägt sie nicht wieder ein. Lernblöcke kommen nicht
-          hinein.
-        </CardDescription>
-      </CardHeader>
+    <>
+      {/* Derselbe Seitenkopf wie auf den übrigen Unterseiten: ohne Rahmen darüber, sonst springt der Titel. */}
+      <SeitenKopf
+        titel="Google Kalender"
+        sub={
+          <>
+              Klausuren, offene Hausaufgaben und freie Tage erscheinen als
+              Termine in einem eigenen Kalender „Schule“ in deinem Google
+              Kalender — ganztägig, denn die App kennt dafür keine Uhrzeit — und,
+              wenn IServ eingerichtet ist, Termine deiner Klasse aus IServ (mit
+              Uhrzeit, wenn IServ eine nennt). Die App trägt dort ein, ändert und
+              löscht — an deine anderen Kalender kommt sie nicht heran. Was du in
+              Google löschst, trägt sie nicht wieder ein. Lernblöcke kommen nicht
+              hinein.
+          </>
+        }
+      />
 
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4" style={{ marginTop: 16 }}>
         {meldung ? (
           meldung.tone === "success" ? (
             <p role="status" className="text-[15px] text-ink-2">
@@ -333,6 +330,6 @@ export function GoogleCalendarCard({
           </>
         ) : null}
       </CardContent>
-    </Card>
+    </>
   );
 }

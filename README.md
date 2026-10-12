@@ -149,8 +149,16 @@ Das echte App-Gefühl (eigenes Symbol, Vollbild, Installation über Chrome) gibt
 erst im gebauten Zustand, weil der Service Worker absichtlich nur dort läuft:
 
 ```bash
+export NEXT_DEPLOYMENT_ID=$(git rev-parse HEAD)
 npm run build && npm run start
 ```
+
+Bau und Start müssen dieselbe `NEXT_DEPLOYMENT_ID` sehen (`next.config.ts`,
+`deploymentId`); deshalb `export` statt nur vor `npm run build`. Startet
+`next start` ohne sie oder mit einer anderen, wird jeder Link zur harten
+Navigation: der Stapel der Nachschlage-Seiten geht verloren, Formulare fahren
+nicht ein, und nach dem Speichern landet man auf `/`. Auf dem NAS reicht
+`nas.sh hoch` die ID in beide Stufen des Dockerfiles.
 
 ## Befehle
 
