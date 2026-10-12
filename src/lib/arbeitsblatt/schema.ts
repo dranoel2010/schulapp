@@ -31,7 +31,8 @@ const text = z.string().trim().min(1).max(2000);
 export const loesungsTeilSchema = z.union([
   z.tuple([z.literal("p"), text]),
   z.tuple([z.literal("teile"), z.array(text).min(1).max(8)]),
-  z.tuple([z.literal("eq"), z.array(z.tuple([text, text])).min(1).max(12)]),
+  // links leer heißt: Folgezeile einer Umformung (nur „= …“)
+  z.tuple([z.literal("eq"), z.array(z.tuple([z.string().trim().max(2000), text])).min(1).max(12)]),
   z.tuple([z.literal("erg"), text]),
   z.tuple([z.literal("hint"), text]),
 ]);
@@ -41,7 +42,12 @@ export const aufgabeSchema = z.object({
   kurz: z.string().trim().min(1).max(80),
   q: text,
   teile: z.array(text).min(1).max(8).optional(),
-  /** Platz zum Rechnen/Schreiben in mm */
+  /** Fremdsprachiger Text in den Teilen: kursiv gesetzt (Prototyp `fr`) */
+  fr: z.boolean().optional(),
+  /**
+   * Platz zum Rechnen/Schreiben: bei Kästchen in mm (5 mm je Kästchen), bei
+   * Linien die Zahl der Linien (9 mm je Linie) — wie `padSvg` im Prototyp.
+   */
   platz: z.number().int().min(0).max(120),
   /** Muss wörtlich in einer Abschrift der Quelle stehen, außerhalb von ⟨⟩ */
   zitat: z.string().trim().min(1).max(600),
@@ -52,6 +58,8 @@ export const quelleSchema = z.object({
   materialId: z.uuid(),
   datum: z.iso.date(),
   zitat: z.string().trim().min(1).max(200),
+  /** Titel des Blatts für den Kopf („»Scheitelpunktform, Übungen«“) */
+  titel: z.string().trim().max(200).optional(),
 });
 
 export const inhaltSchema = z.object({
@@ -71,12 +79,22 @@ export type ArbeitsblattInhalt = z.infer<typeof inhaltSchema>;
  * selbst ⟨ oder ⟩ enthält, kommt nicht durch.
  */
 export function zitatGebunden(zitat: string, abschriften: readonly string[]): boolean {
-  const z = zitat.trim();
+  const z = leerraum(zitat);
   if (z === "") return false;
   if (z.includes(UNCERTAIN_OPEN) || z.includes(UNCERTAIN_CLOSE)) return false;
-  return abschriften.some(
-    (abschrift) => abschrift.includes(z) && !onlyInUncertainSpans(abschrift, z),
-  );
+  return abschriften.some((abschrift) => {
+    const a = leerraum(abschrift);
+    return a.includes(z) && !onlyInUncertainSpans(a, z);
+  });
+}
+
+/**
+ * Leerraum zusammengezogen: eine Abschrift bricht Zeilen, wo das Blatt sie
+ * bricht, und ein Zitat über einen Zeilenumbruch hinweg ist trotzdem
+ * wörtlich. Sonst ändert sich kein Zeichen.
+ */
+export function leerraum(text: string): string {
+  return text.replace(/\s+/gu, " ").trim();
 }
 
 export type Quellbindung = {

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { ThemenArt } from "@/components/kombi/thema-art-zeile";
 import { ButtonLink } from "@/components/ui/button";
+import { themenMitArt } from "@/lib/arbeitsblatt/art-liste";
 import { requireUser } from "@/lib/auth";
 import { getSubject } from "@/lib/subjects";
 
@@ -26,6 +28,8 @@ export default async function EditSubjectPage({
   if (!subject) {
     notFound();
   }
+  // Art je Thema (Modell 23, H): Abfragen mit Karten oder Üben mit Arbeitsblatt
+  const themenArt = await themenMitArt(user.id, subject.id);
 
   return (
     <div className="space-y-6 md:max-w-3xl">
@@ -66,6 +70,9 @@ export default async function EditSubjectPage({
         >
           Themen pflegen
         </ButtonLink>
+        <div className="mt-4">
+          <ThemenArt themen={themenArt} mitTitel={false} />
+        </div>
       </section>
 
       {/* Das PDF steht hinter den Themen und vor der Gefahrenzone.

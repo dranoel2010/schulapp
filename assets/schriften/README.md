@@ -89,3 +89,23 @@ Das Laufzeit-Bild übernimmt nicht den ganzen Baum, sondern nur `node_modules`, 
 `public`, `package.json` und `next.config.ts`. Ein Ordner, der dort nicht ausdrücklich
 genannt ist, kommt im Container nicht an — und das PDF scheiterte erst im Betrieb, mit einer
 Meldung über eine fehlende Datei. Deshalb steht `assets/` als eigene Zeile im Dockerfile.
+
+## Die Schriften des Arbeitsblatts (Modell 23, Abschnitt H, 12.10.2026)
+
+Das Arbeitsblatt-PDF (`src/lib/pdf/arbeitsblatt-document.ts`) bildet das A4 aus dem
+Prototyp nach und braucht deshalb dessen Schriften — als **statische** Instanzen, weil
+pdfkit variable Schriften nicht einbetten kann (siehe oben und `src/lib/pdf/fonts.ts`).
+Erzeugt mit `fonttools varLib.instancer --static` aus den variablen Dateien des
+Google-Fonts-Verzeichnisses (`ofl/schibstedgrotesk`, `ofl/newsreader`):
+
+| Datei | Achsen | Wofür |
+|---|---|---|
+| `SchibstedGrotesk-450.ttf` | wght 450 | Fließtext |
+| `SchibstedGrotesk-560.ttf` | wght 560 | Kopf, Marken a), Titel der Quellen |
+| `SchibstedGrotesk-650.ttf` | wght 650 | Überschrift, Nummern, Ergebnis |
+| `SchibstedGrotesk-Kursiv-450.ttf` | ital, wght 450 | französische Teile |
+| `Newsreader-Kursiv-24.ttf` | ital, opsz 24, wght 400 | Formeln `{…}` |
+
+DejaVu bleibt das Auffangnetz: Schibsted fehlen ⟨⟩ und die Tiefzahlen ₁ ₂, Newsreader
+fehlen √ und →. Beide Schriften stehen unter der SIL Open Font License 1.1
+(`LIZENZ-SchibstedGrotesk.txt`, `LIZENZ-Newsreader.txt`).

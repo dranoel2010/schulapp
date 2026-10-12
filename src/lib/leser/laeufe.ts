@@ -251,6 +251,11 @@ export type LaufVermerk = {
       art: "fragen";
       examId: string;
     }
+  | {
+      /** Der Bau eines Arbeitsblatts (Modell 23, Plan H) */
+      art: "arbeitsblatt";
+      arbeitsblattId: string;
+    }
 );
 
 /**
@@ -268,8 +273,10 @@ export type LaufVermerk = {
 export async function laufVermerken(vermerk: LaufVermerk): Promise<boolean> {
   const ziel =
     vermerk.art === "fragen"
-      ? { materialId: null, examId: vermerk.examId, schluessel: "" }
-      : { materialId: vermerk.materialId, examId: null, schluessel: vermerk.schluessel };
+      ? { materialId: null, examId: vermerk.examId, arbeitsblattId: null, schluessel: "" }
+      : vermerk.art === "arbeitsblatt"
+        ? { materialId: null, examId: null, arbeitsblattId: vermerk.arbeitsblattId, schluessel: "" }
+        : { materialId: vermerk.materialId, examId: null, arbeitsblattId: null, schluessel: vermerk.schluessel };
 
   const geschrieben = await db
     .insert(leserLaeufe)
@@ -277,6 +284,7 @@ export async function laufVermerken(vermerk: LaufVermerk): Promise<boolean> {
       userId: vermerk.userId,
       materialId: ziel.materialId,
       examId: ziel.examId,
+      arbeitsblattId: ziel.arbeitsblattId,
       art: vermerk.art,
       schluessel: ziel.schluessel,
       ergebnis: vermerk.ergebnis,

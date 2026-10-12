@@ -615,6 +615,8 @@ body.toast-on .scroll{padding-bottom:calc(var(--foot-space) + 54px)}
 .tb-paper .a4{position:absolute;left:0;top:0;transform-origin:0 0;pointer-events:none}
 .tb-art{display:block;height:44px;margin:14px auto 0;padding:0 14px;font-size:15px;font-weight:560;color:var(--t-on);opacity:.8;transition:opacity 140ms ease}
 .tb-art:active{opacity:.5}
+/* Bau: Das Blatt ist noch nicht fertig oder ließ sich heute nicht bauen (Plan H, einzige neue Gestalt) */
+.tb-wait{margin-top:24px;text-align:center;font-size:15px;line-height:1.3;font-weight:450;color:var(--t-on);text-wrap:pretty}
 .tb-wert h2{font-size:28px;line-height:1.15;font-weight:650;letter-spacing:-.03em}
 .tb-wert > p{font-size:17px;line-height:1.4;margin-top:8px;opacity:.86;text-wrap:pretty}
 .tb-rows{margin-top:16px;list-style:none;padding:0}
