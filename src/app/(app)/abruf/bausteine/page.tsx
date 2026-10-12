@@ -1,17 +1,23 @@
 import type { Metadata } from "next";
 
-import { ButtonLink } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireUser } from "@/lib/auth";
 import { subjectColor } from "@/lib/colors";
 import { MATERIALARTEN, MATERIALART_NAMEN } from "@/recall/arten";
 import { listItems } from "@/recall/items";
+import { offeneVorschlaege } from "@/recall/proposals";
+
+import { neuPlanenAction } from "../actions";
 
 /**
  * Der Bestand: was überhaupt abgefragt werden kann.
  *
- * Eine Liste zum Nachsehen, nicht zum Üben — geübt wird auf /abruf. Der
+ * Eine Liste zum Nachsehen, nicht zum Üben — geübt wird auf dem Tisch
+ * („Wiederholen“ auf der Startseite). Seit Modell 23 (Plan 2.2, E) steht hier
+ * auch, was vorher auf /abruf stand: die Vorschläge im Eingang, der Stoff
+ * einer Klausur und „Termine neu rechnen“. Der
  * Zuschnitt folgt derselben Trennung wie /lernen gegen /klausuren: hier wird
  * verwaltet, dort wird gearbeitet.
  *
@@ -40,7 +46,11 @@ const ART_LABELS: Record<string, string> = Object.fromEntries(
 
 export default async function BausteinePage() {
   const user = await requireUser();
-  const bausteine = await listItems(user.id);
+  const [bausteine, vorschlaege] = await Promise.all([
+    listItems(user.id),
+    offeneVorschlaege(user.id),
+  ]);
+  const offeneFragen = vorschlaege.reduce((s, v) => s + v.fragen.length, 0);
 
   const aktive = bausteine.filter((b) => b.retiredAt === null);
   const zurueckgezogen = bausteine.filter((b) => b.retiredAt !== null);
@@ -131,6 +141,33 @@ export default async function BausteinePage() {
           })}
         </ul>
       )}
+
+      {/* Was vorher auf /abruf stand (Plan 2.2): Eingang, Stoff, Termine neu rechnen */}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {offeneFragen > 0 ? (
+            <ButtonLink href="/abruf/eingang" variant="secondary">
+              {offeneFragen} {offeneFragen === 1 ? "Frage wartet" : "Fragen warten"} im Eingang
+            </ButtonLink>
+          ) : null}
+          <ButtonLink href="/abruf/klausur" variant="secondary">
+            Stoff einer Klausur
+          </ButtonLink>
+        </div>
+        {/* Der Weg zurück, wenn der Kalender sich bewegt hat: Termine entstehen
+            beim Anlegen, ein Klausurtermin danach nicht mehr. Am Takt ändert
+            sich dabei nichts, Erledigtes bleibt stehen. */}
+        <form action={neuPlanenAction}>
+          <Button type="submit" variant="secondary">
+            Termine neu rechnen
+          </Button>
+        </form>
+        <p className="text-sm text-subtle">
+          Nach einer neuen oder verschobenen Klausur: legt die
+          Wiederholungstermine wieder vor die Klausur. Am Takt ändert sich
+          nichts.
+        </p>
+      </section>
     </div>
   );
 }

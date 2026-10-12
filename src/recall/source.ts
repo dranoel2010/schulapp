@@ -339,3 +339,15 @@ export async function sperrtageAb(
 
   return [...tage].sort();
 }
+
+/**
+ * Was „Wiederholen nach Themen“ (`themen.ts`, Modell 23, Plan 3.4) aus der
+ * Schulapp braucht, durch diese eine Tür: freie Tage (in Ferien wird nicht
+ * wiederholt), das Tagesprotokoll („Für heute durch.“), die Art eines Themas
+ * (Abfragen oder Üben) und der Wortlaut der Texte rund um „Wiederholen“.
+ */
+export { freePeriodToday } from "@/lib/free-days";
+export { protokollVomTag } from "@/lib/protokoll";
+export { themaArt } from "@/lib/themen-art";
+export { weekdayOrDate } from "@/lib/kombi/text";
+export { fragenText, whText, whUnterzeile, type WhStand } from "@/lib/kombi/wiederholen-text";

@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 
+import { WiederholenBlock } from "@/components/kombi/home/wiederholen";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import type { TagDaten } from "@/lib/kombi/tag-daten";
@@ -45,7 +46,12 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
         </button>
       </header>
       <h1 className="hl enter" id="h1" />
-      <div className="modes" />
+      <div className="modes">
+        {/* Abschnitt E: der Block „Wiederholen“; Abschnitt B setzt ihn in den Überblick */}
+        <div className="mode on" id="m-ueberblick">
+          <WiederholenBlock stand={(kombi.tagDaten ?? daten)?.wiederholen} />
+        </div>
+      </div>
     </div>
   );
 }

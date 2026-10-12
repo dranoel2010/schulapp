@@ -1,0 +1,328 @@
+import { dbBereit, testDb, testNutzer } from "@/test/db-harness";
+
+import assert from "node:assert/strict";
+import { before, describe, it } from "node:test";
+
+import { asc, eq, inArray } from "drizzle-orm";
+
+import { arbeitsblaetter, exams, freePeriods, lessons, subjectTopics, subjects } from "@/db/schema";
+import { protokollieren } from "@/lib/protokoll";
+import { recallAttempts, recallItems, recallSchedule } from "@/recall/schema";
+import { urteilFesthalten, versuchFesthalten } from "@/recall/sessions";
+import {
+  appTagVon,
+  berlinStunde,
+  faelligeThemen,
+  fragenZumThema,
+  naechsterTerminThema,
+  naechsterTerminUeberhaupt,
+  themaTagesbericht,
+  wiederholenStand,
+} from "@/recall/themen";
+
+/**
+ * Wiederholen nach Themen (Plan E, Tests aus 3.4): Sortierung, Alias-Kette,
+ * „ohne Thema“, angefangen zuerst, Ferien, Mitternacht, Arbeitsblätter — und
+ * vor allem: eine ganze Runde ändert an den Terminen nichts außer `done_at`
+ * bei „Saß“.
+ */
+
+const MO = "2026-10-12";
+
+async function fach(nutzer: string, name: string, short: string) {
+  const [z] = await testDb.insert(subjects).values({ userId: nutzer, name, short }).returning({ id: subjects.id });
+  return z.id;
+}
+
+async function thema(nutzer: string, subjectId: string, title: string, mergedInto: string | null = null) {
+  const [z] = await testDb
+    .insert(subjectTopics)
+    .values({ userId: nutzer, subjectId, title, matchKey: title.toLowerCase(), origin: "blatt", lastSeenAt: MO, mergedInto })
+    .returning({ id: subjectTopics.id });
+  return z.id;
+}
+
+/** Eine Frage mit Terminen; der erste Termin ist der älteste. */
+async function frage(nutzer: string, subjectId: string, topicId: string | null, termine: string[], text = "Frage") {
+  const [i] = await testDb
+    .insert(recallItems)
+    .values({
+      userId: nutzer,
+      subjectId,
+      subjectTopicId: topicId,
+      promptFree: text,
+      solution: "Lösung",
+      misconception: "Verwechslung",
+      sourceQuote: "Zitat",
+      sourceLength: 6,
+    })
+    .returning({ id: recallItems.id });
+  await testDb.insert(recallSchedule).values(termine.map((dueOn, k) => ({ itemId: i.id, dueOn, round: k + 1, sortOrder: k })));
+  return i.id;
+}
+
+let nutzer = "";
+let ge = "";
+let ma = "";
+let fr = "";
+let tGe = "";
+let tMa = "";
+let tFr = "";
+
+before(async () => {
+  await dbBereit();
+  nutzer = await testNutzer();
+  ge = await fach(nutzer, "Geschichte", "Ge");
+  ma = await fach(nutzer, "Mathematik", "M");
+  fr = await fach(nutzer, "Französisch", "F");
+  tGe = await thema(nutzer, ge, "Industrialisierung in England");
+  tMa = await thema(nutzer, ma, "Quadratische Funktionen");
+  tFr = await thema(nutzer, fr, "Passé composé mit être");
+  // Hauptunterricht: Geschichte in der ersten Stunde an allen fünf Tagen
+  await testDb.insert(lessons).values([1, 2, 3, 4, 5].map((weekday) => ({ userId: nutzer, subjectId: ge, weekday, period: 1 })));
+  await testDb.insert(exams).values({ userId: nutzer, subjectId: ma, kind: "klausur", date: "2026-10-16", title: "QF" });
+  // V2 2.5: Geschichte seit Sa 10.10. (10 Fragen), Mathe am 12.10. mit Klausur (12), Französisch am 12.10. (8)
+  for (let k = 0; k < 10; k++) await frage(nutzer, ge, tGe, ["2026-10-10", "2026-10-13"], `G${k}`);
+  for (let k = 0; k < 12; k++) await frage(nutzer, ma, tMa, [MO, "2026-10-15"], `M${k}`);
+  for (let k = 0; k < 8; k++) await frage(nutzer, fr, tFr, [MO, "2026-10-20"], `F${k}`);
+});
+
+describe("faelligeThemen", () => {
+  it("sortiert nach ältestem Termin, dann naher Klausur, und trägt Art, Umfang und Epoche", async () => {
+    const t = await faelligeThemen(nutzer, MO);
+    assert.deepEqual(
+      t.map((x) => x.titel),
+      ["Industrialisierung in England", "Quadratische Funktionen", "Passé composé mit être"],
+    );
+    assert.equal(t[0].istEpoche, true);
+    assert.equal(t[0].umfang, "10 Fragen");
+    assert.equal(t[0].art, "abfragen");
+    assert.equal(t[1].art, "ueben");
+    assert.equal(t[1].umfang, "Arbeitsblatt");
+    assert.equal(t[1].klausur, "2026-10-16");
+    assert.equal(t[2].art, "ueben", "passé ist ein Grammatik-Stichwort");
+    assert.equal(t[2].istEpoche, false);
+  });
+
+  it("bei Gleichstand: mehr fällige Fragen zuerst, dann alphabetisch", async () => {
+    const n = await testNutzer("Sort");
+    const a = await fach(n, "Biologie", "Bio");
+    const b = await fach(n, "Chemie", "Ch");
+    const ta = await thema(n, a, "Zelle");
+    const tb = await thema(n, b, "Atome");
+    await frage(n, a, ta, [MO]);
+    await frage(n, b, tb, [MO]);
+    await frage(n, b, tb, [MO]);
+    assert.deepEqual((await faelligeThemen(n, MO)).map((x) => x.titel), ["Atome", "Zelle"]);
+    await frage(n, a, ta, [MO]);
+    // Gleich viele: alphabetisch nach Fach und Thema (Biologie vor Chemie)
+    assert.deepEqual((await faelligeThemen(n, MO)).map((x) => x.titel), ["Zelle", "Atome"]);
+  });
+
+  it("folgt der Alias-Kette bis zum eigenständigen Thema", async () => {
+    const n = await testNutzer("Alias");
+    const f = await fach(n, "Geschichte", "Ge");
+    const ziel = await thema(n, f, "Französische Revolution");
+    const mitte = await thema(n, f, "Franz. Revolution", ziel);
+    const alt = await thema(n, f, "Frz Revolution", mitte);
+    await frage(n, f, alt, [MO]);
+    await frage(n, f, ziel, [MO]);
+    const t = await faelligeThemen(n, MO);
+    assert.equal(t.length, 1);
+    assert.equal(t[0].key, ziel);
+    assert.equal(t[0].titel, "Französische Revolution");
+    assert.equal(t[0].fragen, 2);
+    assert.equal((await fragenZumThema(n, MO, ziel)).length, 2);
+  });
+
+  it("bündelt Fragen ohne Thema je Fach zu „ohne Thema“", async () => {
+    const n = await testNutzer("Ohne");
+    const f = await fach(n, "Biologie", "Bio");
+    await frage(n, f, null, [MO]);
+    await frage(n, f, null, [MO]);
+    const t = await faelligeThemen(n, MO);
+    assert.equal(t.length, 1);
+    assert.equal(t[0].key, `ohne:${f}`);
+    assert.equal(t[0].titel, "ohne Thema");
+    assert.equal(t[0].umfang, "2 Fragen");
+    assert.equal(t[0].art, "abfragen");
+  });
+
+  it("ein angefangenes Thema kommt zuerst, auch über ein gedrucktes, nicht ausgewertetes Arbeitsblatt", async () => {
+    const n = await testNutzer("Angefangen");
+    const a = await fach(n, "Geschichte", "Ge");
+    const b = await fach(n, "Englisch", "E");
+    const c = await fach(n, "Mathematik", "M");
+    const ta = await thema(n, a, "Alt");
+    const tb = await thema(n, b, "Vokabeln");
+    const tc = await thema(n, c, "Brüche");
+    await frage(n, a, ta, ["2026-10-01"]);
+    const eng = await frage(n, b, tb, [MO]);
+    const s = await testDb.select().from(recallSchedule).where(inArray(recallSchedule.itemId, [eng]));
+    await frage(n, b, tb, [MO]);
+    await frage(n, c, tc, [MO]);
+    assert.equal((await faelligeThemen(n, MO))[0].titel, "Alt");
+
+    // ein Versuch heute (Kalendertag = App-Tag um 17 Uhr) an Englisch
+    const v = await versuchFesthalten(n, { scheduleId: s[0].id, itemId: s[0].itemId, answerText: "x" }, MO);
+    assert.ok(v.ok);
+    let t = await faelligeThemen(n, MO);
+    assert.equal(t[0].titel, "Vokabeln");
+    assert.equal(t[0].angefangen, true);
+
+    // ein gedrucktes Blatt in Mathe, heute, nicht ausgewertet
+    await testDb.insert(arbeitsblaetter).values({
+      userId: n,
+      subjectTopicId: tc,
+      tag: MO,
+      status: "fertig",
+      gedrucktAm: berlinStunde(MO, 16),
+    });
+    t = await faelligeThemen(n, MO);
+    const m = t.find((x) => x.titel === "Brüche")!;
+    assert.equal(m.blattAngefangen, true);
+    assert.equal(m.angefangen, true);
+    assert.notEqual(t[t.length - 1].titel, "Brüche");
+  });
+
+  it("ein heute gescheitertes Blatt fällt auf Karten zurück", async () => {
+    const n = await testNutzer("Gescheitert");
+    const f = await fach(n, "Mathematik", "M");
+    const t1 = await thema(n, f, "Potenzen");
+    await frage(n, f, t1, [MO]);
+    assert.equal((await faelligeThemen(n, MO))[0].umfang, "Arbeitsblatt");
+    await testDb.insert(arbeitsblaetter).values({ userId: n, subjectTopicId: t1, tag: MO, status: "fehlgeschlagen" });
+    const t = await faelligeThemen(n, MO);
+    assert.equal(t[0].art, "abfragen");
+    assert.equal(t[0].umfang, "1 Frage");
+  });
+
+  it("ein ausgewertetes Übungsthema ist erst am nächsten Termin wieder dran", async () => {
+    const n = await testNutzer("Ausgewertet");
+    const f = await fach(n, "Mathematik", "M");
+    const t1 = await thema(n, f, "Quadratische Funktionen");
+    await frage(n, f, t1, [MO, "2026-10-16"]);
+    await testDb.insert(arbeitsblaetter).values({
+      userId: n,
+      subjectTopicId: t1,
+      tag: MO,
+      status: "fertig",
+      gedrucktAm: berlinStunde(MO, 16),
+      ausgewertetAm: berlinStunde(MO, 17),
+    });
+    assert.equal((await faelligeThemen(n, MO)).length, 0);
+    assert.equal((await faelligeThemen(n, "2026-10-13")).length, 0);
+    assert.equal(await naechsterTerminThema(n, t1, "2026-10-13"), "2026-10-16");
+    assert.equal((await faelligeThemen(n, "2026-10-16")).length, 1);
+  });
+
+  it("in Ferien ist die Liste leer, und der Block fehlt", async () => {
+    const n = await testNutzer("Ferien");
+    const f = await fach(n, "Biologie", "Bio");
+    await frage(n, f, await thema(n, f, "Zelle"), [MO]);
+    await testDb.insert(freePeriods).values({ userId: n, kind: "ferien", startsOn: MO, endsOn: "2026-10-23" });
+    assert.deepEqual(await faelligeThemen(n, MO), []);
+    assert.deepEqual(await wiederholenStand(n, MO), { kind: "ferien" });
+  });
+
+  it("filtert auf ein Fach", async () => {
+    const t = await faelligeThemen(nutzer, MO, { subjectId: fr });
+    assert.deepEqual(t.map((x) => x.fach), ["Französisch"]);
+  });
+});
+
+describe("Termine und Stand", () => {
+  it("„Wieder dran“ und „Nächstes Thema“ lesen vorhandene Termine", async () => {
+    assert.equal(await naechsterTerminThema(nutzer, tGe, MO), "2026-10-13");
+    assert.equal(await naechsterTerminThema(nutzer, tFr, MO), "2026-10-20");
+    assert.equal(await naechsterTerminUeberhaupt(nutzer, MO), "2026-10-13");
+  });
+
+  it("der Knopf zeigt die Zahl der Themen und das erste Thema", async () => {
+    assert.deepEqual(await wiederholenStand(nutzer, MO), {
+      kind: "knopf",
+      n: 3,
+      sub: "Zuerst Geschichte · Industrialisierung in England",
+    });
+  });
+
+  it("ohne Fragen: „Noch keine Fragen“", async () => {
+    const n = await testNutzer("Leer");
+    assert.deepEqual(await wiederholenStand(n, MO), { kind: "leer" });
+  });
+
+  it("nichts fällig: Textzeile mit dem nächsten Thema; nach einem Themenende „Für heute durch.“", async () => {
+    const n = await testNutzer("Durch");
+    const f = await fach(n, "Biologie", "Bio");
+    await frage(n, f, await thema(n, f, "Zelle"), ["2026-10-13"]);
+    assert.deepEqual(await wiederholenStand(n, MO), {
+      kind: "text",
+      text: "Heute ist nichts fällig. Nächstes Thema Dienstag.",
+      ok: false,
+    });
+    await protokollieren(n, MO, "thema_beendet", "x", { n: 1 });
+    assert.deepEqual(await wiederholenStand(n, MO), {
+      kind: "text",
+      text: "Für heute durch. Nächstes Thema Dienstag.",
+      ok: true,
+    });
+  });
+});
+
+describe("eine ganze Runde", () => {
+  it("ändert an den Terminen nichts außer done_at bei „Saß“, und das Themenende zählt richtig", async () => {
+    const vorher = await testDb.select().from(recallSchedule).orderBy(asc(recallSchedule.id));
+    const fragen = await fragenZumThema(nutzer, MO, tGe);
+    assert.equal(fragen.length, 10);
+
+    // Frage 1 erst daneben, dann saß; alle anderen sitzen beim ersten Mal
+    const gesessen = new Set<string>();
+    for (const [k, f] of fragen.entries()) {
+      const v = await versuchFesthalten(nutzer, { scheduleId: f.scheduleId, itemId: f.itemId, answerText: "a" }, MO);
+      assert.ok(v.ok);
+      await urteilFesthalten(nutzer, v.attemptId, k !== 0);
+      if (k !== 0) gesessen.add(f.scheduleId);
+    }
+    // Daneben kommt in derselben Runde wieder, hinten angestellt
+    const nochmal = await fragenZumThema(nutzer, MO, tGe);
+    assert.equal(nochmal.length, 1);
+    assert.equal(nochmal[0].heuteDaneben, 1);
+    const v = await versuchFesthalten(nutzer, { scheduleId: nochmal[0].scheduleId, itemId: nochmal[0].itemId, answerText: "b" }, MO);
+    assert.ok(v.ok);
+    await urteilFesthalten(nutzer, v.attemptId, true);
+    gesessen.add(nochmal[0].scheduleId);
+
+    const nachher = await testDb.select().from(recallSchedule).orderBy(asc(recallSchedule.id));
+    assert.equal(nachher.length, vorher.length, "kein Termin dazu oder weg");
+    for (const [i, a] of vorher.entries()) {
+      const b = nachher[i];
+      assert.deepEqual(
+        { id: b.id, itemId: b.itemId, dueOn: b.dueOn, round: b.round, mode: b.mode, sortOrder: b.sortOrder },
+        { id: a.id, itemId: a.itemId, dueOn: a.dueOn, round: a.round, mode: a.mode, sortOrder: a.sortOrder },
+      );
+      if (gesessen.has(a.id)) assert.ok(b.doneAt, "Saß setzt done_at");
+      else assert.equal(b.doneAt, a.doneAt, "sonst unverändert");
+    }
+
+    const bericht = await themaTagesbericht(nutzer, tGe, MO);
+    assert.equal(bericht.fragen, 10);
+    assert.equal(bericht.beimErstenMal, 9);
+    assert.equal((await faelligeThemen(nutzer, MO))[0].titel, "Quadratische Funktionen");
+  });
+
+  it("ein Versuch um 00:30 trägt den Kalendertag, zählt aber zum App-Tag", async () => {
+    const [f] = await fragenZumThema(nutzer, MO, tFr);
+    // 00:30 am Dienstag: der App-Tag ist noch Montag, geschrieben wird der Kalendertag
+    const nacht = new Date("2026-10-12T22:30:00Z");
+    assert.equal(appTagVon(nacht), MO);
+    const v = await versuchFesthalten(nutzer, { scheduleId: f.scheduleId, itemId: f.itemId, answerText: "c" }, "2026-10-13");
+    assert.ok(v.ok);
+    await testDb.update(recallAttempts).set({ createdAt: nacht }).where(eq(recallAttempts.id, v.attemptId));
+    const [zeile] = await testDb.select().from(recallAttempts).where(eq(recallAttempts.id, v.attemptId));
+    assert.equal(zeile.answeredOn, "2026-10-13");
+    const bericht = await themaTagesbericht(nutzer, tFr, MO);
+    assert.equal(bericht.fragen, 1);
+    // am App-Tag Dienstag gehört er nicht mehr dazu
+    assert.equal((await themaTagesbericht(nutzer, tFr, "2026-10-13")).fragen, 0);
+  });
+});

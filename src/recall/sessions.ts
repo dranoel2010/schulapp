@@ -56,6 +56,10 @@ export type FaelligerBaustein = {
   pageId: string | null;
   subjectName: string;
   subjectColor: string;
+  /** Für Wiederholen nach Themen (Plan 3.4): nur eine erweiterte Auswahl, die Reihenfolge bleibt */
+  subjectId: string;
+  subjectTopicId: string | null;
+  examId: string | null;
   /** Wie oft dieser Baustein HEUTE schon danebenging — 0 beim ersten Mal */
   heuteDaneben: number;
 };
@@ -104,6 +108,9 @@ export async function faelligHeute(
       pageId: recallItems.pageId,
       subjectName: subjects.name,
       subjectColor: subjects.color,
+      subjectId: recallItems.subjectId,
+      subjectTopicId: recallItems.subjectTopicId,
+      examId: recallItems.examId,
     })
     .from(recallSchedule)
     .innerJoin(recallItems, eq(recallItems.id, recallSchedule.itemId))
