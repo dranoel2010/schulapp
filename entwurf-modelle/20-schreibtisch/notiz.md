@@ -1,0 +1,10 @@
+# 20 Schreibtisch
+
+Die App ist ein Arbeitswerkzeug nach dem Vorbild von Linear: dichte Listen unter schlichten Abschnittsköpfen mit Haarlinie, Status-Kreise nur für Hausaufgaben und Lernblöcke, unten eine Leiste mit vier Ansichten, der Kamera und „Neu“.
+Statt Tastenkürzeln gibt es Gesten: nach rechts wischen hakt ab, nach links wischen ändert das Fälligkeitsdatum, Halten öffnet das Aktionsmenü, Tippen öffnet die Hausaufgabe zum Bearbeiten; Tastenkappen erscheinen nur, wenn es eine Maus und damit wahrscheinlich eine Tastatur gibt.
+Heute zeigt um 16:40 oben die Mathe-Klausur mit dem heutigen Lernblock, darunter die Hausaufgaben für Dienstag; heute Abgehaktes liegt eingeklappt als „1 erledigt“, der Stundenplan steht nur in der Woche, die auf Dienstag öffnet.
+Die Schrift ist durchgehend Archivo, eine nüchterne Werkzeug-Grotesk mit schmaler Breitenachse, mit Tabellenziffern, auch für Uhrzeiten und den Timer; Formeln stehen in STIX Two Text mit kursiven Variablen und brechen nicht mitten im Ausdruck um.
+Die Farben sind ein kühles neutrales Grau mit fast schwarzer Schrift; das Himbeerrot gehört nur der Hauptaktion und der Klausur, Erledigt ist ein gedecktes Grau, Löschen ein eigenes Rot als Text, und im Dunkeln ist „Neu“ nur umrandet statt flächig.
+Die wichtigste Animation ist das Abhaken: die Zeile folgt dem Finger, ab 76 px rastet die Aktion mit einem Farbwechsel ein, der Kreis federt, der Haken wird aufgedeckt, der Text durchgestrichen, und die Zeile blendet aus, während die übrigen per FLIP nachrücken und der Zähler weiterrollt.
+Dazu kommen Menüs, die aus dem Druckpunkt aufgehen, ein Datums-Untermenü, das seitlich einschiebt, Detailseiten, die über die Leiste gleiten und sich vom Rand zurückwischen lassen, und eine Druckrückmeldung von 120 ms statt der alten zähen 380 ms.
+Es sieht nicht nach Vorlage aus, weil es keine grauen Gruppenbänder, keine Karten, keine Kleinzeilen in Großbuchstaben, keine Code-Schrift und keine erfundenen Fortschritte und keine vorgetäuschten Textzeilen in den Blatt-Vorschauen gibt; der halbe Kreis erscheint erst, wenn der Timer gelaufen ist.

@@ -1,0 +1,1089 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#f4f1e9">
+<meta name="color-scheme" content="light">
+<title>Feierabend</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=Newsreader:opsz,wght@6..72,400..600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..600,0..1,0&icon_names=add,arrow_back,battery_full,calendar_month,calendar_view_week,check,close,description,edit_note,expand_more,pause,photo_camera,play_arrow,schedule,signal_cellular_alt,style,wifi&display=block">
+<style>
+/* Papier und Tinte. Newsreader nur für die h1, alles andere in IBM Plex Sans.
+   Radius-Regel: alles Drückbare ist eine Pille, Flächen (Blatt, Eingabe) 16 bis 28 px, Vorschaubilder 4 px. */
+:root{
+  --bg:#f4f1e9;
+  --raise:#e9e5da;
+  --raise-2:#dfdacd;
+  --sheet:#fbf9f4;
+  --line:rgba(36,33,28,.12);
+  --line-2:rgba(36,33,28,.22);
+  --ink:#1f1d19;
+  --ink-2:#56524a;
+  --ink-3:#6f6a60;
+  --accent:#2a44c0;
+  --accent-ink:#ffffff;
+  --night:#161c36;
+  --night-ink:#eef0f7;
+  --night-2:#aab1c9;
+  --night-line:rgba(238,240,247,.14);
+  --night-accent:#9aabff;
+  --ease-out:cubic-bezier(0.23,1,0.32,1);
+  --ease-io:cubic-bezier(0.77,0,0.175,1);
+  --ease-drawer:cubic-bezier(0.32,0.72,0,1);
+  --top:max(env(safe-area-inset-top,0px),50px);
+  --bottom:max(env(safe-area-inset-bottom,0px),30px);
+  --pad:22px;
+  --foot:calc(56px + 18px + var(--bottom) + 8px + 24px);
+  --display:"Newsreader",Georgia,serif;
+  --text:"IBM Plex Sans",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;overscroll-behavior:none;background:#d5d7dc}
+body{min-height:100dvh;display:grid;place-items:center;background:#d5d7dc;color:var(--ink);font:400 16px/1.45 var(--text);overscroll-behavior:none;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ms{font-family:"Material Symbols Rounded";font-weight:400;font-style:normal;font-size:22px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;font-variation-settings:"FILL" 0,"wght" 400,"GRAD" 0,"opsz" 24;-webkit-font-smoothing:antialiased;user-select:none}
+
+.phone{position:relative;width:min(100vw,390px);height:min(100dvh,844px);background:var(--bg);overflow:hidden;isolation:isolate}
+@media (min-width:500px){.phone{border-radius:44px;box-shadow:0 0 0 1px rgba(36,33,28,.14)}}
+
+/* Statusleiste */
+.status{position:absolute;inset:0 0 auto 0;height:var(--top);display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 10px 34px;font:600 15px/1 var(--text);z-index:30;pointer-events:none;color:var(--ink);transition:color 200ms ease}
+.ms[data-icon]::before{content:attr(data-icon)}
+.status .ms{font-size:17px;margin-left:3px;font-variation-settings:"FILL" 1,"wght" 500,"GRAD" 0,"opsz" 20}
+.home-ind{position:absolute;left:50%;bottom:8px;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:rgba(31,29,25,.5);z-index:60;pointer-events:none;transition:background-color 200ms ease}
+.phone.dark-top .status{color:var(--night-ink)}
+.phone.dark-top .home-ind{background:rgba(238,240,247,.55)}
+
+/* Band oben: nur die drei Schritte */
+.band{position:absolute;left:var(--pad);right:var(--pad);top:calc(var(--top) + 6px);z-index:20;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;transition:opacity 200ms var(--ease-out)}
+.band.is-hidden{opacity:0;pointer-events:none}
+.seg{display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;text-align:left;padding:6px 0 4px;min-height:44px}
+.seg-track{display:block;height:4px;border-radius:2px;background:var(--line-2);overflow:hidden}
+.seg-fill{display:block;height:100%;background:var(--ink-3);transform:scaleX(0);transform-origin:left;transition:transform 300ms var(--ease-out),background-color 200ms ease}
+.seg-label{display:block;margin-top:8px;font:500 13px/1 var(--text);color:var(--ink-3);transition:color 200ms ease,opacity 200ms var(--ease-out)}
+.seg.is-current .seg-fill{transform:scaleX(1);background:var(--accent)}
+.seg.is-current .seg-label{color:var(--ink)}
+.seg.is-done .seg-fill{transform:scaleX(1)}
+.seg.is-done .seg-label{color:var(--ink-2)}
+/* Zusammenschluss: eine eigene Linie über die volle Breite, die Segmente bleiben stehen */
+.band-line{position:absolute;left:0;right:0;top:6px;height:4px;border-radius:2px;background:var(--accent);opacity:0;transform:scaleX(.98);transition:opacity 260ms ease,transform 300ms var(--ease-out);pointer-events:none}
+.band.is-merged .band-line{opacity:1;transform:none;transition-delay:120ms}
+.band.is-merged .seg-label{opacity:0}
+
+/* Bildschirme */
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg);visibility:hidden;will-change:transform}
+.screen.is-active{visibility:visible}
+.scroll{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:calc(var(--top) + 74px) var(--pad) var(--foot);scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.no-band .scroll{padding-top:calc(var(--top) + 18px)}
+.tall-foot .scroll{padding-bottom:calc(var(--foot) + 56px)}
+
+h1{font:500 38px/1.04 var(--display);font-variation-settings:"opsz" 72;letter-spacing:-.018em;text-wrap:balance}
+h2{font:600 15px/1.2 var(--text);color:var(--ink-2);letter-spacing:0;margin:34px 0 4px}
+.date{font:500 15px/1 var(--text);color:var(--ink-2)}
+.topline{display:flex;justify-content:space-between;align-items:center;margin:-6px 0 14px}
+
+/* Fuß mit Knöpfen */
+.foot{position:absolute;left:0;right:0;bottom:0;padding:18px var(--pad) calc(var(--bottom) + 8px);display:flex;gap:10px;align-items:center;background:linear-gradient(to top,var(--bg) 62%,rgba(244,241,233,0));z-index:5}
+.foot-col{flex-direction:column;align-items:stretch;gap:4px}
+.foot-row{display:flex;gap:10px}
+.btn{height:56px;border-radius:28px;padding:0 24px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font:600 17px/1 var(--text);transition:transform 160ms var(--ease-out),background-color 200ms ease,opacity 200ms ease;white-space:nowrap}
+.btn:active{transform:scale(.97)}
+.btn-primary{flex:1;background:var(--accent);color:var(--accent-ink)}
+.btn-quiet{background:var(--raise);color:var(--ink)}
+.btn-round{width:56px;padding:0;flex:none;background:var(--raise)}
+.btn-text{height:48px;border-radius:24px;font:500 16px/1 var(--text);color:var(--ink-2);transition:opacity 200ms ease,transform 160ms var(--ease-out)}
+.btn-text:active{transform:scale(.97)}
+.btn-text.is-gone{opacity:0;pointer-events:none}
+.btn-label{display:inline-block;transition:opacity 160ms ease,transform 200ms var(--ease-out)}
+.btn-label.swap{opacity:0;transform:translateY(6px)}
+.iconbtn{width:44px;height:44px;border-radius:22px;display:inline-grid;place-items:center;background:var(--raise);transition:transform 160ms var(--ease-out)}
+.iconbtn:active{transform:scale(.94)}
+
+/* Schritt Neu */
+.subj{border-top:1px solid var(--line);padding:14px 0}
+.subj:last-of-type{border-bottom:1px solid var(--line)}
+.subj-head{display:flex;align-items:center;gap:10px;min-height:48px}
+.subj-name{flex:1;min-width:0}
+.subj-name b{display:block;font:600 18px/1.2 var(--text)}
+.subj-name span{display:block;margin-top:3px;font:400 14px/1.3 var(--text);color:var(--ink-3)}
+.pill{height:44px;border-radius:22px;padding:0 14px 0 11px;display:inline-flex;align-items:center;gap:6px;background:var(--raise);font:500 15px/1 var(--text);transition:transform 160ms var(--ease-out),background-color 160ms ease}
+.pill .ms{font-size:20px;color:var(--ink-2)}
+.pill:active{transform:scale(.95);background:var(--raise-2)}
+.added-list:not(:empty){margin-top:8px}
+.item{display:flex;align-items:center;gap:12px;padding:10px 0 2px;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}
+.item .ms{color:var(--accent);font-size:20px;font-variation-settings:"FILL" 0,"wght" 600,"GRAD" 0,"opsz" 20;width:30px;text-align:center}
+.item p{font-size:15px;line-height:1.35}
+.item p span{display:block;color:var(--ink-2);font-size:14px}
+.thumb{width:30px;height:38px;border-radius:4px;background:#fff;box-shadow:0 0 0 1px var(--line-2);flex:none;position:relative;overflow:hidden;transform:rotate(-3deg)}
+
+/* Schritt Fällig */
+.group{margin-top:28px}
+.group h2{margin:0 0 6px}
+.hw{position:relative;border-radius:14px;overflow:hidden;margin:0 -10px}
+.hw-bg{position:absolute;inset:0;background:var(--accent);display:flex;align-items:center;padding-left:22px;color:var(--accent-ink);opacity:0;transition:opacity 200ms ease}
+.hw-bg .ms{font-size:26px;transform:scale(.6);transition:transform 200ms var(--ease-out)}
+.hw.is-dragging .hw-bg{opacity:1}
+.hw.past .hw-bg .ms{transform:scale(1)}
+.hw-front{position:relative;user-select:none;-webkit-user-select:none;display:flex;align-items:center;gap:8px;padding:8px 10px 8px 2px;background:var(--bg);touch-action:pan-y;will-change:transform}
+.check{width:48px;height:48px;flex:none;display:grid;place-items:center;border-radius:24px}
+.check-ring{width:28px;height:28px;border-radius:50%;border:2px solid var(--ink-3);display:grid;place-items:center;position:relative;transition:border-color 160ms ease,transform 160ms var(--ease-out)}
+.check:active .check-ring{transform:scale(.88)}
+.check-fill{position:absolute;inset:-2px;border-radius:50%;background:var(--accent);transform:scale(.4);opacity:0;transition:transform 240ms var(--ease-out),opacity 140ms ease;display:grid;place-items:center}
+.check-fill .ms{font-size:20px;color:var(--accent-ink);font-variation-settings:"FILL" 0,"wght" 600,"GRAD" 0,"opsz" 20;opacity:0;transform:scale(.5) rotate(-12deg);transition:opacity 140ms ease 80ms,transform 240ms var(--ease-out) 80ms}
+.hw.is-done .check-ring{border-color:transparent}
+.hw.is-done .check-fill{transform:scale(1);opacity:1}
+.hw.is-done .check-fill .ms{opacity:1;transform:none}
+.hw-text{flex:1;min-width:0;padding:6px 0}
+.hw-title{position:relative;display:inline-block;font:500 17px/1.3 var(--text);transition:color 200ms ease}
+.hw-title::after{content:"";position:absolute;left:0;right:0;top:55%;height:1.5px;background:currentColor;transform:scaleX(0);transform-origin:left;transition:transform 260ms var(--ease-out) 60ms}
+.hw.is-done .hw-title{color:var(--ink-3)}
+.hw.is-done .hw-title::after{transform:scaleX(1)}
+.hw-meta{font-size:14px;color:var(--ink-2);margin-top:2px}
+.hw.is-done .hw-meta{color:var(--ink-3)}
+.empty{padding:14px 0;color:var(--ink-2);font-size:16px}
+
+/* Schritt Lernen */
+.exam{margin-top:26px;padding-top:18px;border-top:1px solid var(--line)}
+.exam-title{font:600 20px/1.25 var(--text)}
+.exam-when{margin-top:6px;color:var(--ink-2);font-size:16px}
+.tl{margin-top:20px;position:relative}
+.tl-row{display:grid;grid-template-columns:52px 1fr;gap:14px;padding:12px 0;position:relative}
+.tl-row::before{content:"";position:absolute;left:25px;top:0;bottom:0;width:1.5px;background:var(--line-2)}
+.tl-row:first-child::before{top:24px}
+.tl-row:last-child::before{bottom:calc(100% - 24px)}
+.tl-day{position:relative;z-index:1;justify-self:center;width:44px;height:26px;border-radius:13px;background:var(--bg);display:grid;place-items:center;font:600 13px/1 var(--text);color:var(--ink-2);box-shadow:0 0 0 1.5px var(--line-2)}
+.tl-row.is-today .tl-day{background:var(--accent);color:var(--accent-ink);box-shadow:none}
+.tl-row.is-exam .tl-day{background:var(--ink);color:var(--bg);box-shadow:none}
+.tl-body>b{display:block;font:500 17px/1.3 var(--text)}
+.tl-sub{display:block;margin-top:2px;font-size:14px;color:var(--ink-2)}
+.tl-row.is-today .tl-body>b{font-weight:600}
+.tl-done{display:none;align-items:center;gap:4px;margin-top:6px;font:500 14px/1 var(--text);color:var(--accent)}
+.tl-done .ms{font-size:18px}
+.is-blockdone .tl-done{display:inline-flex;animation:fade-in 300ms var(--ease-out) both}
+.grades{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);display:flex;align-items:baseline;justify-content:space-between}
+.grades span{color:var(--ink-2);font-size:15px}
+.grades b{font:600 19px/1 var(--text);word-spacing:.35em;font-variant-numeric:tabular-nums}
+@keyframes fade-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+
+/* Lernblock: eigene Fläche in Nachtblau */
+.block{background:none;color:var(--night-ink)}
+.block-surface{position:absolute;inset:0;background:var(--night);transform-origin:0 0}
+.block-body{position:relative;flex:1;display:flex;flex-direction:column;min-height:0}
+.block-top{display:flex;align-items:center;gap:14px;padding:calc(var(--top) + 8px) var(--pad) 0}
+.block .iconbtn{background:rgba(238,240,247,.1);color:var(--night-ink)}
+.block-ctx{font:500 15px/1.2 var(--text);color:var(--night-2)}
+.block .scroll{padding-top:22px;padding-bottom:var(--foot)}
+.block h1{font-size:40px}
+.clock-row{margin-top:18px;display:flex;align-items:baseline;gap:12px}
+.clock{font:300 56px/1 var(--text);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.clock-of{font:500 15px/1 var(--text);color:var(--night-2)}
+.is-up .clock-of{color:var(--night-accent)}
+.clock-track{margin-top:14px;height:4px;border-radius:2px;background:var(--night-line);overflow:hidden}
+.clock-fill{height:100%;background:var(--night-accent);transform-origin:left;transition:transform 1s linear}
+.block h2{color:var(--night-2);margin-top:30px}
+.recall{border-top:1px solid var(--night-line);border-bottom:1px solid var(--night-line);padding:16px 0 18px;margin-top:8px}
+.rc-n{font:500 14px/1 var(--text);color:var(--night-2);font-variant-numeric:tabular-nums}
+.f{white-space:nowrap}
+.rc-q{margin-top:10px;font:500 19px/1.35 var(--text);text-wrap:pretty}
+.rc-a{margin-top:12px;font-size:17px;line-height:1.4;color:var(--night-accent)}
+.rc-actions{margin-top:16px;display:flex;gap:10px}
+.rc-btn{height:44px;border-radius:22px;padding:0 18px;font:500 15px/1 var(--text);box-shadow:inset 0 0 0 1px var(--night-line);transition:transform 160ms var(--ease-out)}
+.rc-btn:active{transform:scale(.96)}
+.rc-yes{background:var(--night-accent);color:var(--night);box-shadow:none}
+.mat-row{display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--night-line);width:100%;text-align:left}
+.mat-row .thumb{box-shadow:none;background:#e9eaf0}
+.mat-row p{font-size:16px;line-height:1.3}
+.mat-row p span{display:block;font-size:14px;color:var(--night-2);margin-top:2px}
+.block .foot{background:linear-gradient(to top,var(--night) 62%,rgba(22,28,54,0))}
+.btn-night{flex:1;background:var(--night-ink);color:var(--night)}
+.btn-night-quiet{background:rgba(238,240,247,.1);color:var(--night-ink)}
+.block .btn-round{background:rgba(238,240,247,.1);color:var(--night-ink)}
+.is-up #block-pause{display:none}
+.confirm{position:absolute;left:0;right:0;bottom:0;z-index:6;background:var(--night);border-top:1px solid var(--night-line);padding:20px var(--pad) calc(var(--bottom) + 8px);opacity:0;transform:translateY(16px);pointer-events:none;transition:opacity 200ms ease,transform 260ms var(--ease-out)}
+.confirm.is-open{opacity:1;transform:none;pointer-events:auto}
+.cf-q{font:600 20px/1.2 var(--text)}
+.cf-sub{margin-top:6px;color:var(--night-2);font-size:15px}
+.cf-row{margin-top:18px;display:flex;gap:10px}
+.cf-row .btn{flex:1}
+.confirm .btn-text{width:100%;margin-top:4px;color:var(--night-2)}
+
+/* Fertig */
+.done-list{margin-top:26px;display:grid}
+.done-row{display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-top:1px solid var(--line)}
+.done-row:last-child{border-bottom:1px solid var(--line)}
+.done-row .ms{color:var(--accent);font-size:22px;margin-top:1px}
+.done-row .ms.open{color:var(--ink-3)}
+.done-row p{font-size:17px;line-height:1.35}
+.done-row p span{display:block;color:var(--ink-2);font-size:15px;margin-top:2px}
+.tomorrow{margin-top:32px}
+.tomorrow-lessons{margin-top:6px;font:500 17px/1.35 var(--text)}
+.tomorrow p{margin-top:8px;color:var(--ink-2);font-size:15px}
+.stagger>*{opacity:0;transform:translateY(8px)}
+.stagger.go>*{opacity:1;transform:none;transition:opacity 300ms ease,transform 300ms var(--ease-out);transition-delay:calc(var(--i,0) * 40ms)}
+
+/* Woche */
+.week-head{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.days{position:relative;display:grid;grid-template-columns:repeat(5,1fr);margin-top:18px;border-bottom:1px solid var(--line)}
+.day{height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-3);transition:color 200ms ease}
+.day b{font:600 15px/1 var(--text)}
+.day span{font:400 13px/1 var(--text);font-variant-numeric:tabular-nums}
+.day.is-sel{color:var(--ink)}
+.day.is-today span{color:var(--accent);font-weight:600}
+.day-ind{position:absolute;left:0;bottom:-1px;height:2px;width:20%;background:var(--ink);transition:transform 300ms var(--ease-io)}
+.lessons{margin-top:6px;transition:opacity 200ms ease,transform 260ms var(--ease-out)}
+.lesson{display:grid;grid-template-columns:58px 1fr;gap:12px;padding:16px 0;border-bottom:1px solid var(--line)}
+.lesson time{font:500 15px/1.35 var(--text);font-variant-numeric:tabular-nums;color:var(--ink)}
+.lesson time span{display:block;color:var(--ink-3);font-weight:400}
+.lesson b{display:block;font:600 17px/1.25 var(--text)}
+.lesson em{display:block;font-style:normal;font-size:14px;color:var(--ink-2);margin-top:3px}
+.tag{display:flex;align-items:center;gap:7px;margin-top:6px;color:var(--accent);font:500 14px/1.3 var(--text)}
+.tag::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.free{margin-top:16px;font-size:15px;color:var(--ink-3)}
+.lessons.out{opacity:0;transform:translateX(var(--dx,0))}
+.lessons.instant{transition:none}
+
+/* Kamera */
+.cam{background:#0b0b0c}
+.cam-top{position:absolute;top:calc(var(--top) + 8px);left:var(--pad);right:var(--pad);display:flex;justify-content:space-between;align-items:center;z-index:6;color:#eceef2}
+.cam .iconbtn{background:rgba(255,255,255,.12);color:#eceef2}
+.cam-chip{height:44px;padding:0 10px 0 16px;border-radius:22px;background:rgba(255,255,255,.12);display:inline-flex;align-items:center;gap:2px;font:500 15px/1 var(--text);color:#eceef2;transition:transform 160ms var(--ease-out)}
+.cam-chip:active{transform:scale(.96)}
+.cam-chip .ms{font-size:20px;transition:transform 200ms var(--ease-out)}
+.cam-chip[aria-expanded="true"] .ms{transform:rotate(180deg)}
+.cam-menu{position:absolute;top:calc(var(--top) + 60px);left:50%;width:220px;margin-left:-110px;z-index:7;background:#1d1e22;border-radius:18px;padding:6px;box-shadow:0 18px 40px rgba(0,0,0,.45);transform-origin:50% 0;opacity:0;transform:scale(.96) translateY(-4px);pointer-events:none;transition:opacity 160ms ease,transform 200ms var(--ease-out)}
+.cam-menu.is-open{opacity:1;transform:none;pointer-events:auto}
+.cam-menu button{display:flex;width:100%;height:44px;align-items:center;justify-content:space-between;padding:0 14px;border-radius:12px;font:400 16px/1 var(--text);color:#eceef2;text-align:left}
+.cam-menu button:active{background:rgba(255,255,255,.08)}
+.cam-menu button .ms{font-size:20px;opacity:0}
+.cam-menu button.is-sel .ms{opacity:1}
+.viewfinder{position:absolute;left:0;right:0;top:calc(var(--top) + 68px);bottom:180px;overflow:hidden}
+.desk{position:absolute;inset:0;background:#2b2722}
+.paper{position:absolute;left:50%;top:50%;width:62%;aspect-ratio:1/1.414;margin-left:-31%;transform:translateY(-50%) rotate(-4deg);background:#ecebe6;border-radius:2px;box-shadow:0 18px 30px rgba(0,0,0,.45);padding:9% 8%}
+.paper i{display:block;height:5px;border-radius:2px;background:#a7a49c;margin-bottom:9px}
+.paper i:nth-child(1){width:58%;height:8px;background:#6d6a62;margin-bottom:16px}
+.paper i:nth-child(4n){width:72%}
+.paper i:nth-child(5n){width:84%}
+.corner{position:absolute;width:26px;height:26px;transform-origin:var(--o);border:3px solid #eceef2;transition:transform 500ms var(--ease-out),opacity 300ms ease}
+.c1{--o:0 0;left:16px;top:16px;border-right:0;border-bottom:0;border-radius:6px 0 0 0}
+.c2{--o:100% 0;right:16px;top:16px;border-left:0;border-bottom:0;border-radius:0 6px 0 0}
+.c3{--o:0 100%;left:16px;bottom:16px;border-right:0;border-top:0;border-radius:0 0 0 6px}
+.c4{--o:100% 100%;right:16px;bottom:16px;border-left:0;border-top:0;border-radius:0 0 6px 0}
+.cam-hint{position:absolute;left:0;right:0;bottom:16px;text-align:center;font-size:15px;color:rgba(236,238,242,.85)}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:4}
+.cam-bottom{position:absolute;left:0;right:0;bottom:0;height:180px;display:flex;align-items:center;justify-content:center;padding-bottom:var(--bottom)}
+.shutter{width:76px;height:76px;border-radius:50%;border:4px solid #eceef2;display:grid;place-items:center;transition:transform 140ms var(--ease-out)}
+.shutter::after{content:"";width:60px;height:60px;border-radius:50%;background:#eceef2}
+.shutter:active{transform:scale(.92)}
+.shot{position:absolute;left:calc(var(--pad) + 9px);bottom:calc(var(--bottom) + 40px);width:46px;height:60px;opacity:0;transform:scale(.6);transition:opacity 200ms ease,transform 300ms var(--ease-out)}
+.shot-page{position:absolute;inset:0;border-radius:4px;background:#ecebe6}
+.shot-under{transform:translate(5px,-5px) rotate(5deg);background:#cfcdc6;opacity:0;transition:opacity 200ms ease}
+.shot.multi .shot-under{opacity:1}
+.shot-n{position:absolute;right:-9px;top:-9px;min-width:24px;height:24px;border-radius:12px;padding:0 6px;background:#eceef2;color:#0b0b0c;font:600 13px/24px var(--text);text-align:center;font-variant-numeric:tabular-nums;opacity:0;transform:scale(.6);transition:opacity 160ms ease,transform 200ms var(--ease-out)}
+.shot.multi .shot-n{opacity:1;transform:none}
+.cam.has-shot .shot{opacity:1;transform:none}
+.cam-file{position:absolute;right:var(--pad);bottom:calc(var(--bottom) + 38px);width:64px;display:flex;flex-direction:column;align-items:center;gap:6px;font:500 13px/1 var(--text);color:#eceef2;opacity:0;transform:translateX(12px);pointer-events:none;transition:opacity 200ms ease,transform 300ms var(--ease-out)}
+.cam-file .ms{width:56px;height:56px;border-radius:28px;display:grid;place-items:center;background:#eceef2;color:#0b0b0c;font-size:26px;font-variation-settings:"FILL" 0,"wght" 600,"GRAD" 0,"opsz" 24;transition:transform 160ms var(--ease-out)}
+.cam.has-shot .cam-file{opacity:1;transform:none;pointer-events:auto}
+.cam-file:active .ms{transform:scale(.94)}
+
+/* Eintragen-Blatt */
+.scrim{position:absolute;inset:0;background:rgba(31,29,25,.32);opacity:0;pointer-events:none;transition:opacity 300ms ease;z-index:40}
+.scrim.is-open{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:41;background:var(--sheet);border-radius:28px 28px 0 0;padding:10px var(--pad) calc(var(--bottom) + 14px);transform:translateY(105%);transition:transform 380ms var(--ease-drawer)}
+.sheet.is-open{transform:translateY(0)}
+.sheet.is-dragging{transition:none}
+.grab{display:block;width:100%;height:24px;touch-action:none;position:relative}
+.grab::after{content:"";position:absolute;left:50%;top:6px;width:38px;height:5px;margin-left:-19px;border-radius:3px;background:var(--line-2)}
+.sheet h2{color:var(--ink);letter-spacing:0;font:600 20px/1.2 var(--text);margin-top:4px}
+.field{margin-top:18px}
+.field label,.field .lab{display:block;font:500 14px/1 var(--text);color:var(--ink-2);margin-bottom:8px}
+.field input{width:100%;height:54px;border-radius:16px;border:1px solid var(--line-2);background:#fff;color:var(--ink);font:400 17px/1 var(--text);padding:0 16px;outline:none;transition:border-color 160ms ease}
+.field input:focus{border-color:var(--accent)}
+.field input::placeholder{color:var(--ink-3)}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{height:44px;padding:0 15px;border-radius:22px;background:#fff;box-shadow:inset 0 0 0 1px var(--line-2);font:500 15px/1 var(--text);color:var(--ink-2);display:inline-flex;align-items:center;gap:6px;transition:background-color 160ms ease,color 160ms ease,transform 160ms var(--ease-out)}
+.chip .ms{font-size:18px}
+.chip:active{transform:scale(.96)}
+.chip.is-sel{background:var(--ink);color:var(--bg);box-shadow:none}
+.sheet .btn{width:100%;margin-top:22px}
+.err{margin-top:8px;font-size:14px;color:#b3261e}
+.err:empty{display:none}
+#subj-field[hidden]{display:none}
+.date-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;bottom:0;left:0}
+
+@media (hover:hover) and (pointer:fine){
+  .pill:hover,.iconbtn:hover,.btn-quiet:hover,.btn-round:hover{background:var(--raise-2)}
+  .chip:hover{color:var(--ink)}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:120ms!important;animation-duration:120ms!important;transition-delay:0ms!important}
+  .stagger>*,.lessons.out,.corner,.cam-file,.shot,.band-line,.confirm{transform:none!important}
+}
+</style>
+</head>
+<body>
+<div class="phone" id="phone">
+  <div class="status" aria-hidden="true"><span>16:40</span><span><span class="ms">signal_cellular_alt</span><span class="ms">wifi</span><span class="ms">battery_full</span></span></div>
+
+  <nav class="band" id="band" aria-label="Schritte">
+    <button class="seg" data-step="neu"><span class="seg-track"><span class="seg-fill"></span></span><span class="seg-label">Neu</span></button>
+    <button class="seg" data-step="faellig"><span class="seg-track"><span class="seg-fill"></span></span><span class="seg-label">Fällig</span></button>
+    <button class="seg" data-step="lernen"><span class="seg-track"><span class="seg-fill"></span></span><span class="seg-label">Lernen</span></button>
+    <span class="band-line" aria-hidden="true"></span>
+  </nav>
+
+  <!-- Schritt 1: Neu, hier öffnet die App -->
+  <section class="screen is-active" id="s-neu" data-band="neu">
+    <div class="scroll">
+      <div class="topline"><span class="date">Montag, 12. Oktober</span><button class="iconbtn" data-go="woche" aria-label="Woche ansehen"><span class="ms">calendar_view_week</span></button></div>
+      <h1>Was ist neu?</h1>
+      <div style="margin-top:22px" id="subjects"></div>
+    </div>
+    <div class="foot">
+      <button class="btn btn-primary" data-jump="faellig"><span class="btn-label" id="neu-next">Nichts Neues, weiter</span></button>
+    </div>
+  </section>
+
+  <!-- Schritt 2: Fällig -->
+  <section class="screen" id="s-faellig" data-band="faellig">
+    <div class="scroll">
+      <h1>Was ist fällig?</h1>
+      <div id="hw-groups"></div>
+    </div>
+    <div class="foot">
+      <button class="btn btn-round" data-back aria-label="Zurück"><span class="ms" data-icon="arrow_back" aria-hidden="true"></span></button>
+      <button class="btn btn-primary" data-jump="lernen">Weiter zu Lernen</button>
+    </div>
+  </section>
+
+  <!-- Schritt 3: Lernen -->
+  <section class="screen tall-foot" id="s-lernen" data-band="lernen">
+    <div class="scroll">
+      <h1>Was ist zu lernen?</h1>
+      <div class="exam" id="exam">
+        <div class="exam-title">Mathe-Klausur: Quadratische Funktionen</div>
+        <p class="exam-when">Freitag, 16. Oktober. Noch 4 Tage.</p>
+        <div class="tl">
+          <div class="tl-row is-today"><span class="tl-day">Mo</span><div class="tl-body"><b>Lernblock Scheitelpunktform</b><span class="tl-sub">25 Minuten, heute</span><span class="tl-done"><span class="ms">check</span>Erledigt</span></div></div>
+          <div class="tl-row"><span class="tl-day">Mi</span><div class="tl-body"><b>Wiederholung</b><span class="tl-sub">Alles bis Scheitelpunktform</span></div></div>
+          <div class="tl-row"><span class="tl-day">Do</span><div class="tl-body"><b>Probeklausur</b><span class="tl-sub">45 Minuten, ohne Hilfsmittel</span></div></div>
+          <div class="tl-row is-exam"><span class="tl-day">Fr</span><div class="tl-body"><b>Klausur</b><span class="tl-sub">Quadratische Funktionen</span></div></div>
+        </div>
+        <div class="grades"><span>Noten in Mathe bisher</span><b>2 3+ 2−</b></div>
+      </div>
+    </div>
+    <div class="foot foot-col">
+      <div class="foot-row">
+        <button class="btn btn-round" data-back aria-label="Zurück"><span class="ms" data-icon="arrow_back" aria-hidden="true"></span></button>
+        <button class="btn btn-primary" id="learn-cta"><span class="btn-label" id="learn-label">Lernblock starten</span></button>
+      </div>
+      <button class="btn-text" id="learn-skip">Heute nicht lernen</button>
+    </div>
+  </section>
+
+  <!-- Lernblock -->
+  <section class="screen block no-band" id="s-block" data-band="hidden">
+    <div class="block-surface" id="block-surface"></div>
+    <div class="block-body" id="block-body">
+      <div class="block-top"><button class="iconbtn" id="block-close" aria-label="Lernblock schließen"><span class="ms">close</span></button><span class="block-ctx">Mathe-Klausur am Freitag</span></div>
+      <div class="scroll">
+        <h1>Scheitelpunktform</h1>
+        <div class="clock-row"><span class="clock" id="clock">25:00</span><span class="clock-of" id="clock-of">von 25 Minuten</span></div>
+        <div class="clock-track"><div class="clock-fill" id="clock-fill"></div></div>
+        <h2>Fragen zur Scheitelpunktform</h2>
+        <div class="recall" id="recall" aria-live="polite"></div>
+        <h2>Material</h2>
+        <div>
+          <button class="mat-row"><span class="thumb"></span><p>Scheitelpunktform<span>Blatt vom 7. Oktober, 2 Seiten</span></p></button>
+          <button class="mat-row"><span class="thumb"></span><p>Quadratische Funktionen, Übersicht<span>Blatt vom 28. September, 1 Seite</span></p></button>
+        </div>
+      </div>
+    </div>
+    <div class="foot" id="block-foot">
+      <button class="btn btn-round" id="block-pause" aria-label="Pause"><span class="ms" id="pause-icon" style="font-variation-settings:'FILL' 1,'wght' 500,'GRAD' 0,'opsz' 24">pause</span></button>
+      <button class="btn btn-night" id="block-end"><span class="btn-label" id="block-end-label">Block beenden</span></button>
+    </div>
+    <div class="confirm" id="confirm" role="dialog" aria-labelledby="cf-q">
+      <p class="cf-q" id="cf-q">Als erledigt zählen?</p>
+      <p class="cf-sub" id="cf-sub"></p>
+      <div class="cf-row"><button class="btn btn-night-quiet" id="cf-no">Nicht zählen</button><button class="btn btn-night" id="cf-yes">Zählen</button></div>
+      <button class="btn-text" id="cf-back">Weiterlernen</button>
+    </div>
+  </section>
+
+  <!-- Fertig -->
+  <section class="screen" id="s-fertig" data-band="merged">
+    <div class="scroll stagger" id="fertig-body"></div>
+    <div class="foot">
+      <button class="btn btn-round" data-go="woche" aria-label="Woche ansehen"><span class="ms">calendar_month</span></button>
+      <button class="btn btn-quiet" data-jump="neu" style="flex:1">Noch etwas eintragen</button>
+    </div>
+  </section>
+
+  <!-- Woche -->
+  <section class="screen no-band" id="s-woche" data-band="hidden">
+    <div class="scroll" style="padding-bottom:60px">
+      <div class="week-head"><button class="iconbtn" data-close aria-label="Zurück"><span class="ms" data-icon="arrow_back" aria-hidden="true"></span></button><span class="date">12. bis 16. Oktober</span></div>
+      <h1>Woche</h1>
+      <div class="days" id="days"></div>
+      <div class="lessons" id="lessons"></div>
+    </div>
+  </section>
+
+  <!-- Kamera -->
+  <section class="screen cam no-band" id="s-cam" data-band="hidden">
+    <div class="cam-top">
+      <button class="iconbtn" id="cam-close" aria-label="Schließen"><span class="ms">close</span></button>
+      <button class="cam-chip" id="cam-chip" aria-haspopup="listbox" aria-expanded="false"><span id="cam-subj">Biologie</span><span class="ms">expand_more</span></button>
+      <span style="width:44px"></span>
+    </div>
+    <div class="cam-menu" id="cam-menu" role="listbox" aria-label="Fach"></div>
+    <div class="viewfinder" id="viewfinder">
+      <div class="desk"></div>
+      <div class="paper" id="paper"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <span class="corner c1"></span><span class="corner c2"></span><span class="corner c3"></span><span class="corner c4"></span>
+      <p class="cam-hint" id="cam-hint">Blatt erkannt</p>
+    </div>
+    <div class="flash" id="flash"></div>
+    <div class="shot" id="shot"><span class="shot-page shot-under"></span><span class="shot-page"></span><span class="shot-n" id="shot-n">1</span></div>
+    <div class="cam-bottom"><button class="shutter" id="shutter" aria-label="Foto aufnehmen"></button></div>
+    <button class="cam-file" id="cam-file" aria-label="Ablegen"><span class="ms">check</span>Ablegen</button>
+  </section>
+
+  <div class="scrim" id="scrim"></div>
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <button class="grab" id="grab" aria-label="Schließen"></button>
+    <h2 id="sheet-title">Aufgabe in Mathematik</h2>
+    <div class="field" id="subj-field" hidden><span class="lab">Fach</span><div class="chips" id="subj-chips"></div><p class="err" id="subj-err"></p></div>
+    <div class="field"><label for="hw-input">Was ist auf?</label><input id="hw-input" autocomplete="off" enterkeyhint="done" placeholder="z. B. S. 86, Nr. 1"><p class="err" id="hw-err"></p></div>
+    <div class="field"><span class="lab">Bis</span><div class="chips" id="due-chips"></div></div>
+    <input type="date" class="date-input" id="due-date" min="2026-10-13" tabindex="-1" aria-hidden="true">
+    <button class="btn btn-primary" id="hw-save">Eintragen</button>
+  </div>
+
+  <div class="home-ind"></div>
+</div>
+
+<script>
+(() => {
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const EASE_DRAWER = 'cubic-bezier(0.32,0.72,0,1)';
+const EASE_OUT = 'cubic-bezier(0.23,1,0.32,1)';
+// Für die Fläche des Lernblocks: wächst sichtbar aus dem Knopf, statt in den ersten Frames schon fertig zu sein
+const EASE_GROW = 'cubic-bezier(0.6,0,0.2,1)';
+const buzz = (p = 8) => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
+
+// Feder als linear()-Kurve: gedämpfte Schwingung vorberechnet
+function spring(stiffness, damping) {
+  let x = 0, v = 0; const dt = 1 / 120, pts = [];
+  for (let i = 0; i < 240; i++) {
+    const f = -stiffness * (x - 1) - damping * v; v += f * dt; x += v * dt; pts.push(x);
+    if (i > 10 && Math.abs(1 - x) < 0.002 && Math.abs(v) < 0.02) break;
+  }
+  pts[pts.length - 1] = 1;
+  return { easing: `linear(0, ${pts.filter((_, i) => i % 2 === 1 || i === pts.length - 1).map(p => p.toFixed(4)).join(', ')})`, duration: Math.round(pts.length * dt * 1000) };
+}
+const SPRING_BACK = spring(520, 42);
+
+const SUBJECTS = [
+  { name: 'Deutsch', next: 'Mittwoch' },
+  { name: 'Mathematik', next: 'Dienstag' },
+  { name: 'Biologie', next: 'Freitag' },
+];
+const OTHER = [['Englisch', 'Dienstag'], ['Geschichte', 'Dienstag'], ['Sport', 'Dienstag'], ['Physik', 'Mittwoch'], ['Kunst', 'Mittwoch'], ['Chemie', 'Donnerstag']];
+const NEXT = Object.fromEntries([...SUBJECTS.map(s => [s.name, s.next]), ...OTHER]);
+const TODAY = SUBJECTS.map(s => s.name);
+const WEEK = [
+  { d: 'Mo', n: '12', lessons: [['08:00','09:30','Deutsch','R. 104'],['09:50','11:20','Mathematik','R. 208'],['11:40','13:10','Biologie','Bio 1']] },
+  { d: 'Di', n: '13', lessons: [['08:00','09:30','Englisch','R. 112'],['09:50','11:20','Mathematik','R. 208'],['11:40','13:10','Geschichte','R. 015'],['13:30','15:00','Sport','Halle 2']] },
+  { d: 'Mi', n: '14', lessons: [['08:00','09:30','Deutsch','R. 104'],['09:50','11:20','Physik','Ph 2'],['11:40','13:10','Kunst','R. 301']] },
+  { d: 'Do', n: '15', lessons: [['08:00','09:30','Mathematik','R. 208'],['09:50','11:20','Chemie','Ch 1'],['11:40','13:10','Englisch','R. 112']] },
+  { d: 'Fr', n: '16', lessons: [['08:00','09:30','Mathematik','R. 208','Klausur: Quadratische Funktionen'],['09:50','11:20','Deutsch','R. 104'],['11:40','13:10','Biologie','Bio 1']] },
+];
+const DAYS = ['Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag'];
+const short = { Mathematik: 'Mathe', Biologie: 'Bio' };
+const sh = f => short[f] || f;
+const CARDS = [
+  ['Wo liegt der Scheitelpunkt von <span class="f">f(x) = 2(x − 3)² + 1</span>?', 'Bei <span class="f">S(3 | 1)</span>.'],
+  ['Was macht das a in <span class="f">f(x) = a(x − d)² + e</span>?', 'Es streckt oder staucht die Parabel. Ist a negativ, ist sie nach unten geöffnet.'],
+  ['Bring <span class="f">f(x) = x² + 4x + 1</span> in Scheitelpunktform.', '<span class="f">f(x) = (x + 2)² − 3</span>, also <span class="f">S(−2 | −3)</span>.'],
+];
+
+const state = {
+  screen: 'neu',
+  history: [],
+  added: 0,
+  hw: [
+    { id: 'm1', fach: 'Mathematik', text: 'S. 84, Nr. 3–5', due: 'Dienstag', done: false },
+    { id: 'd1', fach: 'Deutsch', text: 'Gedichtanalyse beenden', due: 'Dienstag', done: false },
+    { id: 'e1', fach: 'Englisch', text: 'Vokabeln Unit 3', due: 'Montag', done: true, note: 'gestern abgehakt' },
+  ],
+  sheets: [],
+  blockDone: false,
+  blockSkipped: false,
+  sheetSubject: null,
+  sheetOther: false,
+  sheetDue: 'Dienstag',
+  customDue: null,
+  camSubject: 'Biologie',
+  camPages: 0,
+  weekSel: 1,
+  nudged: false,
+};
+const STEPS = ['neu', 'faellig', 'lernen'];
+
+/* ---------- Bildschirmwechsel ---------- */
+const running = new Set();
+function stopRunning() { running.forEach(a => { try { a.finish(); } catch (e) {} }); running.clear(); }
+function anim(el, frames, opts) { const a = el.animate(frames, { fill: 'none', ...opts }); running.add(a); a.finished.then(() => running.delete(a), () => running.delete(a)); return a; }
+
+function show(id, mode = 'push', origin) {
+  if (id === state.screen) return;
+  stopRunning();
+  const from = $('#s-' + state.screen), to = $('#s-' + id);
+  const prev = state.screen;
+  state.screen = id;
+  if (id === 'fertig') renderFertig();
+  if (id === 'woche') renderWeek(true);
+  if (id === 'faellig') renderHw(false);
+  to.classList.add('is-active');
+  const sc = to.querySelector('.scroll'); if (sc && mode !== 'pop' && mode !== 'down' && mode !== 'unreveal') sc.scrollTop = 0;
+  const dark = id === 'cam' || id === 'block';
+  clearTimeout(show.darkT);
+  if (dark && !reduce) show.darkT = setTimeout(() => $('#phone').classList.add('dark-top'), mode === 'up' ? 200 : 120);
+  else $('#phone').classList.toggle('dark-top', dark);
+  setBand(to.dataset.band);
+  const D = reduce ? 160 : (mode === 'pop' ? 260 : 300);
+  let a;
+  if (reduce) {
+    to.style.zIndex = 2; from.style.zIndex = 1;
+    a = anim(to, [{ opacity: 0 }, { opacity: 1 }], { duration: D, easing: 'ease' });
+  } else if (mode === 'push' || mode === 'pop') {
+    if (mode === 'push') {
+      to.style.zIndex = 2; from.style.zIndex = 1;
+      a = anim(to, [{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }], { duration: D, easing: EASE_DRAWER });
+      anim(from, [{ transform: 'translateX(0)', opacity: 1 }, { transform: 'translateX(-24%)', opacity: .4 }], { duration: D, easing: EASE_DRAWER });
+    } else {
+      to.style.zIndex = 1; from.style.zIndex = 2;
+      a = anim(to, [{ transform: 'translateX(-24%)', opacity: .4 }, { transform: 'translateX(0)', opacity: 1 }], { duration: D, easing: EASE_DRAWER });
+      anim(from, [{ transform: 'translateX(0)' }, { transform: 'translateX(100%)' }], { duration: D, easing: EASE_DRAWER });
+    }
+  } else if (mode === 'up') {
+    to.style.zIndex = 3; from.style.zIndex = 1;
+    a = anim(to, [{ transform: 'translateY(100%)' }, { transform: 'translateY(0)' }], { duration: 340, easing: EASE_DRAWER });
+    anim(from, [{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(.96)', opacity: .5 }], { duration: 340, easing: EASE_DRAWER });
+  } else if (mode === 'down') {
+    to.style.zIndex = 1; from.style.zIndex = 3;
+    a = anim(from, [{ transform: 'translateY(0)' }, { transform: 'translateY(100%)' }], { duration: 300, easing: EASE_DRAWER });
+    anim(to, [{ transform: 'scale(.96)', opacity: .5 }, { transform: 'scale(1)', opacity: 1 }], { duration: 300, easing: EASE_DRAWER });
+  } else if (mode === 'reveal' || mode === 'unreveal') {
+    // Die Fläche des Lernblocks wächst per transform aus dem Knopf (FLIP), der Inhalt kommt danach
+    const ph = $('#phone').getBoundingClientRect(), r = origin.getBoundingClientRect();
+    const small = `translate(${r.left - ph.left}px,${r.top - ph.top}px) scale(${r.width / ph.width},${r.height / ph.height})`;
+    const blk = mode === 'reveal' ? to : from;
+    const surf = blk.querySelector('.block-surface'), parts = [blk.querySelector('.block-body'), blk.querySelector('#block-foot')];
+    if (mode === 'reveal') {
+      to.style.zIndex = 3; from.style.zIndex = 1;
+      a = anim(surf, [{ transform: small, opacity: 0, easing: EASE_GROW }, { opacity: 1, offset: .2 }, { transform: 'translate(0px,0px) scale(1,1)', opacity: 1 }], { duration: 340, easing: 'linear' });
+      parts.forEach(p => anim(p, [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }], { duration: 220, delay: 170, easing: EASE_OUT, fill: 'backwards' }));
+    } else {
+      to.style.zIndex = 1; from.style.zIndex = 3;
+      parts.forEach(p => anim(p, [{ opacity: 1 }, { opacity: 0, offset: .35 }, { opacity: 0 }], { duration: 280 }));
+      a = anim(surf, [{ transform: 'translate(0px,0px) scale(1,1)', opacity: 1, easing: EASE_GROW }, { opacity: 1, offset: .8 }, { transform: small, opacity: 0 }], { duration: 280, easing: 'linear' });
+    }
+  } else {
+    to.style.zIndex = 2; from.style.zIndex = 1;
+    a = anim(to, [{ opacity: 0 }, { opacity: 1 }], { duration: 220, easing: 'ease' });
+  }
+  a.finished.then(() => {
+    if (state.screen !== id) return;
+    from.classList.remove('is-active');
+    from.style.zIndex = to.style.zIndex = '';
+  }, () => {});
+  if (prev === 'fertig') $('#fertig-body').classList.remove('go');
+  if (id === 'fertig') requestAnimationFrame(() => requestAnimationFrame(() => $('#fertig-body').classList.add('go')));
+  if (id === 'faellig' && !state.nudged) { state.nudged = true; setTimeout(nudge, D + 60); }
+}
+
+function setBand(mode) {
+  const band = $('#band');
+  band.classList.toggle('is-hidden', mode === 'hidden');
+  band.classList.toggle('is-merged', mode === 'merged');
+  if (mode === 'hidden') return; // Füllungen bleiben stehen, das Band blendet nur aus
+  const idx = mode === 'merged' ? 3 : STEPS.indexOf(mode);
+  $$('.seg', band).forEach((s, i) => {
+    s.classList.toggle('is-current', i === idx);
+    s.classList.toggle('is-done', i < idx);
+    s.setAttribute('aria-current', i === idx ? 'step' : 'false');
+  });
+}
+
+function jump(step) {
+  const cur = STEPS.indexOf(state.screen), nxt = STEPS.indexOf(step);
+  if (state.screen === 'fertig') return show(step, 'pop');
+  show(step, nxt >= cur ? 'push' : 'pop');
+}
+
+document.addEventListener('click', e => {
+  const j = e.target.closest('[data-jump]');
+  if (j) { jump(j.dataset.jump); return; }
+  const seg = e.target.closest('.seg');
+  if (seg && !$('#band').classList.contains('is-hidden')) { jump(seg.dataset.step); return; }
+  if (e.target.closest('[data-back]')) { const i = STEPS.indexOf(state.screen); show(STEPS[Math.max(0, i - 1)], 'pop'); return; }
+  if (e.target.closest('[data-go="woche"]')) { state.weekReturn = state.screen; show('woche', 'push'); return; }
+  if (e.target.closest('[data-close]')) { show(state.weekReturn || 'neu', 'pop'); return; }
+});
+
+/* ---------- Schritt 1: Neu ---------- */
+function renderSubjects() {
+  const row = (key, title, sub) => `
+    <div class="subj" data-subj="${key}">
+      <div class="subj-head">
+        <div class="subj-name"><b>${title}</b>${sub ? `<span>${sub}</span>` : ''}</div>
+        <button class="pill" data-add="${key}" aria-label="Aufgabe in ${title} eintragen"><span class="ms">add</span>Aufgabe</button>
+        <button class="pill" data-cam="${key}" aria-label="Blatt in ${title} fotografieren" style="padding:0 13px"><span class="ms" style="color:var(--ink)">photo_camera</span></button>
+      </div>
+      <div class="added-list"></div>
+    </div>`;
+  $('#subjects').innerHTML = SUBJECTS.map(s => row(s.name, s.name, 'Nächste Stunde ' + s.next)).join('') + row('andere', 'Anderes Fach', '');
+}
+function addItem(key, html) {
+  const row = $(`.subj[data-subj="${key}"]`);
+  const below = $$('.subj', $('#subjects')).filter(el => row.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const before = below.map(el => el.getBoundingClientRect().top);
+  const el = document.createElement('div');
+  el.className = 'item'; el.innerHTML = html;
+  row.querySelector('.added-list').appendChild(el);
+  state.added++;
+  updateNeuLabel();
+  if (reduce) return;
+  // Neue Zeile sofort im Layout; was darunter liegt, wird per FLIP nachgezogen
+  below.forEach((b, i) => {
+    const d = before[i] - b.getBoundingClientRect().top;
+    if (Math.abs(d) > 0.5) b.animate([{ transform: `translateY(${d}px)` }, { transform: 'none' }], { duration: 280, easing: EASE_OUT });
+  });
+  el.animate([{ opacity: 0, transform: 'translateY(-6px)' }, { opacity: 1, transform: 'none' }], { duration: 240, delay: 40, easing: EASE_OUT, fill: 'backwards' });
+}
+function updateNeuLabel() {
+  const lbl = $('#neu-next');
+  const txt = state.added ? 'Weiter zu Fällig' : 'Nichts Neues, weiter';
+  if (lbl.textContent === txt) return;
+  lbl.classList.add('swap');
+  setTimeout(() => { lbl.textContent = txt; lbl.classList.remove('swap'); }, 160);
+}
+$('#subjects').addEventListener('click', e => {
+  const a = e.target.closest('[data-add]');
+  if (a) openSheet(a.dataset.add);
+  const c = e.target.closest('[data-cam]');
+  if (c) openCam(c.dataset.cam);
+});
+
+/* Eintragen-Blatt */
+const sheet = $('#sheet'), scrim = $('#scrim');
+function openSheet(key) {
+  const other = key === 'andere';
+  state.sheetOther = other;
+  state.sheetSubject = other ? null : key;
+  state.sheetDue = other ? 'Dienstag' : NEXT[key];
+  state.customDue = null;
+  $('#sheet-title').textContent = other ? 'Aufgabe' : 'Aufgabe in ' + key;
+  $('#subj-field').hidden = !other;
+  if (other) $('#subj-chips').innerHTML = OTHER.map(([f]) => `<button class="chip" data-fach="${f}">${f}</button>`).join('');
+  $('#hw-input').value = ''; $('#hw-err').textContent = ''; $('#subj-err').textContent = '';
+  renderChips();
+  sheet.style.transform = '';
+  sheet.classList.add('is-open'); scrim.classList.add('is-open');
+  // Fokus direkt im Tipp: so öffnet iOS die Tastatur zusammen mit dem Blatt
+  if (!other) $('#hw-input').focus({ preventScroll: true });
+}
+function closeSheet() { sheet.style.transform = ''; sheet.classList.remove('is-open'); scrim.classList.remove('is-open'); $('#hw-input').blur(); }
+function renderChips() {
+  const custom = state.customDue;
+  $('#due-chips').innerHTML = DAYS.map(d => `<button class="chip ${d === state.sheetDue ? 'is-sel' : ''}" data-due="${d}">${d}</button>`).join('')
+    + `<button class="chip ${custom && state.sheetDue === custom ? 'is-sel' : ''}" data-due="other"><span class="ms">calendar_month</span>${custom || 'Anderer Tag'}</button>`;
+}
+$('#subj-chips').addEventListener('click', e => {
+  const c = e.target.closest('[data-fach]'); if (!c) return;
+  state.sheetSubject = c.dataset.fach;
+  $$('#subj-chips .chip').forEach(x => x.classList.toggle('is-sel', x === c));
+  if (!state.customDue) { state.sheetDue = NEXT[c.dataset.fach]; renderChips(); }
+  $('#subj-err').textContent = '';
+  $('#hw-input').focus({ preventScroll: true });
+});
+$('#due-chips').addEventListener('click', e => {
+  const c = e.target.closest('[data-due]'); if (!c) return;
+  if (c.dataset.due === 'other') {
+    const inp = $('#due-date');
+    try { inp.showPicker(); } catch (err) { inp.focus(); }
+    return;
+  }
+  state.sheetDue = c.dataset.due; renderChips();
+});
+$('#due-date').addEventListener('change', e => {
+  if (!e.target.value) return;
+  const d = new Date(e.target.value + 'T12:00');
+  const wd = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()];
+  state.customDue = `${wd}, ${d.getDate()}.${d.getMonth() + 1}.`;
+  state.sheetDue = state.customDue; renderChips();
+});
+sheet.addEventListener('mousedown', e => { if (e.target.closest('.chip')) e.preventDefault(); });
+scrim.addEventListener('click', closeSheet);
+$('#hw-save').addEventListener('click', saveHw);
+$('#hw-input').addEventListener('keydown', e => { if (e.key === 'Enter') saveHw(); });
+function saveHw() {
+  const text = $('#hw-input').value.trim();
+  const s = state.sheetSubject;
+  if (!s) { $('#subj-err').textContent = 'Welches Fach?'; return; }
+  if (!text) { $('#hw-err').textContent = 'Schreib kurz, was auf ist.'; $('#hw-input').focus(); return; }
+  const id = 'n' + Date.now();
+  state.hw.push({ id, fach: s, text, due: state.sheetDue, done: false });
+  const key = TODAY.includes(s) ? s : 'andere';
+  const label = key === 'andere' ? `${s}: ${esc(text)}` : esc(text);
+  const due = state.sheetDue;
+  closeSheet();
+  setTimeout(() => addItem(key, `<span class="ms">check</span><p>${label}<span>bis ${due}</span></p>`), 200);
+}
+const esc = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// Blatt nach unten ziehen zum Schließen
+(() => {
+  let y0 = 0, t0 = 0, dy = 0, on = false;
+  const grab = $('#grab');
+  grab.addEventListener('pointerdown', e => { on = true; y0 = e.clientY; t0 = performance.now(); dy = 0; grab.setPointerCapture(e.pointerId); sheet.classList.add('is-dragging'); });
+  grab.addEventListener('pointermove', e => { if (!on) return; dy = e.clientY - y0; const v = dy < 0 ? -Math.sqrt(-dy) * 2 : dy; sheet.style.transform = `translateY(${v}px)`; scrim.style.opacity = String(Math.max(0, 1 - dy / 400)); });
+  grab.addEventListener('pointerup', () => {
+    if (!on) return; on = false; sheet.classList.remove('is-dragging'); scrim.style.opacity = '';
+    const v = dy / (performance.now() - t0);
+    if (dy > 120 || v > 0.5 || Math.abs(dy) < 4) closeSheet(); else sheet.style.transform = '';
+  });
+})();
+
+/* Kamera */
+const CAM_SUBJECTS = ['Deutsch', 'Mathematik', 'Biologie', 'Englisch', 'Geschichte', 'Physik', 'Chemie', 'Kunst', 'Sport', 'Ohne Fach'];
+function setCamSubject(s) {
+  state.camSubject = s;
+  $('#cam-subj').textContent = s;
+  $('#cam-file').setAttribute('aria-label', s === 'Ohne Fach' ? 'Ohne Fach ablegen' : 'In ' + s + ' ablegen');
+  $('#cam-menu').innerHTML = CAM_SUBJECTS.map(f => `<button role="option" aria-selected="${f === s}" class="${f === s ? 'is-sel' : ''}" data-cs="${f}">${f}<span class="ms">check</span></button>`).join('');
+}
+function toggleCamMenu(open) {
+  const m = $('#cam-menu'); const o = open ?? !m.classList.contains('is-open');
+  m.classList.toggle('is-open', o); $('#cam-chip').setAttribute('aria-expanded', o);
+}
+$('#cam-chip').addEventListener('click', () => toggleCamMenu());
+$('#cam-menu').addEventListener('click', e => { const b = e.target.closest('[data-cs]'); if (!b) return; setCamSubject(b.dataset.cs); toggleCamMenu(false); });
+$('#viewfinder').addEventListener('click', () => toggleCamMenu(false));
+function openCam(key) {
+  setCamSubject(key === 'andere' ? 'Ohne Fach' : key);
+  state.camPages = 0;
+  const cam = $('#s-cam');
+  cam.classList.remove('has-shot'); $('#shot').classList.remove('multi');
+  toggleCamMenu(false);
+  $('#cam-hint').textContent = 'Blatt wird gesucht';
+  placeCorners(false);
+  state.history.push(state.screen);
+  show('cam', 'up');
+  setTimeout(() => { placeCorners(true); $('#cam-hint').textContent = 'Blatt erkannt'; }, reduce ? 0 : 480);
+}
+function placeCorners(onPaper) {
+  const vf = $('#viewfinder'), p = $('#paper');
+  const cs = $$('.corner', vf);
+  if (!onPaper) { cs.forEach(c => c.style.transform = ''); return; }
+  const v = vf.getBoundingClientRect();
+  const w = p.offsetWidth + 10, h = p.offsetHeight + 10;
+  const cx = v.width / 2, cy = v.height / 2;
+  const a = -4 * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a);
+  const pt = (x, y) => [cx + x * cos - y * sin, cy + x * sin + y * cos];
+  const tl = pt(-w / 2, -h / 2), tr = pt(w / 2, -h / 2), bl = pt(-w / 2, h / 2), br = pt(w / 2, h / 2);
+  const home = [[16, 16], [v.width - 16, 16], [16, v.height - 16], [v.width - 16, v.height - 16]];
+  [tl, tr, bl, br].forEach((q, i) => { cs[i].style.transform = `translate(${q[0] - home[i][0]}px,${q[1] - home[i][1]}px) rotate(-4deg)`; });
+}
+$('#shutter').addEventListener('click', () => {
+  buzz();
+  toggleCamMenu(false);
+  state.camPages++;
+  const n = state.camPages;
+  $('#flash').animate([{ opacity: .85 }, { opacity: 0 }], { duration: 240, easing: 'ease-out' });
+  const p = $('#paper'), shot = $('#shot');
+  const land = () => {
+    $('#s-cam').classList.add('has-shot');
+    $('#shot-n').textContent = n;
+    shot.classList.toggle('multi', n > 1);
+    if (n > 1 && !reduce) shot.animate([{ transform: 'scale(.9)' }, { transform: 'scale(1)' }], { duration: 220, easing: EASE_OUT });
+  };
+  if (!reduce) {
+    const pr = p.getBoundingClientRect(), sr = shot.getBoundingClientRect();
+    const ph = $('#phone').getBoundingClientRect();
+    const ghost = p.cloneNode(true); ghost.removeAttribute('id');
+    Object.assign(ghost.style, { position: 'absolute', left: (pr.left - ph.left) + 'px', top: (pr.top - ph.top) + 'px', width: p.offsetWidth + 'px', margin: 0, transform: 'rotate(-4deg)', zIndex: 5, transformOrigin: '0 0' });
+    $('#s-cam').appendChild(ghost);
+    const sx = sr.width / p.offsetWidth;
+    ghost.animate([
+      { transform: 'translate(0,0) rotate(-4deg) scale(1)', opacity: 1 },
+      { transform: `translate(${sr.left - pr.left}px,${sr.top - pr.top}px) rotate(0deg) scale(${sx})`, opacity: .9 }
+    ], { duration: 420, easing: EASE_DRAWER, fill: 'forwards' }).finished.then(() => ghost.remove());
+    setTimeout(land, 340);
+  } else land();
+  $('#cam-hint').textContent = n === 1 ? '1 Seite' : `${n} Seiten`;
+});
+$('#cam-file').addEventListener('click', () => {
+  const s = state.camSubject, n = state.camPages;
+  if (!n) return;
+  state.sheets.push({ fach: s, pages: n });
+  const key = TODAY.includes(s) ? s : 'andere';
+  const who = key === 'andere' ? (s === 'Ohne Fach' ? 'Ohne Fach, ' : sh(s) + ', ') : '';
+  show(state.history.pop() || 'neu', 'down');
+  setTimeout(() => addItem(key, `<span class="thumb"></span><p>Blatt abgelegt<span>${who}${n} ${n === 1 ? 'Seite' : 'Seiten'}, die Abschrift folgt</span></p>`), 280);
+});
+$('#cam-close').addEventListener('click', () => show(state.history.pop() || 'neu', 'down'));
+
+/* ---------- Schritt 2: Fällig ---------- */
+function hwRow(h) {
+  return `<div class="hw ${h.done ? 'is-done' : ''}" data-id="${h.id}">
+    <div class="hw-bg"><span class="ms">check</span></div>
+    <div class="hw-front">
+      <button class="check" aria-pressed="${h.done}" aria-label="${esc(h.text)} ${h.done ? 'wieder öffnen' : 'abhaken'}"><span class="check-ring"><span class="check-fill"><span class="ms">check</span></span></span></button>
+      <div class="hw-text"><div class="hw-title">${esc(h.text)}</div><div class="hw-meta">${h.fach}${h.done ? ', ' + (h.note || 'erledigt') : (h.due !== 'Dienstag' ? ', bis ' + h.due : '')}</div></div>
+    </div></div>`;
+}
+function renderHw(flip) {
+  const box = $('#hw-groups');
+  const before = {};
+  if (flip) $$('.hw', box).forEach(el => before[el.dataset.id] = el.getBoundingClientRect().top);
+  const open = state.hw.filter(h => !h.done && h.due === 'Dienstag');
+  const later = state.hw.filter(h => !h.done && h.due !== 'Dienstag');
+  const done = state.hw.filter(h => h.done);
+  let html = `<div class="group"><h2>Für Dienstag</h2>${open.length ? open.map(hwRow).join('') : '<p class="empty">Alles erledigt.</p>'}</div>`;
+  if (later.length) html += `<div class="group"><h2>Später</h2>${later.map(hwRow).join('')}</div>`;
+  if (done.length) html += `<div class="group"><h2>Erledigt</h2>${done.map(hwRow).join('')}</div>`;
+  box.innerHTML = html;
+  if (flip && !reduce) {
+    $$('.hw', box).forEach(el => {
+      const b = before[el.dataset.id];
+      const a = el.getBoundingClientRect().top;
+      if (b == null) { el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200 }); return; }
+      if (Math.abs(b - a) > 1) el.animate([{ transform: `translateY(${b - a}px)` }, { transform: 'none' }], { duration: 340, easing: 'cubic-bezier(0.77,0,0.175,1)' });
+    });
+    $$('.empty', box).forEach(el => el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: 120, fill: 'backwards' }));
+  }
+}
+let hwTimer = null;
+function toggleHw(id, hold) {
+  const h = state.hw.find(x => x.id === id);
+  const row = $(`.hw[data-id="${id}"]`);
+  h.done = !h.done;
+  if (h.done) { buzz(); h.note = 'gerade abgehakt'; }
+  row.classList.toggle('is-done', h.done);
+  row.querySelector('.check').setAttribute('aria-pressed', h.done);
+  clearTimeout(hwTimer);
+  hwTimer = setTimeout(() => renderHw(true), hold ?? (h.done ? 350 : 240));
+}
+$('#hw-groups').addEventListener('click', e => {
+  const c = e.target.closest('.check'); if (!c) return;
+  toggleHw(c.closest('.hw').dataset.id);
+});
+// Einmaliges Anwackeln statt Bedienungsanleitung: die erste offene Zeile zeigt, dass sie sich schieben lässt
+function nudge() {
+  if (reduce || state.screen !== 'faellig') return;
+  const row = $('#hw-groups .hw:not(.is-done)'); if (!row) return;
+  const f = row.querySelector('.hw-front'), bg = row.querySelector('.hw-bg');
+  f.animate([{ transform: 'none' }, { transform: 'translateX(24px)', offset: .45 }, { transform: 'none' }], { duration: 400, easing: 'ease-in-out' });
+  bg.animate([{ opacity: 0 }, { opacity: 1, offset: .3 }, { opacity: 1, offset: .6 }, { opacity: 0 }], { duration: 400 });
+}
+// Wischen zum Abhaken: die Zeile folgt dem Finger und federt beim Loslassen in einer Bewegung zurück
+(() => {
+  const box = $('#hw-groups');
+  let row = null, front = null, x0 = 0, y0 = 0, dx = 0, drag = false, hist = [];
+  box.addEventListener('pointerdown', e => {
+    const f = e.target.closest('.hw-front'); if (!f || e.target.closest('.check')) return;
+    row = f.parentElement; front = f; x0 = e.clientX; y0 = e.clientY; dx = 0; drag = false; hist = [[performance.now(), 0]];
+    front.getAnimations().forEach(a => a.cancel());
+  });
+  box.addEventListener('pointermove', e => {
+    if (!row) return;
+    const mx = e.clientX - x0, my = e.clientY - y0;
+    if (!drag) {
+      if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) { row = null; return; }
+      if (Math.abs(mx) < 10) return;
+      drag = true; front.setPointerCapture(e.pointerId); row.classList.add('is-dragging');
+    }
+    dx = mx > 0 ? mx : -(Math.abs(mx) * 40) / (40 + Math.abs(mx));
+    front.style.transform = `translateX(${dx}px)`;
+    row.classList.toggle('past', dx > row.offsetWidth * .3);
+    hist.push([performance.now(), dx]); if (hist.length > 5) hist.shift();
+  });
+  const end = () => {
+    if (!row) return;
+    const r = row, f = front; row = null;
+    if (!drag) return;
+    const [ta, xa] = hist[0], [tb, xb] = hist[hist.length - 1];
+    const v = (xb - xa) / Math.max(1, tb - ta);
+    const commit = !r.classList.contains('is-done') && (dx > r.offsetWidth * .3 || v > 0.6);
+    // Von der aktuellen Position mit Feder auf 0, der Hintergrund blendet dabei aus
+    f.style.transform = '';
+    f.animate([{ transform: `translateX(${dx}px)` }, { transform: 'translateX(0)' }], reduce ? { duration: 120 } : SPRING_BACK);
+    r.classList.remove('is-dragging', 'past');
+    if (commit) toggleHw(r.dataset.id, Math.max(350, SPRING_BACK.duration - 40));
+  };
+  box.addEventListener('pointerup', end); box.addEventListener('pointercancel', end);
+})();
+
+/* ---------- Schritt 3: Lernen + Lernblock ---------- */
+const TOTAL = 25 * 60;
+let timer = null, remaining = TOTAL, paused = false, phase = 'run';
+let ci = 0, known = 0, answerShown = false;
+function renderRecall(dir) {
+  const box = $('#recall');
+  if (ci >= CARDS.length) {
+    box.innerHTML = `<p class="rc-n">Fertig</p><p class="rc-q">Alle drei Fragen durch, ${known} gewusst.</p><div class="rc-actions"><button class="rc-btn" data-rc="again">Von vorn</button></div>`;
+  } else {
+    const [q, a] = CARDS[ci];
+    box.innerHTML = `<p class="rc-n">Frage ${ci + 1} von ${CARDS.length}</p><p class="rc-q">${q}</p>${answerShown ? `<p class="rc-a">${a}</p>` : ''}<div class="rc-actions">${answerShown ? '<button class="rc-btn" data-rc="no">Nicht gewusst</button><button class="rc-btn rc-yes" data-rc="yes">Gewusst</button>' : '<button class="rc-btn" data-rc="show">Antwort zeigen</button>'}</div>`;
+  }
+  if (reduce) return;
+  if (dir === 'answer') { const el = $('.rc-a', box); el && el.animate([{ opacity: 0, transform: 'translateY(-4px)' }, { opacity: 1, transform: 'none' }], { duration: 220, easing: EASE_OUT }); }
+  if (dir === 'next') [...box.children].forEach(el => el.animate([{ opacity: 0, transform: 'translateX(14px)' }, { opacity: 1, transform: 'none' }], { duration: 240, easing: EASE_OUT }));
+}
+$('#recall').addEventListener('click', e => {
+  const b = e.target.closest('[data-rc]'); if (!b) return;
+  const k = b.dataset.rc;
+  if (k === 'show') { answerShown = true; renderRecall('answer'); return; }
+  if (k === 'again') { ci = 0; known = 0; answerShown = false; renderRecall('next'); return; }
+  if (k === 'yes') known++;
+  ci++; answerShown = false; renderRecall('next');
+});
+function drawClock() {
+  const m = Math.floor(remaining / 60), s = remaining % 60;
+  $('#clock').textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  $('#clock-fill').style.transform = `scaleX(${remaining / TOTAL})`;
+}
+function tick() {
+  if (paused || phase !== 'run') return;
+  remaining = Math.max(0, remaining - 1); drawClock();
+  if (remaining === 0) timeUp();
+}
+function timeUp() {
+  phase = 'up'; clearInterval(timer);
+  buzz([14, 90, 14]);
+  closeConfirm();
+  $('#s-block').classList.add('is-up');
+  $('#clock-of').textContent = 'Zeit um';
+  swapLabel($('#block-end-label'), 'Als erledigt markieren');
+}
+function swapLabel(l, txt) { l.classList.add('swap'); setTimeout(() => { l.textContent = txt; l.classList.remove('swap'); }, 160); }
+$('#learn-cta').addEventListener('click', e => {
+  if (state.blockDone) { show('fertig', 'push'); return; }
+  remaining = TOTAL; paused = false; phase = 'run';
+  $('#pause-icon').textContent = 'pause'; $('#block-pause').setAttribute('aria-label', 'Pause');
+  $('#s-block').classList.remove('is-up'); $('#clock-of').textContent = 'von 25 Minuten'; $('#block-end-label').textContent = 'Block beenden';
+  closeConfirm();
+  ci = 0; known = 0; answerShown = false; renderRecall();
+  $('#clock-fill').style.transition = 'none'; drawClock(); void $('#clock-fill').offsetWidth; $('#clock-fill').style.transition = '';
+  show('block', 'reveal', e.currentTarget);
+  clearInterval(timer);
+  timer = setInterval(tick, 1000);
+});
+$('#learn-skip').addEventListener('click', () => { state.blockSkipped = true; show('fertig', 'push'); });
+$('#block-pause').addEventListener('click', () => {
+  paused = !paused; $('#pause-icon').textContent = paused ? 'play_arrow' : 'pause';
+  $('#block-pause').setAttribute('aria-label', paused ? 'Weiter' : 'Pause');
+});
+function openConfirm() {
+  const min = Math.floor((TOTAL - remaining) / 60);
+  $('#cf-sub').textContent = min < 1 ? 'Noch keine Minute gelernt.' : `${min} von 25 Minuten gelernt.`;
+  $('#confirm').classList.add('is-open');
+  $('#block-foot').style.visibility = 'hidden';
+}
+function closeConfirm() { $('#confirm').classList.remove('is-open'); $('#block-foot').style.visibility = ''; }
+function leaveBlock(done) {
+  clearInterval(timer);
+  if (done) { state.blockDone = true; state.blockSkipped = false; }
+  show('lernen', 'unreveal', $('#learn-cta'));
+  setTimeout(closeConfirm, 300);
+  if (done) setTimeout(() => {
+    $('#exam').classList.add('is-blockdone');
+    swapLabel($('#learn-label'), 'Fertig für heute');
+    $('#learn-skip').classList.add('is-gone');
+  }, 260);
+}
+$('#block-end').addEventListener('click', () => { if (phase === 'up') { buzz(); leaveBlock(true); } else openConfirm(); });
+$('#block-close').addEventListener('click', () => {
+  if (phase === 'up') { leaveBlock(true); return; }
+  if (TOTAL - remaining < 60) leaveBlock(false); else openConfirm();
+});
+$('#cf-yes').addEventListener('click', () => { buzz(); leaveBlock(true); });
+$('#cf-no').addEventListener('click', () => leaveBlock(false));
+$('#cf-back').addEventListener('click', closeConfirm);
+
+/* ---------- Fertig ---------- */
+function renderFertig() {
+  const rows = [];
+  const checked = state.hw.filter(h => h.done && h.note === 'gerade abgehakt');
+  const num = n => ['', 'Eine', 'Zwei', 'Drei'][n] || String(n);
+  if (checked.length) rows.push(['check', `${num(checked.length)} ${checked.length === 1 ? 'Aufgabe' : 'Aufgaben'} abgehakt`, checked.map(h => sh(h.fach)).join(' und ')]);
+  const newHw = state.hw.filter(h => h.id.startsWith('n'));
+  if (newHw.length) rows.push(['edit_note', `${num(newHw.length)} ${newHw.length === 1 ? 'Aufgabe' : 'Aufgaben'} eingetragen`, newHw.map(h => `${sh(h.fach)} bis ${h.due}`).join(', ')]);
+  if (state.sheets.length) {
+    const n = state.sheets.length;
+    rows.push(['description', `${n === 1 ? 'Ein Blatt' : num(n) + ' Blätter'} abgelegt`, state.sheets.map(s => `${s.fach === 'Ohne Fach' ? 'ohne Fach' : sh(s.fach)}, ${s.pages} ${s.pages === 1 ? 'Seite' : 'Seiten'}`).join('; ')]);
+  }
+  if (state.blockDone) rows.push(['check', 'Lernblock Scheitelpunktform', 'Mittwoch kommt die Wiederholung.']);
+  else if (state.blockSkipped) rows.push(['schedule', 'Lernblock Scheitelpunktform offen', 'Passt auch morgen. Mittwoch kommt die Wiederholung.', 'open']);
+  if (!rows.length) rows.push(['check', 'Heute nichts Neues', '']);
+  const open = state.hw.filter(h => !h.done && h.due === 'Dienstag');
+  const items = [
+    `<h1>Fertig für heute.</h1>`,
+    `<div class="done-list">${rows.map(r => `<div class="done-row"><span class="ms ${r[3] || ''}">${r[0]}</span><p>${r[1]}${r[2] ? `<span>${r[2]}</span>` : ''}</p></div>`).join('')}</div>`,
+    `<div class="tomorrow"><h2>Morgen, Dienstag</h2><div class="tomorrow-lessons">${WEEK[1].lessons.map(l => l[2]).join(', ')}</div><p>${open.length ? 'Noch offen: ' + open.map(h => sh(h.fach)).join(', ') + '.' : 'Alle Aufgaben für morgen sind erledigt.'}</p></div>`,
+  ];
+  const body = $('#fertig-body');
+  body.classList.remove('go');
+  body.innerHTML = items.map((h, i) => `<div style="--i:${i}">${h}</div>`).join('');
+}
+
+/* ---------- Woche ---------- */
+function renderWeek(reset) {
+  if (reset) state.weekSel = state.weekReturn === 'fertig' ? 1 : 0;
+  $('#days').innerHTML = WEEK.map((d, i) => `<button class="day ${i === state.weekSel ? 'is-sel' : ''} ${i === 0 ? 'is-today' : ''}" data-day="${i}" aria-pressed="${i === state.weekSel}"><b>${d.d}</b><span>${d.n}.</span></button>`).join('') + '<span class="day-ind" id="day-ind"></span>';
+  $('#day-ind').style.transform = `translateX(${state.weekSel * 100}%)`;
+  drawLessons();
+}
+function drawLessons() {
+  const d = WEEK[state.weekSel];
+  $('#lessons').innerHTML = d.lessons.map(l => `<div class="lesson"><time>${l[0]}<span>${l[1]}</span></time><div><b>${l[2]}</b><em>${l[3]}</em>${l[4] ? `<span class="tag">${l[4]}</span>` : ''}</div></div>`).join('') + '<p class="free">Danach frei.</p>';
+}
+$('#days').addEventListener('click', e => {
+  const b = e.target.closest('[data-day]'); if (!b) return;
+  const i = +b.dataset.day; if (i === state.weekSel) return;
+  const dir = i > state.weekSel ? 1 : -1;
+  state.weekSel = i;
+  $$('.day').forEach((x, k) => { x.classList.toggle('is-sel', k === i); x.setAttribute('aria-pressed', k === i); });
+  $('#day-ind').style.transform = `translateX(${i * 100}%)`;
+  const L = $('#lessons');
+  L.style.setProperty('--dx', `${-dir * 20}px`); L.classList.add('out');
+  setTimeout(() => {
+    drawLessons();
+    L.classList.add('instant'); L.style.setProperty('--dx', `${dir * 20}px`);
+    void L.offsetWidth;
+    L.classList.remove('instant'); L.classList.remove('out');
+  }, reduce ? 0 : 150);
+});
+
+/* ---------- Start: die App öffnet direkt in Schritt 1 ---------- */
+renderSubjects();
+renderHw(false);
+renderRecall();
+setBand('neu');
+// Nur für die Screenshots: Zeit im Lernblock vorspulen
+window.feierabendDemo = { vergangen(s) { remaining = Math.max(1, TOTAL - s); drawClock(); } };
+})();
+</script>
+</body>
+</html>

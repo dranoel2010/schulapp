@@ -1,0 +1,1285 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#fbfaf7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141518">
+<meta name="color-scheme" content="light dark">
+<title>Schulapp Satzspiegel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300..800;1,7..72,300..800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#fbfaf7;
+  --ink:#17181b;
+  --ink-2:#3a3c41;
+  --muted:#6a6c72;
+  --done-tx:#7f8186;
+  --done-sub:#8c8e92;
+  --line:rgba(23,24,27,.30);
+  --accent:#2a3cb4;
+  --accent-line:rgba(42,60,180,.45);
+  --strike:color-mix(in srgb,var(--ink) 60%,transparent);
+  --cam:#121316;
+  --cam-accent:#8f9cff;
+  --ease-out:cubic-bezier(0.23,1,0.32,1);
+  --ease-drawer:cubic-bezier(0.32,0.72,0,1);
+  --serif:"Literata", Georgia, serif;
+  --side:24px;
+  --top:47px;
+  --bottom:34px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#141518; --ink:#ecebe6; --ink-2:#c9c8c3; --muted:#9a9ca1; --done-tx:#7d7f84; --done-sub:#6f7176;
+    --line:rgba(236,235,230,.35); --accent:#8f9cff; --accent-line:rgba(143,156,255,.5);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#141518; --ink:#ecebe6; --ink-2:#c9c8c3; --muted:#9a9ca1; --done-tx:#7d7f84; --done-sub:#6f7176;
+  --line:rgba(236,235,230,.35); --accent:#8f9cff; --accent-line:rgba(143,156,255,.5);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+html{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;overscroll-behavior:none;background:var(--paper)}
+body{background:var(--paper);color:var(--ink);font-family:var(--serif);font-optical-sizing:auto;font-variant-numeric:lining-nums;overscroll-behavior:none;min-height:100dvh;display:grid;place-items:center}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;text-align:left}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+
+#device{position:relative;width:100%;max-width:390px;height:100dvh;max-height:844px;overflow:hidden;background:var(--paper);padding-bottom:var(--bottom)}
+.status{position:absolute;inset:0 0 auto 0;height:var(--top);padding:16px 0 0 34px;font:600 16px/1 -apple-system,system-ui,sans-serif;letter-spacing:-.01em;z-index:40;pointer-events:none}
+
+/* laufender Kopf */
+.run{position:absolute;left:0;right:0;top:var(--top);height:48px;display:flex;justify-content:space-between;align-items:center;padding:0 calc(var(--side) - 10px);z-index:30;background:var(--paper)}
+.run::after{content:"";position:absolute;left:0;right:0;bottom:-18px;height:18px;background:linear-gradient(var(--paper),transparent);pointer-events:none}
+.run .left{display:grid;align-items:center}
+.run .left > *{grid-area:1/1;transition:opacity 140ms ease}
+.run .left > .gone{opacity:0;pointer-events:none;visibility:hidden;transition:opacity 140ms ease,visibility 0s linear 140ms}
+#hdrTitle{padding:0 10px;font-size:15px;color:var(--muted);font-variation-settings:"opsz" 14;font-variant-numeric:tabular-nums lining-nums}
+.run button{height:44px;padding:0 10px;font-size:15px;display:flex;align-items:center;font-variation-settings:"opsz" 14;transition:transform 140ms var(--ease-out)}
+.run button:active{transform:scale(.96)}
+#hdrLeft{color:var(--ink-2)}
+#hdrRight{color:var(--ink);font-weight:550}
+.swap{display:inline-block;transition:opacity 140ms ease,transform 140ms var(--ease-out)}
+.swap.out{opacity:0;transform:translateY(3px)}
+
+#stage{position:absolute;inset:0}
+.page{position:absolute;inset:0;background:var(--paper);padding:calc(var(--top) + 64px) var(--side) calc(var(--bottom) + 110px);overflow-y:auto;overscroll-behavior:contain;visibility:hidden;scrollbar-width:none}
+.page::-webkit-scrollbar{display:none}
+.page.active{visibility:visible}
+.page:not(.active){display:none}
+.page.lifted{z-index:2;box-shadow:-18px 0 40px rgba(20,22,26,.10)}
+.page.under{z-index:1}
+
+/* Schrift */
+.display{font-size:42px;line-height:1.04;font-weight:620;letter-spacing:-.028em;font-variation-settings:"opsz" 72;text-wrap:balance}
+.display.md{font-size:36px}
+.lede{font-size:31px;line-height:1.14;font-weight:470;letter-spacing:-.018em;font-variation-settings:"opsz" 60;text-wrap:balance}
+.sub{margin-top:10px;font-size:17px;line-height:1.45;color:var(--muted);font-variant-numeric:tabular-nums lining-nums}
+.meta{font-size:15px;color:var(--muted);font-variant-numeric:tabular-nums lining-nums;font-variation-settings:"opsz" 14}
+.line{font-size:17px;line-height:1.45;color:var(--muted);font-variation-settings:"opsz" 16}
+.read{font-size:18px;line-height:1.58;color:var(--ink-2);font-variation-settings:"opsz" 16;max-width:34ch}
+.read p+p{margin-top:.9em}
+.read b{font-weight:600;color:var(--ink)}
+.sec{margin-top:44px}
+.gap{margin-top:26px}
+
+/* Antippbare Wörter */
+.w{display:inline;position:relative;padding:0;text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:.18em;text-decoration-color:var(--line);transition:opacity 160ms ease;cursor:pointer}
+.w:active{opacity:.55}
+.w.hot{color:var(--accent);text-decoration-color:var(--accent-line)}
+.w.sm::after{content:"";position:absolute;inset:-12px -4px}
+.act{display:inline-flex;align-items:center;min-height:44px;margin-left:-2px;padding:0 2px;font-size:18px;font-weight:600;color:var(--accent);letter-spacing:-.005em;transition:transform 140ms var(--ease-out),opacity 140ms ease}
+.act:active{transform:scale(.97);opacity:.7}
+.act.quiet{color:var(--ink);font-weight:520}
+.act .meta{font-weight:400;margin-left:8px}
+.links{display:flex;flex-wrap:wrap;column-gap:24px}
+.links .act{font-size:17px}
+.stack{display:flex;flex-direction:column;align-items:flex-start}
+
+/* Aufgaben: Abhaken ist Durchstreichen */
+.task{position:relative;padding:8px 0 10px;touch-action:pan-y;cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.tx{position:relative;display:inline-block;transition:color 240ms ease}
+.task .tx{font-size:23px;line-height:1.28;letter-spacing:-.01em;font-variation-settings:"opsz" 28}
+.task .subj{margin-left:10px;font-size:17px;color:var(--muted);white-space:nowrap;transition:color 220ms ease}
+.strike{position:absolute;left:-3px;right:-5px;top:56%;height:2px;border-radius:2px;background:var(--strike);transform-origin:left center;transform:scaleX(0) rotate(-.7deg);transition:transform 300ms var(--ease-out);pointer-events:none}
+.done .strike{transform:scaleX(1) rotate(-.7deg)}
+.done .tx{color:var(--done-tx)}
+.done .subj{color:var(--done-sub)}
+.task:active .tx{opacity:.8}
+.infach .subj{display:none}
+.gh{font-size:19px;font-weight:560;letter-spacing:-.01em;margin:30px 0 4px}
+.gh .meta{font-weight:400;margin-left:8px}
+.gh.muted{color:var(--muted);font-weight:500}
+.hint{margin-top:16px;font-size:15px;font-style:italic;color:var(--muted);transition:opacity 220ms ease}
+.hint.fade{opacity:0}
+.lern .tx{font-size:23px;line-height:1.28;letter-spacing:-.01em;font-variation-settings:"opsz" 28}
+.lern .line{margin-top:2px}
+
+/* Lernplan */
+.plan{display:grid;grid-template-columns:104px 1fr;row-gap:2px}
+.plan .d{font-size:16px;color:var(--muted);padding-top:6px;font-variation-settings:"opsz" 14}
+.plan .d.now{color:var(--ink);font-weight:600}
+.plan .e{font-size:21px;line-height:1.3;padding:3px 0 12px;font-variation-settings:"opsz" 24}
+.plan .e small{display:block;font-size:15px;color:var(--muted);margin-top:1px}
+.grades{display:flex;gap:28px;align-items:baseline;font-size:46px;font-weight:450;letter-spacing:-.02em;font-variation-settings:"opsz" 72;font-variant-numeric:lining-nums}
+.grades .lead{font-size:17px;font-weight:400;letter-spacing:0;color:var(--muted);margin-right:-8px;font-variation-settings:"opsz" 16}
+
+/* Woche */
+.todayfold{display:flex;align-items:baseline;gap:10px;min-height:44px;font-size:17px;color:var(--muted)}
+.todayfold .car{font-size:12px;transition:transform 200ms var(--ease-out)}
+.todayfold[aria-expanded="true"] .car{transform:rotate(180deg)}
+.todaylist{color:var(--muted);padding-bottom:6px}
+.todaylist .lesson .f{color:var(--muted)}
+.day{margin-top:22px}
+.day .dn{font-size:19px;font-weight:560;letter-spacing:-.01em;margin-bottom:4px}
+.day .dn .meta{font-weight:400;margin-left:8px}
+.lesson{display:grid;grid-template-columns:1fr auto;align-items:baseline;column-gap:12px;padding:3px 0}
+.lesson .f{font-size:19px;line-height:1.3}
+.lesson .r{font-size:15px;color:var(--muted);font-variant-numeric:tabular-nums lining-nums}
+.lesson .t{font-size:15px;color:var(--muted);font-variant-numeric:tabular-nums lining-nums;margin-right:12px}
+.lesson{grid-template-columns:auto 1fr auto}
+.examline{font-size:19px;font-weight:560}
+.dayhw{margin-top:2px}
+
+/* Listen */
+.row{display:block;width:100%;padding:11px 0 11px}
+.row .tt{font-size:21px;line-height:1.28;letter-spacing:-.01em;font-variation-settings:"opsz" 24}
+.row .mm{font-size:15px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums lining-nums}
+button.row:active .tt{opacity:.6}
+
+/* Satz mit austauschbaren Wörtern */
+.sentence{font-size:28px;line-height:1.35;font-weight:450;letter-spacing:-.015em;font-variation-settings:"opsz" 40}
+.sentence .tok{display:inline-block}
+.pick{display:inline-block;vertical-align:baseline;padding:6px 1px;margin:-6px -1px;font:inherit;letter-spacing:inherit;color:var(--ink);white-space:nowrap}
+.pick .slot{position:relative;display:inline-block;vertical-align:baseline;line-height:1.35;clip-path:inset(0 -200px 0 -6px)}
+.pick .cur{display:inline-block;text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:.16em;text-decoration-color:var(--line)}
+.pick .old{position:absolute;left:0;top:0;white-space:nowrap;pointer-events:none}
+.pick .car{display:inline-block;margin-left:4px;font-size:.5em;line-height:1;color:var(--muted);vertical-align:.3em;transition:transform 200ms var(--ease-out)}
+.pick.open .cur{text-decoration-color:var(--accent)}
+.pick.open .car{transform:rotate(180deg);color:var(--accent)}
+.choices{margin-top:14px;display:flex;flex-wrap:wrap;column-gap:20px}
+.choices button{min-height:44px;font-size:21px;color:var(--ink-2);font-variation-settings:"opsz" 24}
+.choices button.on{color:var(--accent)}
+.write{display:block;width:100%;margin-top:18px;border:0;outline:0;background:transparent;resize:none;font:inherit;font-size:28px;line-height:1.35;color:var(--ink);letter-spacing:-.015em;caret-color:var(--accent);font-variation-settings:"opsz" 40;min-height:2.8em}
+.write::placeholder{color:var(--muted)}
+
+/* Lernblock */
+.clock{display:flex;align-items:baseline;gap:12px;margin-top:30px;white-space:nowrap}
+.clock .n{font-size:104px;line-height:1;font-weight:330;letter-spacing:-.04em;font-variant-numeric:tabular-nums lining-nums;font-variation-settings:"opsz" 72}
+.clock .u,.clock .pre{font-size:31px;font-weight:450;letter-spacing:-.015em;font-variation-settings:"opsz" 48}
+.clock .pre{color:var(--muted)}
+.bar{height:2px;margin-top:16px;background:var(--ink);transform-origin:left center;transition:transform 1000ms linear}
+.formula{font-size:26px;line-height:1.3;font-style:italic;font-variation-settings:"opsz" 36}
+
+/* Abruf */
+.q{font-size:29px;line-height:1.2;font-weight:480;letter-spacing:-.017em;font-variation-settings:"opsz" 48;text-wrap:balance}
+.ans{margin-top:32px}
+.ans .rule{display:block;width:24px;height:1.5px;background:var(--ink);margin-bottom:18px}
+.ans .body{font-size:22px;line-height:1.4;color:var(--ink-2)}
+.ans .formula{display:block;color:var(--ink);margin-bottom:6px}
+.qacts{display:flex;justify-content:space-between;align-items:center;margin-top:26px}
+.qwrap{will-change:transform}
+
+/* Kamera, nur angedeutet */
+.page.cam{padding:0;background:var(--cam);color:#ecebe6}
+.viewfinder{position:absolute;inset:0;overflow:hidden;background:radial-gradient(120% 80% at 50% 42%,#2b2d33 0%,#141518 72%);transition:opacity 300ms ease}
+.sheetwrap{position:absolute;left:50%;top:44%;width:236px;height:318px;margin:-159px 0 0 -118px;transform:perspective(700px) rotateX(12deg) rotateZ(-3deg);transition:transform 420ms var(--ease-out),opacity 260ms ease}
+.sheet{position:absolute;inset:0;background:#e9e8e3;box-shadow:0 30px 60px rgba(0,0,0,.45);padding:30px 26px}
+.sheet i{display:block;height:6px;border-radius:3px;background:#c7c6c0;margin-bottom:12px}
+.sheet i.h{height:9px;width:62%;background:#a9a8a2;margin-bottom:20px}
+.corner{position:absolute;width:26px;height:26px;border-color:#fff;border-style:solid;border-width:0;opacity:0;transform:scale(1.25);transition:opacity 200ms ease,transform 320ms var(--ease-out)}
+.found .corner{opacity:1;transform:none}
+.c1{left:-12px;top:-12px;border-left-width:2px;border-top-width:2px;transform-origin:100% 100%}
+.c2{right:-12px;top:-12px;border-right-width:2px;border-top-width:2px;transform-origin:0 100%}
+.c3{left:-12px;bottom:-12px;border-left-width:2px;border-bottom-width:2px;transform-origin:100% 0}
+.c4{right:-12px;bottom:-12px;border-right-width:2px;border-bottom-width:2px;transform-origin:0 0}
+.camtext{position:absolute;left:0;right:0;bottom:0;padding:70px var(--side) calc(var(--bottom) + 14px);background:linear-gradient(to top,rgba(16,17,20,.96) 55%,rgba(16,17,20,0));transition:opacity 160ms ease}
+.camtext .camhint{font-size:16px;font-style:italic;color:#b4b6bb;margin-bottom:4px}
+.camtext .shoot{font-size:40px;font-weight:600;letter-spacing:-.025em;color:var(--cam-accent);min-height:58px;display:flex;align-items:center;font-variation-settings:"opsz" 72;transition:transform 140ms var(--ease-out),opacity 140ms ease}
+.camtext .shoot:active{transform:scale(.97);opacity:.8}
+.camtext .alt{display:flex;gap:24px;margin-top:2px}
+.camtext .alt button{min-height:44px;font-size:16px;color:#c9cace}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.camdone{position:absolute;inset:0;padding:calc(var(--top) + 64px) var(--side) 0;background:var(--paper);color:var(--ink);opacity:0;pointer-events:none;transition:opacity 160ms ease}
+.cam.saved .camdone{opacity:1;pointer-events:auto;transition:opacity 320ms ease 180ms}
+.cam.saved .sheetwrap{transform:perspective(700px) translateY(-40px) scale(.6) rotateZ(0);opacity:0}
+.cam.saved .camtext{opacity:0;pointer-events:none}
+.camdone .cd{transform:translateY(8px);opacity:0;transition:transform 260ms var(--ease-out),opacity 220ms ease}
+.cam.saved .camdone .cd{transform:none;opacity:1;transition-delay:calc(200ms + var(--i,0) * 30ms)}
+#camRow:disabled{cursor:default}
+
+/* Inhalt */
+#toc{position:absolute;inset:0;z-index:25;background:var(--paper);padding:calc(var(--top) + 70px) var(--side) 0;visibility:hidden;opacity:0;transition:opacity 200ms ease,visibility 0s linear 200ms}
+#toc.open{visibility:visible;opacity:1;transition:opacity 180ms ease}
+#toc ol{list-style:none}
+#toc li{opacity:0;transform:translateY(10px);transition:transform 280ms var(--ease-out),opacity 200ms ease}
+#toc.open li{opacity:1;transform:none;transition-delay:calc(var(--i) * 20ms)}
+#toc li button{font-size:33px;line-height:1.12;font-weight:500;letter-spacing:-.022em;padding:5px 0;font-variation-settings:"opsz" 60;min-height:46px;transition:opacity 140ms ease}
+#toc li button:active{opacity:.5}
+#toc li button.cur{color:var(--accent)}
+#toc .cnt{margin-left:10px;font-size:17px;font-style:italic;color:var(--muted);font-variant-numeric:tabular-nums lining-nums}
+#toc .tsub{display:block;margin:-6px 0 4px;font-size:17px;font-style:italic;color:var(--muted)}
+#toc.leaving{background:transparent;transition:opacity 160ms ease,visibility 0s linear 160ms}
+#toc.leaving li{opacity:0!important;transition:opacity 90ms ease!important}
+#toc .tocfoot{text-wrap:balance;position:absolute;left:var(--side);right:var(--side);bottom:calc(var(--bottom) + 18px);font-size:15px;font-style:italic;color:var(--muted);opacity:0;transition:opacity 300ms ease}
+#toc.open .tocfoot{opacity:1;transition-delay:160ms}
+
+/* fester Fuß */
+.foot{position:absolute;left:0;right:0;bottom:0;padding:22px var(--side) calc(var(--bottom) + 6px);display:flex;justify-content:flex-end;align-items:center;z-index:20;background:linear-gradient(to top,var(--paper) 62%,transparent);transition:opacity 180ms ease,transform 220ms var(--ease-out)}
+.foot.hide{opacity:0;transform:translateY(8px);pointer-events:none}
+.foot .act{font-size:17px;color:var(--ink);font-weight:600}
+
+#toast{position:absolute;left:0;right:0;bottom:0;z-index:35;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:30px var(--side) calc(var(--bottom) + 24px);background:linear-gradient(to top,var(--paper) 70%,transparent);font-size:17px;color:var(--ink-2);opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity 180ms ease,transform 220ms var(--ease-out)}
+#toast.show{opacity:1;transform:none;pointer-events:auto}
+#toast .act{font-size:17px;color:var(--ink);font-weight:600}
+
+.ghost{position:absolute;margin:0!important;pointer-events:none;z-index:6}
+
+@media (prefers-reduced-motion: reduce){
+  #toc li,.strike,.qwrap,.sheet,.sheetwrap,.foot,#toast,.swap,.camdone .cd,.bar,.pick .car,.todayfold .car{transition-property:opacity!important;transform:none!important}
+  .done .strike{transform:none!important}
+}
+@media (hover:hover) and (pointer:fine){
+  .w:hover{text-decoration-color:currentColor}
+  .act:hover{opacity:.8}
+}
+@media (min-width:430px){
+  body{background:#dcdcd8}
+  #device{border-radius:44px;box-shadow:0 30px 80px rgba(0,0,0,.18)}
+}
+</style>
+</head>
+<body>
+<div id="device">
+  <div class="status" aria-hidden="true">16:40</div>
+
+  <header class="run">
+    <div class="left">
+      <span id="hdrTitle"><span class="word swap">Montag, 12. Oktober</span></span>
+      <button id="hdrLeft" class="gone" aria-label="Zurück"><span class="word swap">‹ Heute</span></button>
+    </div>
+    <button id="hdrRight" aria-expanded="false"><span class="word swap">Inhalt</span></button>
+  </header>
+
+  <main id="stage">
+
+    <!-- HEUTE -->
+    <section class="page active" data-page="heute">
+      <h1 class="lede st" id="headline" data-hero></h1>
+      <div class="st gap" id="todayTasks"></div>
+
+      <div class="st sec lern" id="todayLern">
+        <span class="tx">Scheitelpunktform<span class="strike"></span></span>
+        <p class="line">25 Minuten, für die <button class="w sm" data-go="klausur" data-from="self"><span class="m">Mathearbeit</span> am Freitag</button></p>
+      </div>
+      <div class="st stack" style="margin-top:6px">
+        <button class="act" data-go="lernblock" id="startLern">Lernblock anfangen</button>
+        <button class="act quiet" data-go="abruf">Wissen abrufen<span class="meta">3 Fragen</span></button>
+      </div>
+
+      <div class="links st sec">
+        <button class="act quiet" data-go="woche">Woche</button>
+        <button class="act quiet" data-go="material">Blätter</button>
+      </div>
+    </section>
+
+    <!-- HAUSAUFGABEN -->
+    <section class="page" data-page="aufgaben" data-back>
+      <h1 class="display st" data-hero>Hausaufgaben</h1>
+      <p class="sub st" id="hwSub"></p>
+      <div id="hwList"></div>
+      <p class="hint st" id="hwHint" hidden>Antippen streicht durch, Wischen nach rechts auch. Lange drücken ändert die Aufgabe.</p>
+      <div class="st" style="margin-top:22px"><button class="act" data-act="newTask">Neue Aufgabe</button></div>
+    </section>
+
+    <!-- SATZ (Neue Aufgabe, Ändern, Note, Klausur) -->
+    <section class="page" data-page="satz" data-back>
+      <p class="sentence st" id="satzSentence"></p>
+      <div class="choices" id="satzChoices" hidden></div>
+      <textarea class="write st" id="satzField" rows="2" enterkeyhint="done" autocapitalize="sentences"></textarea>
+      <div class="st links" style="margin-top:20px">
+        <button class="act" id="satzSave">Eintragen</button>
+        <button class="act quiet" id="satzSecondary" hidden>Löschen</button>
+      </div>
+    </section>
+
+    <!-- KLAUSUR -->
+    <section class="page" data-page="klausur" data-back>
+      <h1 class="display st" data-hero>Mathearbeit</h1>
+      <p class="sub st">Freitag, 16. Oktober<br>Quadratische Funktionen</p>
+
+      <div class="plan st sec" id="plan">
+        <div class="d now">Heute</div>
+        <div class="e" id="planToday"><span class="tx">Scheitelpunktform<span class="strike"></span></span><small>Lernblock, 25 Minuten</small></div>
+        <div class="d">Mittwoch</div>
+        <div class="e">Wiederholung</div>
+        <div class="d">Donnerstag</div>
+        <div class="e">Probeklausur</div>
+      </div>
+      <div class="st"><button class="act" data-go="lernblock" id="planStart">Lernblock anfangen</button></div>
+
+      <div class="grades st sec" id="klGrades"></div>
+
+      <div class="stack st sec">
+        <button class="act quiet" data-go="abruf">Wissen abrufen<span class="meta">3 Fragen</span></button>
+        <button class="act quiet" data-go="blatt" data-p="sp">Übungsblatt vom 9.10.</button>
+      </div>
+    </section>
+
+    <!-- KLAUSUREN -->
+    <section class="page" data-page="klausuren" data-back>
+      <h1 class="display st" data-hero>Klausuren</h1>
+      <div class="gap" id="examList"></div>
+      <div class="st" style="margin-top:18px"><button class="act" data-act="newExam">Klausur eintragen</button></div>
+    </section>
+
+    <!-- LERNBLOCK -->
+    <section class="page" data-page="lernblock" data-back>
+      <h1 class="display md st" data-hero>Scheitelpunktform</h1>
+      <div class="st">
+        <p class="clock" aria-live="off"><span class="pre" id="clockPre" hidden>noch</span><span class="n" id="clockN">25</span><span class="u">Minuten</span></p>
+        <div class="bar" id="clockBar"></div>
+        <p class="meta" id="clockNote" style="margin-top:10px">noch nicht angefangen</p>
+      </div>
+      <p class="formula st sec">f(x) = a(x − d)² + e</p>
+      <p class="read st" style="margin-top:8px">Der Scheitelpunkt ist S(d | e). Ist a positiv, ist die Parabel nach oben geöffnet.</p>
+      <div class="links" style="position:absolute;left:var(--side);right:var(--side);bottom:calc(var(--bottom) + 28px)">
+        <button class="act" id="clockBtn">Anfangen</button>
+        <button class="act quiet" id="lernDone">Fertig</button>
+      </div>
+    </section>
+
+    <!-- WOCHE -->
+    <section class="page" data-page="woche" data-back>
+      <h1 class="display st" data-hero>Woche</h1>
+      <p class="sub st">12. bis 16. Oktober</p>
+      <div class="st gap">
+        <button class="todayfold" id="todayFold" aria-expanded="false">Heute, Montag <span class="meta">3 Stunden, vorbei</span><span class="car" aria-hidden="true">▾</span></button>
+        <div class="todaylist" id="todayList" hidden></div>
+      </div>
+      <div id="weekDays"></div>
+    </section>
+
+    <!-- MATERIAL -->
+    <section class="page" data-page="material" data-back>
+      <h1 class="display st" data-hero>Blätter</h1>
+      <p class="sub st" id="sheetSub"></p>
+      <div class="gap" id="sheetList"></div>
+    </section>
+
+    <!-- BLATT -->
+    <section class="page" data-page="blatt" data-back>
+      <h1 class="display md st" data-hero id="blattTitle"></h1>
+      <p class="sub st" id="blattSub"></p>
+      <div class="read st" style="margin-top:28px" id="blattBody"></div>
+      <div class="links st" style="margin-top:22px"><button class="act quiet" data-go="foto">Foto ansehen</button></div>
+    </section>
+
+    <!-- FOTO (Platzhalter) -->
+    <section class="page cam" data-page="foto" data-back data-dark>
+      <div class="viewfinder" style="background:#1a1b1f"><div class="sheetwrap" style="transform:rotateZ(-1.5deg);width:300px;height:404px;margin:-202px 0 0 -150px;top:52%"><div class="sheet"><i class="h"></i><i></i><i style="width:84%"></i><i></i><i style="width:70%"></i><i></i><i style="width:90%"></i><i style="width:55%"></i></div></div></div>
+    </section>
+
+    <!-- ABRUF -->
+    <section class="page" data-page="abruf" data-back>
+      <div class="qwrap st" id="qwrap">
+        <h1 class="q" id="qText"></h1>
+        <div class="ans" id="qAns" hidden><span class="rule"></span><div class="body" id="qAnsBody"></div></div>
+        <div class="qacts" id="qActs"><div class="links" id="qBtns"></div><span class="meta" id="qCount"></span></div>
+      </div>
+    </section>
+
+    <!-- NOTEN -->
+    <section class="page" data-page="noten" data-back>
+      <h1 class="display st" data-hero>Noten</h1>
+      <div class="gap" id="gradeList"></div>
+      <div class="st" style="margin-top:18px"><button class="act" data-act="newGrade">Note eintragen</button></div>
+    </section>
+
+    <!-- FÄCHER -->
+    <section class="page" data-page="faecher" data-back>
+      <h1 class="display st" data-hero>Fächer</h1>
+      <div class="gap" id="subjList"></div>
+    </section>
+
+    <!-- FACH -->
+    <section class="page" data-page="fach" data-back>
+      <h1 class="display st" data-hero id="fachTitle"></h1>
+      <p class="sub st" id="fachSub"></p>
+      <div id="fachBody"></div>
+    </section>
+
+    <!-- AUFNEHMEN -->
+    <section class="page cam" data-page="kamera" data-back data-dark>
+      <div class="viewfinder" id="vf">
+        <div class="sheetwrap" id="camSheet">
+          <div class="sheet"><i class="h"></i><i></i><i style="width:84%"></i><i></i><i style="width:70%"></i><i></i><i style="width:90%"></i><i style="width:55%"></i><i></i><i style="width:76%"></i></div>
+          <span class="corner c1"></span><span class="corner c2"></span><span class="corner c3"></span><span class="corner c4"></span>
+        </div>
+      </div>
+      <div class="flash" id="flash"></div>
+      <div class="camtext">
+        <p class="camhint" id="camHint">Blatt flach hinlegen, ganz im Bild.</p>
+        <button class="shoot" id="shoot">Aufnehmen</button>
+        <div class="alt"><button>Aus Fotos wählen</button><button>Mehrere Seiten</button></div>
+      </div>
+      <div class="camdone">
+        <h1 class="display cd" style="--i:0">Abgelegt.</h1>
+        <p class="sub cd" style="--i:1"><span class="swap" id="camSub">Fach und Abschrift kommen in ein paar Minuten.</span></p>
+        <button class="row cd" id="camRow" style="--i:2;margin-top:24px" disabled><div class="tt"><span class="swap" id="camRowT">Blatt vom 12.10.</span></div><div class="mm"><span class="swap" id="camRowM">wird abgeschrieben</span></div></button>
+        <div class="links cd" style="--i:3;margin-top:14px">
+          <button class="act" id="camAgain">Nächstes Blatt</button>
+          <button class="act quiet" data-go="material">Zu den Blättern</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- INHALT -->
+  <nav id="toc" aria-label="Inhalt">
+    <ol>
+      <li style="--i:0"><button data-to="heute">Heute</button></li>
+      <li style="--i:1"><button data-to="aufgaben">Hausaufgaben</button><span class="cnt" id="tocHw">2</span></li>
+      <li style="--i:2"><button data-to="klausuren">Klausuren</button><span class="tsub" id="tocEx">Mathe, Freitag</span></li>
+      <li style="--i:3"><button data-to="abruf">Wissen abrufen</button><span class="cnt">3</span></li>
+      <li style="--i:4"><button data-to="material">Blätter</button><span class="cnt" id="tocSh">4</span></li>
+      <li style="--i:5"><button data-to="woche">Woche</button></li>
+      <li style="--i:6"><button data-to="noten">Noten</button></li>
+      <li style="--i:7"><button data-to="faecher">Fächer</button></li>
+    </ol>
+    <p class="tocfoot" id="tocFoot" hidden>Vom linken Rand wischen geht eine Seite zurück.</p>
+  </nav>
+
+  <div class="foot" id="foot">
+    <button class="act" data-go="kamera">Blatt aufnehmen</button>
+  </div>
+
+  <div id="toast" role="status"><span id="toastText"></span><button class="act" id="toastUndo">Zurücknehmen</button></div>
+</div>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const EASE_OUT = 'cubic-bezier(0.23,1,0.32,1)';
+  const EASE_DRAWER = 'cubic-bezier(0.32,0.72,0,1)';
+  const norm = s => s.replace(/\s+/g, ' ').trim();
+
+  /* Merker nur für Hinweise, darf fehlen */
+  const seen = k => { try { return localStorage.getItem('t18-' + k) === '1'; } catch (_) { return false; } };
+  const markSeen = k => { try { localStorage.setItem('t18-' + k, '1'); } catch (_) {} };
+  /* Randgeste nur, wo sie nicht mit Safaris eigener Zurück-Geste kollidiert */
+  const EDGE_OK = matchMedia('(display-mode: standalone)').matches || !/iPhone|iPad|iPod/.test(navigator.userAgent);
+
+  /* ---------- Daten ---------- */
+  const ABBR = { Mathematik: 'Mathe', Deutsch: 'Deutsch', Biologie: 'Bio', Englisch: 'Englisch' };
+  const ROOM = { Deutsch: 'R. 104', Mathematik: 'R. 208', Biologie: 'Bio 1', Englisch: 'R. 112' };
+  const EXAM = { Mathematik: 'Mathearbeit', Deutsch: 'Deutscharbeit', Englisch: 'Englischarbeit', Biologie: 'Biologiearbeit' };
+  const TIMES = ['08:00–09:30', '09:50–11:20', '11:40–13:10'];
+  const WEEK = [
+    { day: 'Montag', date: '12.10.', subj: ['Deutsch', 'Mathematik', 'Biologie'] },
+    { day: 'Dienstag', date: '13.10.', subj: ['Englisch', 'Mathematik', 'Deutsch'] },
+    { day: 'Mittwoch', date: '14.10.', subj: ['Biologie', 'Englisch', 'Mathematik'] },
+    { day: 'Donnerstag', date: '15.10.', subj: ['Deutsch', 'Biologie', 'Englisch'] },
+    { day: 'Freitag', date: '16.10.', subj: ['Mathematik', 'Englisch', 'Deutsch'] },
+  ];
+  const SUBJECTS = ['Deutsch', 'Mathematik', 'Biologie', 'Englisch'];
+  const HW_DAYS = ['Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag'];
+  function nextLesson(subj) {
+    for (let i = 1; i < WEEK.length; i++) { const k = WEEK[i].subj.indexOf(subj); if (k >= 0) return { day: WEEK[i].day, i, k }; }
+    return null;
+  }
+
+  const state = {
+    tasks: [
+      { id: 'm', subj: 'Mathematik', text: 'S. 84, Nr. 3–5', due: 'Dienstag', done: false },
+      { id: 'd', subj: 'Deutsch', text: 'Gedichtanalyse beenden', due: 'Dienstag', done: false },
+      { id: 'e', subj: 'Englisch', text: 'Vokabeln Unit 3', due: 'Montag', done: true, old: true },
+    ],
+    grades: { Mathematik: ['2', '3+', '2−'] },
+    exams: [{ id: 'ma', subj: 'Mathematik', when: 'Freitag', date: 'Freitag, 16.10.', topic: 'Quadratische Funktionen', page: 'klausur' }],
+    sheets: [
+      { id: 'sp', subj: 'Mathematik', title: 'Scheitelpunktform, Übungen', date: 'Freitag 9.10.', short: '9.10.', body: [
+        '<b>Aufgabe 1.</b> Bestimme den Scheitelpunkt der Parabel f(x) = 2(x − 3)² + 1.',
+        '<b>Aufgabe 2.</b> Bringe f(x) = x² − 6x + 5 mit quadratischer Ergänzung in die Scheitelpunktform.',
+        '<b>Aufgabe 3.</b> Eine nach unten geöffnete Normalparabel hat den Scheitelpunkt S(−2 | 4). Gib die Funktionsgleichung an.'] },
+      { id: 'pa', subj: 'Deutsch', title: 'Der Panther, Rilke', date: 'Mittwoch 7.10.', short: '7.10.', body: [
+        'Sein Blick ist vom Vorübergehn der Stäbe<br>so müd geworden, daß er nichts mehr hält.<br>Ihm ist, als ob es tausend Stäbe gäbe<br>und hinter tausend Stäben keine Welt.',
+        '<b>Auftrag.</b> Untersuche, wie Rilke die Gefangenschaft im Satzbau zeigt.'] },
+      { id: 'mi', subj: 'Biologie', title: 'Mitose in vier Phasen', date: 'Dienstag 6.10.', short: '6.10.', body: [
+        '<b>Prophase.</b> Die Chromosomen verdichten sich, die Kernhülle löst sich auf.',
+        '<b>Metaphase.</b> Die Chromosomen ordnen sich in der Äquatorialebene an.',
+        '<b>Anaphase.</b> Die Chromatiden werden zu den Polen gezogen.',
+        '<b>Telophase.</b> Zwei neue Kernhüllen bilden sich.'] },
+      { id: 'u3', subj: 'Englisch', title: 'Unit 3, Vocabulary', date: 'Montag 5.10.', short: '5.10.', body: [
+        'to commute, pendeln<br>rush hour, Hauptverkehrszeit<br>to be stuck in traffic, im Stau stehen<br>public transport, öffentliche Verkehrsmittel'] },
+    ],
+    lernDone: false,
+    shots: 0,
+  };
+
+  const pages = Object.fromEntries($$('.page').map(p => [p.dataset.page, p]));
+  let current = { name: 'heute' };
+  const history = [];
+  const NAMES = { heute: 'Heute', aufgaben: 'Hausaufgaben', klausur: 'Mathearbeit', klausuren: 'Klausuren', lernblock: 'Lernblock', woche: 'Woche', material: 'Blätter', blatt: 'Blatt', foto: 'Foto', abruf: 'Wissen abrufen', noten: 'Noten', faecher: 'Fächer', kamera: 'Aufnehmen' };
+  const label = e => e.name === 'fach' ? e.param : e.name === 'satz' ? e.param.name : NAMES[e.name];
+
+  /* ---------- Texte aus dem Zustand ---------- */
+  const NUM = ['Keine', 'Eine', 'Zwei', 'Drei', 'Vier', 'Fünf'];
+  const openFor = day => state.tasks.filter(t => t.due === day && !t.done).length;
+  function headlineHTML() {
+    const n = openFor('Dienstag');
+    if (n === 0) return state.lernDone ? 'Für morgen ist alles erledigt, der Lernblock auch.' : 'Für morgen ist alles erledigt. Bleibt ein Lernblock.';
+    const a = `<button class="w" data-go="aufgaben">${NUM[n] || n} ${n === 1 ? 'Aufgabe' : 'Aufgaben'}</button>`;
+    return state.lernDone ? `${a} für morgen. Der Lernblock ist geschafft.` : `${a} für morgen, dazu ein Lernblock.`;
+  }
+  function renderHeadline(animate) {
+    const h = $('#headline');
+    const html = headlineHTML();
+    if (h.innerHTML === html) return;
+    if (!animate || reduce) { h.innerHTML = html; return; }
+    h.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: 'ease', fill: 'forwards' }).onfinish = () => {
+      h.innerHTML = html;
+      h.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: 'ease', fill: 'forwards' });
+    };
+  }
+
+  function taskEl(t) {
+    const el = document.createElement('div');
+    el.className = 'task' + (t.done ? ' done' : '');
+    el.dataset.id = t.id;
+    el.setAttribute('role', 'checkbox');
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('aria-checked', t.done);
+    el.innerHTML = `<span class="tx">${t.text}<span class="strike"></span></span><span class="subj">${ABBR[t.subj]}</span>`;
+    return el;
+  }
+  function renderToday() {
+    const box = $('#todayTasks');
+    box.innerHTML = '';
+    state.tasks.filter(t => t.due === 'Dienstag').forEach(t => box.appendChild(taskEl(t)));
+    renderHeadline(false);
+    $('#todayLern').classList.toggle('done', state.lernDone);
+    $('#startLern').hidden = state.lernDone;
+  }
+  const DATES = { Dienstag: '13.10.', Mittwoch: '14.10.', Donnerstag: '15.10.', Freitag: '16.10.' };
+  function renderHw() {
+    const list = $('#hwList');
+    list.innerHTML = '';
+    const groups = {};
+    state.tasks.forEach(t => { const g = t.old ? 'Erledigt' : t.due; (groups[g] = groups[g] || []).push(t); });
+    [...HW_DAYS, 'Erledigt'].filter(g => groups[g]).forEach(g => {
+      const wrap = document.createElement('div'); wrap.className = 'st';
+      const h = document.createElement('p'); h.className = 'gh' + (g === 'Erledigt' ? ' muted' : '');
+      h.innerHTML = g === 'Erledigt' ? 'Erledigt' : g === 'Dienstag' ? `Morgen<span class="meta">Dienstag, 13.10.</span>` : `${g}<span class="meta">${DATES[g]}</span>`;
+      wrap.appendChild(h);
+      groups[g].forEach(t => wrap.appendChild(taskEl(t)));
+      list.appendChild(wrap);
+    });
+    $('#hwHint').hidden = seen('strike');
+    $('#hwHint').classList.remove('fade');
+    updateCounts();
+  }
+  function updateCounts() {
+    const open = state.tasks.filter(t => !t.done);
+    const next = HW_DAYS.find(d => open.some(t => t.due === d));
+    $('#hwSub').textContent = open.length === 0 ? 'Alles erledigt.' : `${open.length} offen, die nächste bis ${next}.`;
+    $('#tocHw').textContent = open.length || '';
+    $('#tocSh').textContent = state.sheets.length;
+    const ex = state.exams;
+    $('#tocEx').textContent = `${ABBR[ex[0].subj]}, ${ex[0].when}` + (ex.length > 1 ? `, und ${ex.length - 1} weitere` : '');
+  }
+
+  /* ---------- Abhaken: Durchstreichen, auch per Wischen ---------- */
+  let toastTimer, lastUndo, toastOn = false;
+  function setDone(id, done) {
+    const t = state.tasks.find(x => x.id === id);
+    if (!t || t.done === done) return;
+    t.done = done;
+    $$(`.task[data-id="${id}"]`).forEach(el => {
+      el.classList.toggle('done', done);
+      el.setAttribute('aria-checked', done);
+    });
+    if (navigator.vibrate) try { navigator.vibrate(done ? 8 : 4); } catch (e) {}
+    if (!seen('strike')) {
+      markSeen('strike');
+      const h = $('#hwHint'); h.classList.add('fade'); setTimeout(() => { h.hidden = true; }, 240);
+    }
+    updateCounts();
+    renderHeadline(true);
+    if (done) toast(`${ABBR[t.subj]} erledigt.`, () => setDone(id, false));
+  }
+  function toast(text, undo) {
+    $('#toastText').textContent = text;
+    lastUndo = undo;
+    $('#toast').classList.add('show');
+    toastOn = true; updateFoot();
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, 3200);
+  }
+  function hideToast() { clearTimeout(toastTimer); $('#toast').classList.remove('show'); toastOn = false; updateFoot(); }
+  $('#toastUndo').addEventListener('click', () => { const u = lastUndo; hideToast(); u && u(); });
+
+  let swipe = null, suppressClick = false;
+  document.addEventListener('pointerdown', e => {
+    const el = e.target.closest('.task[data-id]');
+    if (!el) return;
+    const tx = $('.tx', el);
+    swipe = { el, id: el.dataset.id, x: e.clientX, y: e.clientY, w: tx.getBoundingClientRect().width + 8, base: el.classList.contains('done') ? 1 : 0, active: false, pid: e.pointerId, hist: [] };
+    const sw = swipe;
+    sw.lp = setTimeout(() => {
+      if (swipe !== sw || sw.active) return;
+      swipe = null; suppressClick = true;
+      const release = () => { setTimeout(() => suppressClick = false, 60); document.removeEventListener('pointerup', release); };
+      document.addEventListener('pointerup', release);
+      openTaskEdit(sw.id);
+    }, 480);
+  });
+  document.addEventListener('contextmenu', e => { if (e.target.closest('.task, .pick')) e.preventDefault(); });
+  document.addEventListener('pointermove', e => {
+    if (!swipe || e.pointerId !== swipe.pid) return;
+    const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+    if (!swipe.active) {
+      if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { clearTimeout(swipe.lp); swipe = null; return; }
+      if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
+        clearTimeout(swipe.lp);
+        swipe.active = true; swipe.x = e.clientX;
+        try { swipe.el.setPointerCapture(e.pointerId); } catch (_) {}
+      } else return;
+    }
+    const d = e.clientX - swipe.x;
+    swipe.hist.push({ x: e.clientX, t: performance.now() }); if (swipe.hist.length > 5) swipe.hist.shift();
+    let p = swipe.base + d / swipe.w;
+    if (p > 1) p = 1 + (p - 1) * 0.15; if (p < 0) p = p * 0.15;
+    const s = $('.strike', swipe.el);
+    s.style.transition = 'none';
+    s.style.transform = `scaleX(${Math.max(0, p)}) rotate(-.7deg)`;
+    swipe.p = p;
+  });
+  function endSwipe(e) {
+    if (!swipe || e.pointerId !== swipe.pid) return;
+    const sw = swipe; swipe = null;
+    clearTimeout(sw.lp);
+    if (!sw.active) return;
+    suppressClick = true; setTimeout(() => suppressClick = false, 50);
+    const h = sw.hist; let v = 0;
+    if (h.length > 1) v = (h[h.length - 1].x - h[0].x) / Math.max(1, h[h.length - 1].t - h[0].t);
+    const s = $('.strike', sw.el);
+    let done = sw.base === 1;
+    if (sw.base === 0 && (sw.p > 0.5 || v > 0.11)) done = true;
+    if (sw.base === 1 && (sw.p < 0.5 || v < -0.11)) done = false;
+    s.style.transition = ''; s.style.transform = '';
+    if (done !== (sw.base === 1)) setDone(sw.id, done);
+  }
+  document.addEventListener('pointerup', endSwipe);
+  document.addEventListener('pointercancel', endSwipe);
+  document.addEventListener('click', e => {
+    const el = e.target.closest('.task[data-id]');
+    if (!el) return;
+    if (suppressClick) { suppressClick = false; return; }
+    setDone(el.dataset.id, !el.classList.contains('done'));
+  });
+  document.addEventListener('keydown', e => {
+    const el = e.target.closest && e.target.closest('.task[data-id]');
+    if (el && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); setDone(el.dataset.id, !el.classList.contains('done')); }
+  });
+
+  /* ---------- Kopfzeile ---------- */
+  const NOFOOT = ['kamera', 'satz', 'lernblock', 'abruf', 'foto'];
+  function updateFoot() {
+    const tocOpen = $('#toc').classList.contains('open');
+    $('#foot').classList.toggle('hide', tocOpen || toastOn || NOFOOT.includes(current.name));
+  }
+  function setHeader() {
+    const tocOpen = $('#toc').classList.contains('open');
+    const p = pages[current.name];
+    const showTitle = tocOpen || !p.hasAttribute('data-back');
+    swapText($('#hdrTitle .word'), tocOpen ? 'Inhalt' : 'Montag, 12. Oktober');
+    if (!showTitle) swapText($('#hdrLeft .word'), '‹ ' + label(history[history.length - 1] || { name: 'heute' }));
+    $('#hdrTitle').classList.toggle('gone', !showTitle);
+    $('#hdrLeft').classList.toggle('gone', showTitle);
+    swapText($('#hdrRight .word'), tocOpen ? 'Schließen' : 'Inhalt');
+    const dark = !tocOpen && p.hasAttribute('data-dark');
+    const run = $('.run');
+    run.style.background = dark ? 'transparent' : '';
+    run.style.setProperty('--paper', dark ? 'transparent' : '');
+    $('#hdrLeft').style.color = dark ? '#c9cace' : ''; $('#hdrRight').style.color = dark ? '#ecebe6' : '';
+    $('.status').style.color = dark ? '#ecebe6' : '';
+    updateFoot();
+  }
+  function swapText(el, txt) {
+    if (el.textContent === txt && !el._next) return;
+    if (el._next === txt) return;
+    if (reduce) { el.textContent = txt; return; }
+    el._next = txt;
+    el.classList.add('out');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.textContent = el._next; el._next = null; el.classList.remove('out'); }, 140);
+  }
+  $('#hdrLeft').addEventListener('click', () => {
+    if ($('#toc').classList.contains('open')) return;
+    if (pages[current.name].hasAttribute('data-back')) back();
+  });
+  $('#hdrRight').addEventListener('click', () => $('#toc').classList.contains('open') ? closeToc() : openToc());
+
+  /* ---------- Seiten aus dem Zustand ---------- */
+  const renderers = {
+    heute: renderToday,
+    aufgaben: renderHw,
+    klausur: renderKlausur,
+    klausuren: renderExams,
+    woche: renderWeek,
+    material: renderSheets,
+    blatt: renderBlatt,
+    noten: renderGrades,
+    faecher: renderSubjects,
+    fach: renderFach,
+    satz: renderSatz,
+    abruf: () => resetQuiz(),
+    kamera: () => resetCam(),
+  };
+  function render(name, param) { renderers[name] && renderers[name](param); }
+
+  function gradesHTML(list) { return `<span class="lead">Bisher</span>${list.map(g => `<span>${g}</span>`).join('')}`; }
+  function renderKlausur() {
+    $('#klGrades').innerHTML = gradesHTML(state.grades.Mathematik || []);
+    $('#planToday').classList.toggle('done', state.lernDone);
+    $('#planStart').hidden = state.lernDone;
+  }
+  function renderExams() {
+    const box = $('#examList'); box.innerHTML = '';
+    state.exams.forEach(x => {
+      const b = document.createElement('button'); b.className = 'row st';
+      b.dataset.go = x.page || 'fach'; if (!x.page) b.dataset.p = x.subj;
+      b.innerHTML = `<div class="tt">${EXAM[x.subj]}</div><div class="mm">${x.date}${x.topic ? ', ' + x.topic : ''}</div>`;
+      box.appendChild(b);
+    });
+  }
+  function lessonHTML(subj, k) { return `<div class="lesson"><span class="t">${TIMES[k]}</span><span class="f">${subj}</span><span class="r">${ROOM[subj]}</span></div>`; }
+  function renderWeek() {
+    $('#todayList').innerHTML = WEEK[0].subj.map(lessonHTML).join('');
+    const box = $('#weekDays'); box.innerHTML = '';
+    WEEK.slice(1).forEach((d, i) => {
+      const el = document.createElement('div'); el.className = 'day st';
+      const due = state.tasks.filter(t => t.due === d.day && !t.done).length;
+      const exam = state.exams.find(x => x.when === d.day);
+      el.innerHTML = `<p class="dn">${i === 0 ? 'Morgen, ' + d.day : d.day}<span class="meta">${d.date}</span></p>`
+        + (exam ? `<button class="w hot examline" data-go="klausur" data-from="self">${EXAM[exam.subj]}</button>` : '')
+        + d.subj.map(lessonHTML).join('')
+        + (due ? `<p class="dayhw"><button class="w sm meta" data-go="aufgaben">${due} ${due === 1 ? 'Hausaufgabe' : 'Hausaufgaben'} fällig</button></p>` : '');
+      box.appendChild(el);
+    });
+  }
+  $('#todayFold').addEventListener('click', () => {
+    const f = $('#todayFold'), l = $('#todayList');
+    const open = f.getAttribute('aria-expanded') !== 'true';
+    f.setAttribute('aria-expanded', open);
+    l.hidden = !open;
+    if (open && !reduce) l.animate([{ opacity: 0, transform: 'translateY(-4px)' }, { opacity: 1, transform: 'none' }], { duration: 200, easing: EASE_OUT });
+  });
+  function sheetRow(s, inFach) {
+    const b = document.createElement('button'); b.className = 'row st';
+    b.dataset.go = 'blatt'; b.dataset.p = s.id;
+    b.innerHTML = `<div class="tt">${s.title}</div><div class="mm">${inFach ? s.date : s.subj + ', ' + s.date}</div>`;
+    return b;
+  }
+  function renderSheets() {
+    $('#sheetSub').textContent = `${state.sheets.length} Blätter, zuletzt am ${state.sheets[0].short}`;
+    const box = $('#sheetList'); box.innerHTML = '';
+    state.sheets.forEach(s => box.appendChild(sheetRow(s)));
+  }
+  function renderBlatt(id) {
+    const s = state.sheets.find(x => x.id === id) || state.sheets[0];
+    $('#blattTitle').textContent = s.title;
+    $('#blattSub').textContent = `${s.subj}, ${s.short}`;
+    $('#blattBody').innerHTML = s.body.map(p => `<p>${p}</p>`).join('');
+  }
+  function renderGrades() {
+    const box = $('#gradeList'); box.innerHTML = '';
+    const without = [];
+    SUBJECTS.forEach(s => {
+      const g = state.grades[s];
+      if (!g || !g.length) { without.push(s); return; }
+      const w = document.createElement('div'); w.className = 'st';
+      w.style.marginBottom = '22px';
+      w.innerHTML = `<button class="row" data-go="fach" data-p="${s}" style="padding-bottom:2px"><div class="tt">${s}</div></button><div class="grades">${g.map(x => `<span>${x}</span>`).join('')}</div>`;
+      box.appendChild(w);
+    });
+    if (without.length) {
+      const p = document.createElement('p'); p.className = 'line st';
+      p.textContent = `${without.length === 1 ? without[0] : without.slice(0, -1).join(', ') + ' und ' + without[without.length - 1]} noch ohne Note.`;
+      box.appendChild(p);
+    }
+  }
+  function subjMeta(s) {
+    const n = nextLesson(s);
+    const open = state.tasks.filter(t => t.subj === s && !t.done).length;
+    const ex = state.exams.find(x => x.subj === s);
+    const parts = [ROOM[s], n ? (n.i === 1 ? 'morgen' : n.day) + ` in der ${n.k + 1}. Stunde` : ''];
+    if (ex) parts.push(`Arbeit ${ex.when === 'Freitag' ? 'am Freitag' : 'am ' + ex.date}`);
+    else if (open) parts.push(`${open} offen`);
+    return parts.filter(Boolean).join(', ');
+  }
+  function renderSubjects() {
+    const box = $('#subjList'); box.innerHTML = '';
+    SUBJECTS.forEach(s => {
+      const b = document.createElement('button'); b.className = 'row st';
+      b.dataset.go = 'fach'; b.dataset.p = s;
+      b.innerHTML = `<div class="tt">${s}</div><div class="mm">${subjMeta(s)}</div>`;
+      box.appendChild(b);
+    });
+  }
+  function renderFach(s) {
+    $('#fachTitle').textContent = s;
+    const n = nextLesson(s);
+    $('#fachSub').textContent = `${ROOM[s]}. Nächste Stunde ${n.i === 1 ? 'morgen' : 'am ' + n.day} um ${TIMES[n.k].slice(0, 5)}.`;
+    const body = $('#fachBody'); body.innerHTML = '';
+    const ex = state.exams.find(x => x.subj === s);
+    if (ex) {
+      const p = document.createElement('p'); p.className = 'st sec';
+      p.style.fontSize = '21px';
+      p.innerHTML = ex.page
+        ? `<button class="w hot" data-go="${ex.page}" data-from="self"><span class="m">${EXAM[s]}</span> am ${ex.when}</button>`
+        : `${EXAM[s]} am ${ex.date}${ex.topic ? ', ' + ex.topic : ''}`;
+      body.appendChild(p);
+    }
+    const tasks = state.tasks.filter(t => t.subj === s && !t.old);
+    const tw = document.createElement('div'); tw.className = 'st sec infach';
+    if (tasks.length) tasks.forEach(t => tw.appendChild(taskEl(t)));
+    else tw.innerHTML = '<p class="line">Keine offenen Hausaufgaben.</p>';
+    body.appendChild(tw);
+    const g = state.grades[s];
+    if (g && g.length) { const gl = document.createElement('div'); gl.className = 'grades st sec'; gl.innerHTML = gradesHTML(g); body.appendChild(gl); }
+    const sh = state.sheets.filter(x => x.subj === s);
+    if (sh.length) { const sw = document.createElement('div'); sw.className = 'st sec'; sh.forEach(x => sw.appendChild(sheetRow(x, true))); body.appendChild(sw); }
+  }
+
+  /* ---------- Seitenwechsel ---------- */
+  function stagger(page, dir, base, hero) {
+    if (reduce) return;
+    const items = $$('.st', page).filter(x => x !== hero && x.offsetParent !== null);
+    items.forEach((el, i) => {
+      el.animate([{ opacity: 0, transform: `translate(${dir * 12}px, 6px)` }, { opacity: 1, transform: 'none' }],
+        { duration: 220, delay: base + Math.min(i, 3) * 20, easing: EASE_OUT, fill: 'backwards' });
+    });
+  }
+  function morph(fromEl, toEl) {
+    const a = fromEl.getBoundingClientRect(), b = toEl.getBoundingClientRect();
+    const fa = parseFloat(getComputedStyle(fromEl).fontSize), fb = parseFloat(getComputedStyle(toEl).fontSize);
+    const from = `translate(${a.left - b.left}px, ${a.top - b.top}px) scale(${fa / fb})`;
+    const opts = { duration: 300, easing: EASE_DRAWER };
+    toEl.style.transformOrigin = '0 0';
+    toEl.style.position = 'relative'; toEl.style.zIndex = '5';
+    const c1 = getComputedStyle(fromEl).color, c2 = getComputedStyle(toEl).color;
+    if (c1 !== c2) {
+      // Farbe nicht animieren: alte Farbe als Kopie darüber, die ausblendet
+      const g = toEl.cloneNode(true);
+      g.removeAttribute('data-hero'); g.removeAttribute('id'); g.classList.add('ghost'); g.classList.remove('st');
+      Object.assign(g.style, { left: toEl.offsetLeft + 'px', top: toEl.offsetTop + 'px', width: toEl.offsetWidth + 'px', color: c1, transformOrigin: '0 0' });
+      toEl.parentNode.appendChild(g);
+      g.animate([{ transform: from, opacity: 1 }, { transform: 'none', opacity: 0 }], opts).onfinish = () => g.remove();
+      toEl.animate([{ transform: from, opacity: 0 }, { transform: 'none', opacity: 1 }], opts).onfinish = () => { toEl.style.zIndex = ''; };
+    } else {
+      toEl.animate([{ transform: from }, { transform: 'none' }], opts).onfinish = () => { toEl.style.zIndex = ''; };
+    }
+  }
+  function go(name, opts = {}) {
+    const param = opts.param;
+    if (!pages[name]) return;
+    if (name === current.name && param === current.param) { closeToc(); return; }
+    const from = pages[current.name], to = pages[name];
+    if (!opts.isBack && !opts.fromToc) {
+      const skip = current.name === 'kamera' && pages.kamera.classList.contains('saved');
+      if (!skip) history.push({ ...current, scroll: from.scrollTop });
+    }
+    if (name === 'heute') history.length = 0;
+    const dir = opts.isBack ? -1 : 1;
+    current = { name, param };
+    hideToast();
+    closeChoices();
+    render(name, param);
+    if (from === to) { to.scrollTop = 0; stagger(to, 0, 0, null); setHeader(); return; }
+
+    const hero = $('[data-hero]', to);
+    to.classList.add('active');
+    to.style.opacity = ''; to.style.transform = '';
+    to.scrollTop = opts.isBack ? (opts.scroll || 0) : 0;
+    const src = opts.source;
+    const morphing = !reduce && src && hero && norm(src.textContent) === norm(hero.textContent);
+    if (morphing) morph(src, hero);
+    stagger(to, morphing ? 0 : dir, morphing ? 180 : 40, morphing ? hero : null);
+
+    if (!reduce) {
+      if (opts.fromToc) from.classList.remove('active');
+      else from.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: `translateX(${-dir * 18}px)` }], { duration: 170, easing: 'ease', fill: 'forwards' }).onfinish = function () { if (pages[current.name] !== from) from.classList.remove('active'); this.cancel(); };
+      if (!morphing) to.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, delay: 40, easing: 'ease', fill: 'backwards' });
+    } else {
+      from.classList.remove('active');
+    }
+    setHeader();
+  }
+  function back() {
+    const prev = history.pop() || { name: 'heute' };
+    go(prev.name, { isBack: true, param: prev.param, scroll: prev.scroll });
+  }
+
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-go]');
+    if (!b || b.disabled) return;
+    const src = b.dataset.from === 'self' ? (b.querySelector('.m') || b) : null;
+    go(b.dataset.go, { source: src, param: b.dataset.p });
+  });
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    ({ newTask: openNewTask, newGrade: openNewGrade, newExam: openNewExam })[b.dataset.act]();
+  });
+
+  /* ---------- Inhalt ---------- */
+  function openToc() {
+    const t = $('#toc');
+    const curTo = current.name === 'klausur' ? 'klausuren' : current.name;
+    $$('#toc button').forEach(b => b.classList.toggle('cur', b.dataset.to === curTo));
+    $('#tocFoot').hidden = !EDGE_OK || seen('edge');
+    t.classList.add('open');
+    $('#hdrRight').setAttribute('aria-expanded', 'true');
+    setHeader();
+  }
+  function closeToc() {
+    const t = $('#toc');
+    if (!t.classList.contains('open')) return;
+    t.classList.remove('open');
+    $('#hdrRight').setAttribute('aria-expanded', 'false');
+    setHeader();
+  }
+  $$('#toc button').forEach(b => b.addEventListener('click', () => {
+    const name = b.dataset.to;
+    if (name === current.name) { closeToc(); return; }
+    history.length = 0;
+    if (name !== 'heute') history.push({ name: 'heute' });
+    const t = $('#toc');
+    t.classList.add('leaving');
+    t.classList.remove('open');
+    $('#hdrRight').setAttribute('aria-expanded', 'false');
+    go(name, { source: b, fromToc: true });
+    setTimeout(() => t.classList.remove('leaving'), 320);
+  }));
+
+  /* ---------- Zurück: vom linken Rand wischen, folgt dem Finger ---------- */
+  let edge = null;
+  $('#stage').addEventListener('pointerdown', e => {
+    if (!EDGE_OK) return;
+    if (e.clientX - $('#device').getBoundingClientRect().left > 26) return;
+    if (!pages[current.name].hasAttribute('data-back')) return;
+    const prev = history[history.length - 1] || { name: 'heute' };
+    if (pages[prev.name] === pages[current.name]) return;
+    edge = { x: e.clientX, pid: e.pointerId, prev, hist: [] };
+    try { e.target.setPointerCapture(e.pointerId); } catch (_) {}
+    render(prev.name, prev.param);
+    const p = pages[prev.name];
+    p.classList.add('active', 'under'); p.style.opacity = '1';
+    p.scrollTop = prev.scroll || 0;
+    pages[current.name].classList.add('lifted');
+  });
+  window.addEventListener('pointermove', e => {
+    if (!edge || e.pointerId !== edge.pid) return;
+    const W = $('#device').clientWidth;
+    const dx = Math.max(0, e.clientX - edge.x);
+    const p = Math.min(1, dx / W);
+    edge.p = p; edge.hist.push({ x: e.clientX, t: performance.now() }); if (edge.hist.length > 5) edge.hist.shift();
+    pages[current.name].style.transform = `translateX(${dx}px)`;
+    pages[edge.prev.name].style.opacity = String(0.55 + 0.45 * p);
+    pages[edge.prev.name].style.transform = `translateX(${-60 * (1 - p)}px)`;
+  });
+  window.addEventListener('pointerup', e => {
+    if (!edge || e.pointerId !== edge.pid) return;
+    const ed = edge; edge = null;
+    const h = ed.hist; let v = 0;
+    if (h.length > 1) v = (h[h.length - 1].x - h[0].x) / Math.max(1, h[h.length - 1].t - h[0].t);
+    const cur = pages[current.name], prev = pages[ed.prev.name];
+    const commit = (ed.p || 0) > 0.35 || v > 0.3;
+    const dur = 260;
+    if (commit) {
+      cur.animate([{ transform: cur.style.transform || 'none' }, { transform: 'translateX(100%)' }], { duration: dur, easing: EASE_OUT }).onfinish = () => { cur.classList.remove('active', 'lifted'); cur.style.transform = ''; cur.style.opacity = ''; };
+      prev.animate([{ transform: prev.style.transform || 'none', opacity: prev.style.opacity || 1 }, { transform: 'none', opacity: 1 }], { duration: dur, easing: EASE_OUT }).onfinish = () => { prev.classList.remove('under'); prev.style.transform = ''; prev.style.opacity = ''; };
+      history.pop();
+      current = ed.prev;
+      if (!seen('edge')) markSeen('edge');
+      hideToast();
+      setHeader();
+    } else {
+      cur.animate([{ transform: cur.style.transform || 'none' }, { transform: 'none' }], { duration: dur, easing: EASE_OUT }).onfinish = () => { cur.classList.remove('lifted'); cur.style.transform = ''; cur.style.opacity = ''; };
+      prev.animate([{ transform: prev.style.transform || 'none' }, { transform: 'translateX(-60px)' }], { duration: dur, easing: EASE_OUT }).onfinish = () => { prev.classList.remove('active', 'under'); prev.style.opacity = ''; prev.style.transform = ''; };
+    }
+  });
+
+  /* ---------- Ein Satz mit austauschbaren Wörtern ---------- */
+  let satz = null;
+  function renderSatz(cfg) {
+    satz = cfg;
+    const sent = $('#satzSentence'); sent.innerHTML = '';
+    cfg.tokens.forEach((tk, i) => {
+      if (i > 0 && !(tk && tk.glue)) sent.appendChild(document.createTextNode(' '));
+      if (tk && tk.glue) {
+        // Satzzeichen bleibt am Wort davor, sonst rutscht es allein in die nächste Zeile
+        const prev = sent.lastElementChild;
+        const nb = document.createElement('span'); nb.style.whiteSpace = 'nowrap';
+        sent.replaceChild(nb, prev); nb.appendChild(prev);
+        const s = document.createElement('span'); s.className = 'tok'; s.textContent = tk.t; nb.appendChild(s);
+      } else if (typeof tk === 'string') {
+        const s = document.createElement('span'); s.className = 'tok'; s.textContent = tk; sent.appendChild(s);
+      } else {
+        const b = document.createElement('button'); b.className = 'pick tok'; b.type = 'button'; b.dataset.key = tk.key;
+        b.setAttribute('aria-label', tk.aria + ' wechseln, lange drücken für alle');
+        b.innerHTML = `<span class="slot"><span class="cur">${cfg.values[tk.key]}</span></span><span class="car" aria-hidden="true">▾</span>`;
+        sent.appendChild(b);
+      }
+    });
+    const f = $('#satzField');
+    f.hidden = !cfg.field;
+    if (cfg.field) { f.placeholder = cfg.field.placeholder; f.value = cfg.field.value || ''; }
+    $('#satzSave').textContent = cfg.primary;
+    const sec = $('#satzSecondary');
+    sec.hidden = !cfg.secondary;
+    if (cfg.secondary) sec.textContent = cfg.secondary.label;
+    closeChoices();
+  }
+  function tokDef(key) { return satz.tokens.find(t => t && t.key === key); }
+  function setPick(key, value, dir = 1) {
+    const pick = $(`#satzSentence .pick[data-key="${key}"]`);
+    satz.values[key] = value;
+    const slot = $('.slot', pick); const old = $('.cur', slot);
+    if (old.textContent === value) return;
+    const nx = document.createElement('span'); nx.className = 'cur'; nx.textContent = value;
+    if (reduce) { old.replaceWith(nx); return; }
+    const toks = $$('.tok', $('#satzSentence'));
+    const before = toks.map(t => t.getBoundingClientRect());
+    old.classList.remove('cur'); old.classList.add('old');
+    slot.appendChild(nx);
+    const after = toks.map(t => t.getBoundingClientRect());
+    toks.forEach((t, i) => {
+      const dx = before[i].left - after[i].left, dy = before[i].top - after[i].top;
+      if (Math.abs(dx) > .5 || Math.abs(dy) > .5) t.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'none' }], { duration: 260, easing: EASE_OUT });
+    });
+    old.animate([{ transform: 'none', opacity: 1 }, { transform: `translateY(${-60 * dir}%)`, opacity: 0 }], { duration: 200, easing: EASE_OUT, fill: 'forwards' }).onfinish = () => old.remove();
+    nx.animate([{ transform: `translateY(${60 * dir}%)`, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 260, easing: EASE_OUT });
+  }
+  function cyclePick(key) {
+    const d = tokDef(key);
+    const i = (d.list.indexOf(satz.values[key]) + 1) % d.list.length;
+    choose(key, d.list[i]);
+  }
+  function choose(key, v) {
+    setPick(key, v);
+    satz.touched = satz.touched || {}; satz.touched[key] = true;
+    satz.onChange && satz.onChange(key, v);
+  }
+  function openChoices(key) {
+    const d = tokDef(key);
+    const box = $('#satzChoices');
+    if (box.dataset.key === key && !box.hidden) { closeChoices(); return; }
+    $$('#satzSentence .pick').forEach(p => p.classList.toggle('open', p.dataset.key === key));
+    box.dataset.key = key;
+    box.innerHTML = d.list.map(v => `<button type="button" class="${v === satz.values[key] ? 'on' : ''}">${v}</button>`).join('');
+    box.hidden = false;
+    if (!reduce) $$('button', box).forEach((b, i) => b.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 200, delay: Math.min(i, 4) * 20, easing: EASE_OUT, fill: 'backwards' }));
+  }
+  function closeChoices() {
+    const box = $('#satzChoices'); box.hidden = true; box.dataset.key = '';
+    $$('#satzSentence .pick').forEach(p => p.classList.remove('open'));
+  }
+  $('#satzChoices').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    choose($('#satzChoices').dataset.key, b.textContent);
+    closeChoices();
+  });
+  let pickLp = null, pickLpFired = false;
+  $('#satzSentence').addEventListener('pointerdown', e => {
+    const p = e.target.closest('.pick'); if (!p) return;
+    pickLpFired = false;
+    clearTimeout(pickLp);
+    pickLp = setTimeout(() => { pickLpFired = true; openChoices(p.dataset.key); }, 450);
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => $('#satzSentence').addEventListener(ev, () => clearTimeout(pickLp)));
+  $('#satzSentence').addEventListener('click', e => {
+    const p = e.target.closest('.pick'); if (!p) return;
+    if (pickLpFired) { pickLpFired = false; return; }
+    const box = $('#satzChoices');
+    if (!box.hidden) closeChoices();
+    cyclePick(p.dataset.key);
+  });
+  $('#satzSave').addEventListener('click', () => {
+    const f = $('#satzField');
+    const txt = f.value.trim();
+    if (satz.field && !txt) { f.focus(); f.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(5px)' }, { transform: 'none' }], { duration: 260, easing: EASE_OUT }); return; }
+    satz.save(satz.values, txt);
+  });
+  $('#satzSecondary').addEventListener('click', () => satz.secondary && satz.secondary.fn());
+
+  function taskCfg(t) {
+    const editing = !!t;
+    const subj = t ? t.subj : WEEK[0].subj[WEEK[0].subj.length - 1];
+    const due = t ? t.due : nextLesson(subj).day;
+    return {
+      name: editing ? 'Aufgabe' : 'Neue Aufgabe',
+      tokens: ['In', { key: 'subj', list: SUBJECTS, aria: 'Fach' }, 'bis', { key: 'due', list: HW_DAYS, aria: 'Tag' }, { t: ':', glue: true }],
+      values: { subj, due },
+      field: { placeholder: 'Was ist zu tun?', value: t ? t.text : '' },
+      primary: editing ? 'Ändern' : 'Eintragen',
+      onChange(key, v) { if (key === 'subj' && !(this.touched && this.touched.due) && !editing) setPick('due', nextLesson(v).day); },
+      secondary: editing ? { label: 'Löschen', fn() {
+        const i = state.tasks.indexOf(t); state.tasks.splice(i, 1);
+        back(); renderToday();
+        toast('Aufgabe gelöscht.', () => { state.tasks.splice(i, 0, t); render(current.name, current.param); renderToday(); updateCounts(); });
+      } } : null,
+      save(v, txt) {
+        if (editing) Object.assign(t, { subj: v.subj, due: v.due, text: txt });
+        else state.tasks.splice(Math.max(0, state.tasks.findIndex(x => x.old)), 0, { id: 'n' + Date.now(), subj: v.subj, text: txt, due: v.due, done: false });
+        back(); renderToday();
+      },
+    };
+  }
+  function openNewTask() { go('satz', { param: taskCfg(null) }); }
+  function openTaskEdit(id) { const t = state.tasks.find(x => x.id === id); if (t) go('satz', { param: taskCfg(t) }); }
+  function openNewGrade() {
+    go('satz', { param: {
+      name: 'Note eintragen',
+      tokens: ['Eine', { key: 'g', list: ['1', '2+', '2', '2−', '3+', '3', '3−', '4', '5', '6'], aria: 'Note' }, 'in', { key: 'subj', list: SUBJECTS, aria: 'Fach' }, 'für', { key: 'kind', list: ['den Test', 'die Arbeit', 'die Mitarbeit', 'das Referat'], aria: 'Art' }, { t: '.', glue: true }],
+      values: { g: '2', subj: 'Mathematik', kind: 'den Test' },
+      field: null, primary: 'Eintragen',
+      save(v) { (state.grades[v.subj] = state.grades[v.subj] || []).push(v.g); back(); },
+    } });
+  }
+  function openNewExam() {
+    go('satz', { param: {
+      name: 'Klausur eintragen',
+      tokens: ['Arbeit', 'in', { key: 'subj', list: ['Englisch', 'Deutsch', 'Biologie', 'Mathematik'], aria: 'Fach' }, 'am', { key: 'date', list: ['Dienstag, 20.10.', 'Mittwoch, 21.10.', 'Donnerstag, 22.10.', 'Freitag, 23.10.'], aria: 'Tag' }, { t: ':', glue: true }],
+      values: { subj: 'Englisch', date: 'Dienstag, 20.10.' },
+      field: { placeholder: 'Welches Thema?' }, primary: 'Eintragen',
+      save(v, txt) { state.exams.push({ id: 'x' + Date.now(), subj: v.subj, when: v.date, date: v.date, topic: txt }); updateCounts(); back(); },
+    } });
+  }
+
+  /* ---------- Lernblock: Restzeit in Worten ---------- */
+  const TOTAL = 25 * 60;
+  let remain = TOTAL, ticking = null;
+  function drawClock() {
+    const started = remain < TOTAL || ticking;
+    $('#clockN').textContent = Math.ceil(remain / 60);
+    $('#clockPre').hidden = !started;
+    $('#clockBar').style.transform = `scaleX(${remain / TOTAL})`;
+  }
+  $('#clockBtn').addEventListener('click', () => {
+    if (ticking) { clearInterval(ticking); ticking = null; $('#clockBtn').textContent = 'Weiter'; $('#clockNote').textContent = 'pausiert'; return; }
+    ticking = setInterval(() => { remain = Math.max(0, remain - 1); drawClock(); if (!remain) { clearInterval(ticking); ticking = null; $('#clockNote').textContent = 'Zeit ist um.'; } }, 1000);
+    $('#clockBtn').textContent = 'Pause'; $('#clockNote').textContent = 'läuft';
+    drawClock();
+  });
+  window.__skip = (sec) => { remain = Math.max(0, remain - sec); drawClock(); };
+  $('#lernDone').addEventListener('click', () => {
+    clearInterval(ticking); ticking = null;
+    state.lernDone = true;
+    renderToday();
+    history.length = 0; history.push({ name: 'heute' });
+    go('klausur', { isBack: true });
+    toast('Lernblock erledigt.', () => {
+      state.lernDone = false;
+      renderToday(); renderKlausur();
+    });
+  });
+
+  /* ---------- Wissen abrufen ---------- */
+  const QS = [
+    ['Wie lautet die Scheitelpunktform einer quadratischen Funktion?', '<span class="formula">f(x) = a(x − d)² + e</span>Der Scheitelpunkt ist S(d | e).'],
+    ['Woran erkennst du, ob die Parabel nach oben oder unten geöffnet ist?', 'Am Vorzeichen von a. Positiv heißt nach oben, negativ nach unten.'],
+    ['Wozu dient die quadratische Ergänzung?', 'Sie bringt die Normalform x² + px + q in die Scheitelpunktform.'],
+  ];
+  let qi = 0, known = 0;
+  function resetQuiz() { qi = 0; known = 0; showQ(false); }
+  function setBtns(html) { $('#qBtns').innerHTML = html; }
+  function showQ(anim) {
+    const set = () => {
+      const ans = $('#qAns');
+      if (qi >= QS.length) {
+        $('#qText').textContent = `${known} von ${QS.length} gewusst.`;
+        $('#qAnsBody').textContent = 'Die übrigen Fragen kommen bei der Wiederholung am Mittwoch wieder.';
+        ans.hidden = false;
+        $('#qCount').textContent = '';
+        setBtns('<button class="act" data-go="klausur">Zur Mathearbeit</button><button class="act quiet" id="qAgain">Nochmal</button>');
+        $('#qAgain').addEventListener('click', () => resetQuiz());
+        return;
+      }
+      $('#qText').textContent = QS[qi][0];
+      $('#qAnsBody').innerHTML = QS[qi][1];
+      ans.hidden = true;
+      $('#qCount').textContent = `${qi + 1} von ${QS.length}`;
+      setBtns('<button class="act" id="qShow">Antwort zeigen</button>');
+      $('#qShow').addEventListener('click', reveal);
+    };
+    if (!anim || reduce) { set(); return; }
+    const w = $('#qwrap');
+    w.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-10px)' }], { duration: 150, easing: 'ease', fill: 'forwards' }).onfinish = () => {
+      set();
+      w.animate([{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], { duration: 240, easing: EASE_OUT, fill: 'forwards' });
+    };
+  }
+  function reveal() {
+    const ans = $('#qAns');
+    ans.hidden = false;
+    setBtns('<button class="act" id="qYes">Wusste ich</button><button class="act quiet" id="qNo">Noch nicht</button>');
+    if (!reduce) {
+      ans.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 220, easing: 'ease-out' });
+      $('#qActs').animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 220, delay: 60, easing: 'ease-out', fill: 'backwards' });
+    }
+    $('#qYes').addEventListener('click', () => { known++; qi++; showQ(true); });
+    $('#qNo').addEventListener('click', () => { qi++; showQ(true); });
+  }
+
+  /* ---------- Aufnehmen ---------- */
+  let camTimer, readyTimer;
+  const NEW_SHEETS = [
+    { subj: 'Mathematik', title: 'Scheitelpunktform, Lösungen', body: ['<b>Aufgabe 1.</b> S(3 | 1), nach oben geöffnet.', '<b>Aufgabe 2.</b> f(x) = (x − 3)² − 4, also S(3 | −4).', '<b>Aufgabe 3.</b> f(x) = −(x + 2)² + 4.'] },
+    { subj: 'Mathematik', title: 'Parabeln verschieben', body: ['<b>Aufgabe 1.</b> Verschiebe die Normalparabel um 2 nach rechts und 1 nach oben.'] },
+  ];
+  function resetCam() {
+    const c = pages.kamera;
+    clearTimeout(camTimer); clearTimeout(readyTimer);
+    c.classList.remove('saved', 'found');
+    c.setAttribute('data-dark', '');
+    if (current.name === 'kamera') setHeader();
+    $('#camHint').textContent = 'Blatt flach hinlegen, ganz im Bild.';
+    $('#camSub').textContent = 'Fach und Abschrift kommen in ein paar Minuten.'; $('#camRowT').textContent = 'Blatt vom 12.10.'; $('#camRowM').textContent = 'wird abgeschrieben';
+    const row = $('#camRow'); row.disabled = true; delete row.dataset.go; delete row.dataset.p;
+    camTimer = setTimeout(() => { c.classList.add('found'); $('#camHint').textContent = 'Blatt erkannt. Ruhig halten.'; }, 700);
+  }
+  $('#shoot').addEventListener('click', () => {
+    const f = $('#flash');
+    if (!reduce) f.animate([{ opacity: 0 }, { opacity: .85 }, { opacity: 0 }], { duration: 260, easing: 'ease-out' });
+    setTimeout(() => {
+      pages.kamera.classList.add('saved');
+      pages.kamera.removeAttribute('data-dark');
+      setTimeout(setHeader, 200);
+    }, 140);
+    // nach ein paar Sekunden ist das Blatt eingeordnet und abgeschrieben
+    readyTimer = setTimeout(() => {
+      const src = NEW_SHEETS[state.shots % NEW_SHEETS.length]; state.shots++;
+      const s = { id: 'neu' + state.shots, subj: src.subj, title: src.title, date: 'Montag 12.10.', short: '12.10.', body: src.body };
+      state.sheets.unshift(s); updateCounts();
+      swapText($('#camSub'), 'Eingeordnet und abgeschrieben.'); swapText($('#camRowT'), s.title); swapText($('#camRowM'), `${s.subj}, abgeschrieben`);
+      const row = $('#camRow'); row.disabled = false; row.dataset.go = 'blatt'; row.dataset.p = s.id;
+    }, 3000);
+  });
+  $('#camAgain').addEventListener('click', resetCam);
+
+  /* ---------- Start ---------- */
+  renderToday(); renderHw(); renderKlausur(); renderWeek(); showQ(false); drawClock();
+  setHeader();
+  window.__go = (n, p) => go(n, { param: p }); window.__openToc = openToc;
+})();
+</script>
+</body>
+</html>

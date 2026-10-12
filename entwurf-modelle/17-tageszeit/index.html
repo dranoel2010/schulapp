@@ -1,0 +1,1196 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" id="tc" content="#F2F2EE">
+<meta name="color-scheme" content="light dark">
+<title>Schule nach Tageszeit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:ital,wght@0,400..900;1,400..700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..600,0..1,0&display=block" rel="stylesheet">
+<style>
+:root{
+  --ease-out:cubic-bezier(0.23,1,0.32,1);
+  --ease-io:cubic-bezier(0.77,0,0.175,1);
+  --ease-drawer:cubic-bezier(0.32,0.72,0,1);
+  --safe-top:max(env(safe-area-inset-top,0px),47px);
+  --safe-bottom:max(env(safe-area-inset-bottom,0px),34px);
+  --gutter:20px;
+}
+/* Drei Lichtstimmungen. Je Tageszeit genau ein Akzent. Farben wechseln hart, nie animiert. */
+#app[data-mode="frueh"]{
+  --bg:#E6EDF2; --surface:#F3F7FA; --surface-2:#DCE5EC;
+  --ink:#0F1F2C; --mute:#4D5F6E; --faint:#56666F; --line:rgba(15,31,44,.12);
+  --accent:#C44B32; --on-accent:#FFFFFF; --ring:transparent;
+  --shadow:rgba(0,0,0,.10);
+}
+#app[data-mode="nachmittag"]{
+  --bg:#F2F2EE; --surface:#FBFBF9; --surface-2:#E7E7E1;
+  --ink:#16171A; --mute:#55575C; --faint:#626468; --line:rgba(22,23,26,.10);
+  --accent:#FFC22E; --on-accent:#16171A; --ring:rgba(22,23,26,.25);
+  --shadow:rgba(0,0,0,.09);
+}
+#app[data-mode="abend"]{
+  --bg:#0E1322; --surface:#161C30; --surface-2:#1F2740;
+  --ink:#E8EBF4; --mute:#A3ABC2; --faint:#8A93AE; --line:rgba(232,235,244,.10);
+  --accent:#93B8FF; --on-accent:#0E1322; --ring:transparent;
+  --shadow:rgba(0,0,0,.28);
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;overscroll-behavior:none;height:100%}
+body{margin:0;height:100%;overscroll-behavior:none;background:#F2F2EE;
+  font-family:"Schibsted Grotesk",system-ui,sans-serif;font-size:16px;line-height:1.4;
+  -webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit;
+  touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+input{font:inherit;font-size:16px;color:var(--ink)}
+.ms{font-family:"Material Symbols Rounded";font-weight:400;font-style:normal;font-size:22px;line-height:1;
+  letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;
+  font-variation-settings:"FILL" 0,"wght" 400,"GRAD" 0,"opsz" 24;-webkit-font-smoothing:antialiased}
+.num{font-variant-numeric:tabular-nums}
+
+#app{position:relative;width:100%;max-width:430px;height:100dvh;margin:0 auto;overflow:hidden;color:var(--ink)}
+/* Hintergrund: eine Fläche; beim Wechsel geht die neue vom Punkt aus auf */
+.sky{position:absolute;inset:0;z-index:0;background:#F2F2EE}
+.sky i{position:absolute;inset:0;opacity:0}
+
+/* ---------- Bildschirme ---------- */
+.screen{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;
+  transition:transform 320ms var(--ease-drawer);will-change:transform}
+.screen.push{z-index:3;transform:translateX(100%);background:var(--bg)}
+.screen.push.open{transform:translateX(0);box-shadow:-1px 0 0 var(--line), -24px 0 48px -24px var(--shadow)}
+.screen.under{transform:translateX(-26%)}
+.scrim{position:absolute;inset:0;z-index:2;background:#05070c;opacity:0;pointer-events:none;
+  transition:opacity 320ms var(--ease-drawer)}
+.scrim.on{opacity:.18}
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+  padding:var(--safe-top) var(--gutter) calc(var(--safe-bottom) + 96px)}
+.scroll::-webkit-scrollbar{display:none}
+
+/* ---------- Kopf: Datum mit Tageszeit-Wahl ---------- */
+.whenrow{position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px;height:44px}
+.when{display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 6px 0 10px;margin-left:-10px;border-radius:12px;
+  font-size:15px;color:var(--mute);white-space:nowrap}
+.when:active{background:var(--surface-2)}
+.when .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 1px var(--ring);flex:none}
+.when .md{color:var(--ink);font-weight:560}
+.when.preview .md{color:var(--faint);font-weight:450}
+.when .ms{font-size:20px;color:var(--faint);transition:transform 200ms var(--ease-out)}
+.when[aria-expanded="true"] .ms{transform:rotate(180deg)}
+.now-pill{height:44px;padding:0 4px 0 12px;font-size:15px;font-weight:600;color:var(--ink);
+  opacity:0;transform:translateX(6px);pointer-events:none;
+  transition:opacity 180ms var(--ease-out), transform 180ms var(--ease-out)}
+.now-pill span{display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:16px;background:var(--surface-2)}
+.now-pill.on{opacity:1;transform:none;pointer-events:auto}
+.now-pill:active span{transform:scale(.96)}
+.menu{position:absolute;top:46px;left:-8px;z-index:5;width:250px;padding:6px;border-radius:14px;background:var(--surface);
+  box-shadow:0 0 0 1px var(--line),0 18px 40px -14px var(--shadow);transform-origin:18px 0;
+  opacity:0;transform:scale(.96) translateY(-4px);pointer-events:none;
+  transition:opacity 150ms ease-out, transform 180ms var(--ease-out)}
+.menu.on{opacity:1;transform:none;pointer-events:auto}
+.menu button{display:flex;align-items:center;gap:10px;width:100%;height:44px;padding:0 12px;border-radius:9px;font-size:16px;font-weight:500}
+.menu button:active{background:var(--surface-2)}
+.menu button .r{margin-left:auto;font-size:14px;color:var(--faint);font-weight:450}
+.menu button[aria-checked="true"]{background:var(--surface-2);font-weight:620}
+h1{margin:10px 0 0;font-size:32px;line-height:1.08;font-weight:680;letter-spacing:-.028em;text-wrap:balance}
+#h1{display:grid;min-height:70px}
+#h1 .swap{grid-area:1/1}
+
+/* ---------- Modus-Ansichten: alle in einer Zelle, damit alt und neu sich überblenden ---------- */
+.modes{display:grid;margin-top:18px}
+.mode{grid-area:1/1;display:none;min-width:0}
+.mode.on,.mode.leaving{display:block}
+.mode.leaving{pointer-events:none}
+.blk{margin-top:26px}
+.blk:first-child{margin-top:0}
+.blk-h{display:flex;align-items:baseline;justify-content:space-between;margin:0 0 4px;font-size:15px;font-weight:600;color:var(--mute)}
+.blk-h small{font-size:14px;font-weight:450;color:var(--faint)}
+
+/* Aufgabenzeilen. Spalten: Kreis mittig auf x=33, Text ab x=70. Wischfläche randlos. */
+.tasks{position:relative}
+.task{position:relative;margin:0 calc(-1 * var(--gutter));touch-action:pan-y;overflow:hidden}
+.task::after{content:"";position:absolute;left:70px;right:var(--gutter);bottom:0;height:1px;background:var(--line);z-index:1}
+.task-bg{position:absolute;inset:0;display:flex;align-items:center;padding-left:21px;background:var(--accent);color:var(--on-accent);opacity:0}
+.task-bg .ms{font-size:24px;font-variation-settings:"FILL" 0,"wght" 600,"GRAD" 0,"opsz" 24;transform:scale(.7);transition:transform 160ms var(--ease-out)}
+.task-bg.armed .ms{transform:scale(1)}
+.task-fg{position:relative;display:flex;align-items:center;gap:15px;min-height:68px;padding:10px var(--gutter);background:var(--bg)}
+.task-fg.snap{transition:transform 300ms var(--ease-out)}
+.check{position:relative;flex:none;width:44px;height:44px;margin-left:-9px;display:grid;place-items:center}
+.check::before{content:"";position:absolute;width:26px;height:26px;border-radius:50%;box-shadow:inset 0 0 0 1.75px var(--faint)}
+.check::after{content:"";position:absolute;width:26px;height:26px;border-radius:50%;background:var(--accent);box-shadow:inset 0 0 0 1px var(--ring);
+  transform:scale(.5);opacity:0;transition:transform 240ms var(--ease-out), opacity 160ms ease}
+.check .ms{position:relative;z-index:1;font-size:18px;color:var(--on-accent);font-variation-settings:"FILL" 0,"wght" 600,"GRAD" 0,"opsz" 20;
+  clip-path:inset(0 100% 0 0);transition:clip-path 200ms var(--ease-out) 60ms}
+.check:active::before{box-shadow:inset 0 0 0 2.5px var(--ink)}
+.task.done .check::after{transform:scale(1);opacity:1}
+.task.done .check::before{box-shadow:none}
+.task.done .check .ms{clip-path:inset(0 0 0 0)}
+.task-txt{flex:1;min-width:0;display:flex;flex-direction:column}
+.fach{font-size:14px;color:var(--mute);font-weight:500}
+.fach.none{color:var(--faint);font-weight:450}
+.was{position:relative;align-self:flex-start;font-size:18px;font-weight:550;letter-spacing:-.008em;transition:color 200ms ease}
+.was::after{content:"";position:absolute;left:0;right:0;top:55%;height:1.5px;background:currentColor;
+  transform:scaleX(0);transform-origin:left;transition:transform 240ms var(--ease-out) 40ms}
+.task.done .was{color:var(--faint)}
+.task.done .was::after{transform:scaleX(1)}
+.task.done .fach{color:var(--faint)}
+.task-due{flex:none;font-size:14px;color:var(--mute)}
+.tasks.compact .task-fg{min-height:56px}
+.tasks.compact .was{font-size:16px}
+
+/* Eintragen und Erledigt-Zeile in derselben Spalte */
+.addrow,.donestrip{display:flex;align-items:center;gap:15px;width:100%;min-height:56px;font-size:16px;text-align:left}
+.addrow{color:var(--mute);font-weight:500}
+.addrow .ms,.donestrip .ms.lead,.addform .addic{flex:none;width:44px;margin-left:-9px;text-align:center}
+.addrow:active,.donestrip:active{opacity:.6}
+.donestrip{min-height:52px;color:var(--faint);font-size:15px}
+.donestrip .grow{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.donestrip .ms{font-size:20px}
+.addform{display:none;border-bottom:1px solid var(--line);padding-bottom:12px}
+.addform.on{display:block}
+.addline{display:flex;align-items:center;gap:15px;min-height:56px}
+.addform .addic{color:var(--faint);font-size:22px}
+.addform input{flex:1;min-width:0;height:44px;border:0;background:transparent;outline:none}
+.addform input::placeholder{color:var(--faint)}
+.addopts{padding-left:50px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{height:44px;padding:0 14px;border-radius:12px;background:var(--surface-2);font-size:15px;font-weight:550;color:var(--mute);white-space:nowrap;flex:none;
+  transition:transform 120ms var(--ease-out)}
+.chip:active{transform:scale(.96)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.chiprow{flex-wrap:nowrap;overflow-x:auto;scroll-snap-type:x proximity;scrollbar-width:none;
+  margin-right:calc(-1 * var(--gutter));padding-right:var(--gutter);
+  -webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
+.chiprow::-webkit-scrollbar{display:none}
+.chiprow .chip{scroll-snap-align:start}
+.addfoot{display:flex;align-items:center;gap:6px;margin-top:8px}
+.addfoot .lbl{font-size:14px;color:var(--faint);margin-right:4px}
+.addfoot .grow{flex:1}
+.addfoot .btn{flex:none;height:44px;padding:0 16px}
+.addwhy{margin:2px 0 8px;font-size:14px;color:var(--faint)}
+
+/* Weiterzeilen: reine Textzeilen, rechts eine Menge statt Pfeil */
+.go{display:flex;align-items:center;gap:14px;width:100%;min-height:62px;padding:10px 0;text-align:left;border-bottom:1px solid var(--line);
+  transition:opacity 120ms ease}
+.go:active{opacity:.55}
+.go .t{flex:1;min-width:0;display:flex;flex-direction:column}
+.go .t b{font-size:17px;font-weight:600;letter-spacing:-.006em}
+.go .t span{font-size:14px;color:var(--mute)}
+.go .qty{flex:none;font-size:15px;color:var(--mute)}
+
+/* Abend: Lernblock flach auf dem Hintergrund */
+.lern-t{margin:0;font-size:28px;line-height:1.15;font-weight:650;letter-spacing:-.022em}
+.lern-s{margin:4px 0 0;font-size:16px;color:var(--mute)}
+.lern-s b{color:var(--ink);font-weight:620}
+.bar{position:relative;height:4px;border-radius:2px;background:var(--line);margin:16px 0 0;overflow:hidden}
+.bar i{position:absolute;inset:0;background:var(--accent);transform-origin:left;transform:scaleX(0);transition:transform 1s linear}
+.btn{height:52px;border-radius:14px;display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  font-size:16px;font-weight:620;transition:transform 140ms var(--ease-out)}
+.btn:active{transform:scale(.97)}
+.btn.pri{background:var(--accent);color:var(--on-accent)}
+.btn.sec{background:var(--surface-2);color:var(--ink)}
+.btn.wide{width:100%;margin-top:18px}
+.btn .ms{font-size:20px}
+.tlink{display:flex;align-items:center;justify-content:center;width:100%;height:44px;margin-top:4px;font-size:16px;font-weight:560;color:var(--mute)}
+.tlink:active{opacity:.55}
+
+/* Lernplan-Zeilen abends */
+.plan3{display:block;width:100%;padding:4px 0 8px;border-bottom:1px solid var(--line)}
+.plan3 .pr{display:flex;align-items:center;min-height:36px;font-size:15px;font-weight:520}
+.plan3 .wd{width:62px;flex:none;color:var(--mute);font-weight:450}
+.plan3:active{opacity:.55}
+
+/* Früh: Stunden kompakt */
+.lrow{display:flex;align-items:center;gap:12px;min-height:40px;font-size:15px;border-bottom:1px solid var(--line)}
+.lrow .tm{width:44px;flex:none;color:var(--mute)}
+.lrow .rm{color:var(--faint)}
+
+/* Stunden (Woche) */
+.lesson{display:grid;grid-template-columns:58px 1fr auto;align-items:center;gap:12px;min-height:64px;border-bottom:1px solid var(--line)}
+.lesson .tm{display:flex;flex-direction:column;font-size:15px;font-weight:600;line-height:1.2}
+.lesson .tm small{font-size:13px;font-weight:450;color:var(--faint)}
+.lesson .sj{font-size:18px;font-weight:580;letter-spacing:-.01em}
+.lesson .rm{font-size:14px;color:var(--mute)}
+.flag{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;background:var(--accent);color:var(--on-accent);font-size:13px;font-weight:620;vertical-align:2px}
+
+/* Lernplan (Klausur) */
+.plan{position:relative;margin-top:4px}
+.step{position:relative;display:grid;grid-template-columns:52px 1fr;gap:12px;padding:12px 0 16px}
+.step::before{content:"";position:absolute;left:25px;top:70px;bottom:-6px;width:1px;background:var(--line)}
+.step:last-child::before{display:none}
+.day{display:flex;flex-direction:column;align-items:center;width:52px;height:52px;justify-content:center;border-radius:14px;background:var(--surface-2);
+  font-size:13px;color:var(--mute);line-height:1.1}
+.day b{font-size:19px;color:var(--ink);font-weight:650}
+.step.today .day{background:var(--ink);color:var(--bg)}
+.step.today .day b{color:var(--bg)}
+.step .what b{display:block;font-size:17px;font-weight:600}
+.step .what span{font-size:15px;color:var(--mute)}
+.step .what .btn{margin-top:12px;height:46px;width:100%}
+.step.exam .day{box-shadow:inset 0 0 0 1.75px var(--ink);background:transparent}
+
+/* Noten als Textzeile */
+.gline{display:flex;align-items:center;gap:8px;width:100%;min-height:48px;font-size:17px;border-bottom:1px solid var(--line)}
+.gline .grow{flex:1}
+.gline b{font-weight:640}
+.gline .ms{font-size:20px;color:var(--faint);transition:transform 200ms var(--ease-out)}
+.gline[aria-expanded="true"] .ms{transform:rotate(180deg)}
+.grow-row{display:grid;grid-template-columns:44px 1fr auto;align-items:center;min-height:48px;padding:10px 0;font-size:15px;border-bottom:1px solid var(--line)}
+.grow-row b{font-size:17px;font-weight:640}
+.grow-row span:last-child{color:var(--faint)}
+
+/* Blätter */
+.thumb{position:relative;display:block;aspect-ratio:4/3;border-radius:6px;overflow:hidden;background:#ECEAE4;
+  background-image:repeating-linear-gradient(#ECEAE4 0 9px,#CDD1D8 9px 10px);background-position:0 var(--o,26px);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+.thumb::before{content:"";position:absolute;left:10%;top:9%;width:var(--w,60%);height:9%;max-height:7px;border-radius:2px;background:#3A3A3A;opacity:.75}
+.thumb::after{content:"";position:absolute;left:10%;top:30%;width:70%;height:46%;
+  background:linear-gradient(var(--pen,#45608C),var(--pen,#45608C)) 0 0/80% 2px no-repeat,linear-gradient(var(--pen,#45608C),var(--pen,#45608C)) 0 40%/95% 2px no-repeat,
+  linear-gradient(var(--pen,#45608C),var(--pen,#45608C)) 0 80%/55% 2px no-repeat;opacity:.5}
+.thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px}
+.thumbs button{display:flex;flex-direction:column;gap:6px;min-width:0;text-align:left}
+.thumbs button span.cap{font-size:13px;hyphens:auto;-webkit-hyphens:auto;line-height:1.25;color:var(--mute);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.thumbs button:active{opacity:.6}
+.go .thumb{width:52px;flex:none}
+.search{display:flex;align-items:center;gap:8px;height:44px;margin:16px 0 10px;padding:0 12px;border-radius:12px;background:var(--surface-2)}
+.search .ms{color:var(--faint);font-size:20px}
+.search input{flex:1;min-width:0;height:44px;border:0;background:transparent;outline:none}
+.search input::placeholder{color:var(--faint)}
+.search input::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none}
+.sheetrow{display:flex;align-items:center;gap:14px;width:100%;min-height:72px;padding:10px 0;border-bottom:1px solid var(--line);text-align:left}
+.sheetrow .thumb{width:64px;flex:none}
+.sheetrow .t{flex:1;min-width:0;display:flex;flex-direction:column}
+.sheetrow .t b{font-size:16px;font-weight:600}
+.sheetrow .t span{font-size:14px;color:var(--mute)}
+.sheetrow:active{opacity:.6}
+.sheetrow.new .t span{color:var(--ink)}
+.emptyhint{padding:18px 0;font-size:15px;color:var(--faint)}
+.bigthumb{margin-top:18px;border-radius:6px}
+.abs{margin-top:22px}
+.abs p{margin:0 0 8px;font-size:16px;line-height:1.5}
+.abs .wait{color:var(--faint)}
+
+/* Schwebender Knopf: Blatt aufnehmen */
+.fab{position:absolute;z-index:2;right:20px;bottom:calc(var(--safe-bottom) + 6px);height:56px;padding:0 20px 0 16px;border-radius:28px;
+  display:flex;align-items:center;gap:8px;background:var(--ink);color:var(--bg);font-size:16px;font-weight:620;
+  box-shadow:0 12px 30px -10px var(--shadow);transform-origin:right center;
+  transition:transform 240ms var(--ease-out), opacity 180ms ease}
+.fab:active{transform:scale(.96)}
+#app.toasting .fab{opacity:0;transform:translateY(10px) scale(.94);pointer-events:none}
+#app[data-mode="abend"] .fab,#app[data-mode="frueh"] .fab{padding:0;width:52px;height:52px;justify-content:center}
+#app[data-mode="abend"] .fab .lbl,#app[data-mode="frueh"] .fab .lbl{display:none}
+.fab .ms{font-size:22px}
+
+/* Push-Kopf */
+.nav{display:flex;align-items:center;justify-content:space-between;height:48px;margin:0 -8px;padding-right:8px}
+.back{display:flex;align-items:center;gap:0;height:44px;padding:0 10px 0 2px;border-radius:12px;font-size:16px;font-weight:550;color:var(--mute)}
+.back .ms{font-size:28px}
+.back:active{opacity:.55}
+.ph1{margin:6px 0 4px;font-size:32px;line-height:1.08;font-weight:680;letter-spacing:-.028em}
+.psub{margin:0;font-size:16px;color:var(--mute)}
+
+/* Woche */
+.days{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:18px 0 14px}
+.days button{height:62px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  font-size:14px;color:var(--mute);transition:transform 120ms var(--ease-out)}
+.days button b{font-size:19px;color:var(--ink);font-weight:640}
+.days button:active{transform:scale(.96)}
+.days button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+.days button[aria-selected="true"] b{color:var(--bg)}
+.dayhint{font-size:15px;color:var(--mute);margin:0 0 4px;min-height:22px}
+.daylist{will-change:transform}
+
+/* Abfrage: Karte füllt den Platz, Knöpfe unten am Daumen */
+#s-abfrage .scroll{display:flex;flex-direction:column;overflow:hidden;padding-bottom:calc(var(--safe-bottom) + 8px)}
+.qcount{font-size:15px;color:var(--mute)}
+.qstage{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;margin-top:16px}
+.qslide{flex:1;min-height:0;display:flex}
+.qcard{position:relative;flex:1;min-height:0;padding:22px 22px 18px;border-radius:24px;background:var(--surface);display:flex;flex-direction:column;
+  box-shadow:0 1px 0 var(--line) inset, 0 22px 50px -30px var(--shadow);text-align:left}
+.qcard small{font-size:14px;color:var(--mute)}
+.qcard p{margin:auto 0;font-size:26px;line-height:1.25;font-weight:600;letter-spacing:-.02em;text-wrap:balance}
+.qcard .tap{margin-top:auto;font-size:14px;color:var(--faint)}
+.qcard.ans small{color:var(--ink)}
+.qcard.ans p{font-size:34px;font-weight:700;letter-spacing:-.03em}
+.qcard.ans{box-shadow:inset 0 0 0 2px var(--accent), 0 22px 50px -30px var(--shadow)}
+.qnav{display:grid;flex:none;position:sticky;bottom:0;margin-top:14px}
+.qnav > *{grid-area:1/1}
+.qrow{display:flex;gap:10px}
+.qrow .btn{flex:1}
+.qnav .btn.pri.solo{width:100%}
+.qdone{flex:1;display:flex;flex-direction:column;justify-content:flex-start;padding-top:28px}
+.qdone h2{margin:0;font-size:28px;line-height:1.15;font-weight:650;letter-spacing:-.022em}
+.qdone p{margin:8px 0 0;font-size:17px;color:var(--mute)}
+.qdone ul{margin:22px 0 0;padding:0;list-style:none}
+.qdone li{padding:12px 0;border-bottom:1px solid var(--line);font-size:16px}
+.qdone li:first-child{border-top:1px solid var(--line)}
+
+/* Kamera-Blatt */
+.sheet{position:absolute;inset:0;z-index:6;pointer-events:none}
+.sheet .sc{position:absolute;inset:0;background:#000;opacity:0;transition:opacity 320ms var(--ease-drawer)}
+.sheet.open{pointer-events:auto}
+.sheet.open .sc{opacity:.4}
+.cam{position:absolute;left:0;right:0;bottom:0;top:calc(var(--safe-top) - 12px);border-radius:28px 28px 0 0;background:#0C0D0F;color:#EDEDED;
+  transform:translateY(100%);transition:transform 340ms var(--ease-drawer);display:flex;flex-direction:column;overflow:hidden}
+.sheet.open .cam{transform:translateY(0)}
+.grab{height:30px;display:grid;place-items:center;touch-action:none;flex:none}
+.grab::before{content:"";width:40px;height:5px;border-radius:3px;background:rgba(255,255,255,.28)}
+.camtop{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 10px 6px;flex:none}
+.camtop .x{justify-self:start;height:44px;padding:0 8px;font-size:16px;color:#CFCFD2;font-weight:500}
+.camtop span{font-size:15px;color:#B4B4BA;font-weight:550}
+.camtop .fl{justify-self:end;width:44px;height:44px;display:grid;place-items:center;color:#CFCFD2;border-radius:22px}
+.vf{position:relative;flex:1;margin:0 16px;padding:16px;border-radius:20px;background:#1A1B1E;overflow:hidden}
+.vf::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 80% at 50% 40%, transparent 55%, rgba(0,0,0,.45));pointer-events:none}
+.paper{position:absolute;left:50%;top:48%;width:224px;height:300px;margin:-150px 0 0 -112px;background:#ECEAE4;border-radius:3px;
+  transform:rotate(-4deg);box-shadow:0 30px 50px -20px rgba(0,0,0,.6);
+  background-image:repeating-linear-gradient(#ECEAE4 0 21px, #C9CED6 21px 22px);background-position:0 46px;background-size:100% 100%;
+  transition:transform 320ms var(--ease-out), opacity 240ms ease}
+.paper::before{content:"Quadratische Funktionen";position:absolute;left:18px;top:16px;font-size:13px;font-weight:650;color:#2B2B2B;letter-spacing:-.01em}
+.paper::after{content:"";position:absolute;left:18px;top:52px;width:150px;height:110px;
+  background:linear-gradient(#45608C,#45608C) 0 0/120px 2px no-repeat, linear-gradient(#45608C,#45608C) 0 22px/160px 2px no-repeat,
+  linear-gradient(#45608C,#45608C) 0 44px/90px 2px no-repeat, linear-gradient(#45608C,#45608C) 0 88px/140px 2px no-repeat;opacity:.55}
+.corners{position:absolute;left:50%;top:48%;width:240px;height:316px;margin:-158px 0 0 -120px;transform:rotate(-4deg) scale(1.12);opacity:0;
+  transition:transform 300ms var(--ease-out), opacity 200ms ease}
+.corners.lock{transform:rotate(-4deg) scale(1);opacity:1}
+.corners i{position:absolute;width:26px;height:26px;border:3px solid #FFC22E}
+.corners i:nth-child(1){left:0;top:0;border-right:0;border-bottom:0;border-radius:6px 0 0 0}
+.corners i:nth-child(2){right:0;top:0;border-left:0;border-bottom:0;border-radius:0 6px 0 0}
+.corners i:nth-child(3){left:0;bottom:0;border-right:0;border-top:0;border-radius:0 0 0 6px}
+.corners i:nth-child(4){right:0;bottom:0;border-left:0;border-top:0;border-radius:0 0 6px 0}
+.vfhint{position:absolute;left:16px;right:16px;bottom:16px;text-align:center;font-size:15px;color:#D8D8DC;transition:opacity 200ms ease}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.camfoot{flex:none;height:170px;position:relative}
+.shutter{position:absolute;left:50%;top:22px;width:76px;height:76px;margin-left:-38px;border-radius:50%;box-shadow:inset 0 0 0 4px #EDEDED;display:grid;place-items:center;
+  transition:opacity 200ms ease, transform 200ms var(--ease-out)}
+.shutter::before{content:"";width:60px;height:60px;border-radius:50%;background:#EDEDED;transition:transform 120ms var(--ease-out)}
+.shutter:active::before{transform:scale(.9)}
+.file{position:absolute;left:0;right:0;bottom:0;padding:18px 16px calc(var(--safe-bottom) + 4px);background:#0C0D0F;border-radius:22px 22px 0 0;
+  transform:translateY(100%);pointer-events:none;transition:transform 320ms var(--ease-drawer)}
+.file.on{transform:none;pointer-events:auto}
+.file p{margin:0;font-size:16px;color:#EDEDED;font-weight:560}
+.file .why{margin:2px 0 12px;font-size:14px;color:#9A9AA0;font-weight:450}
+.file .chiprow{margin-right:-16px;padding-right:16px}
+.file .chip{background:#232428;color:#D5D5DA}
+.file .chip[aria-pressed="true"]{background:#FFC22E;color:#16171A}
+.file .btn{margin-top:14px;width:100%;background:#EDEDED;color:#111}
+.vf.shot .paper{transform:translateY(-70px) rotate(0) scale(.82)}
+
+/* Hinweis unten */
+.toast{position:absolute;z-index:8;left:16px;right:16px;bottom:calc(var(--safe-bottom) + 8px);min-height:56px;padding:0 8px 0 18px;border-radius:16px;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--ink);color:var(--bg);font-size:15px;font-weight:500;
+  transform:translateY(calc(100% + 60px));transition:transform 300ms var(--ease-out);
+  box-shadow:0 14px 34px -14px var(--shadow)}
+.toast.on{transform:translateY(0)}
+.toast button{height:44px;padding:0 12px;border-radius:10px;font-weight:650;color:var(--accent)}
+#app[data-mode="nachmittag"] .toast button{color:#FFC22E}
+#app[data-mode="frueh"] .toast button{color:#FF9A84}
+#app[data-mode="abend"] .toast button{color:#2C56A8}
+
+@media (hover:hover) and (pointer:fine){
+  .go:hover,.sheetrow:hover{opacity:.8}
+}
+@media (prefers-reduced-motion:reduce){
+  .screen,.screen.push,.cam,.paper,.corners,.toast,.fab,.task-fg.snap,.menu,.now-pill{transition-property:opacity!important}
+  .screen.push{transform:none;opacity:0;pointer-events:none}
+  .screen.push.open{opacity:1;pointer-events:auto}
+  .screen.under{transform:none}
+  .cam{transform:none;opacity:0;transition:opacity 200ms ease!important}
+  .sheet.open .cam{opacity:1}
+  .menu,.menu.on{transform:none}
+}
+</style>
+</head>
+<body>
+<div id="app" data-mode="nachmittag">
+  <div class="sky" id="sky" aria-hidden="true"><i id="skyNew"></i></div>
+
+  <!-- ================= HEUTE ================= -->
+  <main class="screen" id="home">
+    <div class="scroll" id="homeScroll">
+      <header>
+        <div class="whenrow">
+          <button class="when" id="when" aria-haspopup="menu" aria-expanded="false" aria-controls="menu">
+            <span id="dlDate">Montag, 12. Oktober</span><span aria-hidden="true">·</span><i class="dot" id="sunDot"></i><span class="md" id="dlMode">Nachmittag</span><span class="ms">expand_more</span>
+          </button>
+          <button class="now-pill" id="nowPill"><span>Jetzt</span></button>
+          <div class="menu" id="menu" role="menu" aria-label="Tageszeit">
+            <button role="menuitemradio" data-m="nachmittag" aria-checked="true">Nachmittag<span class="r">jetzt</span></button>
+            <button role="menuitemradio" data-m="abend" aria-checked="false">Abend<span class="r">ab 18 Uhr</span></button>
+            <button role="menuitemradio" data-m="frueh" aria-checked="false">Morgen früh<span class="r">Dienstag</span></button>
+          </div>
+        </div>
+        <h1 id="h1"><span class="swap">Zwei Aufgaben für Dienstag</span></h1>
+      </header>
+
+      <div class="modes">
+        <!-- Nachmittag: erledigen -->
+        <section class="mode on" data-for="nachmittag">
+          <div class="blk">
+            <div class="tasks" data-list="open"></div>
+            <button class="addrow" data-add><span class="ms">add</span>Aufgabe eintragen</button>
+            <div class="addform" data-form></div>
+            <button class="donestrip" data-donestrip data-open="hausaufgaben"></button>
+          </div>
+          <div class="blk">
+            <h2 class="blk-h">Danach</h2>
+            <button class="go" data-open="klausur">
+              <span class="t"><b>Lernblock Scheitelpunktform</b><span>Mathe am Freitag</span></span>
+              <span class="qty">25 min</span>
+            </button>
+            <button class="go" data-open="woche" data-day="1">
+              <span class="t"><b>Dienstag nachsehen</b><span>Mathematik, Englisch, Deutsch</span></span>
+              <span class="qty">3 Stunden</span>
+            </button>
+            <button class="go" data-open="blatt" id="lastSheet"></button>
+          </div>
+        </section>
+
+        <!-- Abend: lernen -->
+        <section class="mode" data-for="abend">
+          <div class="blk" id="lern">
+            <h3 class="lern-t">Scheitelpunktform</h3>
+            <p class="lern-s" id="lernSub">25 Minuten · Mathe am Freitag</p>
+            <div class="bar" id="lernBarWrap" hidden><i id="lernBar"></i></div>
+            <button class="btn pri wide" data-lern></button>
+            <button class="tlink" data-open="abfrage">Abfragen</button>
+          </div>
+          <div class="blk">
+            <h2 class="blk-h">Lernplan bis Freitag</h2>
+            <button class="plan3" data-open="klausur">
+              <span class="pr"><span class="wd">Mi <span class="num">14</span>.</span>Wiederholung</span>
+              <span class="pr"><span class="wd">Do <span class="num">15</span>.</span>Probeklausur</span>
+              <span class="pr"><span class="wd">Fr <span class="num">16</span>.</span>Klausur</span>
+            </button>
+          </div>
+          <div class="blk">
+            <h2 class="blk-h">Für Dienstag <small data-opencount></small></h2>
+            <div class="tasks compact" data-list="di"></div>
+          </div>
+        </section>
+
+        <!-- Früh (der nächste Morgen): was heute abzugeben ist -->
+        <section class="mode" data-for="frueh">
+          <div class="blk">
+            <h2 class="blk-h">Heute abgeben <small data-opencount></small></h2>
+            <div class="tasks compact" data-list="di"></div>
+          </div>
+          <div class="blk">
+            <h2 class="blk-h">Stunden</h2>
+            <div id="fruehLessons"></div>
+          </div>
+          <div class="blk">
+            <button class="go" data-open="klausur">
+              <span class="t"><b>Klausur Mathe</b><span>Freitag, 1. und 2. Stunde</span></span>
+              <span class="qty">in 3 Tagen</span>
+            </button>
+            <button class="go" data-open="woche" data-day="1">
+              <span class="t"><b>Ganze Woche</b><span>Stundenplan Montag bis Freitag</span></span>
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
+    <button class="fab" id="fab" aria-label="Blatt aufnehmen"><span class="ms">photo_camera</span><span class="lbl">Blatt aufnehmen</span></button>
+  </main>
+
+  <div class="scrim" id="scrim"></div>
+
+  <!-- ================= KLAUSUR ================= -->
+  <section class="screen push" id="s-klausur" aria-label="Klausur">
+    <div class="scroll">
+      <div class="nav"><button class="back" data-back><span class="ms">chevron_left</span>Heute</button></div>
+      <h1 class="ph1">Mathematik</h1>
+      <p class="psub">Freitag, 16. Oktober, in 4 Tagen<br>Quadratische Funktionen</p>
+      <div class="blk">
+        <h2 class="blk-h">Lernplan</h2>
+        <div class="plan">
+          <div class="step today"><div class="day">Mo<b>12</b></div>
+            <div class="what"><b>Lernblock Scheitelpunktform</b><span id="kLernSub">25 Minuten, heute</span>
+              <button class="btn pri" data-lern></button></div></div>
+          <div class="step"><div class="day">Mi<b>14</b></div><div class="what"><b>Wiederholung</b><span>Karten zu allen Themen</span></div></div>
+          <div class="step"><div class="day">Do<b>15</b></div><div class="what"><b>Probeklausur</b><span>Unter Zeit, ohne Hilfen</span></div></div>
+          <div class="step exam"><div class="day">Fr<b>16</b></div><div class="what"><b>Klausur</b><span>1. und 2. Stunde</span></div></div>
+        </div>
+      </div>
+      <div class="blk">
+        <h2 class="blk-h">Blätter zum Thema <small id="kThemaCount"></small></h2>
+        <div class="thumbs" id="kThumbs"></div>
+        <button class="go" data-open="blaetter" data-fach="Mathematik" style="margin-top:6px">
+          <span class="t"><b>Alle Mathe-Blätter</b></span><span class="qty" id="kAllCount"></span>
+        </button>
+      </div>
+      <div class="blk">
+        <button class="gline" id="gline" aria-expanded="false" aria-controls="gdetail">
+          <span class="grow">Bisher: <b>2 · 3+ · 2−</b></span><span class="ms">expand_more</span>
+        </button>
+        <div id="gdetail" hidden>
+          <div class="grow-row"><b>2</b><span>Klassenarbeit, Lineare Funktionen</span><span>8. Sep.</span></div>
+          <div class="grow-row"><b>3+</b><span>Test, Steigung</span><span>24. Sep.</span></div>
+          <div class="grow-row"><b>2−</b><span>Mündlich</span><span>2. Okt.</span></div>
+        </div>
+      </div>
+      <div class="blk">
+        <button class="go" data-open="abfrage">
+          <span class="t"><b>Karten abfragen</b><span>Scheitelpunktform</span></span>
+          <span class="qty">3 Karten</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= HAUSAUFGABEN ================= -->
+  <section class="screen push" id="s-hausaufgaben" aria-label="Hausaufgaben">
+    <div class="scroll">
+      <div class="nav"><button class="back" data-back><span class="ms">chevron_left</span>Heute</button></div>
+      <h1 class="ph1">Hausaufgaben</h1>
+      <div class="blk">
+        <h2 class="blk-h">Offen</h2>
+        <div class="tasks" data-list="open"></div>
+        <button class="addrow" data-add><span class="ms">add</span>Aufgabe eintragen</button>
+        <div class="addform" data-form></div>
+      </div>
+      <div class="blk">
+        <h2 class="blk-h">Erledigt</h2>
+        <div class="tasks" data-list="done"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= WOCHE ================= -->
+  <section class="screen push" id="s-woche" aria-label="Woche">
+    <div class="scroll">
+      <div class="nav"><button class="back" data-back><span class="ms">chevron_left</span>Heute</button></div>
+      <h1 class="ph1">Stundenplan</h1>
+      <div class="days" role="tablist" aria-label="Tag">
+        <button role="tab" data-d="0">Mo<b>12</b></button>
+        <button role="tab" data-d="1">Di<b>13</b></button>
+        <button role="tab" data-d="2">Mi<b>14</b></button>
+        <button role="tab" data-d="3">Do<b>15</b></button>
+        <button role="tab" data-d="4">Fr<b>16</b></button>
+      </div>
+      <p class="dayhint" id="dayhint"></p>
+      <div class="daylist" id="daylist"></div>
+    </div>
+  </section>
+
+  <!-- ================= BLÄTTER ================= -->
+  <section class="screen push" id="s-blaetter" aria-label="Blätter">
+    <div class="scroll">
+      <div class="nav"><button class="back" data-back><span class="ms">chevron_left</span>Heute</button></div>
+      <h1 class="ph1">Blätter</h1>
+      <label class="search"><span class="ms">search</span><input id="bSearch" type="search" enterkeyhint="search" placeholder="Suchen, auch in der Abschrift" aria-label="Blätter suchen"></label>
+      <div class="chips chiprow" id="bChips"></div>
+      <div id="bList" style="margin-top:8px"></div>
+    </div>
+  </section>
+
+  <!-- ================= EIN BLATT ================= -->
+  <section class="screen push" id="s-blatt" aria-label="Blatt">
+    <div class="scroll">
+      <div class="nav"><button class="back" data-back><span class="ms">chevron_left</span>Heute</button></div>
+      <h1 class="ph1" id="bdT"></h1>
+      <p class="psub" id="bdS"></p>
+      <span class="thumb bigthumb" id="bdImg"></span>
+      <div class="abs"><h2 class="blk-h">Abschrift</h2><div id="bdAbs"></div></div>
+    </div>
+  </section>
+
+  <!-- ================= ABFRAGE ================= -->
+  <section class="screen push" id="s-abfrage" aria-label="Abfrage">
+    <div class="scroll">
+      <div class="nav"><button class="back" data-back><span class="ms">chevron_left</span>Zurück</button><span class="qcount" id="qcount"></span></div>
+      <h1 class="ph1">Scheitelpunktform</h1>
+      <div class="qstage" id="qstage">
+        <div class="qslide" id="qslide">
+          <button class="qcard" id="qcard" aria-label="Karte umdrehen"><small id="qlabel">Frage</small><p id="qtext"></p><span class="tap" id="qtap">Antippen zum Umdrehen</span></button>
+        </div>
+      </div>
+      <div class="qdone" id="qdone" hidden></div>
+      <div class="qnav">
+        <button class="btn pri solo" id="qshow">Antwort zeigen</button>
+        <div class="qrow" id="qrate" hidden>
+          <button class="btn sec" data-rate="0">Noch nicht</button>
+          <button class="btn pri" data-rate="1">Wusste ich</button>
+        </div>
+        <button class="btn pri solo" id="qfin" hidden data-back>Fertig</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= KAMERA ================= -->
+  <div class="sheet" id="sheet" aria-hidden="true">
+    <div class="sc" data-close></div>
+    <div class="cam" id="cam" role="dialog" aria-label="Blatt aufnehmen">
+      <div class="grab" id="grab"></div>
+      <div class="camtop"><button class="x" data-close>Abbrechen</button><span>Blatt aufnehmen</span><button class="fl" aria-label="Blitz aus"><span class="ms">flash_off</span></button></div>
+      <div class="vf" id="vf">
+        <div class="paper"></div>
+        <div class="corners" id="corners"><i></i><i></i><i></i><i></i></div>
+        <div class="vfhint" id="vfhint">Blatt in den Rahmen halten</div>
+        <div class="flash" id="flash"></div>
+      </div>
+      <div class="camfoot">
+        <button class="shutter" id="shutter" aria-label="Auslösen"></button>
+      </div>
+      <div class="file" id="file">
+        <p>In welches Fach?</p>
+        <p class="why">Mathematik, weil oben „Quadratische Funktionen“ steht.</p>
+        <div class="chips chiprow" id="camChips"></div>
+        <button class="btn" id="fileBtn">Ablegen</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status"><span id="toastTxt"></span><button id="toastBtn"></button></div>
+</div>
+
+<script>
+(() => {
+const app = document.getElementById('app');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const EASE = 'cubic-bezier(0.23,1,0.32,1)';
+
+/* ---------- Daten ---------- */
+const state = {
+  live: 'nachmittag',
+  mode: 'nachmittag',
+  tasks: [
+    {id:1, fach:'Mathematik', was:'S. 84, Nr. 3–5', due:'Di', done:false},
+    {id:2, fach:'Deutsch', was:'Gedichtanalyse beenden', due:'Di', done:false},
+    {id:3, fach:'Englisch', was:'Vokabeln Unit 3', due:'Di', done:true},
+  ],
+  lern: {status:'offen', start:0, total:25*60},
+};
+const WEEK = [
+  {l:[['08:00','09:30','Deutsch','R. 104'],['09:50','11:20','Mathematik','R. 208'],['11:40','13:10','Biologie','Bio 1']]},
+  {l:[['08:00','09:30','Mathematik','R. 208'],['09:50','11:20','Englisch','R. 112'],['11:40','13:10','Deutsch','R. 104']]},
+  {hint:'Lernplan: Wiederholung Mathe', l:[['08:00','09:30','Biologie','Bio 1'],['09:50','11:20','Geschichte','R. 015'],['11:40','13:10','Sport','Halle 2']]},
+  {hint:'Lernplan: Probeklausur Mathe', l:[['08:00','09:30','Englisch','R. 112'],['09:50','11:20','Mathematik','R. 208'],['11:40','13:10','Physik','Ph 2']]},
+  {hint:'Klausur Mathe, 1. und 2. Stunde', l:[['08:00','09:30','Mathematik','R. 208',true],['09:50','11:20','Deutsch','R. 104'],['11:40','13:10','Kunst','R. 301']]},
+];
+const DUE_DAY = {Di:1, Mi:2};
+const SHORT = {Mathematik:'Mathe'};
+/* Fächer für die Kamera: heute gehabt zuerst, dann der Rest der Woche */
+const SUBJECTS = (() => { const s=[]; [0,1,2,3,4].forEach(d => WEEK[d].l.forEach(x => { if(!s.includes(x[2])) s.push(x[2]); })); return s; })();
+const SHEETS = [
+  {id:'s1', t:'Scheitelpunktform, Übungen', fach:'Mathematik', thema:'Quadratische Funktionen', d:'Do, 8. Okt.', w:'72%', o:'28px',
+    abs:['Aufgabe 1: Bestimme den Scheitelpunkt.','a) f(x) = (x − 2)² + 3   b) f(x) = −(x + 1)² − 4','Aufgabe 2: Lies a, d und e ab und skizziere den Graphen.']},
+  {id:'s2', t:'Normalparabel verschieben', fach:'Mathematik', thema:'Quadratische Funktionen', d:'Mo, 5. Okt.', w:'58%', o:'22px',
+    abs:['Verschiebt man die Normalparabel um d nach rechts und um e nach oben, gilt f(x) = (x − d)² + e.','Der Scheitelpunkt ist S(d | e).']},
+  {id:'s3', t:'Merkblatt pq-Formel', fach:'Mathematik', thema:'Quadratische Funktionen', d:'Mi, 30. Sep.', w:'46%', o:'31px',
+    abs:['x² + px + q = 0','x = −p/2 ± √((p/2)² − q)','Ist der Wert unter der Wurzel negativ, gibt es keine Lösung.']},
+  {id:'s4', t:'Klassenarbeit Lineare Funktionen', fach:'Mathematik', thema:'Lineare Funktionen', d:'Di, 8. Sep.', w:'80%', o:'25px', pen:'#B0413E',
+    abs:['Note: 2','Aufgabe 3b: Steigung falsch abgelesen, m = 1/2.']},
+  {id:'s5', t:'Gedichtanalyse, Leitfragen', fach:'Deutsch', thema:'Lyrik', d:'Fr, 9. Okt.', w:'64%', o:'27px',
+    abs:['Wer spricht? Wie ist das Gedicht aufgebaut?','Welche sprachlichen Bilder fallen auf, und was bewirken sie?']},
+  {id:'s6', t:'Unit 3 Vocabulary', fach:'Englisch', thema:'Unit 3', d:'Di, 6. Okt.', w:'50%', o:'24px',
+    abs:['to attend: teilnehmen, besuchen','to apply for: sich bewerben um','reliable: zuverlässig']},
+  {id:'s7', t:'Aufbau der Pflanzenzelle', fach:'Biologie', thema:'Zelle', d:'Mo, 5. Okt.', w:'66%', o:'30px',
+    abs:['Zellwand, Zellmembran, Zellkern, Chloroplasten, Vakuole.']},
+];
+const ORDER = {nachmittag:0, abend:1, frueh:2};
+const THEME = {frueh:'#E6EDF2', nachmittag:'#F2F2EE', abend:'#0E1322'};
+const MODE_NAME = {nachmittag:'Nachmittag', abend:'Abend', frueh:'früh'};
+const WORDS = ['Keine','Eine','Zwei','Drei','Vier','Fünf'];
+const words = n => (WORDS[n]||String(n));
+
+/* ---------- Überschrift und Datumszeile ---------- */
+function openDi(){ return state.tasks.filter(t => t.due==='Di' && !t.done); }
+function lernLeft(){ const L=state.lern; return L.status==='laeuft' ? Math.max(0, L.total - Math.floor((Date.now()-L.start)/1000)) : L.total; }
+function headline(m){
+  const open = openDi().length;
+  if (m==='nachmittag') return open===0 ? 'Für Dienstag ist alles erledigt' : open===1 ? 'Noch eine Aufgabe für Dienstag' : `${words(open)} Aufgaben für Dienstag`;
+  if (m==='abend'){
+    if (state.lern.status==='laeuft'){ const min = Math.max(1, Math.ceil(lernLeft()/60)); return `Lernblock läuft, noch ${min} ${min===1?'Minute':'Minuten'}`; }
+    return state.lern.status==='fertig' ? 'Lernblock für heute erledigt' : 'Heute noch ein Lernblock';
+  }
+  return open===0 ? 'Heute ist nichts mehr abzugeben' : open===1 ? 'Heute noch eine Abgabe' : `Heute ${words(open).toLowerCase()} Abgaben`;
+}
+/* Jede Ansicht zeigt den Tag, für den sie gilt: „früh“ ist der nächste Morgen. */
+function renderWhen(){
+  const m = state.mode, live = m===state.live;
+  $('#dlDate').textContent = m==='frueh' ? 'Dienstag, 13. Oktober' : 'Montag, 12. Oktober';
+  $('#dlMode').textContent = live ? MODE_NAME[m] : (m==='abend' ? 'abends' : 'morgens');
+  $('#when').classList.toggle('preview', !live);
+  $('#nowPill').classList.toggle('on', !live);
+  $$('#menu button').forEach(b => b.setAttribute('aria-checked', b.dataset.m===m));
+}
+function setHeadline(dir){
+  const h = $('#h1'), text = headline(state.mode);
+  const cur = $$('.swap', h).filter(e => !e.classList.contains('out')).pop();
+  if (cur && cur.textContent===text) return;
+  if (!dir || reduce || !cur){ h.innerHTML = `<span class="swap">${text}</span>`; return; }
+  $$('.out', h).forEach(e => e.remove());
+  cur.classList.add('out');
+  cur.animate([{opacity:1},{opacity:0}],{duration:120, easing:'ease-out', fill:'forwards'}).onfinish = () => cur.remove();
+  const n = document.createElement('span'); n.className='swap'; n.textContent=text; h.appendChild(n);
+  n.animate([{opacity:0, transform:`translateX(${dir*24}px)`},{opacity:1, transform:'none'}],{duration:260, easing:EASE});
+}
+
+/* ---------- Aufgaben ---------- */
+function taskHTML(t){
+  const fach = t.fach ? `<span class="fach">${t.fach}</span>` : '<span class="fach none">Ohne Fach</span>';
+  return `<div class="task${t.done?' done':''}" data-id="${t.id}">
+    <div class="task-bg"><span class="ms">check</span></div>
+    <div class="task-fg">
+      <button class="check" aria-label="${t.fach||'Aufgabe'} ${t.done?'wieder öffnen':'abhaken'}"><span class="ms">check</span></button>
+      <div class="task-txt">${fach}<span class="was">${t.was}</span></div>
+      ${t.due!=='Di' ? `<span class="task-due">${t.due}</span>` : ''}
+    </div></div>`;
+}
+function renderTasks(){
+  const open = state.tasks.filter(t => !t.done);
+  const done = state.tasks.filter(t => t.done);
+  $$('[data-list="open"]').forEach(el => el.innerHTML = open.map(taskHTML).join(''));
+  $$('[data-list="done"]').forEach(el => el.innerHTML = done.map(taskHTML).join('') || '<p class="emptyhint">Noch nichts abgehakt.</p>');
+  $$('[data-list="di"]').forEach(el => el.innerHTML = state.tasks.filter(t=>t.due==='Di').map(taskHTML).join(''));
+  $$('[data-donestrip]').forEach(el => {
+    const txt = done.length===0 ? 'Alle Hausaufgaben' : done.length===1 ? `${done[0].fach||'Ohne Fach'}, ${done[0].was}, erledigt` : `${done.length} erledigt`;
+    el.innerHTML = `<span class="ms lead">done_all</span><span class="grow">${txt}</span>`;
+  });
+  const oc = openDi().length;
+  $$('[data-opencount]').forEach(el => el.textContent = oc ? `${oc} offen` : 'alles erledigt');
+  renderWeekHint();
+  bindRows();
+}
+
+/* FLIP: Zeilen gleiten an ihren neuen Platz */
+function flip(mutate){
+  const before = new Map();
+  $$('.task').forEach(el => { if (el.offsetParent) before.set(el.dataset.id + el.parentElement.dataset.list, el.getBoundingClientRect().top); });
+  mutate();
+  if (reduce) return;
+  $$('.task').forEach(el => {
+    if (!el.offsetParent) return;
+    const k = el.dataset.id + el.parentElement.dataset.list;
+    const top = el.getBoundingClientRect().top;
+    if (before.has(k)) {
+      const dy = before.get(k) - top;
+      if (Math.abs(dy) > 1) el.animate([{transform:`translateY(${dy}px)`},{transform:'none'}], {duration:300, easing:'cubic-bezier(0.77,0,0.175,1)'});
+    } else {
+      el.animate([{opacity:0, transform:'translateY(-6px)'},{opacity:1, transform:'none'}], {duration:240, easing:EASE});
+    }
+  });
+}
+
+let settleTimer = null;
+function toggleTask(id){
+  const t = state.tasks.find(x => x.id===id);
+  t.done = !t.done;
+  $$(`.task[data-id="${id}"]`).forEach(el => el.classList.toggle('done', t.done));
+  if (navigator.vibrate) navigator.vibrate(t.done ? 8 : 4);
+  setHeadline(0);
+  clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => flip(renderTasks), t.done ? 650 : 250);
+  if (t.done) toast(`${t.fach||'Aufgabe'} erledigt`, 'Rückgängig', () => { t.done=false; clearTimeout(settleTimer); flip(renderTasks); setHeadline(0); });
+}
+
+/* Wischen nach rechts hakt ab. Die Zeile folgt dem Finger. */
+function bindRows(){
+  $$('.task').forEach(row => {
+    const fg = $('.task-fg', row), bg = $('.task-bg', row), id = +row.dataset.id;
+    $('.check', row).onclick = (e) => { e.stopPropagation(); toggleTask(id); };
+    let sx=0, sy=0, dx=0, drag=false, decided=false, pid=null, hist=[];
+    row.onpointerdown = (e) => {
+      if (e.target.closest('.check')) return;
+      sx=e.clientX; sy=e.clientY; dx=0; drag=false; decided=false; pid=e.pointerId; hist=[{x:e.clientX,t:e.timeStamp}];
+      fg.classList.remove('snap');
+    };
+    row.onpointermove = (e) => {
+      if (pid!==e.pointerId) return;
+      const mx=e.clientX-sx, my=e.clientY-sy;
+      if (!decided){
+        if (Math.abs(mx)<10 && Math.abs(my)<10) return;
+        decided=true; drag = Math.abs(mx) > Math.abs(my) && mx>0;
+        if (drag) row.setPointerCapture(pid); else { pid=null; return; }
+      }
+      if (!drag) return;
+      const max=110; dx = mx<=max ? Math.max(0,mx) : max + (mx-max)*0.25;
+      fg.style.transform=`translateX(${dx}px)`;
+      bg.style.opacity = Math.min(1, dx/60);
+      bg.classList.toggle('armed', dx>84);
+      hist.push({x:e.clientX,t:e.timeStamp}); if (hist.length>5) hist.shift();
+    };
+    const end = (e) => {
+      if (pid!==e.pointerId) return; pid=null;
+      if (!drag) return;
+      const a=hist[0], b=hist[hist.length-1]; const v=(b.x-a.x)/Math.max(1,b.t-a.t);
+      fg.classList.add('snap'); fg.style.transform='';
+      bg.animate([{opacity:bg.style.opacity||0},{opacity:0}],{duration:300,easing:'ease-out'}); bg.style.opacity=0; bg.classList.remove('armed');
+      if (dx>84 || v>0.5) toggleTask(id);
+    };
+    row.onpointerup = end; row.onpointercancel = end;
+  });
+}
+
+/* Neue Aufgabe: Text, dann Fach (vorgewählt aus dem Text) und Abgabetag */
+const GUESS = [
+  [/mathe|s\.\s*\d|nr\.|funktion|gleichung|parabel|formel|rechn/i, 'Mathematik'],
+  [/vokabel|unit|englisch|english|text\s*book/i, 'Englisch'],
+  [/gedicht|aufsatz|analyse|lektüre|roman|deutsch|erörter/i, 'Deutsch'],
+  [/bio|zelle|pflanze/i, 'Biologie'],
+  [/geschicht|quelle/i, 'Geschichte'],
+  [/physik|kraft|energie/i, 'Physik'],
+];
+function guessFach(v){ const g = GUESS.find(([re]) => re.test(v)); return g ? g[1] : null; }
+$$('[data-add]').forEach(btn => {
+  const form = btn.nextElementSibling;
+  form.innerHTML = `<div class="addline"><span class="ms addic">add</span><input type="text" enterkeyhint="done" placeholder="Was ist auf?" aria-label="Neue Aufgabe"></div>
+    <div class="addopts" hidden>
+      <div class="chips chiprow" data-fachchips role="group" aria-label="Fach"></div>
+      <p class="addwhy" data-why hidden></p>
+      <div class="addfoot"><span class="lbl">Bis</span>
+        <button class="chip" data-due="Di" aria-pressed="true">Di 13.</button><button class="chip" data-due="Mi" aria-pressed="false">Mi 14.</button>
+        <span class="grow"></span><button class="btn pri" data-save>Eintragen</button></div>
+    </div>`;
+  const inp = $('input', form), opts = $('.addopts', form), chipsEl = $('[data-fachchips]', form), why = $('[data-why]', form);
+  let fach = null, picked = false, due = 'Di';
+  const keepFocus = e => e.preventDefault();
+  form.addEventListener('pointerdown', e => { if (e.target.closest('button')) keepFocus(e); });
+  form.addEventListener('mousedown', e => { if (e.target.closest('button')) keepFocus(e); });
+  const drawChips = () => {
+    let list = WEEK[DUE_DAY[due]].l.map(x => x[2]);
+    if (fach && !list.includes(fach)) list = [fach, ...list];
+    chipsEl.innerHTML = list.map(f => `<button class="chip" data-f="${f}" aria-pressed="${f===fach}">${f}</button>`).join('');
+    const g = guessFach(inp.value);
+    why.hidden = !(fach && !picked && g===fach);
+    why.textContent = fach ? `${fach} vorgewählt, aus dem Text erkannt.` : '';
+  };
+  const reset = () => { inp.value=''; fach=null; picked=false; due='Di'; opts.hidden=true;
+    $$('[data-due]', form).forEach(c => c.setAttribute('aria-pressed', c.dataset.due===due)); };
+  const close = () => { reset(); form.classList.remove('on'); btn.style.display=''; };
+  btn.onclick = () => { btn.style.display='none'; form.classList.add('on'); reset(); inp.focus(); };
+  inp.oninput = () => {
+    const v = inp.value.trim();
+    opts.hidden = !v;
+    if (!picked) fach = guessFach(v);
+    drawChips();
+  };
+  chipsEl.onclick = e => { const c = e.target.closest('[data-f]'); if (!c) return;
+    fach = fach===c.dataset.f ? null : c.dataset.f; picked = true; drawChips(); };
+  $$('[data-due]', form).forEach(c => c.onclick = () => { due = c.dataset.due;
+    $$('[data-due]', form).forEach(x => x.setAttribute('aria-pressed', x===c)); drawChips(); });
+  const commit = () => {
+    const v = inp.value.trim();
+    if (!v) return close();
+    const t = {id:Date.now(), fach, was:v, due, done:false};
+    flip(() => { state.tasks.push(t); renderTasks(); });
+    close(); setHeadline(0);
+  };
+  $('[data-save]', form).onclick = commit;
+  inp.onkeydown = (e) => { if (e.key==='Enter') commit(); if (e.key==='Escape') close(); };
+  form.addEventListener('focusout', () => setTimeout(() => {
+    if (!form.contains(document.activeElement) && !inp.value.trim()) close();
+  }, 0));
+});
+
+/* ---------- Tageszeit wechseln ---------- */
+/* Hintergrund: die neue Fläche geht vom Punkt vor der Tageszeit aus auf (clip-path, 280 ms). */
+let skyAnim = null, skyTarget = THEME.nachmittag;
+function paintSky(m, animate){
+  document.body.style.background = THEME[m];
+  const base = $('#sky'), layer = $('#skyNew');
+  if (skyAnim){ skyAnim.cancel(); skyAnim=null; base.style.background = skyTarget; layer.style.opacity=0; }
+  skyTarget = THEME[m];
+  if (!animate || reduce){ base.style.background = THEME[m]; layer.style.opacity=0; return; }
+  const ar = app.getBoundingClientRect(), dr = $('#sunDot').getBoundingClientRect();
+  const x = dr.left - ar.left + dr.width/2, y = dr.top - ar.top + dr.height/2;
+  const R = Math.hypot(Math.max(x, ar.width-x), Math.max(y, ar.height-y));
+  layer.style.background = THEME[m]; layer.style.opacity = 1;
+  skyAnim = layer.animate([{clipPath:`circle(0px at ${x}px ${y}px)`},{clipPath:`circle(${R}px at ${x}px ${y}px)`}],{duration:280, easing:EASE, fill:'forwards'});
+  skyAnim.onfinish = () => { base.style.background = THEME[m]; layer.style.opacity=0; skyAnim.cancel(); skyAnim=null; };
+}
+function setMode(m){
+  if (m===state.mode) return;
+  const dir = ORDER[m] > ORDER[state.mode] ? 1 : -1;
+  const from = $(`.mode[data-for="${state.mode}"]`), to = $(`.mode[data-for="${m}"]`);
+  $$('.mode').forEach(s => { s.getAnimations({subtree:true}).forEach(a=>a.cancel()); s.classList.remove('leaving'); });
+  state.mode = m;
+  app.dataset.mode = m;
+  $('#tc').setAttribute('content', THEME[m]);
+  renderWhen();
+  paintSky(m, true);
+  setHeadline(dir);
+  from.classList.remove('on'); to.classList.add('on');
+  $('#homeScroll').scrollTop = 0;
+  if (reduce) return;
+  // Alt blendet sofort aus, neu kommt gleichzeitig aus der Richtung, in die die Zeit läuft.
+  from.classList.add('leaving');
+  from.animate([{opacity:1},{opacity:0}],{duration:120, easing:'ease-out', fill:'forwards'}).onfinish = () => {
+    from.classList.remove('leaving'); from.getAnimations().forEach(a=>a.cancel());
+  };
+  [...to.children].forEach((el,i) => el.animate([{opacity:0, transform:`translateX(${dir*24}px)`},{opacity:1, transform:'none'}],
+    {duration:260, delay:i*30, easing:EASE, fill:'backwards'}));
+}
+function toggleMenu(on){
+  const menu = $('#menu'); on = on ?? !menu.classList.contains('on');
+  menu.classList.toggle('on', on); $('#when').setAttribute('aria-expanded', on);
+}
+$('#when').onclick = (e) => { e.stopPropagation(); toggleMenu(); };
+$$('#menu button').forEach(b => b.onclick = (e) => { e.stopPropagation(); toggleMenu(false); setMode(b.dataset.m); });
+$('#nowPill').onclick = () => setMode(state.live);
+document.addEventListener('pointerdown', e => { if (!e.target.closest('#menu,#when')) toggleMenu(false); });
+
+/* ---------- Bildschirme schieben ---------- */
+const stack = [];
+function openScreen(name, opt={}){
+  const el = $('#s-'+name);
+  if (name==='woche') selectDay(opt.day ?? 1, false);
+  if (name==='abfrage') resetQuiz();
+  if (name==='blaetter') renderSheetList(opt.fach || 'Alle');
+  if (name==='blatt') renderSheet(opt.sheet);
+  const under = stack.length ? $('#s-'+stack[stack.length-1]) : $('#home');
+  const label = stack.length ? 'Zurück' : 'Heute';
+  $('.back', el).lastChild.textContent = label;
+  stack.push(name);
+  el.style.zIndex = 3 + stack.length;
+  $('#scrim').style.zIndex = 2 + stack.length;
+  $('.scroll', el).scrollTop = 0;
+  requestAnimationFrame(() => { el.classList.add('open'); under.classList.add('under'); $('#scrim').classList.add('on'); });
+}
+function closeScreen(){
+  const name = stack.pop(); if (!name) return;
+  const el = $('#s-'+name);
+  el.classList.remove('open'); el.style.transform='';
+  const under = stack.length ? $('#s-'+stack[stack.length-1]) : $('#home');
+  under.classList.remove('under'); under.style.transform='';
+  $('#scrim').style.zIndex = 2 + stack.length;
+  if (!stack.length) $('#scrim').classList.remove('on');
+}
+document.addEventListener('click', (e) => {
+  const o = e.target.closest('[data-open]');
+  if (o) { openScreen(o.dataset.open, {day: o.dataset.day!=null ? +o.dataset.day : undefined, fach:o.dataset.fach, sheet:o.dataset.sheet}); return; }
+  if (e.target.closest('[data-back]')) closeScreen();
+});
+/* Vom linken Rand zurückwischen */
+$$('.screen.push').forEach(el => {
+  let sx=null, pid=null, last=[], w=0;
+  el.addEventListener('pointerdown', e => { if (e.clientX - app.getBoundingClientRect().left > 24) return; sx=e.clientX; pid=e.pointerId; w=el.offsetWidth; last=[{x:sx,t:e.timeStamp}]; el.setPointerCapture(pid); el.style.transition='none'; });
+  el.addEventListener('pointermove', e => { if (pid!==e.pointerId) return; const dx=Math.max(0,e.clientX-sx); el.style.transform=`translateX(${dx}px)`; last.push({x:e.clientX,t:e.timeStamp}); if(last.length>5) last.shift(); });
+  const up = e => { if (pid!==e.pointerId) return; pid=null; el.style.transition='';
+    const dx=e.clientX-sx, v=(last[last.length-1].x-last[0].x)/Math.max(1,last[last.length-1].t-last[0].t);
+    if (dx > w*0.4 || v > 0.5) closeScreen(); else el.style.transform=''; };
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+});
+
+/* ---------- Woche ---------- */
+function renderWeekHint(){
+  const o = openDi();
+  WEEK[1].hint = o.length ? 'Abgabe: ' + o.map(t => `${t.fach ? (SHORT[t.fach]||t.fach)+' ' : ''}${t.was.replace(/ beenden$/,'').replace(/, Nr\..*$/,'')}`).join(', ') : 'Abgaben für Dienstag erledigt';
+  if (stack.includes('woche')) $('#dayhint').textContent = WEEK[curDay].hint || '';
+}
+let curDay = 1;
+function selectDay(d, animate=true){
+  const dir = d > curDay ? 1 : -1; curDay = d;
+  $$('.days button').forEach(b => b.setAttribute('aria-selected', +b.dataset.d===d));
+  const list = $('#daylist');
+  const html = WEEK[d].l.map(x => `<div class="lesson"><span class="tm">${x[0]}<small>${x[1]}</small></span><span class="sj">${x[2]}${x[4]?'<span class="flag">Klausur</span>':''}</span><span class="rm">${x[3]}</span></div>`).join('');
+  $('#dayhint').textContent = WEEK[d].hint || '';
+  if (!animate || reduce){ list.innerHTML = html; return; }
+  list.getAnimations().forEach(a=>a.cancel());
+  list.animate([{opacity:1, transform:'none'},{opacity:0, transform:`translateX(${-dir*24}px)`}],{duration:110, easing:'ease-out'}).onfinish = () => {
+    list.innerHTML = html;
+    list.animate([{opacity:0, transform:`translateX(${dir*24}px)`},{opacity:1, transform:'none'}],{duration:240, easing:EASE});
+  };
+}
+$$('.days button').forEach(b => b.onclick = () => selectDay(+b.dataset.d));
+$('#fruehLessons').innerHTML = WEEK[1].l.map(x => `<div class="lrow"><span class="tm">${x[0]}</span><span>${x[2]}</span><span class="rm">· ${x[3]}</span></div>`).join('');
+
+/* ---------- Lernblock ---------- */
+let tick = null;
+function renderLern(){
+  const L = state.lern, left = lernLeft();
+  const mm = String(Math.floor(left/60)).padStart(2,'0'), ss = String(left%60).padStart(2,'0');
+  $('#lernSub').innerHTML = L.status==='laeuft' ? `<b><span class="num">${mm}</span>:<span class="num">${ss}</span></b> übrig · Mathe am Freitag` :
+                            L.status==='fertig' ? '25 Minuten gelernt · Mathe am Freitag' : '25 Minuten · Mathe am Freitag';
+  $('#lernBarWrap').hidden = L.status!=='laeuft';
+  $('#lernBar').style.transform = `scaleX(${L.status==='laeuft'?(1-left/L.total):0})`;
+  $$('[data-lern]').forEach(b => {
+    b.innerHTML = L.status==='offen' ? '<span class="ms">play_arrow</span><span>Starten</span>' :
+                  L.status==='laeuft' ? '<span class="ms">stop</span><span>Beenden</span>' : '<span class="ms">check</span><span>Erledigt</span>';
+  });
+  $('#kLernSub').innerHTML = L.status==='laeuft' ? `läuft, noch <span class="num">${mm}</span>:<span class="num">${ss}</span>` : L.status==='fertig' ? 'erledigt' : '25 Minuten, heute';
+  setHeadline(0);
+}
+$$('[data-lern]').forEach(b => b.onclick = () => {
+  const L = state.lern;
+  if (L.status==='offen'){ L.status='laeuft'; L.start=Date.now(); tick=setInterval(renderLern,1000); }
+  else if (L.status==='laeuft'){ L.status='fertig'; clearInterval(tick); toast('Lernblock erledigt', 'Rückgängig', () => { L.status='offen'; renderLern(); }); }
+  else return;
+  renderLern();
+});
+
+/* ---------- Abfrage ---------- */
+const CARDS = [
+  ['Wo liegt der Scheitelpunkt von f(x) = 2(x − 3)² + 1?', 'S(3 | 1)'],
+  ['Was zeigt a < 0 in f(x) = a(x − d)² + e?', 'Die Parabel ist nach unten geöffnet.'],
+  ['Schreib f(x) = x² + 6x + 5 in Scheitelpunktform.', 'f(x) = (x + 3)² − 4'],
+];
+let queue = [], first = {}, again = new Set(), flipped = false, busy = false;
+function face(ans){
+  const i = queue[0];
+  $('#qcard').classList.toggle('ans', ans);
+  $('#qlabel').textContent = ans ? 'Antwort' : (again.has(i) && first[i]!=null ? 'Frage, noch einmal' : 'Frage');
+  $('#qtext').textContent = CARDS[i][ans?1:0];
+  $('#qtap').hidden = ans;
+}
+function showCard(){
+  flipped = false; face(false);
+  $('#qcount').textContent = `noch ${queue.length}`;
+  $('#qshow').hidden = false; $('#qrate').hidden = true; $('#qfin').hidden = true;
+  $('#qstage').hidden = false; $('#qdone').hidden = true;
+}
+function resetQuiz(){ queue = CARDS.map((_,i)=>i); first = {}; again = new Set(); busy=false; showCard(); }
+/* Halbe Drehung, Seite wechseln, zurückdrehen. Erst danach erscheinen die Bewertungen. */
+function flipCard(){
+  if (flipped || busy || $('#qstage').hidden) return;
+  flipped = true; busy = true;
+  const c = $('#qcard'), show = $('#qshow'), rate = $('#qrate');
+  const reveal = () => { show.hidden = true; rate.hidden = false;
+    if (!reduce) rate.animate([{opacity:0},{opacity:1}],{duration:160, easing:'ease-out'}); busy = false; };
+  show.style.visibility = 'hidden';
+  if (reduce){ c.animate([{opacity:1},{opacity:0}],{duration:100}).onfinish = () => { face(true); c.animate([{opacity:0},{opacity:1}],{duration:140}).onfinish = () => { show.style.visibility=''; reveal(); }; }; return; }
+  c.animate([{transform:'perspective(900px) rotateY(0)'},{transform:'perspective(900px) rotateY(90deg)'}],{duration:140, easing:'cubic-bezier(0.55,0.05,0.9,0.4)'}).onfinish = () => {
+    face(true);
+    c.animate([{transform:'perspective(900px) rotateY(-90deg)'},{transform:'perspective(900px) rotateY(0)'}],{duration:220, easing:EASE}).onfinish = () => { show.style.visibility=''; reveal(); };
+  };
+}
+$('#qshow').onclick = flipCard;
+$('#qcard').onclick = flipCard;
+function finishQuiz(){
+  const known = CARDS.map((_,i)=>i).filter(i => first[i]===1), not = CARDS.map((_,i)=>i).filter(i => first[i]===0);
+  const k = known.length, n = not.length;
+  const head = n===0 ? `Alle ${words(k).toLowerCase()} gewusst.` : `${k} gewusst, ${n} noch nicht.`;
+  const sub = n===0 ? 'Mittwoch ist Wiederholung.' : n===1 ? 'Die kommt Mittwoch wieder.' : 'Die kommen Mittwoch wieder.';
+  $('#qdone').innerHTML = `<h2>${head}</h2><p>${sub}</p>${n ? '<ul>'+not.map(i=>`<li>${CARDS[i][0]}</li>`).join('')+'</ul>' : ''}`;
+  $('#qstage').hidden = true; $('#qdone').hidden = false;
+  $('#qrate').hidden = true; $('#qshow').hidden = true; $('#qfin').hidden = false;
+  $('#qcount').textContent = '';
+  if (!reduce) $('#qdone').animate([{opacity:0, transform:'translateY(8px)'},{opacity:1, transform:'none'}],{duration:240, easing:EASE});
+}
+$$('[data-rate]').forEach(b => b.onclick = () => {
+  if (busy) return;
+  const i = queue[0], r = +b.dataset.rate;
+  if (first[i]==null) first[i] = r;
+  queue.shift();
+  if (r===0 && !again.has(i)){ again.add(i); queue.push(i); }   // „Noch nicht“ kommt hinten wieder dran
+  if (!queue.length) return finishQuiz();
+  const s = $('#qslide');
+  if (reduce){ showCard(); return; }
+  busy = true;
+  s.animate([{transform:'none',opacity:1},{transform:'translateX(-48px)',opacity:0}],{duration:140,easing:'ease-in',fill:'forwards'}).onfinish = () => {
+    showCard(); busy = true;
+    s.getAnimations().forEach(a=>a.cancel());
+    s.animate([{transform:'translateX(48px)',opacity:0},{transform:'none',opacity:1}],{duration:240,easing:EASE}).onfinish = () => busy=false;
+  };
+});
+
+/* ---------- Blätter ---------- */
+const thumbStyle = s => `--w:${s.w||'60%'};--o:${s.o||'26px'};${s.pen?'--pen:'+s.pen:''}`;
+function sheetById(id){ return SHEETS.find(s => s.id===id); }
+function renderSheetList(fach){
+  const chips = ['Alle', ...SUBJECTS.filter(f => SHEETS.some(s => s.fach===f))];
+  $('#bChips').innerHTML = chips.map(f => `<button class="chip" data-bf="${f}" aria-pressed="${f===fach}">${f}</button>`).join('');
+  $('#bChips').dataset.cur = fach;
+  drawSheetRows();
+}
+function drawSheetRows(){
+  const fach = $('#bChips').dataset.cur, q = $('#bSearch').value.trim().toLowerCase();
+  const rows = SHEETS.filter(s => (fach==='Alle' || s.fach===fach) &&
+    (!q || (s.t+' '+s.thema+' '+(s.abs||[]).join(' ')).toLowerCase().includes(q)));
+  $('#bList').innerHTML = rows.map(s => `<button class="sheetrow${s.neu?' new':''}" data-open="blatt" data-sheet="${s.id}">
+      <span class="thumb" style="${thumbStyle(s)}"></span>
+      <span class="t"><b>${s.t}</b><span>${fach==='Alle'?s.fach+' · ':''}${s.d}</span></span></button>`).join('')
+    || '<p class="emptyhint">Kein Blatt gefunden.</p>';
+}
+$('#bChips').onclick = e => { const c = e.target.closest('[data-bf]'); if (!c) return;
+  $('#bChips').dataset.cur = c.dataset.bf; $$('#bChips .chip').forEach(x => x.setAttribute('aria-pressed', x===c)); drawSheetRows(); };
+$('#bSearch').oninput = drawSheetRows;
+function renderSheet(id){
+  const s = sheetById(id);
+  $('#bdT').textContent = s.t;
+  $('#bdS').textContent = [s.fach, s.thema!==s.t ? s.thema : '', s.d].filter(Boolean).join(' · ');
+  $('#bdImg').setAttribute('style', thumbStyle(s));
+  $('#bdAbs').innerHTML = s.abs ? s.abs.map(p => `<p>${p}</p>`).join('') : '<p class="wait">Die Abschrift kommt in ein paar Minuten. Das Foto ist schon abgelegt.</p>';
+}
+function renderSheetRefs(){
+  const topic = SHEETS.filter(s => s.thema==='Quadratische Funktionen');
+  $('#kThumbs').innerHTML = topic.slice(0,3).map(s => `<button data-open="blatt" data-sheet="${s.id}"><span class="thumb" style="${thumbStyle(s)}"></span><span class="cap">${s.t}</span></button>`).join('');
+  $('#kThemaCount').textContent = topic.length;
+  $('#kAllCount').textContent = SHEETS.filter(s => s.fach==='Mathematik').length;
+  const last = SHEETS[0];
+  $('#lastSheet').dataset.sheet = last.id;
+  $('#lastSheet').innerHTML = `<span class="t"><b>${last.t}</b><span>Zuletzt abgelegt · ${last.fach}, ${last.d.replace(/^Heute, /,'heute ')}</span></span><span class="thumb" style="${thumbStyle(last)}"></span>`;
+}
+/* Neueste zuerst: zuletzt abgelegt ist anfangs das Deutsch-Blatt vom Freitag */
+const ORDER_D = ['s5','s1','s6','s2','s7','s3','s4'];
+SHEETS.sort((a,b) => ORDER_D.indexOf(a.id) - ORDER_D.indexOf(b.id));
+
+/* ---------- Kamera ---------- */
+const sheet = $('#sheet'), cam = $('#cam');
+function openCam(){
+  $('#camChips').innerHTML = SUBJECTS.map(f => `<button class="chip" aria-pressed="${f==='Mathematik'}">${f}</button>`).join('');
+  $('#camChips').scrollLeft = 0;
+  sheet.classList.add('open'); sheet.setAttribute('aria-hidden','false');
+  $('#vf').classList.remove('shot'); $('#file').classList.remove('on'); $('#shutter').style.opacity=1; $('#shutter').style.pointerEvents='';
+  $('#vfhint').textContent='Blatt in den Rahmen halten'; $('#vfhint').style.opacity=1;
+  $('#corners').classList.remove('lock');
+  setTimeout(() => { $('#corners').classList.add('lock'); $('#vfhint').textContent='Blatt erkannt'; }, 650);
+}
+function closeCam(){ sheet.classList.remove('open'); sheet.setAttribute('aria-hidden','true'); cam.style.transform=''; }
+$('#fab').onclick = openCam;
+$$('[data-close]', sheet).forEach(b => b.onclick = closeCam);
+$('#shutter').onclick = () => {
+  if (!reduce) $('#flash').animate([{opacity:.85},{opacity:0}],{duration:240,easing:'ease-out'});
+  $('#vf').classList.add('shot'); $('#vfhint').style.opacity=0; $('#corners').classList.remove('lock');
+  $('#shutter').style.opacity=0; $('#shutter').style.pointerEvents='none';
+  $('#file').classList.add('on');
+};
+$('#camChips').onclick = e => { const c = e.target.closest('.chip'); if (!c) return; $$('#camChips .chip').forEach(x => x.setAttribute('aria-pressed', x===c)); };
+$('#fileBtn').onclick = () => {
+  const f = $('#camChips [aria-pressed="true"]').textContent;
+  const s = {id:'n'+Date.now(), t:'Quadratische Funktionen', fach:f, thema: f==='Mathematik' ? 'Quadratische Funktionen' : '', d:'Heute, 16:41', w:'70%', o:'34px', abs:null, neu:true};
+  SHEETS.unshift(s); renderSheetRefs();
+  closeCam();
+  toast(`Blatt in ${f} abgelegt`, 'Ansehen', () => openScreen('blatt', {sheet:s.id}));
+};
+/* Griff nach unten ziehen schließt */
+(() => {
+  let sy=null, pid=null, last=[];
+  const g = $('#grab');
+  g.addEventListener('pointerdown', e => { sy=e.clientY; pid=e.pointerId; g.setPointerCapture(pid); cam.style.transition='none'; last=[{y:sy,t:e.timeStamp}]; });
+  g.addEventListener('pointermove', e => { if (pid!==e.pointerId) return; let dy=e.clientY-sy; if (dy<0) dy = -Math.sqrt(-dy)*2; cam.style.transform=`translateY(${dy}px)`; last.push({y:e.clientY,t:e.timeStamp}); if(last.length>5) last.shift(); });
+  const up = e => { if (pid!==e.pointerId) return; pid=null; cam.style.transition='';
+    const dy=e.clientY-sy, v=(last[last.length-1].y-last[0].y)/Math.max(1,last[last.length-1].t-last[0].t);
+    if (dy>140 || v>0.5) closeCam(); else cam.style.transform=''; };
+  g.addEventListener('pointerup', up); g.addEventListener('pointercancel', up);
+})();
+
+/* ---------- Hinweis ---------- */
+let toastT=null, actFn=null;
+function toast(text, label, fn){
+  $('#toastTxt').textContent = text; actFn = fn || null;
+  $('#toastBtn').textContent = label || ''; $('#toastBtn').style.display = fn ? '' : 'none';
+  $('#toast').classList.add('on'); app.classList.add('toasting'); clearTimeout(toastT);
+  toastT = setTimeout(hideToast, 3600);
+}
+function hideToast(){ $('#toast').classList.remove('on'); app.classList.remove('toasting'); }
+$('#toastBtn').onclick = () => { const f = actFn; actFn=null; hideToast(); if (f) f(); };
+
+/* ---------- Start: Tageszeit aus der Uhr. Für die Vorlage fest auf 16:40. ---------- */
+function modeFor(h){ return h < 12 ? 'frueh' : h < 18 ? 'nachmittag' : 'abend'; }
+state.live = modeFor(16);
+const qp = new URLSearchParams(location.search).get('modus');
+renderSheetRefs(); renderTasks(); renderLern();
+state.mode = state.live; app.dataset.mode = state.live; paintSky(state.live, false); renderWhen(); setHeadline(0);
+if (qp && ORDER[qp]!=null && qp!==state.live){ setMode(qp); }
+window.__demo = {setMode, openScreen, closeScreen, openCam, toggleTask, selectDay};
+})();
+</script>
+</body>
+</html>

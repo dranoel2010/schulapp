@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#202321">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Takt: ein statischer Startseitenentwurf für die persönliche Schulapp.">
+  <title>B · Takt · Schulapp</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+  /* Bewusst feste Palette für den direkten Vergleich der drei Designrichtungen. */
+    :root {
+    --ground:#202321;
+    --raised:#2b302c;
+    --ink:#edf0e7;
+    --muted:#a6b0a5;
+    --rule:#475048;
+    --accent:#ecc075;
+    color-scheme:dark;
+    font-family:'IBM Plex Sans',sans-serif;
+    color:var(--ink);
+    background:#141715;
+    font-synthesis:none;
+  }
+  * {
+    box-sizing:border-box;
+  }
+  html {
+    -webkit-text-size-adjust:100%;
+    -webkit-tap-highlight-color:transparent;
+    scroll-padding-bottom:100px;
+  }
+  body {
+    margin:0;
+  }
+  h1,h2,h3,p {
+    margin:0;
+  }
+  a {
+    color:inherit;
+    text-decoration:none;
+  }
+  button,input {
+    font:inherit;
+  }
+  a,button,label {
+    touch-action:manipulation;
+  }
+  a,button {
+    user-select:none;
+    -webkit-user-select:none;
+    transition:opacity 120ms ease-out;
+  }
+  a:active,button:active {
+    opacity:.6;
+  }
+  :focus-visible {
+    outline:2px solid var(--accent);
+    outline-offset:4px;
+  }
+  ::selection {
+    background:var(--accent);
+    color:var(--ground);
+  }
+  svg {
+    width:20px;
+    height:20px;
+    fill:none;
+    stroke:currentColor;
+    stroke-width:1.7;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+    flex-shrink:0;
+  }
+  .app {
+    width:min(100%,390px);
+    margin:auto;
+    min-height:100dvh;
+    padding:0 20px 98px;
+    background:var(--ground);
+  }
+  .top {
+    padding-top:calc(8px + env(safe-area-inset-top));
+    height:calc(61px + env(safe-area-inset-top));
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .top h1 {
+    font-size:18px;
+    font-weight:500;
+    letter-spacing:-.3px;
+  }
+  .top time {
+    font:13px 'IBM Plex Mono',monospace;
+    color:var(--muted);
+  }
+  .now {
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:12px 0 17px;
+    border-bottom:1px solid var(--rule);
+    font-size:14px;
+    color:var(--muted);
+  }
+  .now time {
+    font:500 25px/1 'IBM Plex Mono',monospace;
+    color:var(--ink);
+    letter-spacing:-1px;
+  }
+  .now span {
+    border-left:1px solid var(--rule);
+    padding-left:12px;
+  }
+  .next {
+    padding:20px 0 22px;
+  }
+  .next .arrival {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    font-size:13px;
+    color:var(--accent);
+  }
+  .arrival time {
+    font:13px 'IBM Plex Mono',monospace;
+  }
+  .next h2 {
+    font:600 54px/.98 'Barlow Condensed',sans-serif;
+    letter-spacing:-.7px;
+    margin:10px 0 12px;
+    color:var(--accent);
+  }
+  .next .location {
+    display:flex;
+    gap:12px;
+    align-items:center;
+    font-size:16px;
+  }
+  .room {
+    padding-right:12px;
+    border-right:1px solid var(--rule);
+  }
+  .location span:last-child {
+    color:var(--muted);
+    font-size:13px;
+  }
+  .track {
+    list-style:none;
+    margin:0;
+    padding:0;
+    position:relative;
+  }
+  .track:before {
+    content:'';
+    position:absolute;
+    left:69px;
+    top:15px;
+    bottom:30px;
+    width:1px;
+    background:var(--rule);
+  }
+  .track-row {
+    display:grid;
+    grid-template-columns:58px 1fr;
+    gap:25px;
+    position:relative;
+    padding-bottom:19px;
+  }
+  .track-row:before {
+    content:'';
+    position:absolute;
+    top:7px;
+    left:66px;
+    width:7px;
+    height:7px;
+    background:var(--ground);
+    border:1px solid var(--muted);
+    border-radius:50%;
+  }
+  .track time {
+    font:13px/1.6 'IBM Plex Mono',monospace;
+    color:var(--muted);
+  }
+  .track h3 {
+    font-size:16px;
+    font-weight:500;
+    line-height:1.4;
+  }
+  .track p {
+    font-size:12px;
+    color:var(--muted);
+    margin-top:3px;
+  }
+  .track-row.done h3 {
+    color:var(--muted);
+  }
+  .track-row.current:before {
+    background:var(--accent);
+    border-color:var(--accent);
+  }
+  .track-row.current h3,.track-row.current time {
+    color:var(--accent);
+  }
+  .track-row.current .track-detail {
+    display:flex;
+    justify-content:space-between;
+    align-items:start;
+    gap:4px;
+  }
+  .capture {
+    display:inline-flex;
+    gap:5px;
+    align-items:center;
+    font-size:12px;
+    color:var(--accent);
+    min-height:44px;
+    margin-top:-8px;
+  }
+  .capture svg {
+    width:17px;
+    height:17px;
+  }
+  .track-row.last {
+    padding-bottom:0;
+  }
+  .homework {
+    margin-top:27px;
+    border-top:1px solid var(--rule);
+    padding-top:16px;
+  }
+  .section-head {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:8px;
+  }
+  .section-head h2 {
+    font-size:17px;
+    font-weight:500;
+  }
+  .section-head span {
+    font-size:12px;
+    color:var(--muted);
+  }
+  .tasks {
+    list-style:none;
+    padding:0;
+    margin:0;
+  }
+  .task {
+    display:grid;
+    grid-template-columns:1fr 30px;
+    gap:12px;
+    min-height:62px;
+    align-items:center;
+    cursor:pointer;
+  }
+  .task+.task {
+    border-top:1px solid var(--rule);
+  }
+  .task strong {
+    display:block;
+    font-size:15px;
+    font-weight:400;
+    line-height:1.35;
+  }
+  .task small {
+    display:block;
+    color:var(--muted);
+    font-size:12px;
+    margin-top:4px;
+  }
+  .task input {
+    appearance:none;
+    -webkit-appearance:none;
+    width:21px;
+    height:21px;
+    margin:0;
+    border:1px solid var(--muted);
+    border-radius:50%;
+    display:grid;
+    place-items:center;
+  }
+  .task input:checked {
+    background:var(--accent);
+    border-color:var(--accent);
+  }
+  .task input:checked:after {
+    content:'';
+    width:9px;
+    height:5px;
+    border-left:2px solid var(--ground);
+    border-bottom:2px solid var(--ground);
+    transform:rotate(-45deg) translateY(-1px);
+  }
+  .task:has(input:checked) strong {
+    text-decoration:line-through;
+    color:var(--muted);
+  }
+  .learn {
+    display:grid;
+    grid-template-columns:64px 1fr;
+    gap:16px;
+    align-items:center;
+    margin-top:20px;
+    padding:17px 14px;
+    background:var(--raised);
+    border-radius:4px;
+  }
+  .duration {
+    font:500 40px/1 'Barlow Condensed',sans-serif;
+    color:var(--accent);
+    text-align:center;
+  }
+  .duration small {
+    display:block;
+    font:12px/1.6 'IBM Plex Sans',sans-serif;
+    color:var(--muted);
+  }
+  .learn h2 {
+    font-size:15px;
+    font-weight:500;
+  }
+  .learn p {
+    font-size:13px;
+    color:var(--muted);
+    margin-top:4px;
+    line-height:1.4;
+  }
+  .exam {
+    margin-top:17px;
+    padding-bottom:5px;
+    display:grid;
+    grid-template-columns:1fr auto;
+    gap:10px;
+    font-size:13px;
+  }
+  .exam p {
+    color:var(--muted);
+    line-height:1.7;
+  }
+  .exam strong {
+    color:var(--ink);
+    font-weight:500;
+  }
+  .exam .count {
+    font:500 23px/1.1 'IBM Plex Mono',monospace;
+    color:var(--accent);
+    align-self:center;
+    white-space:nowrap;
+  }
+  .exam .count small {
+    font:12px 'IBM Plex Sans',sans-serif;
+  }
+  .more {
+    font-size:13px;
+    color:var(--muted);
+    margin-top:17px;
+  }
+  .more summary {
+    min-height:44px;
+    padding-top:12px;
+    cursor:pointer;
+  }
+  .more p {
+    line-height:1.6;
+    padding:8px 0;
+  }
+  .prototype-note {
+    font-size:12px;
+    text-align:center;
+    line-height:1.5;
+    color:var(--muted);
+    margin-top:20px;
+  }
+  .bottom {
+    position:fixed;
+    bottom:0;
+    left:50%;
+    transform:translateX(-50%);
+    width:min(100%,390px);
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    background:var(--ground);
+    border-top:1px solid var(--rule);
+    padding:0 10px calc(5px + env(safe-area-inset-bottom));
+    z-index:2;
+  }
+  .bottom a {
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:5px;
+    min-height:62px;
+    font-size:12px;
+    color:var(--muted);
+    border-top:2px solid transparent;
+  }
+  .bottom a[aria-current] {
+    color:var(--accent);
+    border-color:var(--accent);
+  }
+  .skip {
+    position:fixed;
+    top:0;
+    left:20px;
+    transform:translateY(-150%);
+    background:var(--ground);
+    padding:10px;
+    z-index:3;
+  }
+  .skip:focus {
+    transform:none;
+  }
+  @media(hover:hover) and (pointer:fine) {
+    a:hover {
+      color:var(--accent);
+    }
+    .task:hover {
+      background:var(--raised);
+    }
+  }
+  @media(prefers-reduced-motion:reduce) {
+    a,button {
+      transition:none;
+    }
+  }
+  @media(max-width:350px) {
+    .app {
+      padding-left:16px;
+      padding-right:16px;
+    }
+    .next h2 {
+      font-size:48px;
+    }
+    .capture {
+      font-size:12px;
+    }
+  }
+  </style>
+</head>
+<body>
+<!-- Statischer Entwurf; Momentaufnahme mit fiktiven Daten am 12.10.2026 um 09:35. -->
+<a class="skip" href="#heute">Zum Tagesinhalt</a>
+<div class="app">
+  <header class="top"><h1>Montag</h1><time datetime="2026-10-12">12.10.2026</time></header>
+  <main id="heute">
+    <p class="now"><time datetime="09:35">09:35</time><span>Pause bis 09:50</span></p>
+    <section class="next" aria-labelledby="next-title">
+      <div class="arrival"><span>In 15 Minuten</span><time datetime="09:50">09:50–11:20</time></div>
+      <h2 id="next-title">Mathematik</h2>
+      <p class="location"><span class="room">Raum 208</span><span>3. &amp; 4. Stunde</span></p>
+    </section>
+    <section id="stunden" aria-label="Heutiger Stundenplan">
+      <ol class="track">
+        <li class="track-row done"><time datetime="08:00">08:00</time><div><h3>Deutsch</h3><p>Raum 104 · bis 09:30</p></div></li>
+        <li class="track-row current"><time datetime="09:50">09:50</time><div class="track-detail"><div><h3>Mathematik</h3><p>Raum 208 · bis 11:20</p></div><a class="capture" href="#material" aria-label="Blatt aufnehmen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6 9.5 3h5L16 6h5v15H3V6h5Zm8 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z"/></svg>Aufnehmen</a></div></li>
+        <li class="track-row"><time datetime="11:40">11:40</time><div><h3>Biologie</h3><p>Bio 1 · bis 13:10</p></div></li>
+        <li class="track-row last"><time datetime="13:10">13:10</time><div><h3>Schulschluss</h3></div></li>
+      </ol>
+    </section>
+    <section class="homework" id="aufgaben" aria-labelledby="aufgaben-titel">
+      <div class="section-head"><h2 id="aufgaben-titel">Für morgen abgeben</h2><span>2 Aufgaben</span></div>
+      <div class="tasks">
+        <label class="task"><span><strong>S. 84, Nr. 3–5</strong><small>Mathematik · Di, 13.10.</small></span><input type="checkbox" aria-label="Mathematik, S. 84, Nr. 3 bis 5 erledigt"></label>
+        <label class="task"><span><strong>Gedichtanalyse beenden</strong><small>Deutsch · Di, 13.10.</small></span><input type="checkbox" aria-label="Deutsch, Gedichtanalyse erledigt"></label>
+      </div>
+    </section>
+    <section class="learn" id="lernen" aria-labelledby="lern-titel"><p class="duration">25<small>Minuten</small></p><div><h2 id="lern-titel">Dein Lernblock heute</h2><p>Mathematik<br>Quadratische Funktionen</p></div></section>
+    <aside class="exam" aria-label="Nächste Klausur"><p><strong>Mathe-Klausur</strong><br>Fr, 16.10. · Quadratische Funktionen</p><div class="count">4 <small>Tage</small></div></aside>
+    <details class="more" id="mehr"><summary>Fächer, Noten &amp; Material</summary><p>Hier liegen außerdem deine Fächer, Noten, gespeicherten Blätter und Einstellungen.</p></details>
+    <details class="more" id="material"><summary>Blatt aufnehmen</summary><p>In der App öffnet dieser Zugang die Kamera. In dieser statischen Ansicht wird kein Foto aufgenommen und kein Fach automatisch zugeordnet.</p></details>
+    <p class="prototype-note">Entwurf B · Beispieldaten · Häkchen werden nicht gespeichert</p>
+  </main>
+  <!-- Bestehende Icon-Geometrie aus src/components/ui/icon.tsx. -->
+  <nav class="bottom" aria-label="Hauptnavigation">
+    <a href="#heute" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-7h6v7"/></svg>Heute</a>
+    <a href="#stunden"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2ZM7 14h2m6 0h2m-10 4h2"/></svg>Plan</a>
+    <a href="#aufgaben"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 6 2 2 4-4m3 2h9M3 14h5v6H3zM12 15h9m-9 4h6"/></svg>Aufgaben</a>
+    <a href="#lernen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6C8 3 4 3 2 4v15c3-1 7 0 10 2m0-15c4-3 8-3 10-2v15c-3-1-7 0-10 2V6"/></svg>Lernen</a>
+    <a href="#mehr"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>Mehr</a>
+  </nav>
+</div>
+</body>
+</html>

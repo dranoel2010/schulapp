@@ -1,0 +1,78 @@
+# 22-kombi-astra
+
+„Drei Fragen, eine Zeile“ führt den Nachmittag durch Neu, Fällig und Lernen bis „Fertig für heute“, während dieselbe dunkle Eingabezeile Eintragen, Suchen und Nachschlagen verbindet.
+Schibsted Grotesk trägt die Bedienung, Newsreader die Schrittüberschriften, Kartenfragen und Formeln, Material Symbols Rounded die Symbole.
+Papierfarben (#F4F1E9) und dunkle Schrift (#1F1D19) treffen auf Blau (#2A44C0); im Dunkelmodus wechseln die Flächen zu #17160F, der Akzent zu #8D9CFF und der Lerntisch zu #121A4E, Gelb bleibt dem kurzen Aufleuchten vorbehalten.
+Die wichtigste räumliche Bewegung lässt den Lernblock aus seinem Startknopf zum blauen Tisch wachsen und dorthin zurückkehren; dazu kommen Geistflüge, Aufgabenverschiebungen und der unmittelbar bedienbare Kartenstapel.
+Die Herkunft bleibt nachvollziehbar: 16 liefert Staffelung, Tokens und Geistflug, 14 Feder, Schritte, Aufgaben, Kamera und Timerwachstum, 19 Kartendrehung, Wurf und Stapel, 10 die Randgeste zurück und 03 Absicht, Tastatur und Navigation.
+Flache Fachzeilen, ein verbindliches Richtungsmodell und der Wechsel zwischen Papier, dunkler Zeile und blauem Lerntisch geben dem Modell seine eigene Struktur, ohne verschachtelte Übersichtskarten oder dekorative Kennzahlen.
+Die einzelne HTML-Datei lädt extern nur Google Fonts und arbeitet mit flüchtigen Beispieldaten vom 12.10.2026: Server, Speicherung, Postgres-Suche, Funnel, Upload, OCR und `/abruf` fehlen, neue Aufnahmen erhalten deshalb einen Fehlerstatus statt erfundener Abschriften oder Themen.
+
+## Abnahmestand zu KOMBI-VORGABE §9
+
+**Keines der 50 Kriterien ist am echten iPhone abgenommen.** „Im Modell umgesetzt“ bezeichnet vorhandene Umsetzung im Quelltext, keine Gerätefreigabe; „Geräteprüfung offen“ bezeichnet insbesondere eine noch unbelegte Geräte-, Gesten-, Darstellungs- oder Laufzeiteigenschaft; „Offen“ bezeichnet fehlende Infrastruktur oder vorgeschriebene Nachweise. Die Hinweise nennen jeweils die vorhandene Grundlage und die verbleibende Grenze.
+
+| Nr. | Kriterium | Status | Umsetzung und Grenze |
+| --- | --- | --- | --- |
+| 1 | Start am 12.10., 16:40 ohne Ereignisse auf Neu | Im Modell umgesetzt | Das feste Datum ist 12.10.2026; ein leeres Ereignisprotokoll führt über `initialStep()` zu Neu. Die Beispieluhrzeit steuert keinen Serverstart. |
+| 2 | Nach Weiter und Neuladen auf Fällig, Stand vom Server | Offen | Der Schritt folgt dem Protokoll im Arbeitsspeicher. Neuladen setzt das Modell zurück; weder Serverprotokoll noch `localStorage` vorhanden. |
+| 3 | Nach erledigtem Lernblock auf Fertig öffnen | Offen | Erledigung und die entsprechende Startentscheidung sind modelliert. Ein erneutes Öffnen nach Neuladen kann den Zustand ohne Speicherung nicht erhalten. |
+| 4 | Schulfrei überspringt Neu; Ferien ohne Aufgaben | Im Modell umgesetzt | Schul- und Ferienprüfung, ausgegrautes Neu und Ferienansicht sind im Code angelegt. Die gelieferte Ferienliste ist leer; die Ausgangssituation ist ein Schultag. |
+| 5 | Freitag zeigt Für Montag und Montag mit Datum | Im Modell umgesetzt | `nextSchool()` und `tomorrowName()` unterscheiden den nächsten Kalendertag vom nächsten Schultag. Die ausgelieferte Ansicht beginnt am Montag. |
+| 6 | Bandsegmente und eindeutige Richtungen | Im Modell umgesetzt | Segmente öffnen die Schritte; Vorwärts- und Rückwärtsbewegung verwenden unterschiedliche Seiten. Interaktion auf dem iPhone bleibt zu prüfen. |
+| 7 | Fertig zählt nur Protokollereignisse ohne Rücknahmen | Im Modell umgesetzt | Tagesereignisse liefern Einträge, Blätter, Seiten und erledigte Aufgaben; Undo entfernt das zugehörige Ereignis. Das Protokoll ist flüchtig. |
+| 8 | Alle 15 Parserbeispiele aus §4.4 | Im Modell umgesetzt | Die sechs Prioritätsregeln sind im Parser berücksichtigt; der abschließende Prüflauf nach den Korrekturen bestand alle 15 vorgegebenen Beispiele. |
+| 9 | Mindestens 38 von 40 echten Nutzersätzen richtig | Offen | 40 echte Nutzersätze liegen nicht vor. 30 zusätzlich geprüfte synthetische Fälle ersetzen diese Messung ausdrücklich nicht. |
+| 10 | Erste Zeile erklärt Enter, zweite wechselt Absicht | Im Modell umgesetzt | Das Menü zeigt die Aktion beziehungsweise den besten Treffer; die Gegenrichtung erscheint passend zum erkannten Fach. |
+| 11 | Absicht-Token wechselt ohne Textänderung | Im Modell umgesetzt | Der Token ändert die erzwungene Absicht; der eingegebene Satz bleibt erhalten. |
+| 12 | Dublette zeigt Steht schon drin | Im Modell umgesetzt | Offene Aufgaben werden nach Fach, Datum und normalisiertem Text verglichen; die bestehende Aufgabe wird geöffnet. |
+| 13 | Fehlendes Datum und fehlende Stunde führen zu Rückfrage | Im Modell umgesetzt | Die Rückfrage bietet drei Datumsantworten; entfernte Fälligkeitstokens werden nicht sofort durch den Parser wieder ergänzt. |
+| 14 | Zeile bei Tastatur in Safari und installierter PWA sichtbar | Geräteprüfung offen | `visualViewport`, Safe Areas und die Viewport-Metadaten bereiten das Verhalten vor. Safari, iOS-Tastatur und installierte PWA wurden nicht geprüft. |
+| 15 | Kein Eingabezoom auf iOS | Geräteprüfung offen | Die Eingabe verwendet 17px Schrift. Ein Test mit echter iOS-Tastatur fehlt. |
+| 16 | scheitelpunkt findet Abschrift in unter 400ms über Funnel | Offen | Die vorhandene Abschrift ist lokal mit 150ms Eingabeverzögerung durchsuchbar. Postgres-Volltextindex, Netzwerklatenz und Funnel sind nicht angebunden. |
+| 17 | faecher und fächer liefern gleiche Treffer | Im Modell umgesetzt | Die gemeinsame Normalisierung gleicht Umlaut- und Ersatzschreibweisen ab. |
+| 18 | Leeres Menü mit allen acht Bereichen | Im Modell umgesetzt | „Wohin?“ listet die acht Bereiche neben kontextbezogenen Vorschlägen und zuletzt geöffneten Zielen. |
+| 19 | Tastatursteuerung und VoiceOver-Ausgabe | Geräteprüfung offen | Pfeiltasten, Enter, Esc, Cmd/Ctrl+K, Combobox-Rollen und aktive Treffer sind im Code verdrahtet. VoiceOver und die vollständige Tastaturbedienung sind nicht am Gerät geprüft. |
+| 20 | Abhaken per Tipp und Rechtswisch, Verschieben nach 350ms | Im Modell umgesetzt | Beide Wege führen zur gleichen Zustandsänderung; der Gruppenwechsel beim Abhaken ist um 350ms verzögert. |
+| 21 | Rückgängig stellt auch nach Umsortieren wieder her | Im Modell umgesetzt | Undo stellt den vorherigen Aufgabenstand wieder her, entfernt das Ereignis und aktualisiert die Gruppen. |
+| 22 | Mehrzeiliger Durchstrich auf jeder Titelzeile | Geräteprüfung offen | `Range.getClientRects()` liefert die Zeilen für einzelne Striche. Der tatsächliche Umbruch und die Positionen benötigen eine Sichtprüfung. |
+| 23 | Rechtswisch ab 0 bis 23px links hakt nicht ab | Im Modell umgesetzt | Der Aufgabenwisch startet erst ab 24px Abstand zum linken Rand der App. |
+| 24 | Vertikales Scrollen löst keinen Aufgabenwisch aus | Geräteprüfung offen | `touch-action: pan-y` und eine Richtungsentscheidung vor der Pointer-Übernahme sind vorhanden. Diagonales und schnelles Scrollen wurde nicht am iPhone geprüft. |
+| 25 | Linkswisch mit Bearbeiten, Löschen und Kontexttokens | Im Modell umgesetzt | Die Aktionen werden seitlich freigelegt; Bearbeiten übernimmt Text, Fach und Fälligkeit in die bestehende Zeile. Eine zusätzliche Aktionstaste erschließt dieselben Funktionen. |
+| 26 | Kamera aus Ablauf und Nachschlagen mit einem Tipp | Im Modell umgesetzt | Der Kameraknopf sitzt in der durchgängigen Zeile; Neu bietet zusätzlich Kameraknöpfe je Fach. |
+| 27 | Erstes Kamerabild spätestens nach 1,5 Sekunden | Geräteprüfung offen | Die Kamera wird schon bei `pointerdown` angefordert; bis zum Bild steht „Kamera startet“. Startdauer und Berechtigungsdialog sind nicht gemessen. |
+| 28 | Ablegen ohne Formular unter dem Ausgangsfach | Im Modell umgesetzt | Aufnahmen werden ohne Formular als Miniatur an den Ausgangskontext angefügt; Aufnahmen aus der Zeile erscheinen oben in Neu. |
+| 29 | Serverstatus und Fehler aus §5.1 | Offen | Statusdarstellung und Fehlertexte sind vorhanden. `markUploadUnavailable()` setzt neue Aufnahmen unmittelbar auf Fehler; es gibt keinen Serverstatus und keine erfolgreiche Einordnung oder OCR. |
+| 30 | Fachänderung wird auf dem Server gespeichert | Offen | Die Fachzeile ändert das Material im Arbeitsspeicher. Eine Servermutation fehlt. |
+| 31 | Verweigerte Kamera bietet Foto auswählen | Im Modell umgesetzt | Der Fehlerpfad bietet einen Dateiauswahldialog für Bilder. Echte iOS-Berechtigungsabläufe wurden nicht geprüft. |
+| 32 | Lerntisch wächst aus und schrumpft in denselben Knopf | Im Modell umgesetzt | Die Startgeometrie und das auslösende Element werden gespeichert und für den Rückweg genutzt. |
+| 33 | Zweiter Tipp dreht eine offene Karte nicht zurück | Im Modell umgesetzt | Der Zustand `flipped` sperrt eine weitere Drehung bis zur nächsten Karte. |
+| 34 | Fünf schnelle Bewertungen gehen vollständig durch | Geräteprüfung offen | Fünf aufeinanderfolgende Aufrufe der tatsächlichen Bewertungsfunktion ohne Warten bestanden eine isolierte Zustandssimulation mit DOM-Ersatzobjekten. Schnelle vollständige Dreh-/Bewertungsfolgen per Berührung sind nicht nachgewiesen. |
+| 35 | Nochmal zeigt 12 Karten · 1 kommt nochmal | Im Modell umgesetzt | Grundzahl und Wiederholungen kommen getrennt aus der Sitzung; die zwölf fälligen Beispielkarten werden durch „Nochmal“ erneut eingereiht. |
+| 36 | Timer nach fünf Minuten Bildschirmsperre sekundengenau | Geräteprüfung offen | Restzeit wird aus `Date.now()`, Startzeit und Pausendauer berechnet. Fünf Minuten echter Gerätesperre wurden nicht geprüft. |
+| 37 | Tischschließen hält Block nicht an; Restzeit in Planzeile | Im Modell umgesetzt | Schließen ändert den Pausenzustand nicht. Die Planzeile wird aus derselben Zeitberechnung aktualisiert. Dies gilt innerhalb der geöffneten Sitzung. |
+| 38 | Abschlussfrage nennt echte Minuten, unter einer Minute keine Frage | Im Modell umgesetzt | Verstrichene Zeit ohne Pausen wird in volle Minuten umgerechnet; unter einer Minute schließt der Tisch ohne Abschlussfrage. |
+| 39 | Karten aus /abruf, Lernblock folgt Klausur | Offen | Karten sind lokale Beispiele mit Fach-, Material- und Reihenfolgebezug. Der Lernblock filtert danach; eine `/abruf`-Anbindung fehlt. |
+| 40 | Gewusst im Dunkelmodus klar vom Tisch abgesetzt | Geräteprüfung offen | Der Knopf verwendet #EEF0F7 auf dem Tisch #121A4E. Die tatsächliche Darstellung wurde nicht am Gerät betrachtet. |
+| 41 | Nur die drei vorgeschriebenen Schriftfamilien geladen | Im Modell umgesetzt | Externe Schrift-Stylesheets laden Schibsted Grotesk, Newsreader und Material Symbols Rounded über Google Fonts. |
+| 42 | Newsreader nur an den erlaubten Stellen | Im Modell umgesetzt | Die Serifenschrift ist auf Schrittüberschriften einschließlich Fertig, Kartenfragen und Formeln begrenzt. |
+| 43 | Blau als Akzent, Gelb nur als Aufleuchten | Im Modell umgesetzt | Blau führt Aktionen und Lerntisch, `--mark` dient dem kurzen Zielaufleuchten; neutrale Flächen tragen den übrigen Ablauf. |
+| 44 | Keine verschachtelten Karten, Großbuchstaben-Vorzeilen, Flächenverläufe oder Emojis | Im Modell umgesetzt | Fach-, Aufgaben- und Nachschlageansichten verwenden Zeilen; Symbole stammen aus der vorgegebenen Symbolschrift. Der Kartenstapel gehört zur Abfrage. |
+| 45 | Zahlen stammen aus Daten oder Protokoll | Im Modell umgesetzt | Aufgaben, Noten, Termine, Seiten, Karten und Zeitwerte werden aus den Beispieldaten oder dem Sitzungszustand abgeleitet; dies sind keine produktiven Nutzerdaten. |
+| 46 | Nur transform/opacity, keine Layout-/Paint-Spitzen | Geräteprüfung offen | Bewegungs-Keyframes verwenden `transform` und `opacity`; Layoutmessungen dienen den Zielgeometrien. Ein Performance-Panel-Nachweis beim Abhaken fehlt. |
+| 47 | Doppeltipp auf Band kehrt laufende Bewegung um | Geräteprüfung offen | Das Band kann während einer laufenden Bewegung zum vorherigen Schritt wechseln; die Bewegungsfunktion übernimmt aktuelle Transformationswerte. Schnelle Doppeltipps wurden nicht visuell geprüft. |
+| 48 | Alle Regeln für reduzierte Bewegung aus §7.3 | Geräteprüfung offen | Die Medienabfrage wird je Bewegung gelesen: reduzierte Ebenenübergänge, Überblenden der Karten, kurze Haken, keine Staffelung oder Flüge, weiterlaufende Zeitlinie und direktes Gestenende sind im Code angelegt. Der vollständige Geräteabgleich fehlt. |
+| 49 | Hell/Dunkel über System und data-theme | Im Modell umgesetzt | Systemabfrage sowie explizites `data-theme="light"` und `data-theme="dark"` sind vorhanden; Einstellungen schalten zwischen den drei Varianten. |
+| 50 | Drei Fachzeilen auf iPhone SE 375×667 ohne Scrollen | Geräteprüfung offen | Kompakte Abstände und Fachzeilenhöhen sind im CSS angelegt. Eine gerenderte Ansicht auf dem echten iPhone SE wurde nicht geprüft. |
+
+## Tatsächlich vorliegende Prüfung und Grenzen
+
+Die abschließende Prüfung nach den Korrekturen bestand die JavaScript-Syntaxprüfung, alle 15 vorgegebenen Parserbeispiele, alle 30 synthetischen Absichtsfälle und fünf Regressionen für Aufgabentext und Fach. Zusätzliche Prüfungen deckten Unicode-Aliasse, Jahreswechsel, ungültige Datumsangaben, Dubletten, Kontext und erzwungene Absicht, Ereignisrücknahme, Startzustand sowie Freitag, Wochenende und Ferien ab. Die Zeitberechnung mit Pause wurde simuliert; reduzierte Bewegung wurde auf Endgeometrie und ausschließliches Überblenden geprüft. Die Strukturprüfung bestätigte ausschließlich Google Fonts als externe Ressourcen und keine Verwendung von `innerHTML`, `setInterval`, `localStorage` oder einem Testzugang im ausgelieferten Modell. Synthetische Fälle ersetzen weiterhin nicht die echten Nutzersätze aus Kriterium 9; simulierte Prüfungen ersetzen keine Gerätesperre oder Browserdarstellung.
+
+Isolierte Zustandssimulationen der tatsächlichen Funktionen mit DOM-Ersatzobjekten bestanden außerdem fünf aufeinanderfolgende Bewertungen ohne Warten und wiederholtes „Nochmal“ mit korrekter Zahl ausstehender Wiederholungen sowie zwölf gespeicherten Erstbewertungen. Beim Ablauf der Lernzeit mit offenem Material-Sheet blieb nur der passende Abschlussdialog aktiv; 123.000ms verstrichene Lernzeit ergaben die Anzeige von zwei Minuten. Diese Prüfungen erfassen Zustandslogik, keine echte Berührung, Darstellung oder Animationsgeschwindigkeit.
+
+Der angeforderte Detektor wurde am Ende erneut mit dem angeforderten Befehl auf dem endgültigen Code ausgeführt. Sein Hinweis auf ein Bild ohne Quelle wurde durch das Erzeugen des Vorschaubildes erst bei vorhandener Aufnahme korrigiert und trat nicht mehr auf. Der abschließende Lauf endete mit Exitcode 2 und genau einem Befund: dem hellen Kartenschatten im Dunkelmodus, der bewusst erhalten bleibt, weil §6.2 ihn exakt vorgibt. Das ist keine bestandene visuelle Geräteprüfung.
+
+Browser-Sichtprüfungen waren blockiert: Der Chrome-Start aus der Shell endete in der Sandbox mit SIGABRT/EPERM, der Zugriff über Computer Use wurde durch die Chrome-Berechtigung verweigert. Daher gibt es keine belastbaren Screenshots, keine echte iPhone-, Safari-, PWA- oder VoiceOver-Abnahme, keine Performance-Aufzeichnung und keinen Nachweis für schnelle Gestenfolgen oder den Timer bei Gerätesperre. Die abschließende Codeprüfung bestätigte alle fünf Reviewer-Korrekturen als gelöst; eine Freigabe der gesamten Oberfläche im Browser wird daraus nicht abgeleitet.
+
+Neue Aufnahmen behalten ihre tatsächlich ausgewählten Bilddaten nur für die laufende Öffnung. „Erneut versuchen“ endet ohne Uploaddienst wieder im Fehlerzustand; es erzeugt keine künstliche Klassifikation, kein Thema und keine Abschrift. Die bereits vorhandenen Abschriften, Themen und Lernkarten sind ausdrücklich Beispieldaten; auch die Originalansicht vorhandener Beispielblätter ist eine lokale Textdarstellung, kein nachgewiesener Scan.

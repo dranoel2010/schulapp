@@ -81,6 +81,6 @@ rueckblick.html
 # Entscheidung, und bis dahin ist er wenigstens außer Reichweite.
 install.sh
 
-# Die gebündelte Abnahme-Messung (scripts/abschrift-messen.mts, Kopf): sie
-# entsteht im Klon und geht per scp aufs NAS. Ein Bauergebnis, kein Quelltext.
-/abschrift-messen.mjs
+# Prüf-Screenshots der UI-Entwürfe: über 100 MB, sie bleiben lokal
+/entwurf-modelle/*/screens/
+/entwurf-modelle/*/final/
