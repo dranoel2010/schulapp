@@ -47,3 +47,17 @@ export function ablaufAusMenuNehmen(): boolean {
 }
 
 const SERVER: AblaufZustand = { sichtbar: false, schritt: "blaetter", nachDerSchule: false };
+
+/**
+ * Der App-Tag, den der Server zuletzt für den Ablauf genannt hat (Testuhr
+ * eingeschlossen). Die Kamera schreibt ihn in jedes abgelegte Blatt: Im
+ * Ablauf stehen nur die Blätter dieses Tages.
+ */
+let ablaufTag: string | null = null;
+export function ablaufTagSetzen(tag: string): void {
+  ablaufTag = tag;
+}
+export function ablaufTagLesen(): string | null {
+  return ablaufTag;
+}
+

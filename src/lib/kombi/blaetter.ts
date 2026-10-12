@@ -9,6 +9,8 @@ import { jevConfigured } from "@/lib/jev";
 import { claudeBeschaeftigt, claudeEingeplant, claudeLiestGerade, claudePausiert } from "@/lib/leser/claude-zustand";
 import { loadTopics, ownsSubject } from "@/lib/materials";
 
+import { themenLaufAktiv } from "./themen-lauf";
+
 /**
  * Die Blätter für den Ablauf nach der Schule und „Zuletzt abgelegt“
  * (Modell 23, Plan 3.8): je Blatt eine kurze, serialisierbare Zeile mit dem
@@ -42,6 +44,8 @@ export type BlattKurz = {
   /** das vorläufige Fach, nur für „Fach ändern“ (welche Pille gedrückt ist) */
   fachVorlaeufig: string;
   themen: string[];
+  /** Nach „Fach ändern“ bestimmt Jev gerade die Themen: „Thema folgt“ */
+  themaFolgt: boolean;
   seiten: number;
   status: BlattStatus;
   /** Vorschau der ersten Seite */
@@ -215,6 +219,7 @@ async function kurzMachen(userId: string, zeilen: Zeile[]): Promise<BlattKurz[]>
       fach: eingeordnet ? { id: z.subjectId, name: z.subjectName } : null,
       fachVorlaeufig: z.subjectId,
       themen: (themen.get(z.id) ?? []).map((t) => t.title),
+      themaFolgt: themenLaufAktiv(z.id),
       seiten: s.length,
       status: blattStatus({ eingeordnet, ungelesen, inArbeit, gescheitert }),
       vorschau: s[0] ? `/api/material/${s[0].id}/vorschau` : null,

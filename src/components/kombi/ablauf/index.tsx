@@ -10,11 +10,14 @@ import {
   abhakenZuruecknehmenAction,
   abschriftErneutAction,
   aufgabeAbhakenAblaufAction,
+  aufgabeAendernAblaufAction,
+  aufgabeEintragenAblaufAction,
   aufgabeLoeschenAblaufAction,
   aufgabeWiederherstellenAblaufAction,
+  eintragenZuruecknehmenAblaufAction,
   fachAendernAction,
 } from "@/app/(app)/ablauf-actions";
-import { ablaufAusMenuNehmen, ablaufStore } from "@/components/kombi/ablauf/ablauf-store";
+import { ablaufAusMenuNehmen, ablaufStore, ablaufTagSetzen } from "@/components/kombi/ablauf/ablauf-store";
 import { AufgabeZeile } from "@/components/kombi/ablauf/aufgabe";
 import { BlattZeile, type BlattAnzeige } from "@/components/kombi/ablauf/blatt-zeile";
 import { blattFertig } from "@/components/kombi/ablauf/status-texte";
@@ -22,8 +25,10 @@ import { ablageEmpfangen, blaetterStore, vorLandungMelden, type Landung } from "
 import { Icon } from "@/components/kombi/icon";
 import { useKombi, type Ansicht } from "@/components/kombi/kontext";
 import { warmCamera } from "@/components/kombi/kamera/stream";
+import type { EintragSenden } from "@/components/kombi/zeile";
 import type { AblaufDaten, AufgabeKurz } from "@/lib/kombi/ablauf";
-import { E, buzz, flash, flip, moveTo, reduce } from "@/lib/kombi/motion";
+import { E, buzz, flash, flip, moveTo, reduce, vvStable } from "@/lib/kombi/motion";
+import { cap, zahl } from "@/lib/kombi/text";
 import { themeColor } from "@/lib/kombi/theme-color";
 
 /**
@@ -101,17 +106,54 @@ export function AblaufEbene() {
     daten: null as AblaufDaten | null,
   });
 
+  /** laufende Actions je Aufgabe: ihre optimistische Änderung bleibt, bis die Action fertig ist */
+  const laufend = useRef(new Map<string, number>());
+  const laufStart = useCallback((id: string) => {
+    laufend.current.set(id, (laufend.current.get(id) ?? 0) + 1);
+  }, []);
+  const laufEnde = useCallback((id: string) => {
+    const n = (laufend.current.get(id) ?? 1) - 1;
+    if (n > 0) laufend.current.set(id, n);
+    else laufend.current.delete(id);
+  }, []);
+  /**
+   * Neue Serverdaten: optimistische Änderungen fallen nur weg, wenn ihre
+   * Action fertig ist oder der Server sie schon enthält — sonst spränge eine
+   * eben abgehakte Zeile still zurück (2.4 Punkt 9).
+   */
+  const aenderungAbgleichen = useCallback((server: AufgabeKurz[]) => {
+    const byId = new Map(server.map((a) => [a.id, a]));
+    setAenderung((m) => {
+      if (!m.size) return m;
+      const n = new Map<string, { done?: string | null; weg?: boolean }>();
+      for (const [id, c] of m) {
+        if (!laufend.current.get(id)) continue;
+        const s = byId.get(id);
+        const schonDa = c.weg ? !s : !!s && "done" in c && !!s.done === !!c.done;
+        if (!schonDa) n.set(id, c);
+      }
+      return n;
+    });
+  }, []);
+
+  const uebernehmen = useCallback(
+    (d: AblaufDaten) => {
+      z.current.daten = d;
+      ablaufTagSetzen(d.tag);
+      blaetterStore.tagSetzen(d.tag);
+      setDaten(d);
+      aenderungAbgleichen(d.aufgaben);
+    },
+    [aenderungAbgleichen],
+  );
+
   const laden = useCallback(
     () =>
       ablaufHolen().then((d) => {
-        if (d) {
-          z.current.daten = d;
-          setDaten(d);
-          setAenderung(new Map());
-        }
+        if (d) uebernehmen(d);
         return d;
       }),
-    [],
+    [uebernehmen],
   );
 
   // ── Schritte (Prototyp goStep/setBand, Z. 2185–2249) ────────────────────────
@@ -290,8 +332,10 @@ export function AblaufEbene() {
     void laden().then((d) => {
       if (weg || !d) return;
       z.current.live = d.ansichtAblauf;
-      const state = window.history.state as { stapel?: unknown[]; overlay?: string } | null;
-      const stapelLeer = !state?.stapel?.length && !state?.overlay;
+      // Nur ein echter Stapel hält den Ablauf auf; ein Overlay (Menü, Kamera)
+      // aus der Zeit vor dem Neuladen nicht (Kriterium 11).
+      const state = window.history.state as { stapel?: unknown[] } | null;
+      const stapelLeer = !state?.stapel?.length;
       if (d.ansichtAblauf && window.location.pathname === "/" && stapelLeer && !z.current.gestartet) {
         z.current.gestartet = true;
         setView("ablauf", { anim: false });
@@ -334,13 +378,20 @@ export function AblaufEbene() {
 
   // ── Blätter: Anzeige aus Server und Browser ─────────────────────────────────
 
+  const datenTag = daten?.tag ?? null;
   const anzeige = useMemo((): BlattAnzeige[] => {
     const server = daten?.blaetter ?? [];
     const byId = new Map(server.map((b) => [b.id, b]));
     const benutzt = new Set<string>();
     const out: (BlattAnzeige & { order: number })[] = [];
     for (const l of lokal) {
-      if (versteckt.has(l.key)) continue;
+      if (datenTag && l.tag && l.tag !== datenTag) continue;
+      if (versteckt.has(l.key)) {
+        // Auch versteckt gehört der Server-Eintrag zu diesem Blatt: er darf
+        // nicht vor der Landung als eigene Zeile erscheinen.
+        if (l.id) benutzt.add(l.id);
+        continue;
+      }
       const s = (l.id && byId.get(l.id)) || l.kurz;
       if (l.id) benutzt.add(l.id);
       if (s) {
@@ -350,7 +401,7 @@ export function AblaufEbene() {
           status: l.lokal ?? s.status,
           fach: s.fach,
           titel: s.titel,
-          thema: themaFolgt.has(s.id) && !s.themen.length ? "Thema folgt" : (s.themen[0] ?? ""),
+          thema: (themaFolgt.has(s.id) || s.themaFolgt) && !s.themen.length ? "Thema folgt" : (s.themen[0] ?? ""),
           seiten: Math.max(s.seiten, l.seiten),
           bild: l.bild || s.vorschau,
           order: l.order,
@@ -367,14 +418,14 @@ export function AblaufEbene() {
         status: s.status,
         fach: s.fach,
         titel: s.titel,
-        thema: themaFolgt.has(s.id) && !s.themen.length ? "Thema folgt" : (s.themen[0] ?? ""),
+        thema: (themaFolgt.has(s.id) || s.themaFolgt) && !s.themen.length ? "Thema folgt" : (s.themen[0] ?? ""),
         seiten: s.seiten,
         bild: blaetterStore.bildVon(s.id) ?? s.vorschau,
         order: Date.parse(s.erstellt),
       });
     }
     return out.sort((a, b) => b.order - a.order);
-  }, [daten?.blaetter, lokal, versteckt, themaFolgt]);
+  }, [daten?.blaetter, datenTag, lokal, versteckt, themaFolgt]);
 
   const has = anzeige.length > 0;
 
@@ -387,7 +438,11 @@ export function AblaufEbene() {
   }, [fertigeUploads, laden, neuLaden]);
 
   // Solange ein Blatt nicht fertig ist: alle 2 s nach dem Stand fragen (Plan 3.8)
-  const offen = anzeige.some((b) => OFFEN.has(b.status) && b.id && !blattFertig(b.status));
+  // nur Blätter, die der Server für heute kennt — sonst liefe die Abfrage ohne Ende
+  const serverIds = useMemo(() => new Set((daten?.blaetter ?? []).map((b) => b.id)), [daten?.blaetter]);
+  const themaWartet = (daten?.blaetter ?? []).some((b) => b.themaFolgt);
+  const offen =
+    themaWartet || anzeige.some((b) => OFFEN.has(b.status) && !!b.id && serverIds.has(b.id) && !blattFertig(b.status));
   useEffect(() => {
     if (!offen) return;
     let stand: string | null = null;
@@ -396,10 +451,15 @@ export function AblaufEbene() {
       if (weg) return;
       if (!document.hidden) {
         try {
-          const r = await fetch("/api/material/stand", { cache: "no-store" });
-          const j = (await r.json()) as { stand?: string };
-          if (j.stand && stand !== null && j.stand !== stand) await laden();
-          if (j.stand) stand = j.stand;
+          if (z.current.daten?.blaetter.some((b) => b.themaFolgt)) {
+            // Jev bestimmt nach „Fach ändern“ die Themen: direkt über /api/ablauf nachfragen
+            await laden();
+          } else {
+            const r = await fetch("/api/material/stand", { cache: "no-store" });
+            const j = (await r.json()) as { stand?: string };
+            if (j.stand && stand !== null && j.stand !== stand) await laden();
+            if (j.stand) stand = j.stand;
+          }
         } catch {
           // ohne Netz: der nächste Takt
         }
@@ -536,7 +596,7 @@ export function AblaufEbene() {
           flushSync(zeigen);
           const n = l.neu.length;
           const k0 = l.neu[0].key;
-          toast(n === 1 ? "Blatt abgelegt" : `${n} Blätter abgelegt`, () => {
+          toast(n === 1 ? "Blatt abgelegt" : `${cap(zahl(n, "n"))} Blätter abgelegt`, () => {
             const id = blaetterStore.get().find((x) => x.key === k0)?.id;
             if (id) openPage("blatt", { id });
           }, undefined, "Ansehen");
@@ -609,20 +669,24 @@ export function AblaufEbene() {
       setDaten((d) =>
         d ? { ...d, blaetter: d.blaetter.map((x) => (x.id === id ? { ...x, fach: f ?? x.fach, themen: [] } : x)) } : d,
       );
+      // bis der Server antwortet; danach sagt er selbst, ob Jev noch läuft (BlattKurz.themaFolgt)
       setThemaFolgt((s) => new Set(s).add(id));
-      setTimeout(() => setThemaFolgt((s) => {
-        const n = new Set(s);
-        n.delete(id);
-        return n;
-      }), 12_000);
+      const ohneFolgt = () =>
+        setThemaFolgt((s) => {
+          const n = new Set(s);
+          n.delete(id);
+          return n;
+        });
       if (f) toast(`Nach ${f.name} verschoben`);
       const lauf = () =>
         fachAendernAction(id, fachId).then(
-          () => {
+          (kurz) => {
+            if (kurz) setDaten((d) => (d ? { ...d, blaetter: d.blaetter.map((x) => (x.id === id ? kurz : x)) } : d));
+            ohneFolgt();
             void laden();
-            setTimeout(() => void laden(), 4000);
           },
           () => {
+            ohneFolgt();
             fehlerToast("Nicht gespeichert", lauf, "Erneut");
             setTimeout(() => setDaten(vorher), 320);
           },
@@ -708,38 +772,51 @@ export function AblaufEbene() {
           ),
         erledigt ? 350 : 200,
       );
-      const lauf = () =>
-        aufgabeAbhakenAblaufAction(a.id, erledigt).then(
+      const lauf = () => {
+        laufStart(a.id);
+        return aufgabeAbhakenAblaufAction(a.id, erledigt).then(
           ({ protokollId }) => {
+            laufEnde(a.id);
             void neuLaden();
             if (erledigt) {
               toast(
                 `${a.kurz} abgehakt`,
                 () => {
                   setAenderung((m) => new Map(m).set(a.id, { done: a.done }));
-                  void abhakenZuruecknehmenAction(a.id, false, protokollId).then(() => void laden());
+                  laufStart(a.id);
+                  void abhakenZuruecknehmenAction(a.id, false, protokollId).then(
+                    () => {
+                      laufEnde(a.id);
+                      void laden();
+                    },
+                    () => laufEnde(a.id),
+                  );
                 },
                 `${a.kurz}, ${a.text}`,
               );
             }
           },
           () => {
+            laufEnde(a.id);
             fehlerToast("Nicht gespeichert", lauf, "Erneut");
             setTimeout(() => setAenderung((m) => new Map(m).set(a.id, { done: a.done })), 320);
           },
         );
+      };
       if (!erledigt) hideToast();
       void lauf();
     },
-    [fehlerToast, hideToast, laden, neuLaden, toast, umsortieren],
+    [fehlerToast, hideToast, laden, laufEnde, laufStart, neuLaden, toast, umsortieren],
   );
 
   const loeschen = useCallback(
     (a: AufgabeKurz) => {
       umsortieren(() => setAenderung((m) => new Map(m).set(a.id, { weg: true })));
-      const lauf = () =>
-        aufgabeLoeschenAblaufAction(a.id).then(
+      const lauf = () => {
+        laufStart(a.id);
+        return aufgabeLoeschenAblaufAction(a.id).then(
           (r) => {
+            laufEnde(a.id);
             void neuLaden();
             if (!r) return;
             toast(
@@ -758,6 +835,7 @@ export function AblaufEbene() {
             );
           },
           () => {
+            laufEnde(a.id);
             fehlerToast("Nicht gespeichert", lauf, "Erneut");
             setTimeout(
               () =>
@@ -770,12 +848,129 @@ export function AblaufEbene() {
             );
           },
         );
+      };
       void lauf();
     },
-    [fehlerToast, laden, neuLaden, toast, umsortieren],
+    [fehlerToast, laden, laufEnde, laufStart, neuLaden, toast, umsortieren],
   );
 
-  const bearbeiten = useCallback((a: AufgabeKurz) => openZeile({ intent: "aendern", id: a.id, text: a.text, fach: a.fachId }), [openZeile]);
+  // ── Eintragen und Ändern über die Zeile (Kriterium 22; Prototyp doEintragen/placeNewTask, Z. 2922–2975) ──
+
+  /** Geistflug: der Satz löst sich aus dem Feld und landet an seiner Zeile (13.3 Nr. 23) */
+  const geistflug = useCallback(async (id: string, satz: string, fr: DOMRect | null) => {
+    await vvStable();
+    const row = haScrollRef.current?.querySelector<HTMLElement>(`#haSubjects .task[data-id="${id}"]`);
+    if (!row) return;
+    const front = row.querySelector<HTMLElement>(".t-front") ?? row;
+    const tEl = row.querySelector<HTMLElement>(".t-txt");
+    if (reduce() || !fr || !tEl || !z.current.sichtbar || z.current.schritt !== "ha") {
+      row.style.visibility = "";
+      flash(front);
+      return;
+    }
+    const tr = tEl.getBoundingClientRect();
+    const ghost = document.createElement("div");
+    ghost.style.cssText = `position:fixed;z-index:80;left:${tr.left}px;top:${tr.top}px;font-size:17px;line-height:1.4;color:var(--ink);pointer-events:none;white-space:nowrap`;
+    ghost.textContent = satz;
+    document.body.append(ghost);
+    row.style.visibility = "hidden";
+    const gr = ghost.getBoundingClientRect();
+    const dx = fr.left + 4 - gr.left;
+    const dy = fr.top + (fr.height - gr.height) / 2 - gr.top;
+    ghost
+      .animate([{ transform: `translate(${dx}px,${dy}px)`, opacity: 0.4 }, { transform: "none", opacity: 1 }], { duration: 360, easing: E.drawer })
+      .finished.then(
+        () => {
+          ghost.remove();
+          row.style.visibility = "";
+          flash(front);
+        },
+        () => {
+          ghost.remove();
+          row.style.visibility = "";
+        },
+      );
+  }, []);
+
+  const senden = useCallback(
+    (e: EintragSenden) => {
+      const eingabe = { subjectId: e.fachId, title: e.text, dueDate: e.due };
+      if (e.intent === "aendern" && e.id) {
+        const aid = e.id;
+        const alt = z.current.daten?.aufgaben.find((x) => x.id === aid);
+        const lauf = () =>
+          aufgabeAendernAblaufAction(aid, eingabe).then(
+            () => {
+              void laden();
+              void neuLaden();
+              if (alt) {
+                toast(
+                  "Geändert",
+                  () =>
+                    void aufgabeAendernAblaufAction(aid, { subjectId: alt.fachId, title: alt.text, dueDate: alt.due }).then(() => {
+                      void laden();
+                      void neuLaden();
+                    }),
+                  e.text,
+                );
+              }
+            },
+            () => fehlerToast("Nicht gespeichert", lauf, "Erneut"),
+          );
+        void lauf();
+        return;
+      }
+      const lauf = () =>
+        aufgabeEintragenAblaufAction(eingabe).then(
+          async ({ id: neu, protokollId }) => {
+            const d = await ablaufHolen();
+            if (d) {
+              const sc = haScrollRef.current;
+              const aufHA = z.current.sichtbar && z.current.schritt === "ha" && !document.querySelector("#pages > .page");
+              // die Zeilen darunter rücken per FLIP (13.3 Nr. 24); die neue steht unsichtbar, bis der Satz landet
+              if (sc && aufHA && !reduce()) flip(sc, () => flushSync(() => uebernehmen(d)), { duration: 280, easing: E.out });
+              else flushSync(() => uebernehmen(d));
+              void geistflug(neu, e.text, aufHA ? e.from : null);
+            }
+            void neuLaden();
+            toast(
+              "Eingetragen",
+              () => {
+                umsortieren(() => setAenderung((m) => new Map(m).set(neu, { weg: true })));
+                laufStart(neu);
+                void eintragenZuruecknehmenAblaufAction(neu, protokollId).then(
+                  () => {
+                    laufEnde(neu);
+                    void laden();
+                    void neuLaden();
+                  },
+                  () => laufEnde(neu),
+                );
+              },
+              e.text,
+            );
+          },
+          () => fehlerToast("Nicht gespeichert", lauf, "Erneut"),
+        );
+      void lauf();
+    },
+    [fehlerToast, geistflug, laden, laufEnde, laufStart, neuLaden, toast, uebernehmen, umsortieren],
+  );
+
+  /** Was die Zeile zum Eintragen braucht: Fächer mit nächster Stunde, der App-Tag, und wohin sie absendet */
+  const zeileKontext = useCallback(
+    (k: { intent: "eintragen" | "aendern"; fach: string | null; due: string | null; dueAuto?: boolean; fachPills?: boolean; id?: string; text?: string }) => {
+      const d = z.current.daten;
+      const faecher = (d?.alleFaecher ?? []).map((f) => ({ id: f.id, name: f.name, kurz: f.kurz, naechste: f.naechste }));
+      openZeile({ ...k, from: "ha", heute: d?.tag ?? "", faecher, senden });
+    },
+    [openZeile, senden],
+  );
+
+  const bearbeiten = useCallback(
+    (a: AufgabeKurz) => zeileKontext({ intent: "aendern", id: a.id, text: a.text, fach: a.fachId, due: a.due, dueAuto: false }),
+    [zeileKontext],
+  );
 
   const skipLabel = ausMenu ? "Schließen" : "Überspringen";
 
@@ -906,10 +1101,10 @@ export function AblaufEbene() {
                       type="button"
                       aria-label={f ? `Aufgabe in ${f.name} eintragen` : "Aufgabe in anderem Fach eintragen"}
                       onClick={() =>
-                        openZeile(
+                        zeileKontext(
                           f
-                            ? { intent: "eintragen", fach: f.id, due: f.naechste, dueAuto: true, from: "ha" }
-                            : { intent: "eintragen", fach: null, due: null, from: "ha", fachPills: true },
+                            ? { intent: "eintragen", fach: f.id, due: f.naechste, dueAuto: true }
+                            : { intent: "eintragen", fach: null, due: null, fachPills: true },
                         )
                       }
                     >

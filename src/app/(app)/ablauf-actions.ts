@@ -9,12 +9,13 @@ import { themenFuerFach } from "@/lib/auto-file";
 import { requireUser } from "@/lib/auth";
 import { requestCalendarSync } from "@/lib/calendar/sync";
 import { claudeConfigured } from "@/lib/claude/client";
-import { deleteHomework, getHomework, setHomeworkDone } from "@/lib/homework";
+import { createHomework, deleteHomework, getHomework, setHomeworkDone, updateHomework } from "@/lib/homework";
 import { ablaufBeenden } from "@/lib/kombi/ablauf";
 import { jetztFuerAblauf } from "@/lib/kombi/ablauf-uhr";
 import { blattKurz, fachAendern, type BlattKurz } from "@/lib/kombi/blaetter";
 import { abschriftLaufVormerken } from "@/lib/kombi/blatt-aufnahme";
 import { appTagVon } from "@/lib/kombi/tag-daten";
+import { themenLaufEnde, themenLaufStart } from "@/lib/kombi/themen-lauf";
 import { claudeKnopfMoeglich, claudeVonHandAnstossen, claudeVonHandVormerken } from "@/lib/leser/claude-leser";
 import { letzterLauf } from "@/lib/leser/laeufe";
 import { getMaterial, ownsSubject } from "@/lib/materials";
@@ -91,11 +92,15 @@ export async function fachAendernAction(materialId: string, subjectId: string): 
   const mid = id.parse(materialId);
   const sid = id.parse(subjectId);
   if (!(await fachAendern(user.id, mid, sid))) return null;
+  // Solange Jev läuft, steht „Thema folgt“; endet der Lauf ohne Thema, bleibt die Zeile leer.
+  themenLaufStart(mid);
   after(async () => {
     try {
       await themenFuerFach(user.id, mid);
     } catch (fehler) {
       console.error("Themen nach Fach ändern fehlgeschlagen", fehler);
+    } finally {
+      themenLaufEnde(mid);
     }
   });
   return blattKurz(user.id, mid);
@@ -174,5 +179,45 @@ export async function aufgabeWiederherstellenAblaufAction(zeile: AufgabeZeileDat
     })
     .onConflictDoNothing();
   await protokollLoeschen(user.id, id.parse(protokollId));
+  requestCalendarSync(user.id);
+}
+
+const eingabeSchema = z.object({
+  subjectId: z.uuid(),
+  title: z.string().trim().min(1).max(120),
+  dueDate: z.iso.date(),
+});
+export type AufgabeEingabe = z.infer<typeof eingabeSchema>;
+
+/**
+ * „+ Aufgabe“ in Schritt 2 (Kriterium 22; Plan 3.9 `aufgabeEintragenAction`):
+ * anlegen, Protokoll `aufgabe_eingetragen` (damit sie unter dem Fach steht),
+ * Kalender-Abgleich. Gibt ID und Protokoll-ID zurück (Rückgängig).
+ */
+export async function aufgabeEintragenAblaufAction(e: AufgabeEingabe): Promise<{ id: string; protokollId: string }> {
+  const user = await requireUser();
+  const p = eingabeSchema.parse(e);
+  const neu = await createHomework(user.id, p);
+  const protokollId = await protokollieren(user.id, await heute(), "aufgabe_eingetragen", neu);
+  requestCalendarSync(user.id);
+  return { id: neu, protokollId };
+}
+
+/** Rückgängig nach dem Eintragen: Aufgabe und Protokolleintrag weg. */
+export async function eintragenZuruecknehmenAblaufAction(aufgabeId: string, protokollId: string): Promise<void> {
+  const user = await requireUser();
+  await deleteHomework(user.id, id.parse(aufgabeId));
+  await protokollLoeschen(user.id, id.parse(protokollId));
+  requestCalendarSync(user.id);
+}
+
+/** „Bearbeiten“ im Linkswisch: Fach, Text, Fälligkeit; ohne Protokoll (Plan 3.3). Rückgängig ruft sie mit den alten Werten. */
+export async function aufgabeAendernAblaufAction(aufgabeId: string, e: AufgabeEingabe): Promise<void> {
+  const user = await requireUser();
+  const hid = id.parse(aufgabeId);
+  const p = eingabeSchema.parse(e);
+  const alt = await getHomework(user.id, hid);
+  if (!alt) return;
+  await updateHomework(user.id, hid, { ...p, details: alt.details ?? null });
   requestCalendarSync(user.id);
 }

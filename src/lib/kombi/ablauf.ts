@@ -63,8 +63,8 @@ export type AblaufDaten = {
   /** Alle offenen Aufgaben und die heute erledigten */
   aufgaben: AufgabeKurz[];
   blaetter: BlattKurz[];
-  /** alle aktiven Fächer, für „Fach ändern“ */
-  alleFaecher: { id: string; name: string }[];
+  /** alle aktiven Fächer, für „Fach ändern“ und die Fach-Pillen beim Eintragen (mit nächster Stunde) */
+  alleFaecher: { id: string; name: string; kurz: string; naechste: string | null }[];
 };
 
 /** Die Uhr eines Stundenendes 'HH:MM' oder 'HH:MM:SS'. */
@@ -210,7 +210,7 @@ export async function ladeAblauf(userId: string, now: Date): Promise<AblaufDaten
     eingetragen,
     aufgaben,
     blaetter,
-    alleFaecher: faecherAlle.map((f) => ({ id: f.id, name: f.name })),
+    alleFaecher: faecherAlle.map((f) => ({ id: f.id, name: f.name, kurz: kurzName(f.name), naechste: naechsteStunde(f.id) })),
   };
 }
 

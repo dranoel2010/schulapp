@@ -32,14 +32,23 @@ function norm(s: string): string {
     .replace(/\p{M}/gu, "");
 }
 
+/**
+ * Der Standardtitel eines Blatts ohne eigenen Titel (`defaultMaterialTitle`,
+ * „Blatt vom 12.10.“). Er sagt nichts über das Blatt und zählt wie kein Titel.
+ */
+export function istStandardTitel(titel: string): boolean {
+  return /^Blatt(?: vom \d{1,2}\.\d{1,2}\.)?$/.test(titel.trim());
+}
+
 /** Die drei Zeilen (Prototyp `statusTexts`, Z. 3631). */
 export function statusTexts(b: Pick<BlattAnzeige, "status" | "fach" | "titel" | "thema">): [string, string, string] {
   const warte = STATUS[b.status];
   if (warte) return [warte, "", ""];
   const fach = b.fach ? b.fach.name : "Ohne Fach";
   const th = b.thema || "";
+  const titel = istStandardTitel(b.titel) ? "" : b.titel;
   // der Titel steht nur, wenn er mehr sagt als das Thema; sonst bleibt allein der Stand der Abschrift
-  const t = b.titel && !norm(th).startsWith(norm(b.titel.split(",")[0])) ? `${b.titel.split(",")[0]} · ` : "";
+  const t = titel && !norm(th).startsWith(norm(titel.split(",")[0])) ? `${titel.split(",")[0]} · ` : "";
   if (b.status === "abschrift_laeuft") return [fach, th, `${t}Abschrift folgt`];
   if (b.status === "abschrift_da") return [fach, th, `${t}Abschrift da`];
   if (b.status === "fehlgeschlagen") return [fach, th, `${t}Abschrift fehlgeschlagen`];

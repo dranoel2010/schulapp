@@ -12,6 +12,7 @@ import {
   vorLandungAusloesen,
   type Aufnahme,
 } from "@/components/kombi/ablauf/blaetter-store";
+import { ablaufTagLesen } from "@/components/kombi/ablauf/ablauf-store";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import { prepareCanvas, prepareFile } from "@/components/material/prepare-page";
@@ -72,6 +73,7 @@ function underOf(): HTMLElement | null {
 export function KameraEbene() {
   const kombi = useKombi();
   const { registriere, toast, hideToast, openPage } = kombi;
+  const appTag = kombi.tagDaten?.tag ?? null;
 
   const camRef = useRef<HTMLElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -241,7 +243,8 @@ export function KameraEbene() {
         seiten: b.pages.length,
         order: base + i,
         kurz: null,
-        tag: null,
+        // der App-Tag des Servers (Testuhr eingeschlossen): im Ablauf stehen nur die Blätter dieses Tages
+        tag: ablaufTagLesen() ?? appTag,
       });
       neu.push({ key: eintrag.key, from });
       uploads.push(
@@ -272,7 +275,7 @@ export function KameraEbene() {
       },
       reduce() ? 170 : 300,
     );
-  }, [closeCam, openPage, toast]);
+  }, [appTag, closeCam, openPage, toast]);
 
   // ── Öffnen (Prototyp `openCam`, Z. 3387) ───────────────────────────────────
   const openCam = useCallback(

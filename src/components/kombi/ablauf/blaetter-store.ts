@@ -54,6 +54,16 @@ export const blaetterStore = {
     liste = liste.filter((b) => b.key !== key);
     hoerer.forEach((f) => f());
   },
+  /**
+   * Neuer App-Tag (die PWA blieb über Nacht offen): Blätter eines anderen
+   * Tages fallen heraus, Blätter ohne Tag (vor dem ersten Laden abgelegt)
+   * bekommen diesen.
+   */
+  tagSetzen(tag: string): void {
+    if (!liste.some((b) => b.tag !== tag)) return;
+    liste = liste.filter((b) => !b.tag || b.tag === tag).map((b) => (b.tag ? b : { ...b, tag }));
+    hoerer.forEach((f) => f());
+  },
   /** Vorschaubild zu einer Server-ID (für Blätter, die in dieser Sitzung fotografiert wurden) */
   bildVon(id: string): string | null {
     return liste.find((b) => b.id === id)?.bild ?? null;

@@ -54,6 +54,13 @@ describe("Zeilen der Blattliste (Prototyp statusTexts)", () => {
     assert.deepEqual(statusTexts({ ...b, status: "abschrift_da" })[2], "Arbeiterbewegung · Abschrift da");
     assert.deepEqual(statusTexts({ ...b, status: "fehlgeschlagen" })[2], "Arbeiterbewegung · Abschrift fehlgeschlagen");
   });
+  it("ein Standardtitel zählt wie kein Titel (das entscheidende Wort bleibt lesbar)", () => {
+    const ohne = { fach: { id: "g", name: "Geschichte" }, titel: "Blatt vom 12.10.", thema: "" };
+    assert.equal(statusTexts({ ...ohne, status: "fehlgeschlagen" })[2], "Abschrift fehlgeschlagen");
+    assert.equal(statusTexts({ ...ohne, status: "abschrift_laeuft" })[2], "Abschrift folgt");
+    assert.equal(statusTexts({ ...ohne, titel: "Blatt", status: "abschrift_da" })[2], "Abschrift da");
+    assert.equal(statusTexts({ ...ohne, titel: "Blatt vom Bäcker", status: "abschrift_da" })[2], "Blatt vom Bäcker · Abschrift da");
+  });
   it("der Titel fällt weg, wenn das Thema mit ihm beginnt", () => {
     assert.equal(
       statusTexts({ fach: { id: "b", name: "Biologie" }, titel: "Zellatmung", thema: "Zellatmung", status: "abschrift_da" })[2],
