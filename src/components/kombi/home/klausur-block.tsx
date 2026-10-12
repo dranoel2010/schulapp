@@ -150,7 +150,14 @@ function LernblockZeile({ block: vomServer, fach, klausurDatum }: { block: Block
           tabIndex={done ? -1 : 0}
           aria-label={z === "ruhe" ? "Lernblock starten" : `Lernblock fortsetzen, noch ${fmtRest(rest)}`}
           onClick={(e) =>
-            kombi.openTisch({ mode: "block", origin: e.currentTarget, blockId: block.id, fach, klausurDatum })
+            kombi.openTisch({
+              mode: "block",
+              origin: e.currentTarget,
+              blockId: block.id,
+              fach,
+              klausurDatum,
+              blatt: !!block.blatt && !block.blatt.fehlgeschlagen,
+            })
           }
         >
           {text ? <span id="lbText">{text}</span> : <span id="lbText" dangerouslySetInnerHTML={{ __html: tn(fmtRest(rest)) }} />}

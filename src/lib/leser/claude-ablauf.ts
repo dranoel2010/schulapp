@@ -775,7 +775,11 @@ export function laufAnzeige(lauf: LaufZeile): string {
     ? "abgebrochen (die App startete mitten im Lauf neu)"
     : lauf.art === "fragen" && lauf.ergebnis === "vorschlag"
       ? "Fragen vorgeschlagen"
-      : ERGEBNIS_TEXT[lauf.ergebnis];
+      : lauf.art === "arbeitsblatt" && lauf.ergebnis === "vorschlag"
+        ? "Arbeitsblatt gebaut"
+        : lauf.art === "arbeitsblatt" && lauf.ergebnis === "kein-vorschlag"
+          ? "kein Arbeitsblatt"
+          : ERGEBNIS_TEXT[lauf.ergebnis];
   const grund = lauf.grund.trim();
   const kosten =
     lauf.kostenUsd !== null

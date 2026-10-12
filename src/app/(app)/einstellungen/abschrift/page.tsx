@@ -4,8 +4,8 @@ import { SeitenKopf } from "@/components/kombi/form";
 import { requireUser } from "@/lib/auth";
 import { CLAUDE_MODELL, claudeConfigured } from "@/lib/claude/client";
 import { todayInBerlin } from "@/lib/dates";
-import { kostenSatz } from "@/lib/leser/claude-ablauf";
-import { laufKostenSeit } from "@/lib/leser/laeufe";
+import { kostenSatz, laufAnzeige } from "@/lib/leser/claude-ablauf";
+import { laufKostenSeit, letzterArbeitsblattLauf } from "@/lib/leser/laeufe";
 
 /**
  * Einstellungen › Handschrift abschreiben: ob Claude eingerichtet ist und was
@@ -22,7 +22,10 @@ export default async function AbschriftPage() {
   // zum Ansehen genau genug; abgerechnet wird bei Anthropic.
   const monatsanfang = new Date(`${today.slice(0, 8)}01T00:00:00Z`);
   const claude = claudeConfigured();
-  const kosten = await laufKostenSeit(user.id, monatsanfang);
+  const [kosten, blattLauf] = await Promise.all([
+    laufKostenSeit(user.id, monatsanfang),
+    letzterArbeitsblattLauf(user.id),
+  ]);
 
   return (
     <>
@@ -38,8 +41,11 @@ export default async function AbschriftPage() {
         <p className="p-sub" style={{ marginTop: 16 }}>
           Auf diesem Server ist Claude nicht eingerichtet — es fehlt <code>ANTHROPIC_API_KEY</code>. Gedrucktes liest
           Docling weiter; Handschrift liest niemand, sie bleibt ohne Abschrift, bis du sie am Blatt abtippst.
+          Übungsthemen laufen dann mit Karten statt mit Arbeitsblatt.
         </p>
       )}
+      {/* Ein Arbeitsblatt hat keine eigene Seite: sein jüngster Bau steht hier (Befund der Abnahme von H) */}
+      {claude && blattLauf ? <p className="p-sub">{`Arbeitsblätter: ${laufAnzeige(blattLauf)}`}</p> : null}
     </>
   );
 }

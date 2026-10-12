@@ -251,6 +251,11 @@ export type LaufVermerk = {
       art: "fragen";
       examId: string;
     }
+  | {
+      /** Der Bau eines Arbeitsblatts (Modell 23, Plan H) */
+      art: "arbeitsblatt";
+      arbeitsblattId: string;
+    }
 );
 
 /**
@@ -268,8 +273,10 @@ export type LaufVermerk = {
 export async function laufVermerken(vermerk: LaufVermerk): Promise<boolean> {
   const ziel =
     vermerk.art === "fragen"
-      ? { materialId: null, examId: vermerk.examId, schluessel: "" }
-      : { materialId: vermerk.materialId, examId: null, schluessel: vermerk.schluessel };
+      ? { materialId: null, examId: vermerk.examId, arbeitsblattId: null, schluessel: "" }
+      : vermerk.art === "arbeitsblatt"
+        ? { materialId: null, examId: null, arbeitsblattId: vermerk.arbeitsblattId, schluessel: "" }
+        : { materialId: vermerk.materialId, examId: null, arbeitsblattId: null, schluessel: vermerk.schluessel };
 
   const geschrieben = await db
     .insert(leserLaeufe)
@@ -277,6 +284,7 @@ export async function laufVermerken(vermerk: LaufVermerk): Promise<boolean> {
       userId: vermerk.userId,
       materialId: ziel.materialId,
       examId: ziel.examId,
+      arbeitsblattId: ziel.arbeitsblattId,
       art: vermerk.art,
       schluessel: ziel.schluessel,
       ergebnis: vermerk.ergebnis,
@@ -552,6 +560,40 @@ export async function letzterLauf(
 
   if (!zeile) return null;
   // numeric kommt je nach Treiber als Zahl oder Text an — hier wird es eine Zahl.
+  return {
+    ...zeile,
+    gemessen: Boolean(zeile.gemessen),
+    fristRestMs: zeile.fristRestMs === null ? null : Number(zeile.fristRestMs),
+    kostenUsd: zeile.kostenUsd === null ? null : Number(zeile.kostenUsd),
+  };
+}
+
+/**
+ * Der jüngste Bau eines Arbeitsblatts — für die Zeile „Zuletzt …“ in den
+ * Einstellungen unter „Handschrift abschreiben“ (ein Blatt hat keine eigene
+ * Seite, an der sie stehen könnte). Dieselbe Form wie `letzterLauf()`.
+ */
+export async function letzterArbeitsblattLauf(
+  userId: string,
+): Promise<(LaufZeile & { id: string }) | null> {
+  const [zeile] = await db
+    .select({
+      id: leserLaeufe.id,
+      art: leserLaeufe.art,
+      ergebnis: leserLaeufe.ergebnis,
+      grund: leserLaeufe.grund,
+      kostenUsd: leserLaeufe.kostenUsd,
+      abbruch: leserLaeufe.abbruch,
+      gemessen: sql<boolean>`${leserLaeufe.messung} is not null`,
+      fristRestMs: restMs(leserLaeufe.fristBis),
+      createdAt: leserLaeufe.createdAt,
+    })
+    .from(leserLaeufe)
+    .where(and(eq(leserLaeufe.userId, userId), eq(leserLaeufe.art, "arbeitsblatt")))
+    .orderBy(desc(leserLaeufe.createdAt), desc(leserLaeufe.id))
+    .limit(1);
+
+  if (!zeile) return null;
   return {
     ...zeile,
     gemessen: Boolean(zeile.gemessen),

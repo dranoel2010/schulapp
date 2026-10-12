@@ -8,6 +8,7 @@ import {
   formatGerman,
   todayInBerlin,
 } from "@/lib/dates";
+import { vorabBauen } from "@/lib/arbeitsblatt/bauen";
 import { isCronAuthorized } from "@/lib/cron-auth";
 import { zielCountdown, zielHeuteLernen } from "@/lib/erinnerung-ziel";
 import { blocksForDay, upcomingExams } from "@/lib/exams";
@@ -70,11 +71,19 @@ export async function GET(request: Request) {
   const today = todayInBerlin();
   const hour = currentHourInBerlin(new Date());
 
+  // Arbeitsblätter vorab bauen (Plan H, Frage 7) — für jeden Nutzer, auch
+  // ohne Push. Der Bau läuft in der Warteschlange des Prozesses weiter.
+  let blaetter = 0;
+  for (const { id } of await db.select({ id: users.id }).from(users)) {
+    blaetter += await vorabBauen(id, new Date(), true);
+  }
+
   if (!isPushConfigured()) {
     return Response.json({
       ok: true,
       date: today,
       hour,
+      blaetter,
       reason: "push-not-configured",
     });
   }
@@ -134,6 +143,7 @@ export async function GET(request: Request) {
     date: today,
     hour,
     users: due.length,
+    blaetter,
     reminders,
     countdowns,
     sent,

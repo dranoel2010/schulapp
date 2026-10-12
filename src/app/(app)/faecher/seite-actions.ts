@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { subjects, subjectTopics } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
-import { appTagVon } from "@/lib/kombi/tag-daten";
+import { appTag, jetzt } from "@/lib/tag";
 import { setArchived } from "@/lib/subjects";
 import { themaArtSetzen, themaArtZuruecknehmen, type ArtUmstellung } from "@/lib/themen-art";
 
@@ -37,7 +37,7 @@ export async function themaArtAction(
   if (!id.safeParse(topicId).success || !art.safeParse(neu).success) return { ok: false };
   const fach = await fachDesThemas(user.id, topicId);
   if (!fach) return { ok: false };
-  const umstellung = await themaArtSetzen(user.id, topicId, neu, appTagVon(new Date()), fach);
+  const umstellung = await themaArtSetzen(user.id, topicId, neu, appTag(await jetzt()), fach);
   return { ok: true, umstellung };
 }
 

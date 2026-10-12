@@ -6,7 +6,7 @@ import { blattHolen, blattVorwaermen, laufHolen, wiederholenHolen } from "@/comp
 import type { BlattImSheet, FrageKarte, ThemaKurz, ThemaLauf } from "@/components/kombi/tisch/typen";
 import { whSetzen } from "@/components/kombi/tisch/wh-stand";
 import { E, buzz, moveTo, reduce, rubber, springOpts, swapText, vvStable } from "@/lib/kombi/motion";
-import { TAG, dm, fxTeile, wd } from "@/lib/kombi/text";
+import { TAG, dm, fxTeile, tn, wd } from "@/lib/kombi/text";
 import { themeColor } from "@/lib/kombi/theme-color";
 import {
   fragenText,
@@ -56,7 +56,20 @@ export type TischDeps = {
   /** das Sheet „Blatt ansehen“ öffnen — erst mit fertigen Daten (Plan 2.4 Punkt 6 und 7) */
   blattAnsehen: (blatt: BlattImSheet) => void;
   neuLaden: () => Promise<void>;
+  /**
+   * Das Arbeitsblatt eines Übungsthemas (Abschnitt H): die Steuerung meldet,
+   * welches Thema gerade als Blatt auf dem Tisch liegt (null: keins), React
+   * füllt `#tBlatt` und `#tBFoot` mit Vorschau, „Wie lief es?“ und Knopf.
+   * `beimOeffnen`: der Tisch geht gerade auf (Einblenden nach dem Wachsen).
+   */
+  blatt?: (t: ThemaKurz | null, beimOeffnen: boolean) => void;
+  /** Die Lupe über dem Blatt: Escape schließt erst sie */
+  lupeOffen?: () => boolean;
+  lupeSchliessen?: () => void;
 };
+
+/** Das Ergebnis eines ausgewerteten Blatts fürs Themenende (Prototyp `endThema`, Zweig Blatt). */
+export type BlattErgebnis = { n: number; richtig: number; falsch: number[]; wiederDran: string | null };
 
 export type TischOptionen = { mode?: string; origin?: HTMLElement | null; fach?: string | null };
 
@@ -204,6 +217,9 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     laeufe: new Map(),
     lieberAbfragen: new Set(),
   };
+  /** gesetzt, wenn das Blatt des aktuellen Themas ausgewertet ist */
+  let blattErgebnis: BlattErgebnis | null = null;
+  let oeffnetGerade = false;
   let kbInset = 0;
   let qResize: ResizeObserver | null = null;
   let oeffnet = 0;
@@ -944,12 +960,15 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     T.qi = 0;
     T.total = 0;
     T.wiederDran = lauf?.wiederDran ?? null;
+    blattErgebnis = null;
     /* Übungsthema: statt Karten das Arbeitsblatt (Zusatz, Kriterium 1; gebaut in Abschnitt H) */
     if (istBlatt(t) || !lauf) {
       T.kind = "blatt";
+      deps.blatt?.(t, oeffnetGerade);
       return;
     }
     T.kind = "karten";
+    deps.blatt?.(null, false);
     for (const f of lauf.fragen) T.fragen.set(f.itemId, f);
     T.queue = lauf.fragen.map((f) => f.itemId).filter(valid);
     T.first = { ...lauf.erste };
@@ -1016,8 +1035,6 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
   function renderBlattPlatz() {
     const t = thema();
     $("tCount").textContent = t.umfang;
-    const art = $<HTMLButtonElement>("tbArt");
-    art.hidden = t.fragen === 0;
   }
 
   /* Der Stapel blendet als Gruppe ein, die Karten kommen einzeln: so scheint nie eine Karte durch die vordere */
@@ -1075,13 +1092,30 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     const ok = Object.values(T.first).filter(Boolean).length;
     const end = $("tEnd");
     T.fertig.add(t.key);
-    beenden(t.key, n);
+    beenden(t.key, T.kind === "blatt" && blattErgebnis ? blattErgebnis.n : n);
     const rest = T.themen.slice(T.ti + 1).filter((x) => !T.fertig.has(x.key));
-    const kids: HTMLElement[] = [
-      h("h2", null, `${t.titel} sitzt.`),
-      h("p", null, `${fragenText(n)}, ${ok === n ? "alle" : ok} beim ersten Mal.`),
-    ];
-    const nt = T.wiederDran;
+    const be = T.kind === "blatt" ? blattErgebnis : null;
+    const und = (l: number[]) => (l.length < 2 ? l.join("") : `${l.slice(0, -1).join(", ")} und ${l[l.length - 1]}`);
+    /* beim Blatt zählt die eigene Wertung je Aufgabe; falsche Aufgaben kommen aufs nächste Blatt */
+    const kids: HTMLElement[] = be
+      ? [
+          h("h2", null, be.richtig === be.n ? `${t.titel} sitzt.` : `${t.titel} geübt.`),
+          h("p", null, `${be.n} Aufgaben, ${be.richtig === be.n ? "alle" : be.richtig} richtig.`),
+          ...(be.falsch.length
+            ? [
+                h(
+                  "p",
+                  null,
+                  `${be.falsch.length === 1 ? "Aufgabe" : "Aufgaben"} ${und(be.falsch)} ${be.falsch.length === 1 ? "kommt" : "kommen"} aufs nächste Blatt.`,
+                ),
+              ]
+            : []),
+        ]
+      : [
+          h("h2", null, `${t.titel} sitzt.`),
+          h("p", null, `${fragenText(n)}, ${ok === n ? "alle" : ok} beim ersten Mal.`),
+        ];
+    const nt = be ? be.wiederDran : T.wiederDran;
     if (nt) kids.push(h("p", null, `Wieder dran: ${TAG[wd(nt)]}, ${dm(nt)}`));
     const rows: HTMLElement[] = [];
     if (rest.length) {
@@ -1307,7 +1341,9 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     T.origin = origin;
     tisch.classList.toggle("rm", reduce());
     tisch.classList.remove("typing");
+    oeffnetGerade = !!origin;
     loadThema(T.themen[0], daten.lauf);
+    oeffnetGerade = false;
     setHead();
     showRun();
     /* die Zeile geht erst, wenn der Tisch sie bedeckt */
@@ -1428,6 +1464,7 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
       [surf, body, end, tint, ghost, tisch].forEach((x) => x.getAnimations().forEach((an) => an.cancel()));
       tisch.classList.remove("open", "ended", "blatt", "typing");
       tisch.setAttribute("aria-hidden", "true");
+      deps.blatt?.(null, false);
       tStack.replaceChildren();
       end.classList.remove("on");
       end.replaceChildren();
@@ -1502,6 +1539,10 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     if (deps.sheetOffen()) return;
     e.stopImmediatePropagation();
     e.preventDefault();
+    if (deps.lupeOffen?.()) {
+      deps.lupeSchliessen?.();
+      return;
+    }
     const ask = tisch.querySelector(".cb-ask");
     if (ask) ask.remove();
     else closeTisch();
@@ -1516,12 +1557,24 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
   tisch.querySelectorAll<HTMLElement>("#tRate .rb").forEach((b) =>
     b.addEventListener("click", () => advance(b.dataset.r as "sass" | "daneben", 0)),
   );
-  $("tbArt").addEventListener("click", () => void lieberAbfragen());
 
   return {
     openTisch,
     closeTisch: () => closeTisch(),
     istOffen: () => T.offen,
+    /** „Dieses Thema lieber abfragen“ aus dem Blatt: für heute Karten */
+    lieberAbfragen: () => void lieberAbfragen(),
+    /** Das Zählwort unter dem Kopf, sobald der Stand des Blatts da ist („Arbeitsblatt · 6 Aufgaben, etwa 25 Minuten“) */
+    blattZaehler(text: string) {
+      if (!T.offen || T.kind !== "blatt" || T.ended) return;
+      $("tCount").innerHTML = tn(text);
+    },
+    /** Das Blatt ist ausgewertet: das Themenende mit der eigenen Wertung (Prototyp `endThema`, Zweig Blatt) */
+    blattFertig(e: BlattErgebnis) {
+      if (!T.offen || T.kind !== "blatt" || T.ended) return;
+      blattErgebnis = e;
+      endThema();
+    },
     zerstoeren() {
       window.visualViewport?.removeEventListener("resize", vvFit);
       window.visualViewport?.removeEventListener("scroll", vvFit);

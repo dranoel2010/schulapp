@@ -551,7 +551,7 @@ export function Zeile({
         }
         return;
       case "tisch":
-        nachSchliessen(() => kombi.openTisch({ mode: ziel.mode, fach: ziel.fach ?? null }));
+        nachSchliessen(() => kombi.openTisch({ mode: ziel.mode, fach: ziel.fach ?? null, blockId: ziel.blockId }));
         return;
       case "kamera":
         nachSchliessen(() => kombi.openCam({ ziel: ziel.ziel }));
@@ -895,7 +895,7 @@ export function Zeile({
   const optProps = {
     fachKurz,
     onAbhaken: setDone,
-    onStarten: () => gehe({ typ: "tisch", mode: "block" }),
+    onStarten: () => gehe({ typ: "tisch", mode: "block", blockId: v?.lernblock?.key }),
     onVorladen: (o: Option) => {
       if (o.ziel?.typ === "seite" && ZIEL_ARTEN.has(o.ziel.art)) kombi.vorladen(o.ziel.art, o.ziel.params ?? {});
     },

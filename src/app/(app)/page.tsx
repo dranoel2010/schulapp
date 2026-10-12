@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { after } from "next/server";
 
 import { Startseite } from "@/components/kombi/home/startseite";
+import { vorabBauen } from "@/lib/arbeitsblatt/bauen";
 import { requireUser } from "@/lib/auth";
 import { ladeTag } from "@/lib/kombi/tag-daten";
 import { jetzt } from "@/lib/tag";
@@ -20,6 +22,9 @@ export const metadata: Metadata = {
 
 export default async function HomePage() {
   const user = await requireUser();
-  const daten = await ladeTag(user.id, await jetzt());
+  const now = await jetzt();
+  const daten = await ladeTag(user.id, now);
+  // Arbeitsblätter für heute und morgen vorab bauen (Plan H)
+  after(() => vorabBauen(user.id, now));
   return <Startseite daten={daten} vomServer />;
 }

@@ -70,7 +70,7 @@ export type Ziel =
   | { typ: "route"; url: string }
   | { typ: "ansicht"; ansicht: "ueberblick" | "morgens" | "frueh" }
   | { typ: "ablauf" }
-  | { typ: "tisch"; mode: "wh" | "block"; fach?: string | null }
+  | { typ: "tisch"; mode: "wh" | "block"; fach?: string | null; blockId?: string }
   | { typ: "kamera"; ziel: "zeile" | "liste" }
   | { typ: "ha-kontext" };
 
@@ -175,7 +175,7 @@ export function lernblockOpt(v: ZeilenVorrat): { l1: string; l2: string; ziel: Z
   return {
     l1: b.zustand === "ruhe" ? "Lernblock starten" : "Lernblock fortsetzen",
     l2: `${b.label}, ${b.zustand === "ruhe" ? `${b.minuten} Minuten` : `noch ${fmtRest(b.restMs)}`}`,
-    ziel: { typ: "tisch", mode: "block" },
+    ziel: { typ: "tisch", mode: "block", blockId: b.key },
   };
 }
 

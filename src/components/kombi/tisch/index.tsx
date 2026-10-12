@@ -1,11 +1,17 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
+import { artAction, blattOeffnenAction } from "@/app/(app)/arbeitsblatt-actions";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
+import { a4Daten, BlattKoerper, BlattLupe, DruckSeiten, type LupeSteuerung } from "@/components/kombi/tisch/arbeitsblatt/blatt";
+import { useArbeitsblatt, type BlattAnfang } from "@/components/kombi/tisch/arbeitsblatt/use-arbeitsblatt";
 import { BlattSheet } from "@/components/kombi/tisch/blatt-sheet";
 import { erzeugeTisch, type TischOptionen } from "@/components/kombi/tisch/steuerung";
+import type { ThemaKurz } from "@/components/kombi/tisch/typen";
+import { buzz } from "@/lib/kombi/motion";
+import { uhrzeit } from "@/lib/kombi/text";
 
 /**
  * Der Tisch (`#tisch`, Prototyp Z. 943–974): die blaue Fläche, auf der
@@ -13,16 +19,127 @@ import { erzeugeTisch, type TischOptionen } from "@/components/kombi/tisch/steue
  * Bewegte — Karten, Striche, Themenende — führt `erzeugeTisch()` wie im
  * Prototyp direkt am DOM. React rendert in `#tStack` und `#tEnd` nie Kinder.
  *
- * Der Lernblock (Uhr, Material, „Block beenden“, Abschnitt F) und das
- * Arbeitsblatt (Vorschau, Lupe, Druck, Abschnitt H) hängen sich an dieselbe
- * Fläche; ihre Elemente stehen hier schon im Gerüst (`#tClock`, `#tMat`,
- * `#tConfirm`, `#tBlatt`, `#tBFoot`), bleiben beim Wiederholen aber
- * verborgen bzw. leer.
+ * Ein Übungsthema liegt als Arbeitsblatt auf demselben Tisch (Abschnitt H):
+ * die Steuerung meldet das Thema (`deps.blatt`), React füllt `#tBlatt` und
+ * `#tBFoot` mit Vorschau, Lupe, „Wie lief es?“ und Druck (./arbeitsblatt).
+ * Nach dem Auswerten schreibt die Steuerung das Themenende samt „Weiter mit
+ * …“ (Prototyp `endThema`, Zweig Blatt).
+ *
+ * Der Lernblock hat seine eigene Ebene (./lernblock-tisch, Abschnitt F);
+ * `#tClock`, `#tMat` und `#tConfirm` bleiben hier verborgen.
  */
+
+/** Ist die App installiert (standalone)? Dann öffnet „Drucken“ das PDF (Plan H, „Drucken“). */
+function alsApp(): boolean {
+  try {
+    return window.matchMedia("(display-mode: standalone)").matches;
+  } catch {
+    return false;
+  }
+}
+
+type Steuerung = ReturnType<typeof erzeugeTisch>;
 export function TischEbene() {
   const kombi = useKombi();
   const ref = useRef<HTMLElement>(null);
   const api = useRef(kombi);
+  const steuerung = useRef<Steuerung | null>(null);
+
+  // ── Arbeitsblatt eines Übungsthemas ───────────────────────────────────────
+  const [blattThema, setBlattThema] = useState<{ t: ThemaKurz; einblenden: number; nr: number } | null>(null);
+  const [anfang, setAnfang] = useState<BlattAnfang | null>(null);
+  const zaehler = useRef(0);
+  const lupe = useRef<LupeSteuerung | null>(null);
+  const seitenRef = useRef<(HTMLDivElement | null)[]>([]);
+  const blatt = useArbeitsblatt(anfang, kombi.fehlerToast);
+  const stand = blatt.lage.art === "da" ? blatt.lage.stand : null;
+
+  // Das Thema wechselt: den Stand des Blatts holen (anlegen und anstoßen, falls nötig)
+  useEffect(() => {
+    if (!blattThema) {
+      setAnfang(null);
+      return;
+    }
+    let ab = false;
+    const holen = () => {
+      blattOeffnenAction({ thema: blattThema.t.key }).then(
+        (r) => {
+          if (ab) return;
+          if (!r.ok) throw new Error(r.fehler);
+          if (!r.daten) {
+            // Kein Blatt (ohne Schlüssel und ohne fertiges Blatt): für heute Karten
+            steuerung.current?.lieberAbfragen();
+            return;
+          }
+          zaehler.current += 1;
+          setAnfang({ stand: r.daten, nr: zaehler.current });
+        },
+        () => {
+          if (!ab) api.current.fehlerToast("Keine Verbindung", holen, "Erneut");
+        },
+      );
+    };
+    holen();
+    return () => {
+      ab = true;
+    };
+  }, [blattThema]);
+
+  // Das Zählwort unter dem Kopf folgt dem Stand des Blatts
+  const phase = blatt.phase;
+  useEffect(() => {
+    if (!stand) return;
+    const n = stand.inhalt?.aufgaben.length ?? 0;
+    const um = stand.gedrucktAm ? uhrzeit(new Date(stand.gedrucktAm)) : null;
+    steuerung.current?.blattZaehler(
+      !stand.inhalt
+        ? "Arbeitsblatt"
+        : phase === "bewerten" && um
+          ? `Arbeitsblatt · gedruckt um ${um}`
+          : `Arbeitsblatt · ${n} Aufgaben, etwa ${stand.inhalt.minuten} Minuten`,
+    );
+  }, [stand, phase]);
+
+  const drucken = useCallback(() => {
+    if (!stand?.inhalt) return;
+    if (alsApp()) window.open(`/api/arbeitsblatt/${stand.id}/pdf`, "_blank", "noopener");
+    else {
+      try {
+        window.print();
+      } catch {
+        // ohne Druckdialog: die Wertung kommt trotzdem
+      }
+    }
+    void blatt.gedruckt();
+  }, [stand, blatt]);
+
+  const fertig = useCallback(async () => {
+    const a = await blatt.auswerten(false);
+    if (!a) return;
+    buzz();
+    steuerung.current?.blattFertig({ n: a.n, richtig: a.richtig, falsch: a.falsch, wiederDran: a.wiederDran });
+  }, [blatt]);
+
+  /**
+   * „Dieses Thema lieber abfragen“: mit fertigem Blatt die Art umstellen (wie
+   * im Tisch aus H), sonst nur für heute — dann Karten auf demselben Tisch.
+   */
+  const abfragen = useCallback(
+    async function abfragen(): Promise<void> {
+      if (stand?.topicId && stand.inhalt) {
+        const a = await artAction(stand.topicId, "abfragen").catch(() => null);
+        if (!a?.ok) {
+          api.current.fehlerToast("Nicht gespeichert", () => void abfragen(), "Erneut");
+          return;
+        }
+      }
+      steuerung.current?.lieberAbfragen();
+    },
+    [stand],
+  );
+
+  const lupeAuf = useCallback(() => kombi.ebeneAuf("lupe", () => lupe.current?.schliessen()), [kombi]);
+  const lupeZu = useCallback(() => kombi.ebeneZu("lupe"), [kombi]);
 
   useEffect(() => {
     api.current = kombi;
@@ -39,7 +156,18 @@ export function TischEbene() {
       sheetOffen: () => !!document.getElementById("sheet")?.classList.contains("open"),
       blattAnsehen: (blatt) => api.current.openSheet(<BlattSheet blatt={blatt} />, true),
       neuLaden: () => api.current.neuLaden(),
+      blatt: (t, beimOeffnen) => {
+        if (!t) {
+          lupe.current?.schliessen(true);
+          setBlattThema(null);
+          return;
+        }
+        setBlattThema((alt) => ({ t, einblenden: beimOeffnen ? 204 : 60, nr: (alt?.nr ?? 0) + 1 }));
+      },
+      lupeOffen: () => !!lupe.current?.offen(),
+      lupeSchliessen: () => lupe.current?.schliessen(),
     });
+    steuerung.current = tisch;
     const ab = api.current.registriere("tisch", (o) => {
       const opt = (o ?? {}) as TischOptionen;
       // Der Lernblock (mode „block“) kommt mit Abschnitt F.
@@ -49,6 +177,7 @@ export function TischEbene() {
     return () => {
       ab();
       tisch.zerstoeren();
+      steuerung.current = null;
     };
   }, []);
 
@@ -99,21 +228,38 @@ export function TischEbene() {
             </button>
           </div>
         </div>
-        <div className="t-blatt" id="tBlatt">
-          <div className="tb-view" id="tbVorschau">
-            <p style={{ fontSize: 15, lineHeight: 1.4, fontWeight: 450, textAlign: "center", paddingTop: 24 }}>
-              Für dieses Thema ließ sich heute kein Blatt bauen.
-            </p>
-            <button className="tb-art" type="button" id="tbArt">
-              Dieses Thema lieber abfragen
-            </button>
-          </div>
-        </div>
-        <div className="t-bfoot" id="tBFoot" />
+        {blattThema && stand ? (
+          <BlattKoerper
+            key={`${blattThema.nr}:${anfang?.nr ?? 0}`}
+            stand={stand}
+            phase={phase}
+            wertung={blatt.wertung}
+            onDrucken={drucken}
+            onBewerten={blatt.bewerten}
+            onFertig={() => void fertig()}
+            onAbfragen={stand.hatFragen ? () => void abfragen() : null}
+            lupeRef={lupe}
+            seitenRef={seitenRef}
+            einblenden={blattThema.einblenden}
+          />
+        ) : (
+          <>
+            <div className="t-blatt" id="tBlatt" />
+            <div className="t-bfoot" id="tBFoot" />
+          </>
+        )}
         <button className="t-mat" id="tMat" type="button" hidden>
           <span id="tMatText" />
         </button>
       </div>
+      <BlattLupe
+        daten={blattThema && stand ? a4Daten(stand) : null}
+        steuerungRef={lupe}
+        seitenRef={seitenRef}
+        istOffen={() => !!steuerung.current?.istOffen()}
+        beimOeffnen={lupeAuf}
+        beimSchliessen={lupeZu}
+      />
       <div className="t-end" id="tEnd" />
       <div className="t-confirm" id="tConfirm" role="alertdialog" aria-labelledby="tcH">
         <h2 id="tcH" />
@@ -125,6 +271,7 @@ export function TischEbene() {
           </button>
         </div>
       </div>
+      <DruckSeiten daten={blattThema && stand ? a4Daten(stand) : null} />
     </section>
   );
 }
