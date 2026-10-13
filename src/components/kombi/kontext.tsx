@@ -24,7 +24,7 @@ export type OeffnenOptionen = {
 export type EbenenName = "kamera" | "tisch" | "lernblock" | "arbeitsblatt" | "ansicht" | "ablauf";
 export type EbenenHandler = (optionen?: Record<string, unknown>) => void;
 /** Ebenen mit eigenem Eintrag in der History, die Zurück der Reihe nach schließt */
-export type UeberEbene = "tisch" | "lupe";
+export type UeberEbene = "tisch" | "lupe" | "bestaetigung";
 
 export type KombiApi = {
   /** Nachschlage-Seite öffnen (Prototyp `openPage`); unbekannte Arten navigieren zur Route */

@@ -7,7 +7,8 @@ import { aufgabeDaten, heuteApp, schulKalender, type AufgabeDaten } from "./geme
  * Die Seite „Hausaufgaben“ (Prototyp `hausaufgabenGroups`, Z. 3026): „Für
  * ⟨nächster Schultag⟩“, „Später“ und „Erledigt“ — erledigt nur, was in den
  * letzten zwei Tagen abgehakt wurde (Plan 2.2). Ältere erledigte Aufgaben
- * findet die Suche der Zeile.
+ * findet die Suche der Zeile noch zwei Wochen lang (`ERLEDIGT_SUCHE_TAGE`)
+ * und öffnet sie dort wieder.
  */
 export type HausaufgabenDaten = {
   heute: string;

@@ -1,6 +1,7 @@
 import { bare, norm, type FachEintrag } from "@/lib/kombi/fach-alias";
 import { TAG, TK, dm, kurz, lang, wd } from "@/lib/kombi/text";
 import {
+  ERLEDIGT_SUCHE_TAGE,
   addTage,
   fmtRest,
   inFerien,
@@ -392,9 +393,12 @@ export function suche(
       if (p.fach && a.fachId !== p.fach.id) return false;
       return cq.length ? cq.some((q) => wordHit(q, hay)) : !!p.fach;
     })
+    // Erledigtes bis zwei Wochen zurück: die Hausaufgabenliste zeigt es nur
+    // zwei Tage, hier lässt es sich danach noch wieder öffnen. Oberster Treffer
+    // wird es nie (siehe `hat` unten).
     .filter((a) => {
       const d = u.doneFuer(a);
-      return !d || tagVon(d) === v.heute || d >= u.jetzt - 2 * 864e5;
+      return !d || tagVon(d) === v.heute || d >= u.jetzt - ERLEDIGT_SUCHE_TAGE * 864e5;
     });
   if (aufg.length)
     groups.push({

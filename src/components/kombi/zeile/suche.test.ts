@@ -106,6 +106,21 @@ describe("Suche", () => {
     assert.ok(r.groups.some((g) => g.items?.some((i) => i.key === "a:a3" && i.done)));
   });
 
+  it("ältere erledigte Aufgaben findet die Suche zwei Wochen lang, aber nie als obersten Treffer", () => {
+    const tag = 864e5;
+    const mit = (vor: number) => {
+      const a3 = v.aufgaben.find((a) => a.id === "a3")!;
+      const vv = { ...v, aufgaben: v.aufgaben.map((a) => (a.id === "a3" ? { ...a3, done: v.jetzt - vor * tag } : a)) };
+      return suche(p("vokabeln"), { ...u, v: vv, server: { q: "", list: [] } });
+    };
+    const vier = mit(4);
+    assert.notEqual(vier.top.key, "a:a3");
+    assert.ok(vier.groups.some((g) => g.items?.some((i) => i.key === "a:a3" && i.done)));
+    const alt = mit(15);
+    assert.ok(!alt.groups.some((g) => g.items?.some((i) => i.key === "a:a3")));
+    assert.notEqual(alt.top.key, "a:a3");
+  });
+
   it("Kein Treffer", () => {
     const r = suche(p("mama anrufen"), { ...u, server: { q: "", list: [] } });
     assert.equal(txtText(r.top.l1), "Kein Treffer für »mama anrufen«");

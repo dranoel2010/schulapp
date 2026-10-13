@@ -13,6 +13,7 @@ import { fachEintraege } from "@/lib/kombi/fach-alias";
 import { appTagVon } from "@/lib/kombi/tag-daten";
 import { diffDays } from "@/lib/kombi/text";
 import {
+  ERLEDIGT_SUCHE_TAGE,
   isSchool,
   schluss,
   type VorratKlausur,
@@ -106,8 +107,10 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
   const frei = freiRoh.map((f) => ({ von: f.startsOn, bis: f.endsOn, ferien: f.kind === "ferien" }));
   const kal = { stunden, frei };
 
-  // ── Aufgaben: offene und die der letzten Tage (für „Erledigt“ in der Suche) ──
-  const grenze = now.getTime() - 3 * 864e5;
+  // ── Aufgaben: offene und die der letzten zwei Wochen (für „Erledigt“ in der
+  // Suche: die Hausaufgabenliste zeigt Erledigtes nur zwei Tage, die Zeile
+  // findet es so lange, wie es früher in der Liste stand) ──
+  const grenze = now.getTime() - ERLEDIGT_SUCHE_TAGE * 864e5;
   const aufgaben = aufgabenRoh
     .filter((a) => aktiv.has(a.subjectId) && (!a.doneAt || a.doneAt.getTime() >= grenze))
     .map((a) => ({

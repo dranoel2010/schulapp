@@ -256,7 +256,8 @@ export function HomeworkDangerZone({
           <p className="text-[15px] text-ink">
             {homeworkLabel} wirklich löschen? Rückgängig geht das nicht. Wenn du
             sie nur nicht mehr sehen willst: abgehakte Aufgaben verschwinden
-            nach zwei Wochen von selbst aus der Liste.
+            nach zwei Tagen von selbst aus der Liste, die Suche findet sie
+            danach noch zwei Wochen.
           </p>
           <div className="flex flex-wrap gap-2">
             <form

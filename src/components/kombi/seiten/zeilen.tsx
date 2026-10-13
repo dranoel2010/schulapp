@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { Icon } from "@/components/kombi/icon";
@@ -117,7 +117,31 @@ export function Bestaetigung({
   onJa: () => void;
   onNein: () => void;
 }) {
-  const { hideToast } = useKombi();
+  const { hideToast, ebeneAuf, ebeneZu } = useKombi();
+  // Ein eigener Eintrag in der History: Android-Zurück schließt erst die
+  // Bestätigung, nicht die Seite darunter (Grundsatz 4). Zurück ruft `onNein`;
+  // schließt ein Knopf, räumt das Abbauen den Eintrag wieder ab. Eingetragen
+  // erst nach dem Malen, damit ein doppelter Effekt (Strict Mode) keinen
+  // Eintrag liegen lässt.
+  const neinRef = useRef(onNein);
+  useEffect(() => {
+    neinRef.current = onNein;
+  });
+  useEffect(() => {
+    let eingetragen = false;
+    let ausHistory = false;
+    const t = setTimeout(() => {
+      eingetragen = true;
+      ebeneAuf("bestaetigung", () => {
+        ausHistory = true;
+        neinRef.current();
+      });
+    }, 0);
+    return () => {
+      clearTimeout(t);
+      if (eingetragen && !ausHistory) ebeneZu("bestaetigung");
+    };
+  }, [ebeneAuf, ebeneZu]);
   // Solange sie offen ist, geht die Zeile weg wie unter dem Tisch (.t-confirm),
   // und ein Toast von vorher verdeckt die Knöpfe nicht.
   useEffect(() => {

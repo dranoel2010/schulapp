@@ -740,7 +740,18 @@ export function KombiShell({ children }: { children: ReactNode }) {
     // Ein Stapel-Eintrag nennt in `stapel` auch die Seite seiner URL — die
     // rendert nach dem Neuladen die Route, darunter liegt der Rest. Ein
     // Routen-Eintrag nennt nur die Seiten darunter.
-    const unten = istStart || s.route ? gespeichert : gespeichert.slice(0, -1);
+    let unten = istStart || s.route ? gespeichert : gespeichert.slice(0, -1);
+    // Ohne Netz liefert der Service Worker für eine Stapelseite ohne eigene
+    // gecachte Fassung die Startseite unter ihrer Adresse aus (public/sw.js,
+    // `stapelPfad`). Dann fehlt die Seite der Adresse noch oben auf dem
+    // Stapel, wenn der Eintrag sie nicht schon nennt (Routen-Eintrag oder
+    // gar kein Eintrag, etwa beim Aufruf über ein Lesezeichen).
+    const ersatzStart = istStart && window.location.pathname !== "/";
+    if (ersatzStart) {
+      const hier = artAusSegmenten(window.location.pathname.split("/").filter(Boolean));
+      const oben = unten[unten.length - 1];
+      if (hier && !(oben && oben.art === hier.art && (oben.params.id ?? "") === (hier.params.id ?? ""))) unten = [...unten, hier];
+    }
     if (unten.length) {
       const keys = unten.map((e) => keyFuer(e.art));
       setzeEbenen((alt) => [
@@ -765,8 +776,12 @@ export function KombiShell({ children }: { children: ReactNode }) {
     // History-Eintrag wieder her; der darf den Ablauf nicht aufhalten.
     const { overlay: _liegengeblieben, ...ohneOverlay } = s;
     void _liegengeblieben;
+    // Ersatz-Startseite: der Eintrag ist jetzt ein Stapel-Eintrag, der die
+    // Seite seiner Adresse nennt — so stellt ihn auch ein späteres Neuladen
+    // mit Netz (echte Route) richtig wieder her.
+    if (ersatzStart) delete (ohneOverlay as Partial<KombiState>).route;
     window.history.replaceState(
-      { ...ohneOverlay, kombi: 1, stapel: s.kombi ? gespeichert : unten, idx: idx.current, ladung: LADUNG },
+      { ...ohneOverlay, kombi: 1, stapel: s.kombi && !ersatzStart ? gespeichert : unten, idx: idx.current, ladung: LADUNG },
       "",
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps

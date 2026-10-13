@@ -112,6 +112,13 @@ export type ZeilenVorrat = {
   themenListe: VorratThemaTreffer[];
 };
 
+/**
+ * So viele Tage findet die Zeile eine erledigte Hausaufgabe noch (und lässt sie
+ * wieder öffnen). Die Hausaufgabenliste zeigt Erledigtes nur zwei Tage; vor
+ * Modell 23 stand es 14 Tage in der Liste.
+ */
+export const ERLEDIGT_SUCHE_TAGE = 14;
+
 // ── Kalender (Prototyp Z. 1104–1128) ─────────────────────────────────────────
 
 export function addTage(tag: string, n: number): string {

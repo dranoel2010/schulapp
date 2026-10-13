@@ -26,6 +26,18 @@ function istShellDaten(pathname) {
 }
 const OFFLINE_URL = "/offline";
 
+/**
+ * Adressen, hinter denen eine Stapelseite steht — dieselben wie
+ * `artAusSegmenten` in src/components/kombi/seiten/registry.tsx.
+ */
+const ID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
+const STAPEL_PFADE = new RegExp(
+  `^/(?:(?:stundenplan|hausaufgaben|klausuren|noten|material|faecher|einstellungen)|(?:klausuren|material|faecher)/${ID}|noten/fach/${ID})/?$`,
+);
+function stapelPfad(pathname) {
+  return STAPEL_PFADE.test(pathname);
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
@@ -133,6 +145,15 @@ async function networkFirst(request, event) {
   } catch {
     const cached = await caches.match(request, { cacheName: PAGE_CACHE });
     if (cached) return cached;
+
+    // Stapelseiten (Modell 23) entstehen per pushState, nicht als Navigation:
+    // ihre Adresse steht nie im PAGE_CACHE. Ohne Netz kommt dann die gecachte
+    // Startseite unter dieser Adresse; die Shell legt die Seite darauf und
+    // holt ihre Daten aus dem Daten-Cache, wie beim Öffnen über die Zeile.
+    if (stapelPfad(new URL(request.url).pathname)) {
+      const start = await caches.match(new URL("/", self.location.origin).href, { cacheName: PAGE_CACHE });
+      if (start) return start;
+    }
 
     const offline = await caches.match(OFFLINE_URL);
     if (offline) return offline;
