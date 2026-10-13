@@ -140,7 +140,7 @@ function vorratVomTag(vv: { v: ZeilenVorrat; versatz: number }): boolean {
 /** Wie `homeworkInputSchema`: der Titel einer Aufgabe hat höchstens 120 Zeichen. */
 const TITEL_MAX = 120;
 
-const ZIEL_ARTEN = new Set(["woche", "hausaufgaben", "klausuren", "klausur", "noten", "notenfach", "ablage", "blatt", "faecher", "fach", "einstellungen"]);
+const ZIEL_ARTEN = new Set(["woche", "hausaufgaben", "klausuren", "klausur", "noten", "notenfach", "ablage", "blatt", "faecher", "fach", "einstellungen", "archiv"]);
 
 /**
  * Was ein Eintrag aus einem fremden Kontext zurückgibt (Abschnitt C): Der

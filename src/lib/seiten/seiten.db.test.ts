@@ -112,6 +112,7 @@ describe("Loader der Nachschlage-Seiten", () => {
       ["faecher", {}],
       ["fach", { id: ids.Mathematik }],
       ["einstellungen", {}],
+      ["archiv", {}],
     ] as const) {
       const daten = await laden(art, params);
       assert.ok(daten, `${art} liefert Daten`);

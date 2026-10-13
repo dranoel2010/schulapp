@@ -6,7 +6,7 @@ import { nextLesson } from "@/lib/kombi/vorrat";
 
 import { parse } from "./parser";
 import { prototypVorrat } from "./prototyp-vorrat";
-import { answerFor, dublette, rueckfrageTage, suche, suggestions, txtText, type Antwort, type SuchUmgebung } from "./suche";
+import { AREAS, answerFor, dublette, rueckfrageTage, suche, suggestions, txtText, type Antwort, type SuchUmgebung } from "./suche";
 
 const v = prototypVorrat();
 const u: SuchUmgebung = { v, jetzt: v.jetzt, doneFuer: (a) => a.done };
@@ -143,6 +143,26 @@ describe("Suche", () => {
     const alt = mit(15);
     assert.ok(!alt.groups.some((g) => g.items?.some((i) => i.key === "a:a3")));
     assert.notEqual(alt.top.key, "a:a3");
+  });
+
+  it("»archiv« öffnet das Archiv, auch mit »klausuren«, und wird keine Aufgabe (Antwort 11)", () => {
+    for (const q of ["archiv", "klausuren archiv", "Archiv"]) {
+      assert.notEqual(p(q).intent, "eintragen", q);
+      const a = antwort(q);
+      assert.equal(a.l1, "Archiv öffnen");
+      assert.ok(a.kind === "nav");
+      if (a.kind !== "nav") continue;
+      assert.deepEqual(a.ziel, { typ: "seite", art: "archiv" });
+    }
+    const r = suche(p("archiv"), { ...u, server: { q: "", list: [] } });
+    assert.equal(txtText(r.top.l1), "Archiv öffnen");
+  });
+
+  it("»vergangene« findet das Archiv als Bereich, das Raster „Wohin?“ bleibt bei neun", () => {
+    const r = suche(p("vergangene"), { ...u, server: { q: "", list: [] } });
+    assert.ok(r.groups.flatMap((g) => g.items ?? []).some((i) => i.ziel?.typ === "seite" && i.ziel.art === "archiv") || (r.top.ziel?.typ === "seite" && r.top.ziel.art === "archiv"));
+    assert.equal(AREAS.length, 9);
+    assert.ok(!AREAS.some((a) => a.key === "archiv"));
   });
 
   it("Kein Treffer", () => {

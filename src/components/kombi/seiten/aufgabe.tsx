@@ -29,7 +29,7 @@ import type { AufgabeDaten } from "@/lib/seiten/gemeinsam";
  * lädt die Shell die Seite nach (`neuLaden`), so ordnen sich die Gruppen neu.
  */
 
-export type ZeilenModus = "page" | "page-sp" | "woche" | "subj";
+export type ZeilenModus = "page" | "page-sp" | "woche" | "subj" | "archiv";
 
 type Ueber = Record<string, { done?: boolean; weg?: boolean }>;
 
@@ -45,7 +45,8 @@ const RUECKSPRUNG_MS = 300;
  * zu deren Loslassen. Sonst ordnete eine schnelle Antwort die Liste schon
  * während des Haltens hart um, und beim Loslassen glitte nichts mehr.
  */
-export function useAufgaben<T>(daten: T) {
+export function useAufgaben<T>(daten: T, optionen?: { wiederOffenMelden?: boolean }) {
+  const wiederOffenMelden = !!optionen?.wiederOffenMelden;
   const kombi = useKombi();
   const [stand, setStand] = useState(daten);
   const [ueber, setUeber] = useState<Ueber>({});
@@ -184,6 +185,9 @@ export function useAufgaben<T>(daten: T) {
               },
               `${a.fach}, ${a.text}`,
             );
+          } else if (wiederOffenMelden) {
+            // Im Archiv verlässt eine wieder geöffnete Aufgabe die Seite: sagen, was geschah
+            kombi.toast(`${a.fach} wieder offen`, null, `${a.fach}, ${a.text}`);
           }
           await kombi.neuLaden();
           fertig(a.id);
@@ -197,7 +201,7 @@ export function useAufgaben<T>(daten: T) {
         },
       );
     },
-    [kombi, setze, halte, loslassen, fertig],
+    [kombi, setze, halte, loslassen, fertig, wiederOffenMelden],
   );
 
   const loeschen = useCallback(
@@ -355,6 +359,8 @@ export function AufgabeZeile({
   let sub: string | null = null;
   if (!a.done && a.due < heute) sub = `war fällig ${kurz(a.due)}`;
   else if (!a.done && (modus === "subj" || modus === "page-sp")) sub = kurz(a.due);
+  // im Archiv: wann sie fällig war, sonst ließen sich gleiche Titel nicht unterscheiden
+  else if (modus === "archiv") sub = kurz(a.due);
 
   // Plan 2.2 (Prototyp `startEdit`): ohne Details ändert die Zeile den
   // Kurztext, mit Details öffnet das Formular.

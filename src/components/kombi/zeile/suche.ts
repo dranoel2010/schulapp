@@ -272,6 +272,8 @@ export function answerFor(p: Pick<Geparst, "words" | "fach">, u: SuchUmgebung): 
       l2: v.epoche.seit ? `Hauptunterricht seit ${lang(v.epoche.seit)}` : "Hauptunterricht",
       ziel: { typ: "seite", art: "fach", params: { id: v.epoche.fachId } },
     };
+  // Antwort 11: „archiv“, auch „klausuren archiv“, öffnet das Archiv
+  if (has("archiv")) return { kind: "nav", l1: "Archiv öffnen", ziel: { typ: "seite", art: "archiv" } };
   if (has("klausur") || has("klausuren")) {
     const k =
       klausurenBald(v).find((x) => !fach || x.fachId === fach.id) ??
@@ -326,6 +328,14 @@ export const AREAS: readonly Bereich[] = [
   { key: "ablage", label: "Ablage", terms: "ablage blaetter blatt material", ziel: () => ({ typ: "seite", art: "ablage" }) },
   { key: "faecher", label: "Fächer", terms: "faecher fach", ziel: () => ({ typ: "seite", art: "faecher" }) },
   { key: "einstellungen", label: "Einstellungen", terms: "einstellungen", ziel: () => ({ typ: "seite", art: "einstellungen" }) },
+];
+
+/**
+ * Bereiche, die die Suche findet, aber nicht im Raster „Wohin?“ stehen: das
+ * Raster bleibt 3 × 3 wie im Prototyp (Antwort 11: das Archiv).
+ */
+const NUR_SUCHE: readonly Bereich[] = [
+  { key: "archiv", label: "Archiv", terms: "archiv vergangen vergangene", ziel: () => ({ typ: "seite", art: "archiv" }) },
 ];
 
 const ACTIONS: readonly { key: string; label: string; terms: string; ziel: Ziel }[] = [
@@ -502,7 +512,7 @@ export function suche(
       })),
     });
   // ein Bereich, den die erste Zeile schon nennt, steht nicht noch einmal darunter
-  const ar = AREAS.filter((a) => qs.some((q) => wordHit(q, a.terms) || wordHit(q, a.label)) && !(ans && norm(ans.l1).startsWith(norm(a.label))));
+  const ar = [...AREAS, ...NUR_SUCHE].filter((a) => qs.some((q) => wordHit(q, a.terms) || wordHit(q, a.label)) && !(ans && norm(ans.l1).startsWith(norm(a.label))));
   const fachAr: Option[] =
     p.fach && !(ans && ans.kind === "nav" && ans.l2 === "Fach öffnen")
       ? [{ key: "f:" + p.fach.id, l1: p.fach.name, l2: "Fach öffnen", ziel: { typ: "seite", art: "fach", params: { id: p.fach.id } } }]

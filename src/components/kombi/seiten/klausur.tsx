@@ -487,7 +487,10 @@ function PlanZeile({
 
 // ── Klausuren ─────────────────────────────────────────────────────────────────
 
-/** Die Liste aller Klausuren (Prototyp `PAGES.klausuren`, Z. 3106). */
+/**
+ * Die Liste der Klausuren (Prototyp `PAGES.klausuren`, Z. 3106): kommende
+ * zuerst, darunter blasser die vergangenen der letzten 14 Tage (Antwort 11).
+ */
 export function KlausurenInhalt({ daten }: { params: Record<string, string>; daten: KlausurenSeite }) {
   const kombi = useKombi();
   return (
@@ -498,7 +501,7 @@ export function KlausurenInhalt({ daten }: { params: Record<string, string>; dat
         {daten.klausuren.map((k) => (
           <button
             key={k.id}
-            className="lrow plain"
+            className={`lrow plain${k.vorbei ? " vorbei" : ""}`}
             type="button"
             onPointerDown={() => kombi.vorladen("klausur", { id: k.id })}
             onClick={() => kombi.openPage("klausur", { id: k.id })}
@@ -516,6 +519,8 @@ export function KlausurenInhalt({ daten }: { params: Record<string, string>; dat
       {/* wie „Fach anlegen“ auf der Fächer-Seite (Plan 2.3: Textzeile mit Chevron) */}
       {daten.klausuren.length ? <div style={{ height: 16 }} /> : null}
       <TextLine href="/klausuren/neu">Klausur eintragen</TextLine>
+      {/* Antwort 11: ab Tag 15 nach dem Klausurtag steht eine Klausur im Archiv */}
+      {daten.archiv ? <TextLine onClick={() => kombi.openPage("archiv")}>Archiv</TextLine> : null}
     </>
   );
 }

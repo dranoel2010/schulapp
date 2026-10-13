@@ -1,4 +1,5 @@
 import { ablageSeite, blattSeite } from "@/lib/seiten/ablage";
+import { archivSeite } from "@/lib/seiten/archiv";
 import { einstellungenSeite } from "@/lib/seiten/einstellungen";
 import { fachSeite, faecherSeite } from "@/lib/seiten/faecher";
 import { hausaufgabenSeite } from "@/lib/seiten/hausaufgaben";
@@ -36,6 +37,7 @@ export const SEITEN_LOADER: Record<string, SeitenLoader | undefined> = {
   faecher: (userId) => faecherSeite(userId),
   fach: fachSeite,
   einstellungen: (userId) => einstellungenSeite(userId),
+  archiv: (userId) => archivSeite(userId),
 };
 
 export function seitenLoader(art: string): SeitenLoader | undefined {

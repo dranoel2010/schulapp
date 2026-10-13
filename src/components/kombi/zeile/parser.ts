@@ -59,6 +59,8 @@ export const ZIEL = [
   "faecher", "einstellungen", "foto", "kamera", "lernblock", "wiederholen", "wiederholung", "ueberblick", "packen", "epoche",
   // App: weitere Navigationsantworten (Plan 2.2, „Neue Ziele für die Zeile“)
   "eingangskorb", "eingang", "bausteine",
+  // Antwort 11: Vergangenes nach zwei Wochen
+  "archiv",
 ];
 export const ZIEL_REST = ["arbeit", "test", "hausaufgaben", "ha", "aufgaben", "vokabeln"];
 export const FRAGE_REST = FRAGE.concat(["haben wir", "hab ich auf", "muss ich"]);

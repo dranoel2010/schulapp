@@ -23,6 +23,7 @@ const FEST: Record<string, string> = {
   ablage: "Ablage",
   faecher: "Fächer",
   einstellungen: "Einstellungen",
+  archiv: "Archiv",
 };
 
 /**
@@ -38,6 +39,7 @@ const FEST_ROUTE: Record<string, string> = {
   "/material": "ablage",
   "/faecher": "faecher",
   "/einstellungen": "einstellungen",
+  "/archiv": "archiv",
 };
 
 /** Die Seite ohne Parameter hinter einer Adresse, sonst null. */

@@ -2,6 +2,7 @@
 
 import type { ComponentType } from "react";
 
+import { ArchivInhalt } from "@/components/kombi/seiten/archiv";
 import { AblageInhalt, ablageSub, BlattInhalt, blattSub } from "@/components/kombi/seiten/blatt";
 import { EinstellungenInhalt } from "@/components/kombi/seiten/einstellungen";
 import { FachInhalt, FaecherInhalt } from "@/components/kombi/seiten/faecher";
@@ -127,6 +128,12 @@ export const SEITEN: Record<string, SeitenArt | undefined> = {
     titel: () => "Einstellungen",
     Inhalt: inhalt(EinstellungenInhalt),
   },
+  // Antwort 11: Vergangenes nach zwei Wochen
+  archiv: {
+    url: () => "/archiv",
+    titel: () => "Archiv",
+    Inhalt: inhalt(ArchivInhalt),
+  },
 };
 
 /**
@@ -163,6 +170,7 @@ export function artAusSegmenten(segmente: string[]): { art: string; params: Reco
       material: "ablage",
       faecher: "faecher",
       einstellungen: "einstellungen",
+      archiv: "archiv",
     };
     return Object.hasOwn(einfach, a) ? { art: einfach[a], params: {} } : null;
   }

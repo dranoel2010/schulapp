@@ -47,7 +47,7 @@ const OFFLINE_URL = "/offline";
  */
 const ID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 const STAPEL_PFADE = new RegExp(
-  `^/(?:(?:stundenplan|hausaufgaben|klausuren|noten|material|faecher|einstellungen)|(?:klausuren|material|faecher)/${ID}|noten/fach/${ID})/?$`,
+  `^/(?:(?:stundenplan|hausaufgaben|klausuren|noten|material|faecher|einstellungen|archiv)|(?:klausuren|material|faecher)/${ID}|noten/fach/${ID})/?$`,
 );
 function stapelPfad(pathname) {
   return STAPEL_PFADE.test(pathname);
@@ -65,6 +65,7 @@ const EINFACH = {
   material: "ablage",
   faecher: "faecher",
   einstellungen: "einstellungen",
+  archiv: "archiv",
 };
 const MIT_ID = { klausuren: "klausur", material: "blatt", faecher: "fach" };
 function stapelDaten(pathname) {

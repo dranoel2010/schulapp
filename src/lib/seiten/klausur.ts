@@ -8,6 +8,7 @@ import { freeDatesFrom } from "@/lib/free-days";
 import { gradeLabel } from "@/lib/grade-scale";
 import { gradesBySubject } from "@/lib/grades";
 import { appTag, jetzt } from "@/lib/tag";
+import { klausurImArchiv, klausurVorbei } from "@/lib/kombi/archiv";
 import { blattStaende, blockDaten, type BlockDaten } from "@/lib/kombi/lernblock-daten";
 import { buildPlan, type PlanWarning } from "@/lib/study-plan";
 import { lessonsForWeekday, weekdayOf } from "@/lib/timetable";
@@ -214,24 +215,35 @@ async function blaetterZurKlausur(
 // ── Klausuren (Liste) ────────────────────────────────────────────────────────
 
 export type KlausurenSeite = {
-  klausuren: { id: string; fach: string; datum: string; thema: string }[];
+  /** Kommende zuerst (die nächste oben), darunter die vergangenen der letzten 14 Tage, die jüngste zuerst */
+  klausuren: { id: string; fach: string; datum: string; thema: string; vorbei: boolean }[];
+  /** Wie viele Klausuren im Archiv stehen: ab 1 steht unten „Archiv“ */
+  archiv: number;
 };
 
 /**
- * Alle Klausuren in einer sortierten Liste, vergangene eingeschlossen — wie im
- * Prototyp (Z. 3106), ohne eigenen Abschnitt „Vorbei“ (Plan 2.2, Frage 11).
+ * Alle Klausuren in einer Liste wie im Prototyp (Z. 3106), ohne eigenen
+ * Abschnitt „Vorbei“ (Plan 2.2). Vergangene stehen unten und blasser, bis
+ * 14 Tage nach dem Klausurtag; danach im Archiv (Antwort 11, `archivSeite`).
  */
-export async function klausurenSeite(userId: string): Promise<KlausurenSeite> {
-  const liste = await listExams(userId, { includePast: true });
+export async function klausurenSeite(userId: string, jetztZeit?: Date): Promise<KlausurenSeite> {
+  const heute = appTag(jetztZeit ?? (await jetzt()));
+  const liste = await listExams(userId, { includePast: true, heute });
+  const zeilen = liste.map((k) => ({
+    id: k.id,
+    fach: k.subject.name,
+    datum: k.date,
+    thema: k.title ?? ART_NAMEN[k.kind] ?? "Prüfung",
+    vorbei: klausurVorbei(k.date, heute),
+  }));
+  const auf = (a: { datum: string }, b: { datum: string }) => (a.datum < b.datum ? -1 : a.datum > b.datum ? 1 : 0);
   return {
-    klausuren: liste
-      .slice()
-      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
-      .map((k) => ({
-        id: k.id,
-        fach: k.subject.name,
-        datum: k.date,
-        thema: k.title ?? ART_NAMEN[k.kind] ?? "Prüfung",
-      })),
+    klausuren: [
+      ...zeilen.filter((k) => !k.vorbei).sort(auf),
+      ...zeilen
+        .filter((k) => k.vorbei && !klausurImArchiv(k.datum, heute))
+        .sort((a, b) => auf(b, a)),
+    ],
+    archiv: zeilen.filter((k) => klausurImArchiv(k.datum, heute)).length,
   };
 }
