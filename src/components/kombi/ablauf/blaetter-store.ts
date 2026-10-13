@@ -148,44 +148,115 @@ function ungesichertZaehlen(d: 1 | -1): void {
 }
 
 /**
- * Die Seiten ab `ab` senden: die erste legt das Blatt an, die weiteren hängen
- * an dasselbe. Ohne Netz „hängt“ die Zeile und es geht weiter, sobald das
- * Gerät wieder online ist. Jeder Schritt steht in IndexedDB, bis alles da ist.
+ * „Seite dazu“ an ein vorhandenes Blatt, solange der Server die Seiten noch
+ * nicht hat: die Blattzeile im Ablauf und die Blattseite zeigen daran „Wird
+ * hochgeladen“ oder „Hängt, wird erneut versucht“ (statt nur eines Toasts,
+ * der von selbst verschwindet). `erledigt` zählt angekommene Uploads, damit
+ * Liste und Seite danach neu laden.
  */
-async function hochladenAb(
-  key: string,
-  uid: string,
-  fassungen: PreparedPage[],
-  ziel: "liste" | "zeile",
-  ab: number,
-  id: string | null,
-  fehler: string | null,
-): Promise<BlattKurz | null> {
+export type DazuEintrag = { uid: string; id: string; lokal: "hochladen" | "haengt"; seiten: number };
+type DazuStand = { liste: DazuEintrag[]; erledigt: number };
+let dazuStand: DazuStand = { liste: [], erledigt: 0 };
+const dazuHoerer = new Set<() => void>();
+function dazuAendern(n: DazuStand): void {
+  dazuStand = n;
+  dazuHoerer.forEach((f) => f());
+}
+const LEER_DAZU: DazuStand = { liste: [], erledigt: 0 };
+
+export const dazuStore = {
+  get: (): DazuStand => dazuStand,
+  leer: (): DazuStand => LEER_DAZU,
+  subscribe(f: () => void): () => void {
+    dazuHoerer.add(f);
+    return () => dazuHoerer.delete(f);
+  },
+  neu(e: DazuEintrag): void {
+    dazuAendern({ ...dazuStand, liste: [...dazuStand.liste.filter((x) => x.uid !== e.uid), e] });
+  },
+  setzen(uid: string, lokal: DazuEintrag["lokal"]): void {
+    if (!dazuStand.liste.some((x) => x.uid === uid && x.lokal !== lokal)) return;
+    dazuAendern({ ...dazuStand, liste: dazuStand.liste.map((x) => (x.uid === uid ? { ...x, lokal } : x)) });
+  },
+  weg(uid: string, angekommen: boolean): void {
+    dazuAendern({
+      liste: dazuStand.liste.filter((x) => x.uid !== uid),
+      erledigt: dazuStand.erledigt + (angekommen ? 1 : 0),
+    });
+  },
+};
+
+/** Was an einem Blatt noch hängt: der Stand und wie viele Seiten noch kommen. */
+export function dazuAn(stand: DazuStand, id: string | null): { lokal: DazuEintrag["lokal"]; seiten: number } | null {
+  if (!id) return null;
+  const e = stand.liste.filter((x) => x.id === id);
+  if (!e.length) return null;
+  return { lokal: e.some((x) => x.lokal === "haengt") ? "haengt" : "hochladen", seiten: e.reduce((n, x) => n + x.seiten, 0) };
+}
+
+type Hochladen = {
+  uid: string;
+  fassungen: PreparedPage[];
+  ziel: "liste" | "zeile";
+  /** ab dieser Seite senden (die davor hat der Server schon) */
+  ab: number;
+  /** Server-ID des Blatts, wenn es schon eines gibt */
+  id: string | null;
+  /** „Seite dazu“: alle Seiten hängen an `id` */
+  dazu: boolean;
+  fehler: string | null;
+  /** Anzeige: hochladen, hängt, oder die erste Antwort des Servers */
+  stand: (teil: Partial<LokalesBlatt>) => void;
+};
+
+/**
+ * Die Formularfelder zur Seite `i` von `n`: ohne Blatt legt die Seite eines
+ * an, sonst hängt sie daran. Bei „Seite dazu“ steht das Blatt von Anfang an
+ * fest; die erste Seite sagt, wie viele kommen.
+ */
+export function seitenFelder(a: {
+  i: number;
+  n: number;
+  blattId: string | null;
+  dazu: boolean;
+  ziel: "liste" | "zeile";
+  fehler: string | null;
+}): Record<string, string> {
+  if (a.dazu) return { attach: a.blattId ?? "", ...(a.i > 0 ? { folge: "1" } : { seiten: String(a.n) }) };
+  if (a.i === 0 || !a.blattId) return { seiten: String(a.n), ziel: a.ziel, ...(a.fehler ? { fehler: a.fehler } : {}) };
+  return { attach: a.blattId, folge: "1" };
+}
+
+/**
+ * Die Seiten ab `ab` senden: die erste legt das Blatt an (bei „Seite dazu“
+ * hängt sie an das vorhandene), die weiteren hängen an dasselbe. Ohne Netz
+ * „hängt“ die Zeile und es geht weiter, sobald das Gerät wieder online ist.
+ * Jeder Schritt steht in IndexedDB, bis alles da ist.
+ */
+async function hochladenAb(h: Hochladen): Promise<BlattKurz | null> {
+  const { uid, fassungen, ziel, ab, dazu, fehler, stand } = h;
   const versuch = async <T,>(f: () => Promise<T>): Promise<T> => {
     for (;;) {
       try {
         return await f();
       } catch (e) {
         if (!(e instanceof UploadFehler) || !e.netz) throw e;
-        blaetterStore.setzen(key, { lokal: "haengt" });
+        stand({ lokal: "haengt" });
         await online();
-        blaetterStore.setzen(key, { lokal: "hochladen" });
+        stand({ lokal: "hochladen" });
       }
     }
   };
   let kurz: BlattKurz | null = null;
-  let blattId = id;
+  let blattId = h.id;
   try {
     for (let i = ab; i < fassungen.length; i++) {
-      const felder: Record<string, string> =
-        i === 0 || !blattId
-          ? { seiten: String(fassungen.length), ziel, ...(fehler ? { fehler } : {}) }
-          : { attach: blattId, folge: "1" };
+      const felder = seitenFelder({ i, n: fassungen.length, blattId, dazu, ziel, fehler });
       const k = await versuch(() => senden(fassungen[i], felder));
       kurz = k;
       if (!blattId) {
         blattId = k.id;
-        blaetterStore.setzen(key, { id: k.id, kurz: k, lokal: i + 1 < fassungen.length ? "hochladen" : null });
+        stand({ id: k.id, kurz: k, lokal: i + 1 < fassungen.length ? "hochladen" : null });
       }
       await aufnahmeFortschritt(uid, i + 1, blattId);
     }
@@ -195,8 +266,22 @@ async function hochladenAb(
     throw e;
   }
   await aufnahmeVergessen(uid);
-  if (kurz) blaetterStore.setzen(key, { kurz, lokal: null });
+  if (kurz) stand({ kurz, lokal: null });
   return kurz;
+}
+
+/** Ein Upload dieses Fensters (gegen doppeltes Fortsetzen beim Ereignis „online“). */
+const laufendeUids = new Set<string>();
+
+/** `reserviert`: die uid steht schon in `laufendeUids` (vor dem Ablegen in IndexedDB eingetragen). */
+async function gesperrt<T>(uid: string, nurWennFrei: boolean, f: () => Promise<T>, reserviert = false): Promise<T | null> {
+  if (!reserviert && laufendeUids.has(uid)) return null;
+  laufendeUids.add(uid);
+  try {
+    return await mitSperre(uid, nurWennFrei, f);
+  } finally {
+    laufendeUids.delete(uid);
+  }
 }
 
 /**
@@ -215,6 +300,8 @@ export async function blattHochladen(
   const fassungen = await Promise.all(seiten.map((s) => s.fassungen));
   const eintrag = blaetterStore.get().find((b) => b.key === key);
   const uid = neueUid();
+  // vor dem Ablegen reserviert: ein „online“ dazwischen setzt diese Aufnahme nicht ein zweites Mal fort
+  laufendeUids.add(uid);
   const gesichert = await aufnahmeMerken({
     uid,
     ziel,
@@ -227,7 +314,10 @@ export async function blattHochladen(
   });
   if (!gesichert) ungesichertZaehlen(1);
   try {
-    const kurz = await mitSperre(uid, false, () => hochladenAb(key, uid, fassungen, ziel, 0, null, fehler));
+    const kurz = await gesperrt(uid, false, () =>
+      hochladenAb({ uid, fassungen, ziel, ab: 0, id: null, dazu: false, fehler, stand: (t) => blaetterStore.setzen(key, t) }),
+      true,
+    );
     if (!kurz) throw new UploadFehler("Nicht gespeichert", false);
     return kurz;
   } finally {
@@ -235,19 +325,63 @@ export async function blattHochladen(
   }
 }
 
+/** Eine Aufnahme mit „Seite dazu“ senden: Stand an der Blattzeile, danach weg. */
+async function dazuSenden(a: { uid: string; id: string; fassungen: PreparedPage[]; ab: number }): Promise<BlattKurz | null> {
+  dazuStore.neu({ uid: a.uid, id: a.id, lokal: "hochladen", seiten: a.fassungen.length - a.ab });
+  let angekommen = false;
+  try {
+    const kurz = await hochladenAb({
+      uid: a.uid,
+      fassungen: a.fassungen,
+      ziel: "zeile",
+      ab: a.ab,
+      id: a.id,
+      dazu: true,
+      fehler: null,
+      stand: (t) => {
+        if (t.lokal) dazuStore.setzen(a.uid, t.lokal);
+      },
+    });
+    angekommen = true;
+    if (kurz) {
+      const lokal = blaetterStore.get().find((x) => x.id === a.id);
+      if (lokal) blaetterStore.setzen(lokal.key, { kurz, seiten: kurz.seiten });
+    }
+    return kurz;
+  } finally {
+    dazuStore.weg(a.uid, angekommen);
+  }
+}
+
 let fortgesetzt = false;
 
 /**
- * Beim Start der Shell: was beim letzten Mal hängen blieb (ohne Netz
- * fotografiert, dann neu geladen oder von Android beendet), steht wieder in
- * der Liste und geht weiter an den Server. `melden` bekommt den Satz für den
- * Toast, wenn der Server ein Blatt ablehnt.
+ * Beim Start der Shell und bei jedem Ereignis „online“: was hängen blieb
+ * (ohne Netz fotografiert, dann neu geladen oder von Android beendet), steht
+ * wieder in der Liste oder an seiner Blattzeile und geht weiter an den
+ * Server. Was dieses Fenster schon sendet oder ein anderes Fenster hält
+ * (Web Locks), bleibt unberührt. `melden` bekommt den Satz für den Toast,
+ * wenn der Server ein Blatt ablehnt.
  */
 export async function haengendeFortsetzen(melden: (text: string) => void): Promise<void> {
-  if (fortgesetzt) return;
-  fortgesetzt = true;
+  if (!fortgesetzt) {
+    fortgesetzt = true;
+    addEventListener("online", () => void fortsetzen(melden));
+  }
+  await fortsetzen(melden);
+}
+
+async function fortsetzen(melden: (text: string) => void): Promise<void> {
   for (const a of await haengendeLesen()) {
-    void mitSperre(a.uid, true, async () => {
+    if (laufendeUids.has(a.uid)) continue;
+    if (a.dazu && a.id) {
+      const id = a.id;
+      void gesperrt(a.uid, true, () => dazuSenden({ uid: a.uid, id, fassungen: a.seiten, ab: a.gesendet })).catch((e: unknown) =>
+        melden(e instanceof Error ? e.message : "Nicht gespeichert"),
+      );
+      continue;
+    }
+    void gesperrt(a.uid, true, async () => {
       const eintrag = blaetterStore.neu({
         id: a.id,
         lokal: "hochladen",
@@ -258,7 +392,16 @@ export async function haengendeFortsetzen(melden: (text: string) => void): Promi
         tag: a.tag,
       });
       try {
-        const kurz = await hochladenAb(eintrag.key, a.uid, a.seiten, a.ziel, a.gesendet, a.id, null);
+        const kurz = await hochladenAb({
+          uid: a.uid,
+          fassungen: a.seiten,
+          ziel: a.ziel,
+          ab: a.gesendet,
+          id: a.id,
+          dazu: false,
+          fehler: null,
+          stand: (t) => blaetterStore.setzen(eintrag.key, t),
+        });
         // alles war schon da: die Liste vom Server kennt das Blatt
         if (!kurz) blaetterStore.weg(eintrag.key);
       } catch (e) {
@@ -270,14 +413,33 @@ export async function haengendeFortsetzen(melden: (text: string) => void): Promi
   }
 }
 
-/** „Seite dazu“ an ein vorhandenes Blatt. */
+/**
+ * „Seite dazu“ an ein vorhandenes Blatt, wie ein neues Blatt: die Fassungen
+ * liegen erst in IndexedDB, ohne Netz hängt der Upload (an der Blattzeile
+ * „Hängt, wird erneut versucht“) und geht weiter, sobald das Gerät online
+ * ist, auch nach einem Neuladen. Wirft nur, wenn der Server ablehnt.
+ */
 export async function seitenDazu(materialId: string, seiten: Aufnahme[]): Promise<BlattKurz | null> {
-  let kurz: BlattKurz | null = null;
-  for (const [i, s] of seiten.entries()) {
-    const f = await s.fassungen;
-    kurz = await senden(f, { attach: materialId, ...(i > 0 ? { folge: "1" } : { seiten: String(seiten.length) }) });
+  const fassungen = await Promise.all(seiten.map((s) => s.fassungen));
+  const uid = neueUid();
+  laufendeUids.add(uid);
+  const gesichert = await aufnahmeMerken({
+    uid,
+    ziel: "zeile",
+    tag: null,
+    bild: seiten[0]?.bild ?? "",
+    order: Date.now(),
+    seiten: fassungen,
+    gesendet: 0,
+    id: materialId,
+    dazu: true,
+  });
+  if (!gesichert) ungesichertZaehlen(1);
+  try {
+    return await gesperrt(uid, false, () => dazuSenden({ uid, id: materialId, fassungen, ab: 0 }), true);
+  } finally {
+    if (!gesichert) ungesichertZaehlen(-1);
   }
-  return kurz;
 }
 
 /**

@@ -140,6 +140,32 @@ async function navigationAusCache(): Promise<{ gespeichert: number } | null> {
   }
 }
 
+/**
+ * Das HTML einer echten Route (Eingangskorb, Bausteine …) neu in den Cache
+ * des Service Workers legen. Ihr Stand steht nur im HTML: nach einer Action
+ * auf der Seite (abgehakt, übernommen) lieferte der Worker ohne Netz sonst
+ * still die zuerst geladene Fassung. Der Abruf läuft am Worker vorbei (kein
+ * `navigate`) und trägt den Zeitpunkt wie public/sw.js `mitZeitpunkt`; ohne
+ * `Vary`, damit die Navigation ihn später findet.
+ */
+async function routeNachCache(pfad: string): Promise<void> {
+  try {
+    if (!("caches" in window) || !navigator.onLine || window.location.pathname !== pfad) return;
+    const url = window.location.href.split("#")[0];
+    const r = await fetch(url, { credentials: "same-origin", cache: "no-store", headers: { accept: "text/html" } });
+    if (!r.ok || r.redirected || !(r.headers.get("content-type") ?? "").includes("text/html")) return;
+    const body = await r.arrayBuffer();
+    const headers = new Headers(r.headers);
+    // der Körper ist schon entpackt und neu gezählt
+    for (const k of ["vary", "content-encoding", "content-length"]) headers.delete(k);
+    headers.set("x-schulapp-gespeichert", new Date().toISOString());
+    const cache = await caches.open("schulapp-v3-pages");
+    await cache.put(url, new Response(body, { status: r.status, statusText: r.statusText, headers }));
+  } catch {
+    // ohne Netz oder ohne Cache-Speicher: es bleibt bei der Fassung von vorher
+  }
+}
+
 async function seiteHolen(art: string, params: Record<string, string>): Promise<SeitenAntwort> {
   const qs = new URLSearchParams(params).toString();
   const res = await fetch(`/api/seite/${encodeURIComponent(art)}${qs ? `?${qs}` : ""}`, {
@@ -903,6 +929,20 @@ export function KombiShell({ children }: { children: ReactNode }) {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Echte Route neu gerendert (Action mit revalidatePath, `router.refresh()`,
+  // Navigation dorthin): ihr HTML im Cache auf diesen Stand bringen. Das erste
+  // Rendern nach dem Laden nicht — das HTML hat der Worker eben gespeichert.
+  const routeCacheErst = useRef(true);
+  useEffect(() => {
+    if (routeCacheErst.current) {
+      routeCacheErst.current = false;
+      return;
+    }
+    if (istStart) return;
+    const t = setTimeout(() => void routeNachCache(pathname), 800);
+    return () => clearTimeout(t);
+  }, [children, istStart, pathname]);
 
   // ── Echte Navigation (Plan 2.4, Punkt 5) ────────────────────────────────────
 

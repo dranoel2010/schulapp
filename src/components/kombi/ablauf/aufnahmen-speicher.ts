@@ -28,8 +28,10 @@ export type HaengendeAufnahme = {
   seiten: PreparedPage[];
   /** so viele Seiten hat der Server schon */
   gesendet: number;
-  /** Server-ID nach der ersten Seite */
+  /** Server-ID nach der ersten Seite; bei „Seite dazu“ von Anfang an das Blatt */
   id: string | null;
+  /** „Seite dazu“: die Seiten hängen an das vorhandene Blatt `id`, kein neues */
+  dazu?: boolean;
 };
 
 const DB_NAME = "schulapp-aufnahmen";

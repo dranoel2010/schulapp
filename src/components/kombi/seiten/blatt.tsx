@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
 
 import {
   abschreibenAction,
@@ -8,6 +8,7 @@ import {
   blattLoeschenAction,
   inDenKorbAction,
 } from "@/app/(app)/material/seite-actions";
+import { dazuAn, dazuStore } from "@/components/kombi/ablauf/blaetter-store";
 import { useKombi } from "@/components/kombi/kontext";
 import { formatGerman } from "@/lib/dates";
 import { dm, fliesstext } from "@/lib/kombi/text";
@@ -67,6 +68,8 @@ export function BlattInhalt({ daten }: { daten: BlattDaten }) {
   const [vorher, setVorher] = useState(daten);
   const [loeschen, setLoeschen] = useState(false);
   const [laeuft, setLaeuft] = useState(false);
+  // „Seite dazu“ unterwegs (ohne Netz fotografiert): die Zeile sagt es, bis der Server die Seite hat
+  const dazu = dazuAn(useSyncExternalStore(dazuStore.subscribe, dazuStore.get, dazuStore.leer), daten.id);
   if (vorher !== daten) {
     setVorher(daten);
     setFach(daten.warte ? null : daten.fachId);
@@ -188,7 +191,13 @@ export function BlattInhalt({ daten }: { daten: BlattDaten }) {
       <RowBtn titel="Blatt bearbeiten" sub="Fach, Titel, Datum, Notiz, Themen, Abschrift, Seiten" ziel={{ href: `/material/${daten.id}/bearbeiten` }} />
       <RowBtn
         titel="Seite dazu"
-        sub="Noch eine Seite zu diesem Blatt fotografieren"
+        sub={
+          dazu?.lokal === "haengt"
+            ? "Hängt, wird erneut versucht"
+            : dazu
+              ? "Wird hochgeladen"
+              : "Noch eine Seite zu diesem Blatt fotografieren"
+        }
         ziel={{
           onClick: () =>
             kombi.openCam({

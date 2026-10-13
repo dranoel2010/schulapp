@@ -4,8 +4,8 @@
  * Ziel: die App bleibt ohne Netz lesbar.
  *  - /_next/static und /icons  → cache-first (die Dateinamen enthalten einen Hash,
  *    das Zeug ändert sich nie)
- *  - Seitenaufrufe             → network-first, sonst die zuletzt geladene Fassung,
- *    sonst die Offline-Seite. Für „/“ und die Stapelseiten ohne Netz die Shell
+ *  - Seitenaufrufe             → network-first, sonst die zuletzt geladene Fassung
+ *    (mit der Marke für „Ohne Verbindung · Stand …“), sonst die Offline-Seite. Für „/“ und die Stapelseiten ohne Netz die Shell
  *    mit den Daten aus dem Daten-Cache, wenn die neuer sind (siehe networkFirst)
  *  - Daten der Shell (Modell 23, Plan 2.4 Punkt 8): /api/seite/*, /api/tag/daten,
  *    /api/tag/stand und /api/ablauf → network-first in den eigenen Cache
@@ -189,6 +189,26 @@ async function cacheFirst(request, event) {
   return response;
 }
 
+/** Für die Shell: diese Seite kam ohne Netz, Stand des HTML. */
+async function navigationMarken(pfad, antwort) {
+  try {
+    const cache = await caches.open(DATA_CACHE);
+    await cache.put(
+      new URL(NAV_MARKE, self.location.origin).href,
+      new Response(
+        JSON.stringify({
+          pfad,
+          zeit: Date.now(),
+          gespeichert: gespeichertUm(antwort) || null,
+        }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+  } catch {
+    // ohne Marke fehlt nur der Hinweis „Ohne Verbindung“
+  }
+}
+
 async function networkFirst(request, event) {
   try {
     const response = await fetch(request);
@@ -225,28 +245,22 @@ async function networkFirst(request, event) {
         if (!cached || (daten && gespeichertUm(daten) >= gespeichertUm(cached))) antwort = start;
       }
       if (antwort) {
-        // Für die Shell: diese Seite kam ohne Netz, Stand des HTML
-        try {
-          const cache = await caches.open(DATA_CACHE);
-          await cache.put(
-            new URL(NAV_MARKE, self.location.origin).href,
-            new Response(
-              JSON.stringify({
-                pfad,
-                zeit: Date.now(),
-                gespeichert: gespeichertUm(antwort) || null,
-              }),
-              { headers: { "content-type": "application/json" } },
-            ),
-          );
-        } catch {
-          // ohne Marke fehlt nur der Hinweis „Ohne Verbindung“
-        }
+        await navigationMarken(pfad, antwort);
         return antwort;
       }
     }
 
-    if (cached) return cached;
+    /*
+     * Echte Routen (Eingangskorb, Bausteine, Formulare): ihr HTML ist ihr
+     * Stand. Die Shell schreibt es nach jeder Änderung auf der Seite neu in
+     * den Cache (shell.tsx, `routeNachCache`); hier bekommt sie die Marke,
+     * damit sie „Ohne Verbindung · Stand ⟨Uhrzeit⟩“ sagt, statt den Stand
+     * still als aktuell auszugeben.
+     */
+    if (cached) {
+      await navigationMarken(pfad, cached);
+      return cached;
+    }
 
     const offline = await caches.match(OFFLINE_URL);
     if (offline) return offline;

@@ -233,8 +233,9 @@ export function KameraEbene() {
         const t = b.target;
         dazu.push({ id: t.id, from });
         const pages = b.pages;
-        // Scheitert der Upload, bleiben die Seiten hier im Speicher: „Erneut“
-        // schickt dieselben Seiten noch einmal (wie beim Abhaken offline).
+        // Ohne Netz hängt der Upload (IndexedDB, an der Blattzeile „Hängt, wird
+        // erneut versucht“) und geht von selbst weiter. Lehnt der Server ab,
+        // bleiben die Seiten hier im Speicher: „Erneut“ schickt sie noch einmal.
         const senden = (): Promise<boolean> =>
           seitenDazu(t.id, pages).then(
             (kurz) => {

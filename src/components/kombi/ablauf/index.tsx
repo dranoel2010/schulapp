@@ -23,6 +23,8 @@ import { blattFertig } from "@/components/kombi/ablauf/status-texte";
 import {
   ablageEmpfangen,
   blaetterStore,
+  dazuAn,
+  dazuStore,
   haengendeFortsetzen,
   vorLandungMelden,
   type Landung,
@@ -89,6 +91,8 @@ export function AblaufEbene() {
   /** „Fach ändern“ läuft: Thema folgt */
   const [themaFolgt, setThemaFolgt] = useState<Set<string>>(() => new Set());
   const lokal = useSyncExternalStore(blaetterStore.subscribe, blaetterStore.get, () => []);
+  /** „Seite dazu“, die noch nicht beim Server ist: Stand an der Blattzeile */
+  const dazu = useSyncExternalStore(dazuStore.subscribe, dazuStore.get, dazuStore.leer);
 
   const flowRef = useRef<HTMLElement | null>(null);
   const bandRef = useRef<HTMLElement>(null);
@@ -510,8 +514,13 @@ export function AblaufEbene() {
         order: Date.parse(s.erstellt),
       });
     }
+    // „Seite dazu“ unterwegs: die Zeile sagt es, bis der Server die Seiten hat
+    for (const b of out) {
+      const d = dazuAn(dazu, b.id);
+      if (d) Object.assign(b, { status: d.lokal, seiten: b.seiten + d.seiten });
+    }
     return out.sort((a, b) => b.order - a.order);
-  }, [daten?.blaetter, datenTag, lokal, versteckt, themaFolgt]);
+  }, [daten?.blaetter, datenTag, lokal, versteckt, themaFolgt, dazu]);
 
   const has = anzeige.length > 0;
 
@@ -522,6 +531,14 @@ export function AblaufEbene() {
     void laden();
     void neuLaden();
   }, [fertigeUploads, laden, neuLaden]);
+
+  // „Seite dazu“ angekommen (auch nach Neuladen fortgesetzt): Liste und Seite neu holen
+  const dazuErledigt = dazu.erledigt;
+  useEffect(() => {
+    if (!dazuErledigt) return;
+    void laden();
+    void neuLaden();
+  }, [dazuErledigt, laden, neuLaden]);
 
   // Solange ein Blatt nicht fertig ist: alle 2 s nach dem Stand fragen (Plan 3.8)
   // nur Blätter, die der Server für heute kennt — sonst liefe die Abfrage ohne Ende
