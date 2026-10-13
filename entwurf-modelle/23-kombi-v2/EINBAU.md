@@ -40,6 +40,10 @@ Am Handy geht die Kamera nur über HTTPS. Dafür auf dem Mac `tailscale funnel 3
 
 ## Auf den NAS: SQL zuerst, dann hochfahren
 
+**Erst wenn der IServ-Ferienabgleich gebaut ist.** Die Ferien-Seite gibt es in Modell 23 nicht mehr (dein Wunsch vom 12.10.). Die Ferien sollen künftig von selbst aus IServ kommen. Bis das gebaut ist, könnte niemand Ferien eintragen, und die App würde in den Ferien Lernblöcke planen.
+
+**Vor dem Push** wird der ganze Branch nach echten Namen und Schuldaten durchsucht, weil das Repo öffentlich ist. Gepusht wird erst nach deinem Ja.
+
 Die Datenbank auf dem NAS kennt die neuen Tabellen noch nicht. Die sechs Dateien müssen **vor** `nas.sh hoch` hinein, **in genau dieser Reihenfolge**:
 
 1. `scripts/kombi-tagesprotokoll.sql`
