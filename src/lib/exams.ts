@@ -542,10 +542,19 @@ export async function generatePlan(
   });
 
   // Erledigt, gestrichen, angefangen oder mit eigenem Arbeitsblatt: das bleibt stehen.
+  // Ausnahme ist die offene Probeklausur mit Blatt: das Blatt bleibt, ihr Tag
+  // aber folgt dem neuen Termin (sonst läge sie nach dem Vorverlegen am
+  // Klausurtag oder nach dem Verschieben eine Woche zu früh).
   const eigenesBlatt = await bloeckeMitEigenemBlatt(blocks.map((block) => block.id));
-  const settled = blocks.filter((block) => !frei(block) || eigenesBlatt.has(block.id));
+  const wandernd = blocks.filter(
+    (block) => frei(block) && block.kind === "probe" && eigenesBlatt.has(block.id),
+  );
+  const wanderndIds = new Set(wandernd.map((block) => block.id));
+  const settled = blocks.filter(
+    (block) => !wanderndIds.has(block.id) && (!frei(block) || eigenesBlatt.has(block.id)),
+  );
 
-  if (settled.length === 0) {
+  if (settled.length === 0 && wandernd.length === 0) {
     // Nichts angefangen: der alte Plan darf komplett weichen.
     await db.transaction(async (tx) => {
       await tx.delete(studyBlocks).where(eq(studyBlocks.examId, examId));
@@ -595,9 +604,17 @@ export async function generatePlan(
   });
 
   const placed = new Map(scheduled.map((entry) => [entry.id, entry]));
+  // Der Probe-Posten des neuen Plans geht an die erste wandernde Probeklausur:
+  // sie zieht samt Blatt auf den neuen Tag. Bekommt er keinen Tag (oder es gibt
+  // ihn nicht, weil schon eine Probe erledigt ist), wird sie gestrichen.
+  const verlegt: { id: string; date: string; minutes: number; sortOrder: number }[] = [];
   const rows = remaining.flatMap((block, index) => {
     const slot = placed.get(String(index));
     if (!slot) return [];
+    if (block.kind === "probe" && verlegt.length < wandernd.length) {
+      verlegt.push({ id: wandernd[verlegt.length].id, date: slot.date, minutes: slot.minutes, sortOrder: slot.sortOrder });
+      return [];
+    }
     return [
       {
         examId,
@@ -610,6 +627,8 @@ export async function generatePlan(
       },
     ];
   });
+  const verlegtIds = new Set(verlegt.map((v) => v.id));
+  const gestrichen = wandernd.filter((block) => !verlegtIds.has(block.id));
 
   await db.transaction(async (tx) => {
     await tx
@@ -621,6 +640,35 @@ export async function generatePlan(
           eigenesBlatt.size > 0 ? notInArray(studyBlocks.id, [...eigenesBlatt]) : undefined,
         ),
       );
+    for (const v of verlegt) {
+      await tx
+        .update(studyBlocks)
+        .set({ date: v.date, minutes: v.minutes, sortOrder: v.sortOrder })
+        .where(and(eq(studyBlocks.id, v.id), eq(studyBlocks.examId, examId)));
+      // Ein noch nicht gebautes Blatt bekommt den neuen Tag in den Kopf.
+      await tx
+        .update(arbeitsblaetter)
+        .set({ tag: v.date })
+        .where(
+          and(
+            eq(arbeitsblaetter.userId, userId),
+            eq(arbeitsblaetter.studyBlockId, v.id),
+            isNull(arbeitsblaetter.subjectTopicId),
+            eq(arbeitsblaetter.status, "wartet"),
+          ),
+        );
+    }
+    if (gestrichen.length > 0) {
+      await tx
+        .update(studyBlocks)
+        .set({ status: "skipped" })
+        .where(
+          and(
+            eq(studyBlocks.examId, examId),
+            inArray(studyBlocks.id, gestrichen.map((block) => block.id)),
+          ),
+        );
+    }
     if (rows.length > 0) {
       await tx.insert(studyBlocks).values(rows);
     }

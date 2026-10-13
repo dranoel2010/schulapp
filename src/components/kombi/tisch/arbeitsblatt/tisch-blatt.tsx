@@ -20,6 +20,7 @@ import { MaterialSheet } from "@/components/kombi/tisch/lernblock-tisch";
 import { LernblockUhr } from "@/components/kombi/tisch/lernblock-uhr";
 import type { MaterialDaten } from "@/lib/kombi/lernblock-daten";
 import type { Auswertung, BlattStand } from "@/lib/arbeitsblatt/ablauf";
+import { falschZeile } from "@/lib/arbeitsblatt/ende-text";
 import { buzz, E, reduce } from "@/lib/kombi/motion";
 import { dm, kurz, TAG, uhrzeit, wd } from "@/lib/kombi/text";
 import { themeColor } from "@/lib/kombi/theme-color";
@@ -71,8 +72,6 @@ function Tn({ text }: { text: string }) {
   return <>{teile}</>;
 }
 
-const und = (l: number[]) => (l.length < 2 ? l.join("") : `${l.slice(0, -1).join(", ")} und ${l[l.length - 1]}`);
-
 /** Das Themenende nach der Auswertung (Prototyp `endThema`, Zweig Blatt). */
 export function ArbeitsblattEnde({
   stand,
@@ -94,9 +93,8 @@ export function ArbeitsblattEnde({
       .map(([nr]) => Number(nr))
       .sort((a, b) => a - b);
   const ok = auswertung?.richtig ?? n - falsch.length;
-  const zeileFalsch = falsch.length ? (
-    <p>{`${falsch.length === 1 ? "Aufgabe" : "Aufgaben"} ${und(falsch)} ${falsch.length === 1 ? "kommt" : "kommen"} aufs nächste Blatt.`}</p>
-  ) : null;
+  const falschText = falschZeile(falsch, stand.topicId);
+  const zeileFalsch = falschText ? <p>{falschText}</p> : null;
   const zahlen = <p>{`${n} Aufgaben, ${ok === n ? "alle" : ok} richtig.`}</p>;
 
   if (imBlock) {

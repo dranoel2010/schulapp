@@ -79,6 +79,23 @@ export function warnungText(warnings: PlanWarning[], tageBis: number): string | 
   return null;
 }
 
+/**
+ * Die Warnungen des neu gerechneten Plans, gegen den gespeicherten Plan
+ * geprüft: „nur ein Lerntag“ ist falsch, wenn jeder verbleibende Lerntag schon
+ * einer Probeklausur gehört. Dann zeigt der Plan darunter die Probe und keine
+ * Themen, und die Warnung spräche von etwas, das nicht da ist.
+ */
+export function planWarnungen(
+  warnings: PlanWarning[],
+  studyDays: string[],
+  probeTage: Iterable<string>,
+): PlanWarning[] {
+  if (!warnings.includes("tight")) return warnings;
+  const proben = new Set(probeTage);
+  if (studyDays.length === 0 || !studyDays.every((tag) => proben.has(tag))) return warnings;
+  return warnings.filter((w) => w !== "tight");
+}
+
 export async function klausurSeite(
   userId: string,
   params: Record<string, string>,
@@ -132,7 +149,14 @@ export async function klausurSeite(
     gestrichen: blocks.length - geplant.length,
     minutenProTag: exam.minutesPerDay,
     vorlauf: exam.leadDays,
-    warnung: topics.length > 0 && tageBis >= 0 ? warnungText(plan.warnings, tageBis) : null,
+    warnung: topics.length > 0 && tageBis >= 0 ? warnungText(
+            planWarnungen(
+              plan.warnings,
+              plan.studyDays,
+              geplant.filter((b) => b.kind === "probe").map((b) => b.date),
+            ),
+            tageBis,
+          ) : null,
     verpasst:
       verpassteBloecke.length && exam.date >= heute
         ? {

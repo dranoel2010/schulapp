@@ -135,11 +135,12 @@ function splitDays(days: string[]): {
  * freien Tag, gilt der nächstfrühere Schultag unter den Lerntagen. Nie der
  * Prüfungstag, nie vor heute (beides steckt schon in `studyDays`).
  *
- * Null, wenn es weniger als zwei Lerntage gibt — dann bleibt keine Zeit, vor
- * der Probe etwas zu lernen — oder wenn kein Schultag in Frage kommt.
+ * Bleibt nur ein Lerntag und ist er ein Schultag (Test morgen), gehört er der
+ * Probeklausur: „sonst einen Tag vorher“ gilt auch hier. Null, wenn kein
+ * Schultag in Frage kommt.
  */
 export function probeTagFuer(examDate: string, studyDays: string[]): string | null {
-  if (studyDays.length < 2) return null;
+  if (studyDays.length === 0) return null;
   const abstand = studyDays.length >= 4 ? 2 : 1;
   const ziel = addDays(examDate, -abstand);
   const schultage = studyDays.filter((day) => weekdayIndex(day) < 5);
@@ -149,6 +150,39 @@ export function probeTagFuer(examDate: string, studyDays: string[]): string | nu
   // dann der Tag davor, wenn er ein Schultag ist.
   const vortag = addDays(examDate, -1);
   return schultage.includes(vortag) ? vortag : null;
+}
+
+/**
+ * Teilt die Lerntage auf: Probetag, Tage zum Durcharbeiten, Tage zum
+ * Wiederholen.
+ *
+ * Durchgearbeitet wird nur vor der Probeklausur, sonst prüfte sie Stoff, der
+ * laut Plan noch gar nicht dran war. Lerntage nach ihr (Klausur am Montag,
+ * Probe am Freitag davor, das Wochenende dazwischen) sind Wiederholungstage.
+ * Liegt vor der Probe kein Tag zum Durcharbeiten mehr, entfällt sie, außer
+ * sie ist der einzige Lerntag überhaupt (siehe `probeTagFuer`).
+ */
+export function tageAufteilen(
+  examDate: string,
+  studyDays: string[],
+  mitProbe: boolean,
+): { probeTag: string | null; learnDays: string[]; reviewDays: string[] } {
+  const probeTag = mitProbe ? probeTagFuer(examDate, studyDays) : null;
+  if (!probeTag) return { probeTag: null, ...splitDays(studyDays) };
+
+  const rest = studyDays.filter((day) => day !== probeTag);
+  if (rest.length === 0) return { probeTag, learnDays: [], reviewDays: [] };
+
+  const { learnDays, reviewDays } = splitDays(rest);
+  const vorher = learnDays.filter((day) => day < probeTag);
+  const nachher = learnDays.filter((day) => day > probeTag);
+  if (vorher.length === 0) return { probeTag: null, ...splitDays(studyDays) };
+
+  return {
+    probeTag,
+    learnDays: vorher,
+    reviewDays: [...nachher, ...reviewDays].sort(),
+  };
 }
 
 /**
@@ -211,8 +245,11 @@ export function buildPlan(input: PlanInput): Plan {
   const minutesPerDay = sanitizeMinutes(input.minutesPerDay);
   const topics = input.topics ?? [];
   const studyDays = studyDaysFor(input);
-  const probeTag = input.probe ? probeTagFuer(input.examDate, studyDays) : null;
-  const { learnDays, reviewDays } = splitDays(studyDays.filter((day) => day !== probeTag));
+  const { probeTag, learnDays, reviewDays } = tageAufteilen(
+    input.examDate,
+    studyDays,
+    Boolean(input.probe),
+  );
 
   const warnings: PlanWarning[] = [];
   if (topics.length === 0) warnings.push("no-topics");
@@ -228,10 +265,14 @@ export function buildPlan(input: PlanInput): Plan {
 
   const entries: { date: string; draft: Draft }[] = [];
 
-  topics.forEach((topic, index) => {
-    const date = learnDays[slotFor(index, topics.length, learnDays.length)];
-    entries.push({ date, draft: { topicId: topic.id, kind: "learn" } });
-  });
+  // Ohne Tag zum Durcharbeiten (der einzige Lerntag gehört der Probeklausur)
+  // deckt die Probe den ganzen Stoff ab.
+  if (learnDays.length > 0) {
+    topics.forEach((topic, index) => {
+      const date = learnDays[slotFor(index, topics.length, learnDays.length)];
+      entries.push({ date, draft: { topicId: topic.id, kind: "learn" } });
+    });
+  }
 
   if (reviewDays.length > 0) {
     topics.forEach((topic, index) => {
@@ -288,8 +329,7 @@ export function replanOpen(
   const minutesPerDay = sanitizeMinutes(input.minutesPerDay);
   const studyDays = studyDaysFor(input);
   const hatProbe = open.some((block) => block.kind === "probe");
-  const probeTag = hatProbe ? probeTagFuer(input.examDate, studyDays) : null;
-  const { learnDays, reviewDays } = splitDays(studyDays.filter((day) => day !== probeTag));
+  const { probeTag, learnDays, reviewDays } = tageAufteilen(input.examDate, studyDays, hatProbe);
 
   // Tage, an denen schon gelernt wurde, sind ganz oder teilweise verbraucht.
   // Wir weichen zuerst auf Tage mit Platz aus; ist gar keiner mehr frei, wird

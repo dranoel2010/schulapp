@@ -92,15 +92,26 @@ describe("Probeklausur im Lernplan", () => {
     assert.equal((await bloecke(id)).filter((x) => x.kind === "probe").length, 1);
   });
 
-  it("Nachholen am Vortag der Klausur: kein Tag mehr frei, die Probe fällt weg statt auf den Klausurtag", async () => {
+  it("Nachholen am Vortag der Klausur: die verpasste Probe rückt auf den Vortag, nie auf den Klausurtag", async () => {
     const id = await neueKlausur("klausur", "2026-10-16");
     await generatePlan(nutzer, id, HEUTE);
     const [probe] = (await bloecke(id)).filter((x) => x.kind === "probe");
     assert.equal(probe.date, "2026-10-14");
     await catchUpMissed(nutzer, id, "2026-10-15");
     const [danach] = await testDb.select().from(studyBlocks).where(eq(studyBlocks.id, probe.id));
+    assert.equal(danach.status, "open");
+    assert.equal(danach.date, "2026-10-15");
+  });
+
+  it("Nachholen am Sonntag vor der Klausur am Montag: kein Schultag mehr, die Probe fällt weg", async () => {
+    const id = await neueKlausur("klausur", "2026-10-19");
+    await generatePlan(nutzer, id, HEUTE);
+    const [probe] = (await bloecke(id)).filter((x) => x.kind === "probe");
+    assert.equal(probe.date, "2026-10-16");
+    await catchUpMissed(nutzer, id, "2026-10-18");
+    const [danach] = await testDb.select().from(studyBlocks).where(eq(studyBlocks.id, probe.id));
     assert.equal(danach.status, "skipped");
-    assert.equal(danach.date, "2026-10-14");
+    assert.equal(danach.date, "2026-10-16");
   });
 
   it("die Probe ist auch im Abfrage-Fach ein Arbeitsblatt, der Lernblock dort nicht", async () => {
@@ -177,5 +188,62 @@ describe("Probeklausur im Lernplan", () => {
     await testDb.insert(leserLaeufe).values({ userId: nutzer, art: "arbeitsblatt", arbeitsblattId: z2.id, ergebnis: "vorschlag" });
     await deleteSubject(nutzer, f.subjectId);
     assert.equal((await testDb.select().from(subjects).where(eq(subjects.id, f.subjectId))).length, 0);
+  });
+
+  describe("Klausur verschoben, nachdem das Blatt der Probe angelegt ist", () => {
+    async function mitBlatt(gebaut: boolean) {
+      const f = await fachMitThema(nutzer, "Englisch", `Unit ${gebaut ? 5 : 4}`, "2026-10-01");
+      const [k] = await testDb
+        .insert(exams)
+        .values({ userId: nutzer, subjectId: f.subjectId, date: KLAUSUR, kind: "test", leadDays: 10, minutesPerDay: 45 })
+        .returning({ id: exams.id });
+      await testDb.insert(examTopics).values({ examId: k.id, title: "Unit", sortOrder: 0, subjectTopicId: f.topicId });
+      await generatePlan(nutzer, k.id, HEUTE);
+      const probe = (await bloecke(k.id)).find((x) => x.kind === "probe")!;
+      assert.equal(probe.date, "2026-10-21");
+      const zeile = (await blattFuerBlock(nutzer, probe.id))!;
+      if (gebaut) await testDb.update(arbeitsblaetter).set({ status: "fertig" }).where(eq(arbeitsblaetter.id, zeile.id));
+      return { examId: k.id, probeId: probe.id, blattId: zeile.id };
+    }
+    const verschieben = (examId: string, datum: string) =>
+      testDb.update(exams).set({ date: datum }).where(eq(exams.id, examId));
+
+    it("vorverlegt: die Probe zieht samt Blatt auf den neuen Tag, nie auf den Klausurtag", async () => {
+      const { examId, probeId, blattId } = await mitBlatt(false);
+      await verschieben(examId, "2026-10-21");
+      await generatePlan(nutzer, examId, "2026-10-20");
+      const b = await bloecke(examId);
+      const proben = b.filter((x) => x.kind === "probe" && x.status !== "skipped");
+      assert.deepEqual(proben.map((x) => [x.id, x.date]), [[probeId, "2026-10-20"]]);
+      assert.ok(b.every((x) => x.date !== "2026-10-21"), "nichts am Klausurtag");
+      assert.deepEqual(b.filter((x) => x.date === "2026-10-20").map((x) => x.kind), ["probe"]);
+      const [blatt] = await testDb.select().from(arbeitsblaetter).where(eq(arbeitsblaetter.id, blattId));
+      assert.equal(blatt.studyBlockId, probeId);
+      assert.equal(blatt.tag, "2026-10-20", "ungebautes Blatt bekommt den neuen Tag");
+    });
+
+    it("nach hinten verschoben: die Probe rückt mit, Lernen und Wiederholen meiden ihren Tag", async () => {
+      const { examId, probeId, blattId } = await mitBlatt(true);
+      await verschieben(examId, "2026-10-30");
+      await generatePlan(nutzer, examId, "2026-10-13");
+      const b = await bloecke(examId);
+      const proben = b.filter((x) => x.kind === "probe" && x.status !== "skipped");
+      assert.deepEqual(proben.map((x) => [x.id, x.date]), [[probeId, "2026-10-28"]]);
+      assert.deepEqual(b.filter((x) => x.date === "2026-10-28").map((x) => x.kind), ["probe"]);
+      assert.ok(b.filter((x) => x.kind === "learn").every((x) => x.date < "2026-10-28"));
+      const [blatt] = await testDb.select().from(arbeitsblaetter).where(eq(arbeitsblaetter.id, blattId));
+      assert.equal(blatt.studyBlockId, probeId, "das gebaute Blatt bleibt");
+      assert.equal(blatt.tag, "2026-10-21", "gebautes Blatt behält seinen Kopf");
+    });
+
+    it("kein Tag mehr frei: die Probe wird gestrichen, das Blatt bleibt", async () => {
+      const { examId, probeId, blattId } = await mitBlatt(true);
+      await verschieben(examId, "2026-10-19"); // Montag, heute Sonntag
+      await generatePlan(nutzer, examId, "2026-10-18");
+      const [p] = (await bloecke(examId)).filter((x) => x.id === probeId);
+      assert.equal(p.status, "skipped");
+      assert.ok((await bloecke(examId)).every((x) => x.status === "skipped" || x.date === "2026-10-18"));
+      assert.equal((await testDb.select().from(arbeitsblaetter).where(eq(arbeitsblaetter.id, blattId))).length, 1);
+    });
   });
 });
