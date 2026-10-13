@@ -82,6 +82,33 @@ export type VorratThemaTreffer = {
   lb: boolean;
 };
 
+/**
+ * Ein Grammatikthema für „Blatt Grammatik …“ in der Zeile (Antwort 5 vom
+ * 13.10.2026): ein Übungsthema in Deutsch, Englisch oder Französisch mit
+ * mindestens einem abgeschriebenen Blatt. Der Vorrat liefert sie schon in
+ * der Reihenfolge „fälligstes zuerst“ (`grammatikFolge`).
+ */
+export type VorratGrammatik = {
+  /** id des Fach-Themas */
+  id: string;
+  fachId: string;
+  name: string;
+  sprache: "en" | "fr" | "de";
+  /** ältester offener Termin einer Frage des Themas, sonst null */
+  faellig: string | null;
+  /** Kalendertag, an dem das Thema zuletzt vorkam */
+  zuletzt: string;
+};
+
+/** Fälligstes zuerst: ältester offener Termin, ohne Termin zuletzt; dann das jüngste Thema, dann alphabetisch. */
+export function grammatikFolge(a: VorratGrammatik, b: VorratGrammatik): number {
+  const fa = a.faellig ?? "9999-12-31";
+  const fb = b.faellig ?? "9999-12-31";
+  if (fa !== fb) return fa < fb ? -1 : 1;
+  if (a.zuletzt !== b.zuletzt) return a.zuletzt > b.zuletzt ? -1 : 1;
+  return a.name.localeCompare(b.name, "de");
+}
+
 /** Wiederholen auf dem Überblick (Prototyp `whState`, Z. 2016). */
 export type VorratWh =
   | { kind: "ferien" }
@@ -110,6 +137,8 @@ export type ZeilenVorrat = {
   lernblock: VorratLernblock | null;
   epoche: { fachId: string; seit: string | null } | null;
   themenListe: VorratThemaTreffer[];
+  /** Grammatikthemen für „Blatt Grammatik …“, fälligstes zuerst */
+  grammatik: VorratGrammatik[];
 };
 
 /**

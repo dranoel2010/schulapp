@@ -1,4 +1,8 @@
+import { and, eq, isNull } from "drizzle-orm";
 import type { NextRequest } from "next/server";
+
+import { db } from "@/db";
+import { subjectTopics, subjects } from "@/db/schema";
 
 import type { ThemaKurz, ThemaLauf, WiederholenAntwort } from "@/components/kombi/tisch/typen";
 import { getSessionUser } from "@/lib/session";
@@ -21,7 +25,11 @@ import { istId } from "@/recall/ids";
  * - `GET /api/wiederholen[?fach=<id>]` — die fälligen Themen in ihrer
  *   Reihenfolge und gleich die Fragen des ersten Themas;
  * - `GET /api/wiederholen?thema=<key>` — die Fragen eines Themas
- *   („Fertig, weiter“).
+ *   („Fertig, weiter“);
+ * - `GET /api/wiederholen?blatt=<topicId>` — genau dieses Fach-Thema als
+ *   Arbeitsblatt, auch wenn heute nichts daran fällig ist („Blatt Grammatik
+ *   Englisch“ aus der Zeile, Antwort 5 vom 13.10.2026). Ein fremdes oder
+ *   unbekanntes Thema ergibt eine leere Liste.
  *
  * Ist nichts fällig, kommen der Fachname (bei `?fach=`) und `durch` (heute
  * schon ein Thema beendet) mit, damit der Tisch denselben Satz sagt wie der
@@ -55,6 +63,28 @@ async function lauf(userId: string, heute: string, key: string): Promise<ThemaLa
   };
 }
 
+/** Ein Fach-Thema als Arbeitsblatt für den Tisch — oder null, wenn es nicht dem Nutzer gehört. */
+async function blattThema(userId: string, topicId: string): Promise<ThemaKurz | null> {
+  const [t] = await db
+    .select({ id: subjectTopics.id, titel: subjectTopics.title, fach: subjects.name })
+    .from(subjectTopics)
+    .innerJoin(subjects, eq(subjects.id, subjectTopics.subjectId))
+    .where(and(eq(subjectTopics.userId, userId), eq(subjectTopics.id, topicId), isNull(subjectTopics.mergedInto)))
+    .limit(1);
+  if (!t) return null;
+  return {
+    key: t.id,
+    fach: t.fach,
+    titel: t.titel,
+    art: "ueben",
+    umfang: "Arbeitsblatt",
+    istEpoche: false,
+    fragen: 0,
+    angefangen: false,
+    blattAngefangen: false,
+  };
+}
+
 export async function GET(request: NextRequest) {
   const user = await getSessionUser();
   if (!user) {
@@ -67,6 +97,23 @@ export async function GET(request: NextRequest) {
   if (thema) {
     if (!istThemaSchluessel(thema)) return Response.json({ ok: false }, { status: 400, headers: HEADERS });
     return Response.json({ ok: true, lauf: await lauf(user.id, heute, thema) }, { headers: HEADERS });
+  }
+
+  const blatt = sp.get("blatt");
+  if (blatt) {
+    if (!istId(blatt)) return Response.json({ ok: false }, { status: 400, headers: HEADERS });
+    const [t, ferien] = await Promise.all([blattThema(user.id, blatt), freePeriodToday(user.id, heute)]);
+    const antwort: WiederholenAntwort = {
+      ok: true,
+      heute,
+      ferien: !!ferien,
+      themen: t ? [t] : [],
+      naechstesThema: null,
+      fachName: null,
+      durch: false,
+      lauf: null,
+    };
+    return Response.json(antwort, { headers: HEADERS });
   }
 
   const fach = sp.get("fach") || undefined;

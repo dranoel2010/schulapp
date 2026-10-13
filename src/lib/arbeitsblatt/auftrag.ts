@@ -11,6 +11,7 @@ import { seiteEinsMesser } from "@/lib/pdf/arbeitsblatt-document";
 
 import { aufSeiteEins, LINIEN_SUMME, PLATZ_SUMME_MM } from "./hoehe";
 import type { Quelle } from "./quelle";
+import { spracheAbsatz, type BlattSprache } from "./sprache";
 import {
   aufgabeSchema,
   leerraum,
@@ -58,6 +59,12 @@ export type BlattVorab = {
   zuletztFalsch: { kurz: string; q: string }[];
   /** Probeklausur im Lernplan einer Klausur (Antwort 4 vom 13.10.2026): Klausurformat statt Übungsblatt */
   probe?: boolean;
+  /**
+   * Sprache des Fachs (Antwort 5 vom 13.10.2026, ./sprache): ein Blatt in
+   * Englisch steht auf Englisch, in Französisch auf Französisch, in Deutsch
+   * auf Deutsch. Fehlt sie (Mathematik, Physik …), sagt der Auftrag nichts dazu.
+   */
+  sprache?: BlattSprache | null;
 };
 
 /** So lange wie eine Klausur (@/lib/study-plan, PROBE_MINUTEN). */
@@ -86,6 +93,7 @@ export function blattAuftrag(vorab: BlattVorab): string {
     `Fach: ${vorab.fach}. Thema: ${vorab.thema}.`,
     "",
     ...(vorab.probe ? [probeAbsatz(), ""] : []),
+    ...(vorab.sprache ? [spracheAbsatz(vorab.sprache), ""] : []),
     `1. Unter diesem Auftrag stehen die Abschriften seiner Blätter zu diesem Thema. Das ist der ganze Stoff. Schreib ${MIN_AUFGABEN} bis ${MAX_AUFGABEN} Aufgaben, von leicht nach schwer, im Stil der Aufgaben dort. Keine Aufgabe zu Stoff, der nicht in den Abschriften steht.`,
     "",
     `2. Jede Aufgabe trägt ein zitat: eine Stelle aus einer Abschrift, Zeichen für Zeichen so, wie sie dort steht — kopiere sie heraus. Es ist die Stelle, auf der die Aufgabe beruht (die Regel, das Beispiel, die Übung). Eine Stelle in ${klammer} war schon beim Abschreiben unsicher und taugt nicht. Die App prüft jedes Zitat; eine Aufgabe, deren Zitat nicht wörtlich dasteht, fällt weg.`,
@@ -93,8 +101,8 @@ export function blattAuftrag(vorab: BlattVorab): string {
     "3. Formeln und Terme stehen in geschweiften Klammern, etwa {f(x) = (x − 4)² + 1} — sie werden kursiv gesetzt. Schreib Minus als −, Hochzahlen als ² ³, Brüche als ½ oder a/b. Eine Lücke zum Ausfüllen ist ___ (drei Unterstriche).",
     "",
     rechnen
-      ? "4. Gerechnet wird in Kästchen (5 mm). platz ist die Höhe des Rechenfelds in mm: 15 für Ablesen, 25 für eine Umformung, 40 für eine längere Rechnung. Alles muss auf eine Seite passen: zusammen höchstens ${PLATZ_SUMME_MM} mm platz."
-      : `4. Geschrieben wird auf Linien (9 mm). platz ist die Zahl der Linien — 0, wenn in den Lücken der Teile geschrieben wird. Alles muss auf eine Seite passen: zusammen höchstens ${LINIEN_SUMME} Linien. Fremdsprachiger Text in den Teilen bekommt fr = true (kursiv).`,
+      ? `4. Gerechnet wird in Kästchen (5 mm). platz ist die Höhe des Rechenfelds in mm: 15 für Ablesen, 25 für eine Umformung, 40 für eine längere Rechnung. Alles muss auf eine Seite passen: zusammen höchstens ${PLATZ_SUMME_MM} mm platz.`
+      : `4. Geschrieben wird auf Linien (9 mm). platz ist die Zahl der Linien — 0, wenn in den Lücken der Teile geschrieben wird. Alles muss auf eine Seite passen: zusammen höchstens ${LINIEN_SUMME} Linien.${vorab.sprache === "de" ? "" : " Fremdsprachiger Text in den Teilen bekommt fr = true (kursiv)."}`,
     "",
     "5. teile sind die Unteraufgaben a), b), c) … — nur wenn es mehrere gibt.",
     "",

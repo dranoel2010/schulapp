@@ -556,7 +556,7 @@ export function Zeile({
         }
         return;
       case "tisch":
-        nachSchliessen(() => kombi.openTisch({ mode: ziel.mode, fach: ziel.fach ?? null, blockId: ziel.blockId }));
+        nachSchliessen(() => kombi.openTisch({ mode: ziel.mode, fach: ziel.fach ?? null, blockId: ziel.blockId, thema: ziel.thema }));
         return;
       case "kamera":
         nachSchliessen(() => kombi.openCam({ ziel: ziel.ziel }));

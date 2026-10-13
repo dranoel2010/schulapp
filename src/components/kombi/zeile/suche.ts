@@ -19,6 +19,7 @@ import {
   type ZeilenVorrat,
 } from "@/lib/kombi/vorrat";
 
+import { grammatikAntwort, istGrammatikBlatt } from "./grammatik";
 import { WH_WORDS, ZIEL, type Geparst } from "./parser";
 
 /**
@@ -72,7 +73,8 @@ export type Ziel =
   | { typ: "route"; url: string }
   | { typ: "ansicht"; ansicht: "ueberblick" | "morgens" | "frueh" }
   | { typ: "ablauf" }
-  | { typ: "tisch"; mode: "wh" | "block"; fach?: string | null; blockId?: string }
+  /** `thema`: genau dieses Thema als Arbeitsblatt („Blatt Grammatik …“, Antwort 5) */
+  | { typ: "tisch"; mode: "wh" | "block"; fach?: string | null; blockId?: string; thema?: string }
   | { typ: "kamera"; ziel: "zeile" | "liste" }
   | { typ: "ha-kontext" };
 
@@ -93,7 +95,14 @@ export type KlausurInhalt = {
 export type AntwortInhalt = TagInhalt | NotenInhalt | KlausurInhalt;
 
 export type Antwort =
-  | { kind: "nav"; l1: string; l2?: string | null; ziel: Ziel | null }
+  | {
+      kind: "nav";
+      l1: string;
+      l2?: string | null;
+      ziel: Ziel | null;
+      /** eine kurze Auswahl unter dem obersten Treffer („Blatt Grammatik“) */
+      wahl?: { label: string; items: Option[] };
+    }
   | {
       kind: "tag" | "noten" | "klausur";
       l1: string;
@@ -228,6 +237,8 @@ export function answerFor(p: Pick<Geparst, "words" | "fach">, u: SuchUmgebung): 
     open: { typ: "ansicht", ansicht: d === heute && v.ansicht === "morgens" ? "morgens" : "frueh" },
     openLabel: "Morgenansicht öffnen",
   });
+  // „Blatt Grammatik Englisch“ (Antwort 5): vor allen anderen Wörtern, auch vor „morgen“
+  if (istGrammatikBlatt(p.words)) return grammatikAntwort(v, p.words, fach);
   const inWoche = (a: Antwort, d: string): Antwort =>
     a.kind === "nav" ? a : { ...a, open: { typ: "seite", art: "woche", params: { tag: d } }, openLabel: "In der Woche öffnen" };
   if (has("uebermorgen")) {
@@ -389,7 +400,10 @@ export function suche(
   const groups: Gruppe[] = [];
   const ans = answerFor(p, u);
   if (ans && ans.kind !== "nav") groups.push({ key: "g:ans", label: null, inhalt: ans.inhalt });
-  const acts = ACTIONS.filter((a) => qs.some((q) => wordHit(q, a.terms) || wordHit(q, a.label)));
+  if (ans && ans.kind === "nav" && ans.wahl) groups.push({ key: "g:gr", label: ans.wahl.label, items: ans.wahl.items });
+  // „Blatt Grammatik …“ meint das Arbeitsblatt: „Blatt aufnehmen“ und die Ablage stehen dann nicht darunter
+  const grammatik = istGrammatikBlatt(p.words);
+  const acts = grammatik ? [] : ACTIONS.filter((a) => qs.some((q) => wordHit(q, a.terms) || wordHit(q, a.label)));
   if (acts.length) groups.push({ key: "g:act", label: "Aktionen", items: acts.map((a) => ({ key: a.key, l1: hl(a.label, qs), ziel: a.ziel })) });
   const aufg = v.aufgaben
     .filter((a) => {
@@ -481,7 +495,7 @@ export function suche(
     p.fach && !(ans && ans.kind === "nav" && ans.l2 === "Fach öffnen")
       ? [{ key: "f:" + p.fach.id, l1: p.fach.name, l2: "Fach öffnen", ziel: { typ: "seite", art: "fach", params: { id: p.fach.id } } }]
       : [];
-  if (ar.length || fachAr.length)
+  if (!grammatik && (ar.length || fachAr.length))
     groups.push({ key: "g:ar", label: "Bereiche", items: fachAr.concat(ar.map((a) => ({ key: "ar:" + a.key, l1: hl(a.label, qs), ziel: a.ziel(v) }))) });
 
   let top: Option;

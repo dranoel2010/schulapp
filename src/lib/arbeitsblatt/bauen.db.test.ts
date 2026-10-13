@@ -134,6 +134,27 @@ describe("Arbeitsblatt bauen (gemockter Claude-Aufruf)", () => {
     assert.ok(e.gebaut && e.status === "fertig");
   });
 
+  it("ein Englisch-Grammatikthema bekommt den Auftrag auf Englisch (Antwort 5), Mathe keinen", async () => {
+    const en = await fachMitThema(nutzer, "Englisch", "Simple past", TAG);
+    await blattMitAbschrift(nutzer, en.subjectId, en.topicId, "Simple past", "2026-10-08", "Simple past: verb + ed. I played football.");
+    const anfragen: string[] = [];
+    const leer = { teil: "", minuten: 20, aufgaben: [], grund: "Test" };
+    const { senden } = senderMit(leer);
+    const mitschreiben: typeof senden = (anfrage, signal, begonnen) => {
+      anfragen.push(JSON.stringify(anfrage));
+      return senden(anfrage, signal, begonnen);
+    };
+    const zeile = await arbeitsblattFuer(nutzer, { subjectTopicId: en.topicId }, TAG);
+    await blattBauen(nutzer, zeile.id, { senden: mitschreiben, jetzt: () => T0 });
+    assert.equal(anfragen.length, 1);
+    assert.ok(anfragen[0].includes("Sprache des Blatts: Englisch"));
+
+    const ma = await arbeitsblattFuer(nutzer, { subjectTopicId: thema }, "2026-10-15");
+    await blattBauen(nutzer, ma.id, { senden: mitschreiben, jetzt: () => T0 });
+    assert.equal(anfragen.length, 2);
+    assert.ok(!anfragen[1].includes("Sprache des Blatts"));
+  });
+
   it("ein Block vor einer Klausur aus Wissensthemen ist kein Arbeitsblatt", async () => {
     const ge = await fachMitThema(nutzer, "Geschichte", "Industrialisierung", TAG);
     const { blockId } = await klausurMitBlock(nutzer, ge.subjectId, "2026-10-20", TAG, ge.topicId, true);

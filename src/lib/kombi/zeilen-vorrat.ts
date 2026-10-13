@@ -11,6 +11,7 @@ import { gradesBySubject } from "@/lib/grades";
 import { lessonRoom } from "@/lib/home";
 import { listHomework } from "@/lib/homework";
 import { fachEintraege } from "@/lib/kombi/fach-alias";
+import { grammatikThemen } from "@/lib/kombi/grammatik-themen";
 import { appTagVon } from "@/lib/kombi/tag-daten";
 import { diffDays } from "@/lib/kombi/text";
 import {
@@ -211,6 +212,9 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
     if (aktiv.has(b.subjectId) && !themenListe.some((o) => o.t === b.title))
       themenListe.push({ t: b.title, fachId: b.subjectId, ziel: { art: "fach", id: b.subjectId }, lb: false });
 
+  // ── Grammatikthemen für „Blatt Grammatik …“ (Antwort 5) ──────────────────
+  const grammatik = await grammatikThemen(userId, faecher);
+
   // ── Ansicht (bis Abschnitt B sie liefert: Prototyp `ansicht`, Z. 1335) ────
   const s = schluss(kal, heute);
   const jetztHHMM = new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now);
@@ -239,6 +243,7 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
     lernblock,
     epoche,
     themenListe,
+    grammatik,
   };
 }
 

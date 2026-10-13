@@ -12,6 +12,7 @@ Die App sieht aus und verhält sich wie der Prototyp „Kombi V2“. Alle Abschn
 - **Wiederholen nach Themen:** auf dem blauen Tisch, ein Thema am Stück, das fälligste zuerst. Der Takt der Wiederholung ist unverändert.
 - **Lernblock und Klausur:** Lernblock mit Uhr und Pause, ohne Startzeit. Der Lernplan steht auf der Klausurseite.
 - **Arbeitsblätter:** Für Übungsthemen (Mathe, Grammatik) baut die App ein druckbares Blatt mit Lösungsblatt. Danach sagst du, wie es lief. Das zählt wie eine Kartenrunde.
+- **Grammatikblatt in der Sprache des Fachs:** Ein Grammatikthema in Englisch gibt ein Blatt auf Englisch, in Französisch auf Französisch, in Deutsch auf Deutsch. Kurze Arbeitsanweisungen auf Deutsch dürfen dabeistehen. In der Zeile öffnet „Blatt Grammatik Englisch“ das Blatt zum fälligsten Englisch-Grammatikthema, „Blatt Grammatik“ das fälligste überhaupt. Weitere Themen stehen darunter zur Wahl. Ist keins heute fällig und gibt es mehrere Sprachen, fragt die Zeile „In welcher Sprache?“. Dafür braucht es kein SQL.
 - **Probeklausur:** Klausuren und Tests bekommen im Lernplan eine Probeklausur, 45 Minuten, bei genug Vorlauf zwei Tage vorher, sonst einen. Fällt der Tag aufs Wochenende oder einen freien Tag, nimmt die App den Schultag davor. Sie ist in jedem Fach ein Arbeitsblatt aus dem Stoff der Klausur und wird ausgewertet wie eins. Bestehende Klausuren bekommen sie, sobald ihr Plan neu berechnet wird („Lernplan neu erstellen“ oder Speichern). Dafür braucht es kein SQL.
 - **Alle alten Seiten** gibt es weiter, im neuen Stil: Noten, Klausuren, Ablage, Fächer, Stundenplan, Eingangskorb, Einstellungen, Kalender, Push.
 - Hell und Dunkel richten sich nach dem Handy. Den Umschalter gibt es nicht mehr.
@@ -84,7 +85,6 @@ Ablauf im Ganzen:
 
 Bis zu deiner Antwort gilt der Vorschlag. Antwort etwa „4 ja, 6 nein“.
 
-5. **Grammatik erkennen:** Die App erkennt Grammatik an Stichwörtern im Thementitel, du kannst es von Hand umstellen. Passt das? *Vorschlag: ja.*
 6. **Fragen ohne Klausur** (Französisch, Epoche): Solche Themen erscheinen nur, solange sie Termine haben. Willst du das später getrennt entscheiden? *Vorschlag: ja, nicht in diesem Bau.*
 7. **Arbeitsblätter vorab bauen:** für Übungsthemen und Lernblöcke von heute und morgen, höchstens eins je Thema und Tag. Jedes Blatt ist ein Opus-Aufruf. *Vorschlag: ja.*
 8. **Fachfarben:** bleiben gespeichert, werden aber nirgends mehr gezeigt. *Vorschlag: ja.*
@@ -92,4 +92,4 @@ Bis zu deiner Antwort gilt der Vorschlag. Antwort etwa „4 ja, 6 nein“.
 10. **Üben nach Mitternacht:** Antworten zwischen 0 und 4 Uhr zählen beim Speichern zum neuen Tag, in der Anzeige zum alten. *Vorschlag: so lassen.*
 11. **Vergangenes:** Vergangene Klausuren stehen in derselben Liste, erledigte Hausaufgaben bleiben 2 Tage sichtbar. *Vorschlag: ja, wie der Prototyp.*
 
-Die Fragen 1 bis 3 hast du am 12.10. schon beantwortet: volle Breite am Rechner, kein Hell/Dunkel-Umschalter, und ein ausgewertetes Arbeitsblatt zählt wie eine Kartenrunde. Frage 4 am 13.10.: die Probeklausur kommt als neue Art in den Lernplan, gebaut wie oben.
+Die Fragen 1 bis 3 hast du am 12.10. schon beantwortet: volle Breite am Rechner, kein Hell/Dunkel-Umschalter, und ein ausgewertetes Arbeitsblatt zählt wie eine Kartenrunde. Frage 4 am 13.10.: die Probeklausur kommt als neue Art in den Lernplan, gebaut wie oben. Frage 5 am 13.10.: Grammatik bleibt am Stichwort erkannt und von Hand umstellbar, das Blatt richtet sich nach der Sprache des Fachs, gebaut wie oben.

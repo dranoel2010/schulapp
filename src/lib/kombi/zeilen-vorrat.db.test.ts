@@ -3,7 +3,8 @@ import { dbBereit, testDb, testNutzer } from "@/test/db-harness";
 import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
 
-import { exams, grades, homework, lessons, subjects } from "@/db/schema";
+import { exams, grades, homework, lessons, subjects, subjectTopics } from "@/db/schema";
+import { blattMitAbschrift, fachMitThema, frageMitTerminen } from "@/lib/arbeitsblatt/test-saat";
 import { zeilenVorrat } from "@/lib/kombi/zeilen-vorrat";
 
 let nutzer = "";
@@ -22,6 +23,25 @@ before(async () => {
   await testDb.insert(homework).values({ userId: nutzer, subjectId: ma.id, title: "alt", dueDate: "2026-09-01", doneAt: new Date("2026-09-01T10:00:00Z") });
   await testDb.insert(exams).values({ userId: nutzer, subjectId: ma.id, date: "2026-10-16", title: "Quadratische Funktionen" });
   await testDb.insert(grades).values({ userId: nutzer, subjectId: ma.id, value: 20, date: "2026-09-17", title: "Klausur" });
+
+  // Grammatik (Antwort 5): zwei Englisch-Themen mit Blatt, eins ohne, eine Vokabelliste, ein Alias
+  const en = await fachMitThema(nutzer, "Englisch", "Simple past", "2026-10-01");
+  await blattMitAbschrift(nutzer, en.subjectId, en.topicId, "Simple past", "2026-10-01", "Regel: Verb + ed.");
+  const thema = async (title: string, mergedInto: string | null = null) => {
+    const [t] = await testDb
+      .insert(subjectTopics)
+      .values({ userId: nutzer, subjectId: en.subjectId, title, matchKey: title.toLowerCase(), lastSeenAt: "2026-10-05", mergedInto })
+      .returning({ id: subjectTopics.id });
+    return t.id;
+  };
+  const pp = await thema("Present perfect");
+  await blattMitAbschrift(nutzer, en.subjectId, pp, "Present perfect", "2026-10-05", "have + past participle");
+  await frageMitTerminen(nutzer, en.subjectId, pp, ["2026-10-20"]);
+  const alias = await thema("Simple past tense", en.topicId);
+  await frageMitTerminen(nutzer, en.subjectId, alias, ["2026-10-13"]);
+  await thema("Reported speech");
+  const vok = await thema("Vokabeln Unit 3");
+  await blattMitAbschrift(nutzer, en.subjectId, vok, "Unit 3", "2026-10-05", "to arrive – ankommen");
 });
 
 describe("zeilenVorrat", () => {
@@ -46,6 +66,14 @@ describe("zeilenVorrat", () => {
     assert.deepEqual(v.noten[ma], [{ label: "2", titel: "Klausur", datum: "2026-09-17" }]);
     // Montag nach Schulschluss, Ablauf noch offen
     assert.equal(v.ansicht, "ablauf");
+  });
+
+  it("liefert die Grammatikthemen mit Blatt, fälligstes zuerst, Aliase beim Ziel", async () => {
+    const v = await zeilenVorrat(nutzer, JETZT);
+    assert.deepEqual(
+      v.grammatik.map((t) => `${t.name} ${t.sprache} ${t.faellig}`),
+      ["Simple past en 2026-10-13", "Present perfect en 2026-10-20"],
+    );
   });
 
   it("ist serialisierbar und klein", async () => {

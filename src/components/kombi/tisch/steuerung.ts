@@ -2,7 +2,7 @@
 
 import { flushSync } from "react-dom";
 
-import { blattHolen, blattVorwaermen, laufHolen, wiederholenHolen } from "@/components/kombi/tisch/daten";
+import { blattHolen, blattThemaHolen, blattVorwaermen, laufHolen, wiederholenHolen } from "@/components/kombi/tisch/daten";
 import type { BlattImSheet, FrageKarte, ThemaKurz, ThemaLauf } from "@/components/kombi/tisch/typen";
 import { whSetzen } from "@/components/kombi/tisch/wh-stand";
 import { E, buzz, moveTo, reduce, rubber, springOpts, swapText, vvStable } from "@/lib/kombi/motion";
@@ -71,7 +71,8 @@ export type TischDeps = {
 /** Das Ergebnis eines ausgewerteten Blatts fürs Themenende (Prototyp `endThema`, Zweig Blatt). */
 export type BlattErgebnis = { n: number; richtig: number; falsch: number[]; wiederDran: string | null };
 
-export type TischOptionen = { mode?: string; origin?: HTMLElement | null; fach?: string | null };
+/** `thema`: genau dieses Thema als Arbeitsblatt, auch wenn es heute nicht fällig ist („Blatt Grammatik …“, Antwort 5) */
+export type TischOptionen = { mode?: string; origin?: HTMLElement | null; fach?: string | null; thema?: string | null };
 
 type Karte = HTMLDivElement & {
   _frontH?: number;
@@ -1314,14 +1315,14 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     const fach = opts.fach ?? null;
     let daten;
     try {
-      daten = await wiederholenHolen(fach);
+      daten = opts.thema ? await blattThemaHolen(opts.thema) : await wiederholenHolen(fach);
     } catch {
       deps.toast("Keine Verbindung", () => void openTisch(opts), "Keine Verbindung", "Erneut");
       return;
     }
     if (nr !== oeffnet || T.offen) return;
     if (!daten.themen.length) {
-      deps.toast(whLeerText({ ...daten, fachName: fach ? daten.fachName : null }));
+      deps.toast(opts.thema ? "Das Thema gibt es nicht mehr." : whLeerText({ ...daten, fachName: fach ? daten.fachName : null }));
       return;
     }
     T.themen = daten.themen.slice();

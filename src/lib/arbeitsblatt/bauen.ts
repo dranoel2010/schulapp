@@ -28,6 +28,7 @@ import {
   type Quelle,
 } from "./quelle";
 import { inhaltSchema } from "./schema";
+import { fachSprache } from "./sprache";
 import { bauFehlgeschlagen, bauFertig, bauStarten, type ArbeitsblattZeile } from "./stand";
 
 /**
@@ -144,6 +145,7 @@ export async function blattBauen(
     papier,
     zuletztFalsch: await zuletztFalsch(userId, zeile),
     probe,
+    sprache: fachSprache(quelle.fach),
   };
 
   const gerufen = await claudeRufen(

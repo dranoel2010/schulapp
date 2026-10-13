@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { subjectTopics, type ThemaArt } from "@/db/schema";
+import { fachSprache } from "@/lib/arbeitsblatt/sprache";
 import { protokollieren, protokollLoeschen } from "@/lib/protokoll";
 
 /**
@@ -86,14 +87,7 @@ type FachArt = "rechnen" | "sprache" | "wissen";
 function fachArt(fachName: string): FachArt {
   const n = normText(fachName).trim();
   if (n.startsWith("mathe") || n.startsWith("physik")) return "rechnen";
-  if (
-    n.startsWith("deutsch") ||
-    n.startsWith("franz") ||
-    n.startsWith("englisch") ||
-    n.startsWith("english")
-  ) {
-    return "sprache";
-  }
+  if (fachSprache(fachName)) return "sprache";
   return "wissen";
 }
 

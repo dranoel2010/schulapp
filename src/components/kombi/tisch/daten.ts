@@ -43,6 +43,11 @@ export function wiederholenHolen(fach?: string | null): Promise<WiederholenAntwo
   return ausVorrat<WiederholenAntwort>(themenUrl(fach), false);
 }
 
+/** Ein Thema als Arbeitsblatt, auch wenn es heute nicht fällig ist („Blatt Grammatik …“, Antwort 5). */
+export function blattThemaHolen(topicId: string): Promise<WiederholenAntwort> {
+  return holen<WiederholenAntwort>(`/api/wiederholen?blatt=${encodeURIComponent(topicId)}`);
+}
+
 export async function laufHolen(key: string): Promise<ThemaLauf> {
   const r = await holen<{ ok: true; lauf: ThemaLauf }>(`/api/wiederholen?thema=${encodeURIComponent(key)}`);
   return r.lauf;

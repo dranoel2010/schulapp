@@ -81,5 +81,12 @@ export function prototypVorrat(jetzt = Date.UTC(2026, 9, 12, 14, 40)): ZeilenVor
       { t: "Industrialisierung in Deutschland", fachId: "ge", ziel: { art: "fach", id: "ge" }, lb: false },
       { t: "Passé composé mit être", fachId: "fr", ziel: { art: "fach", id: "fr" }, lb: false },
     ],
+    // Grammatikthemen (Antwort 5): Französisch aus dem Prototyp (heute fällig), Englisch und Deutsch nur für die Tests
+    grammatik: [
+      { id: "fr-pc", fachId: "fr", name: "Passé composé mit être", sprache: "fr", faellig: "2026-10-12", zuletzt: "2026-10-12" },
+      { id: "en-sp", fachId: "en", name: "Simple past", sprache: "en", faellig: "2026-10-14", zuletzt: "2026-10-08" },
+      { id: "en-pp", fachId: "en", name: "Present perfect", sprache: "en", faellig: null, zuletzt: "2026-10-01" },
+      { id: "de-ks", fachId: "de", name: "Kommasetzung", sprache: "de", faellig: null, zuletzt: "2026-10-05" },
+    ],
   };
 }
