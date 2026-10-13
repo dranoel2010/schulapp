@@ -12,7 +12,8 @@ import { TextLine } from "./zeilen";
  * Hausaufgaben (Prototyp `PAGES.hausaufgaben` und `hausaufgabenGroups`,
  * Z. 3026–3105): „Für ⟨Tag⟩“, „Später“, „Erledigt“ — davor „Heute“ mit
  * den heute fälligen, noch offenen Aufgaben (sonst fänden sie sich nach der
- * Schule nur über das Fach). Ist „Für ⟨Tag⟩“ leer,
+ * Schule nur über das Fach), bis Schulschluss auch den überfälligen. Danach
+ * stehen die überfälligen unter „Für ⟨Tag⟩“ wie im Überblick. Ist „Für ⟨Tag⟩“ leer,
  * steht dort „Für ⟨Tag⟩ ist nichts offen.“ Darunter der Weg zum Formular mit
  * Details (Plan 2.2) und, sobald etwas darin steht, zum Archiv (Antwort 11).
  */

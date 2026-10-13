@@ -128,7 +128,7 @@ export function istAelter(d: Pick<TagDaten, "stand">, alt: Pick<TagDaten, "stand
 }
 
 /** Ist der Tag ein Schultag? Aus den Daten: der App-Tag selbst oder der nächste. */
-const istSchultag = (d: TagDaten, tag: string) =>
+const istSchultag = (d: Pick<TagDaten, "tag" | "schultag" | "naechsterSchultag">, tag: string) =>
   tag === d.tag ? d.schultag : tag === d.naechsterSchultag;
 
 /** „Dienstag“, wenn der Tag morgen ist, sonst „Montag, 19.10.“ (Prototyp `tagName`). */
@@ -140,12 +140,13 @@ export function tagName(tag: string, heute: string): string {
  * Für den nächsten Schultag: was bis dahin fällig und offen ist, ohne die
  * Abgaben von heute an Schultagen (die stehen morgens). Prototyp Z. 1782.
  * `halten`: abgehakte Zeilen, die noch 350 ms stehen bleiben (7.2 Nr. 27).
+ * Die Seite „Hausaufgaben“ liest dieselbe Menge für „Für ⟨Tag⟩“.
  */
-export function offeneFuer(
-  d: TagDaten,
-  aufgaben: readonly AufgabeT[],
+export function offeneFuer<A extends Pick<AufgabeT, "id" | "due" | "done">>(
+  d: Pick<TagDaten, "tag" | "schultag" | "naechsterSchultag">,
+  aufgaben: readonly A[],
   halten: ReadonlySet<string> = new Set(),
-): AufgabeT[] {
+): A[] {
   const ns = d.naechsterSchultag;
   const heute = d.tag;
   return aufgaben

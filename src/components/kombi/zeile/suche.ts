@@ -291,6 +291,11 @@ export function answerFor(p: Pick<Geparst, "words" | "fach">, u: SuchUmgebung): 
         open: { typ: "seite", art: "klausur", params: { id: k.id } },
         openLabel: "Klausur öffnen",
       };
+    // Ein Fach ohne Klausur im Vorrat: nicht auf die freie Suche zurückfallen,
+    // die sonst die Klausur eines anderen Fachs obenan stellt. Was ab Tag 15
+    // nach dem Klausurtag liegt, steht im Archiv (Antwort 11).
+    if (fach)
+      return { kind: "nav", l1: `Keine Klausur in ${fach.name}`, l2: "Archiv öffnen", ziel: { typ: "seite", art: "archiv" } };
   }
   if (has("woche") || has("stundenplan"))
     return { kind: "nav", l1: "Woche öffnen", ziel: { typ: "seite", art: "woche", params: { tag: nextSchool(v, heute) } } };
@@ -466,9 +471,11 @@ export function suche(
   const kl = v.klausuren.filter((k) => {
     if (grammatik) return false;
     const f = F(v, k.fachId);
+    // mit erkanntem Fach nur dessen Klausuren („englisch klausur“ nie die Mathe-Klausur)
+    if (p.fach && k.fachId !== p.fach.id) return false;
     return (
       qs.some((q) => wordHit(q, `${f.name} ${f.kurz} ${k.thema} klausur`)) &&
-      (!contentQs.length || contentQs.some((q) => wordHit(q, `${k.thema} klausur klausuren`)) || (p.fach && k.fachId === p.fach.id))
+      (!contentQs.length || !!p.fach || contentQs.some((q) => wordHit(q, `${k.thema} klausur klausuren`)))
     );
   });
   if (kl.length && !(ans && ans.kind === "klausur"))

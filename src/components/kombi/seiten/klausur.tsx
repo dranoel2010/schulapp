@@ -16,7 +16,7 @@ import { useKombi } from "@/components/kombi/kontext";
 import { TextLine } from "@/components/kombi/seiten/zeilen";
 import { blockMerken, useBlock, zustand } from "@/components/kombi/lernblock/uhr";
 import { useOptimistischeAktion } from "@/lib/kombi/aktion";
-import { klausurPlanAnsicht, planBrauchtDatum } from "@/lib/kombi/archiv";
+import { klausurenLeerSatz, klausurPlanAnsicht, planBrauchtDatum } from "@/lib/kombi/archiv";
 import type { BlockVorher } from "@/app/(app)/lernblock-actions";
 import type { BlockDaten } from "@/lib/kombi/lernblock-daten";
 import { E, moveTo, reduce, rubber } from "@/lib/kombi/motion";
@@ -511,7 +511,7 @@ export function KlausurenInhalt({ daten }: { params: Record<string, string>; dat
   const kombi = useKombi();
   return (
     <>
-      {daten.klausuren.length === 0 ? <p className="empty">Noch keine Klausur eingetragen.</p> : null}
+      {klausurenLeerSatz(daten) ? <p className="empty">{klausurenLeerSatz(daten)}</p> : null}
       {/* eigener Behälter: die letzte Zeile bleibt :last-child, ohne Strich (Prototyp Z. 415) */}
       <div>
         {daten.klausuren.map((k) => (

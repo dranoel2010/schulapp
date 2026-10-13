@@ -5,6 +5,8 @@ import { before, describe, it } from "node:test";
 
 import { lessons } from "@/db/schema";
 import { createHomework } from "@/lib/homework";
+import { headlineFor, offeneFuer } from "@/lib/kombi/startseite";
+import { ladeTag } from "@/lib/kombi/tag-daten";
 import { createSubject } from "@/lib/subjects";
 import { berlinZeitpunkt } from "@/lib/tag";
 
@@ -13,7 +15,9 @@ import { hausaufgabenSeite } from "./hausaufgaben";
 /**
  * Abnahme 12: am Morgen sagen Startseite („Abgeben“, `istAbgabeAm`) und die
  * Seite „Hausaufgaben“ („Heute“) dasselbe. Eine überfällige offene Aufgabe
- * steht an einem Schultag unter „Heute“, nicht unter „Für ⟨Tag⟩“.
+ * steht an einem Schultag bis Schulschluss unter „Heute“, nicht unter „Für ⟨Tag⟩“.
+ * Abnahme 14: nach Schulschluss steht sie wie im Überblick (`offeneFuer`)
+ * unter „Für ⟨nächster Schultag⟩“; „Heute“ behält nur das heute Fällige.
  */
 
 let nutzer = "";
@@ -53,5 +57,27 @@ describe("Hausaufgaben am Morgen", () => {
     const d = await hausaufgabenSeite(nutzer, berlinZeitpunkt("2026-10-17", "10:00"));
     assert.deepEqual(d.heuteFaellig, []);
     assert.deepEqual(d.fuer.map((a) => a.text), ["war gestern fällig", "heute fällig", "für morgen"]);
+  });
+
+  it("Di 16:10 (nach Schulschluss): die überfällige steht unter „Für Mittwoch“ wie im Überblick", async () => {
+    const jetzt = berlinZeitpunkt("2026-10-13", "16:10");
+    const d = await hausaufgabenSeite(nutzer, jetzt);
+    assert.deepEqual(d.heuteFaellig.map((a) => a.text), ["heute fällig"]);
+    assert.deepEqual(d.fuer.map((a) => a.text), ["war gestern fällig", "für morgen"]);
+    const t = await ladeTag(nutzer, jetzt);
+    assert.deepEqual(d.fuer.map((a) => a.id), offeneFuer(t, t.aufgaben).map((a) => a.id));
+    assert.equal(headlineFor("ueberblick", t, t.aufgaben), "Zwei Aufgaben für Mittwoch");
+  });
+
+  it("Mi 20:31: zwei überfällige, „Für Donnerstag“ gleich dem Überblick, „Heute“ nur das heute Fällige", async () => {
+    const jetzt = berlinZeitpunkt("2026-10-14", "20:31");
+    const d = await hausaufgabenSeite(nutzer, jetzt);
+    assert.deepEqual(d.heuteFaellig.map((a) => a.text), ["für morgen"]);
+    const t = await ladeTag(nutzer, jetzt);
+    const start = offeneFuer(t, t.aufgaben);
+    assert.equal(start.length, 2);
+    assert.deepEqual(d.fuer.map((a) => a.id), start.map((a) => a.id));
+    assert.deepEqual(d.fuer.map((a) => a.text), ["war gestern fällig", "heute fällig"]);
+    assert.equal(headlineFor("ueberblick", t, t.aufgaben), "Zwei Aufgaben für Donnerstag");
   });
 });

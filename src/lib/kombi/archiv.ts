@@ -85,6 +85,15 @@ export function aufgabeImArchiv(a: { done: boolean; doneAt: string | null }, jet
  * kommenden zuerst, die nächste oben; darunter die vergangenen bis Tag 14,
  * die jüngste zuerst. Was im Archiv steht, fällt heraus und wird gezählt.
  */
+/**
+ * Der Satz über einer leeren Liste „Klausuren“: „Noch keine Klausur
+ * eingetragen.“ stimmt nur, wenn auch im Archiv keine steht.
+ */
+export function klausurenLeerSatz(d: { klausuren: readonly unknown[]; archiv: number }): string | null {
+  if (d.klausuren.length) return null;
+  return d.archiv ? "Keine anstehende Klausur." : "Noch keine Klausur eingetragen.";
+}
+
 export function klausurListe<T extends { datum: string }>(
   zeilen: readonly T[],
   heute: string,

@@ -177,6 +177,25 @@ describe("Suche", () => {
     assert.equal(txtText(r.top.l1), "Archiv öffnen");
   });
 
+  it("»englisch klausur« ohne Englisch-Klausur im Vorrat: keine Klausur eines anderen Fachs obenan, sondern das Archiv (Abnahme 14)", () => {
+    assert.ok(!v.klausuren.some((k) => k.fachId === "en"));
+    const a = antwort("englisch klausur");
+    assert.ok(a.kind === "nav");
+    if (a.kind !== "nav") return;
+    assert.equal(a.l1, "Keine Klausur in Englisch");
+    assert.deepEqual(a.ziel, { typ: "seite", art: "archiv" });
+    const r = suche(p("englisch klausur"), { ...u, server: { q: "", list: [] } });
+    assert.equal(txtText(r.top.l1), "Keine Klausur in Englisch");
+    assert.deepEqual(r.top.ziel, { typ: "seite", art: "archiv" });
+    const alle = [r.top, ...r.groups.flatMap((g) => g.items ?? [])];
+    assert.ok(!alle.some((i) => i.ziel?.typ === "seite" && i.ziel.art === "klausur"), "keine Mathe-Klausur unter »englisch klausur«");
+    // Die Gruppe „Klausuren“ lässt bei erkanntem Fach nur dessen Klausuren zu
+    const r2 = suche(p("englisch quadratische"), { ...u, server: { q: "", list: [] } });
+    assert.ok(![r2.top, ...r2.groups.flatMap((g) => g.items ?? [])].some((i) => i.key.startsWith("k:") || txtText(i.l1) === "Klausur Mathematik"));
+    // mit dem eigenen Fach bleibt alles wie gehabt
+    assert.equal(antwort("mathe klausur").l1, "Klausur Mathematik");
+  });
+
   it("»vergangene« findet das Archiv als Bereich, das Raster „Wohin?“ bleibt bei neun", () => {
     const r = suche(p("vergangene"), { ...u, server: { q: "", list: [] } });
     assert.ok(r.groups.flatMap((g) => g.items ?? []).some((i) => i.ziel?.typ === "seite" && i.ziel.art === "archiv") || (r.top.ziel?.typ === "seite" && r.top.ziel.art === "archiv"));

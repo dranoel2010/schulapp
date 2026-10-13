@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { appTag, berlinZeitpunkt } from "@/lib/tag";
 
-import { planBrauchtDatum, aufgabeImArchiv, klausurImArchiv, klausurListe, klausurPlanAnsicht, klausurVorbei } from "./archiv";
+import { planBrauchtDatum, aufgabeImArchiv, klausurImArchiv, klausurenLeerSatz, klausurListe, klausurPlanAnsicht, klausurVorbei } from "./archiv";
 
 /**
  * Antwort 11: die Grenzen des Archivs. Klausuren zählen in App-Tagen
@@ -74,6 +74,21 @@ describe("Archiv: Klausuren", () => {
     // Zeitumstellung im März: Klausur am 20.3.2027, Tag 15 am 4.4.2027
     assert.equal(klausurImArchiv("2027-03-20", tagUm("2027-04-03", "12:00")), false);
     assert.equal(klausurImArchiv("2027-03-20", tagUm("2027-04-04", "12:00")), true);
+  });
+});
+
+describe("Archiv: leere Liste „Klausuren“", () => {
+  it("ohne Klausur und ohne Archiv: „Noch keine Klausur eingetragen.“", () => {
+    assert.equal(klausurenLeerSatz({ klausuren: [], archiv: 0 }), "Noch keine Klausur eingetragen.");
+  });
+  it("alle im Archiv: nicht „Noch keine …“, sondern „Keine anstehende Klausur.“", () => {
+    const { liste, archiv } = klausurListe([{ datum: "2026-10-16" }], "2026-11-02");
+    assert.deepEqual(liste, []);
+    assert.equal(archiv, 1);
+    assert.equal(klausurenLeerSatz({ klausuren: liste, archiv }), "Keine anstehende Klausur.");
+  });
+  it("mit Liste kein Satz", () => {
+    assert.equal(klausurenLeerSatz({ klausuren: [{}], archiv: 2 }), null);
   });
 });
 

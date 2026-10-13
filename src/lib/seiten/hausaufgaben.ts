@@ -1,6 +1,7 @@
 import { listHomework } from "@/lib/homework";
 import { aufgabeImArchiv } from "@/lib/kombi/archiv";
-import { jetzt } from "@/lib/tag";
+import { offeneFuer } from "@/lib/kombi/startseite";
+import { jetzt, ladeKalender, nachSchulschluss } from "@/lib/tag";
 
 import { aufgabeDaten, heuteApp, schulKalender, type AufgabeDaten } from "./gemeinsam";
 
@@ -16,11 +17,17 @@ export type HausaufgabenDaten = {
   /** Der nächste Schultag */
   ns: string;
   /**
-   * Heute an einem Schultag fällig (oder schon überfällig) und noch offen. Der Morgens-Ablauf zeigt
-   * sie unter „Abgeben“; auf dieser Seite stehen sie den ganzen Tag unter
-   * „Heute“, damit man sie auch nachmittags abhaken oder ändern kann.
+   * An einem Schultag heute fällig und noch offen, bis Schulschluss auch das
+   * Überfällige: dieselbe Menge wie „Abgeben“ auf der Startseite
+   * (`istAbgabeAm`). Das heute Fällige steht den ganzen Tag hier, damit man es
+   * nachmittags abhaken oder ändern kann.
    */
   heuteFaellig: AufgabeDaten[];
+  /**
+   * „Für ⟨nächster Schultag⟩“: dieselbe Menge wie der Überblick der Startseite
+   * (`offeneFuer`), ohne was gerade unter „Heute“ steht. Nach Schulschluss
+   * steht das Überfällige also hier, wie im Prototyp (Z. 3031).
+   */
   fuer: AufgabeDaten[];
   spaeter: AufgabeDaten[];
   erledigt: AufgabeDaten[];
@@ -33,27 +40,31 @@ const nachFaelligkeit = (a: AufgabeDaten, b: AufgabeDaten) => (a.due < b.due ? -
 export async function hausaufgabenSeite(userId: string, jetztZeit?: Date): Promise<HausaufgabenDaten> {
   const now = jetztZeit ?? (await jetzt());
   const heute = heuteApp(now);
-  const [kal, liste] = await Promise.all([
+  const [kal, k, liste] = await Promise.all([
     schulKalender(userId, heute),
+    ladeKalender(userId),
     listHomework(userId, { includeDone: true }),
   ]);
   const ns = kal.naechsterSchultag(heute);
   const heuteSchule = kal.schultag(heute);
+  // Dieselbe Grenze wie die Ansicht der Startseite: bis Schulschluss „morgens“
+  const vorSchluss = heuteSchule && !nachSchulschluss(k, now);
   // gleiche Fälligkeit: in der Reihenfolge des Eintragens (Prototyp `offeneFuer`, Z. 1782)
   const alle = [...liste].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map(aufgabeDaten);
   const jetztMs = now.getTime();
+  // An einem Schultag das heute Fällige, bis Schulschluss auch das Überfällige
+  const heuteOffen = heuteSchule
+    ? alle.filter((a) => !a.done && (a.due === heute || (a.due < heute && vorSchluss)))
+    : [];
+  const unterHeute = new Set(heuteOffen.map((a) => a.id));
 
   return {
     heute,
     ns,
-    // Dieselbe Menge wie „Abgeben“ auf der Startseite (`istAbgabeAm`): an einem
-    // Schultag auch die überfälligen offenen, die überfälligen zuerst
-    heuteFaellig: heuteSchule ? alle.filter((a) => !a.done && a.due <= heute).sort(nachFaelligkeit) : [],
-    // Was bis zum nächsten Schultag fällig ist, ohne die heutigen Abgaben an
-    // einem Schultag — die stehen morgens (Prototyp `offeneFuer`, Z. 1782).
-    fuer: alle
-      .filter((a) => !a.done && a.due <= ns && !(a.due <= heute && heuteSchule))
-      .sort(nachFaelligkeit),
+    heuteFaellig: heuteOffen.sort(nachFaelligkeit),
+    fuer: offeneFuer({ tag: heute, schultag: heuteSchule, naechsterSchultag: ns }, alle).filter(
+      (a) => !unterHeute.has(a.id),
+    ),
     spaeter: alle.filter((a) => !a.done && a.due > ns).sort(nachFaelligkeit),
     erledigt: alle
       .filter((a) => a.done && !aufgabeImArchiv(a, jetztMs))
