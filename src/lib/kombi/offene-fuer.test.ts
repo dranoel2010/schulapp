@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   headlineFor,
+  istAelter,
   moAbgaben,
   offeneFuer,
   ueberblickAufgaben,
@@ -180,5 +181,18 @@ describe("ueberblickAufgaben mit gehaltenen Zeilen", () => {
     assert.deepEqual(ohne, ["Deutsch"]);
     const mit = ueberblickAufgaben(mo, ordnung, new Set([mathe.id])).gezeigt.map((a) => a.fach);
     assert.deepEqual(mit, ["Mathe", "Deutsch"]);
+  });
+});
+
+describe("istAelter", () => {
+  it("Server-Props aus dem Router-Cache verlieren gegen den frischeren Stand", () => {
+    const alt = { stand: "2026-10-13T14:40:00.000Z" };
+    const neu = { stand: "2026-10-13T14:52:10.000Z" };
+    assert.equal(istAelter(alt, neu), true);
+    assert.equal(istAelter(neu, alt), false);
+    assert.equal(istAelter(neu, neu), false);
+  });
+  it("ohne lesbaren Stand gilt nichts als älter", () => {
+    assert.equal(istAelter({ stand: "" }, { stand: "2026-10-13T14:52:10.000Z" }), false);
   });
 });

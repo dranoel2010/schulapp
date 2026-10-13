@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import "@/components/kombi/form/form.css";
-
 /**
  * Wird gezeigt, wenn eine Adresse ins Leere zeigt — etwa ein Fach, das es
  * nicht mehr gibt. Ohne diese Seite stünde hier Nextens englischer Standard.

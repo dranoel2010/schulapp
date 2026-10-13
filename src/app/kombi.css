@@ -738,3 +738,13 @@ body.toast-on .scroll{padding-bottom:calc(var(--foot-space) + 54px)}
   .opt:hover{background:var(--line)}
   .lrow:hover,.textline:hover,.exam-row:hover{opacity:.8}
 }
+
+/* Seiten ohne Shell: Anmeldung, Einrichtung, Offline, Datenschutz, 404 (Plan 2.2). Hier und nicht in form.css: die 404 ist die root-not-found, ihr CSS lädt Next auf jeder Route vor */
+.solo{min-height:100dvh;background:var(--bg);color:var(--ink);padding:calc(var(--top) + 56px) var(--pad) calc(var(--safe-b) + 28px)}
+.solo-in{max-width:var(--col,680px);margin:0 auto}
+.solo h1.hl{display:block;min-height:0;font-size:28px;line-height:1.12;font-weight:650;letter-spacing:-.03em;margin-bottom:8px;text-wrap:balance}
+.solo .q-sub{margin:0 0 24px}
+.solo .btn{width:100%}
+.solo .btn.primary.solo-btn,.solo .btn.primary{background:var(--accent-fill);color:var(--on-accent-fill)}
+.solo .btn.quiet{background:var(--raise);color:var(--ink)}
+.solo p + p{margin-top:12px}

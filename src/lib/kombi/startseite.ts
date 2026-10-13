@@ -116,6 +116,17 @@ export type TagDaten = {
   wiederholen: WhStand;
 };
 
+/**
+ * Ist `d` älter als `alt`? Maßgeblich ist `stand`, die Uhr des Servers beim
+ * Berechnen. Ältere TagDaten — etwa die Server-Props aus dem Router-Cache
+ * nach Android-Zurück — dürfen einen frischeren Stand nicht überschreiben.
+ */
+export function istAelter(d: Pick<TagDaten, "stand">, alt: Pick<TagDaten, "stand">): boolean {
+  const a = Date.parse(d.stand);
+  const b = Date.parse(alt.stand);
+  return Number.isFinite(a) && Number.isFinite(b) && a < b;
+}
+
 /** Ist der Tag ein Schultag? Aus den Daten: der App-Tag selbst oder der nächste. */
 const istSchultag = (d: TagDaten, tag: string) =>
   tag === d.tag ? d.schultag : tag === d.naechsterSchultag;

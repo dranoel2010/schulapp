@@ -52,12 +52,3 @@ input.kf-input[type="number"]{font-variant-numeric:tabular-nums}
 .kf-form input[type="checkbox"],.kf-form input[type="radio"],.kf-seite input[type="checkbox"]{accent-color:var(--ink);width:22px;height:22px}
 .kf-check{display:flex;align-items:center;gap:12px;min-height:44px;font-size:17px}
 .kf-check input{width:22px;height:22px;accent-color:var(--ink);flex:none}
-/* Seiten ohne Shell: Anmeldung, Einrichtung, Offline, Datenschutz, 404 (Plan 2.2) */
-.solo{min-height:100dvh;background:var(--bg);color:var(--ink);padding:calc(var(--top) + 56px) var(--pad) calc(var(--safe-b) + 28px)}
-.solo-in{max-width:var(--col,680px);margin:0 auto}
-.solo h1.hl{display:block;min-height:0;font-size:28px;line-height:1.12;font-weight:650;letter-spacing:-.03em;margin-bottom:8px;text-wrap:balance}
-.solo .q-sub{margin:0 0 24px}
-.solo .btn{width:100%}
-.solo .btn.primary.solo-btn,.solo .btn.primary{background:var(--accent-fill);color:var(--on-accent-fill)}
-.solo .btn.quiet{background:var(--raise);color:var(--ink)}
-.solo p + p{margin-top:12px}

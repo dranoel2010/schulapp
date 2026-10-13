@@ -32,6 +32,7 @@ import { TOAST_MS } from "@/lib/kombi/aktion";
 import { festeSeiteVon, zuletztMerken } from "@/components/kombi/zeile/zuletzt";
 import { E, moveTo, reduce, springOpts } from "@/lib/kombi/motion";
 import type { TagDaten } from "@/lib/kombi/tag-daten";
+import { istAelter } from "@/lib/kombi/startseite";
 import { themeColor, themeColorBeobachten } from "@/lib/kombi/theme-color";
 
 /**
@@ -847,7 +848,19 @@ export function KombiShell({ children }: { children: ReactNode }) {
       return;
     }
     if (istStart) {
-      if (route) setzeEbenen((alt) => alt.map((e) => (e.key === route.key ? { ...e, geht: true } : e)));
+      if (route) {
+        setzeEbenen((alt) => alt.map((e) => (e.key === route.key ? { ...e, geht: true } : e)));
+        // Zurück von einer echten Route (eingang, bausteine, stoff …): was dort
+        // geschah, kennt die Startseite noch nicht — TagDaten frisch holen.
+        // Die Server-Props aus dem Router-Cache sind älter und gelten nicht
+        // (merkeTagDaten vergleicht `stand`).
+        fetch("/api/tag/daten", { headers: { accept: "application/json" } })
+          .then((r) => (r.ok ? (r.json() as Promise<TagDaten>) : null))
+          .then((d) => {
+            if (d) setTagDaten((alt) => (alt && istAelter(d, alt) ? alt : d));
+          })
+          .catch(() => {});
+      }
       if (!ausPop.current) {
         // Eine Navigation zur Startseite (nicht Zurück): alles zu, wie setView
         setzeEbenen((alt) => alt.filter((e) => e.typ === "route"));
@@ -1077,7 +1090,17 @@ export function KombiShell({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const merkeTagDaten = useCallback((d: TagDaten) => setTagDaten(d), []);
+  /**
+   * TagDaten aus den Server-Props der Startseite. Nach Android-Zurück von
+   * einer echten Route (popstate) entsteht die Startseite neu — mit den Props
+   * aus dem Router-Cache von „/“, also dem Stand vom letzten Seitenladen.
+   * Die dürfen den frischeren Stand aus `neuLaden()` nicht überschreiben:
+   * übernommen wird nur, was nicht älter ist (`stand`, Uhr des Servers).
+   */
+  const merkeTagDaten = useCallback(
+    (d: TagDaten) => setTagDaten((alt) => (alt && istAelter(d, alt) ? alt : d)),
+    [],
+  );
 
   const api = useMemo<KombiApi>(
     () => ({
