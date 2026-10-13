@@ -147,7 +147,7 @@ export function FachInhalt({ daten: vomServer }: { daten: FachDaten }) {
       {daten.klausuren.map((k) => (
         <Fragment key={k.id}>
           <PLab>Klausur</PLab>
-          <RowBtn titel={`Klausur am ${lang(k.datum)}`} sub={k.thema} ziel={{ seite: "klausur", params: { id: k.id } }} />
+          <RowBtn titel={`Klausur am ${lang(k.datum)}`} sub={k.thema} vorbei={k.vorbei} ziel={{ seite: "klausur", params: { id: k.id } }} />
         </Fragment>
       ))}
       {daten.themen.length ? (

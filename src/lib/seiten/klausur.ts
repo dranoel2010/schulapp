@@ -8,7 +8,7 @@ import { freeDatesFrom } from "@/lib/free-days";
 import { gradeLabel } from "@/lib/grade-scale";
 import { gradesBySubject } from "@/lib/grades";
 import { appTag, jetzt } from "@/lib/tag";
-import { klausurImArchiv, klausurVorbei } from "@/lib/kombi/archiv";
+import { klausurListe } from "@/lib/kombi/archiv";
 import { blattStaende, blockDaten, type BlockDaten } from "@/lib/kombi/lernblock-daten";
 import { buildPlan, type PlanWarning } from "@/lib/study-plan";
 import { lessonsForWeekday, weekdayOf } from "@/lib/timetable";
@@ -37,7 +37,14 @@ export function klausurThema(
   return ART_NAMEN[exam.kind] ?? "Klausur";
 }
 
-export type KlausurZeile = { id: string; fach: string; datum: string; thema: string };
+export type KlausurZeile = {
+  id: string;
+  fach: string;
+  datum: string;
+  thema: string;
+  /** Der Klausurtag liegt hinter heute: die Zeile steht unten und blasser */
+  vorbei: boolean;
+};
 
 export type KlausurSeite = {
   id: string;
@@ -229,21 +236,14 @@ export type KlausurenSeite = {
 export async function klausurenSeite(userId: string, jetztZeit?: Date): Promise<KlausurenSeite> {
   const heute = appTag(jetztZeit ?? (await jetzt()));
   const liste = await listExams(userId, { includePast: true, heute });
-  const zeilen = liste.map((k) => ({
-    id: k.id,
-    fach: k.subject.name,
-    datum: k.date,
-    thema: k.title ?? ART_NAMEN[k.kind] ?? "Prüfung",
-    vorbei: klausurVorbei(k.date, heute),
-  }));
-  const auf = (a: { datum: string }, b: { datum: string }) => (a.datum < b.datum ? -1 : a.datum > b.datum ? 1 : 0);
-  return {
-    klausuren: [
-      ...zeilen.filter((k) => !k.vorbei).sort(auf),
-      ...zeilen
-        .filter((k) => k.vorbei && !klausurImArchiv(k.datum, heute))
-        .sort((a, b) => auf(b, a)),
-    ],
-    archiv: zeilen.filter((k) => klausurImArchiv(k.datum, heute)).length,
-  };
+  const { liste: klausuren, archiv } = klausurListe(
+    liste.map((k) => ({
+      id: k.id,
+      fach: k.subject.name,
+      datum: k.date,
+      thema: k.title ?? ART_NAMEN[k.kind] ?? "Prüfung",
+    })),
+    heute,
+  );
+  return { klausuren, archiv };
 }

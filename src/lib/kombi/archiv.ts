@@ -53,3 +53,23 @@ export function aufgabeImArchiv(a: { done: boolean; doneAt: string | null }, jet
   if (!a.doneAt) return true;
   return new Date(a.doneAt).getTime() < jetztMs - ERLEDIGT_LISTE_TAGE * 864e5;
 }
+
+/**
+ * Die Klausuren einer Liste (Seite „Klausuren“ und Seite eines Fachs): die
+ * kommenden zuerst, die nächste oben; darunter die vergangenen bis Tag 14,
+ * die jüngste zuerst. Was im Archiv steht, fällt heraus und wird gezählt.
+ */
+export function klausurListe<T extends { datum: string }>(
+  zeilen: readonly T[],
+  heute: string,
+): { liste: (T & { vorbei: boolean })[]; archiv: number } {
+  const auf = (a: { datum: string }, b: { datum: string }) => (a.datum < b.datum ? -1 : a.datum > b.datum ? 1 : 0);
+  const mit = zeilen.map((z) => ({ ...z, vorbei: klausurVorbei(z.datum, heute) }));
+  return {
+    liste: [
+      ...mit.filter((k) => !k.vorbei).sort(auf),
+      ...mit.filter((k) => k.vorbei && !klausurImArchiv(k.datum, heute)).sort((a, b) => auf(b, a)),
+    ],
+    archiv: mit.filter((k) => klausurImArchiv(k.datum, heute)).length,
+  };
+}

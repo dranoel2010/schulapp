@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { arbeitsblaetter } from "@/db/schema";
 import { listExams, examTopicTitles } from "@/lib/exams";
 import { listHomework } from "@/lib/homework";
+import { klausurListe } from "@/lib/kombi/archiv";
 import { dm, weekdayOrDate, lang } from "@/lib/kombi/text";
 import { listMaterials } from "@/lib/materials";
 import { listTopics } from "@/lib/subject-topics";
@@ -79,15 +80,16 @@ export type FachDaten = {
 export async function fachSeite(
   userId: string,
   params: Record<string, string>,
+  jetztZeit?: Date,
 ): Promise<FachDaten | null> {
   const fach = await getSubject(userId, params.id ?? "");
   if (!fach) return null;
-  const heute = heuteApp(await jetzt());
+  const heute = heuteApp(jetztZeit ?? (await jetzt()));
 
   const [kal, aufgaben, klausuren, titel, themen, blaetter, imKorb] = await Promise.all([
     schulKalender(userId, heute),
     listHomework(userId),
-    listExams(userId, { includePast: true }),
+    listExams(userId, { includePast: true, heute }),
     examTopicTitles(userId),
     listTopics(userId, fach.id),
     listMaterials(userId, { subjectId: fach.id }),
@@ -131,10 +133,14 @@ export async function fachSeite(
     istEpoche: fach.id === kal.epoche,
     sub: fach.archived ? "Archiviert" : fachSub(kal, heute, fach.id, true),
     offen: aufgaben.filter((a) => a.subjectId === fach.id && !a.done).map(aufgabeDaten),
-    klausuren: klausuren
-      .filter((k) => k.subjectId === fach.id)
-      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
-      .map((k) => ({ id: k.id, fach: fach.name, datum: k.date, thema: klausurThema(k, titel.get(k.id) ?? []) })),
+    // wie die Liste „Klausuren“ (Antwort 11): kommende zuerst, vergangene bis
+    // Tag 14 unten und blasser, danach nur noch im Archiv
+    klausuren: klausurListe(
+      klausuren
+        .filter((k) => k.subjectId === fach.id)
+        .map((k) => ({ id: k.id, fach: fach.name, datum: k.date, thema: klausurThema(k, titel.get(k.id) ?? []) })),
+      heute,
+    ).liste,
     themen: themen.map((t) => ({
       id: t.id,
       name: t.title,

@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { appTag, berlinZeitpunkt } from "@/lib/tag";
 
-import { aufgabeImArchiv, klausurImArchiv, klausurPlanAnsicht, klausurVorbei } from "./archiv";
+import { aufgabeImArchiv, klausurImArchiv, klausurListe, klausurPlanAnsicht, klausurVorbei } from "./archiv";
 
 /**
  * Antwort 11: die Grenzen des Archivs. Klausuren zählen in App-Tagen
@@ -14,6 +14,24 @@ import { aufgabeImArchiv, klausurImArchiv, klausurPlanAnsicht, klausurVorbei } f
 const tagUm = (tag: string, hhmm: string) => appTag(berlinZeitpunkt(tag, hhmm));
 
 describe("Archiv: Klausuren", () => {
+  it("klausurListe: kommende zuerst, vergangene bis Tag 14 darunter (die jüngste zuerst), der Rest gezählt", () => {
+    const zeilen = [
+      { id: "a", datum: "2026-09-01" },
+      { id: "b", datum: "2026-10-20" },
+      { id: "c", datum: "2026-09-29" },
+      { id: "d", datum: "2026-10-13" },
+      { id: "e", datum: "2026-10-12" },
+      { id: "f", datum: "2026-09-28" },
+    ];
+    const { liste, archiv } = klausurListe(zeilen, "2026-10-13");
+    assert.deepEqual(
+      liste.map((k) => `${k.id}${k.vorbei ? "-" : "+"}`),
+      ["d+", "b+", "e-", "c-"],
+    );
+    // 1.9. ist Tag 42, 28.9. Tag 15
+    assert.equal(archiv, 2);
+  });
+
   it("eine vergangene Klausur plant nichts mehr: kein Lernplan-Hinweis, kein „Termine neu rechnen“", () => {
     // vorher und am Klausurtag: alles wie bisher
     assert.deepEqual(klausurPlanAnsicht({ datum: "2026-09-27", heute: "2026-09-20", themen: 0, bloecke: 0 }), { lernplan: true, termineNeu: true });

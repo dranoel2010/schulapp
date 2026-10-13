@@ -30,6 +30,7 @@ export function RowBtn({
   strong,
   ziel,
   ariaLabel,
+  vorbei,
 }: {
   titel: ReactNode;
   sub?: ReactNode;
@@ -37,8 +38,11 @@ export function RowBtn({
   strong?: boolean;
   ziel: Ziel;
   ariaLabel?: string;
+  /** Vergangenes (eine Klausur nach ihrem Tag): Titel und Zeile blasser */
+  vorbei?: boolean;
 }) {
   const kombi = useKombi();
+  const klasse = `lrow plain${vorbei ? " vorbei" : ""}`;
   const inhalt = (
     <>
       <span>
@@ -52,20 +56,20 @@ export function RowBtn({
     const download = "download" in ziel && ziel.download;
     if (download) {
       return (
-        <a className="lrow plain" href={ziel.href} download aria-label={ariaLabel}>
+        <a className={klasse} href={ziel.href} download aria-label={ariaLabel}>
           {inhalt}
         </a>
       );
     }
     return (
-      <Link className="lrow plain" href={ziel.href} aria-label={ariaLabel}>
+      <Link className={klasse} href={ziel.href} aria-label={ariaLabel}>
         {inhalt}
       </Link>
     );
   }
   return (
     <button
-      className="lrow plain"
+      className={klasse}
       type="button"
       aria-label={ariaLabel}
       onPointerDown={ziel.seite ? () => kombi.vorladen(ziel.seite!, ziel.params ?? {}) : undefined}

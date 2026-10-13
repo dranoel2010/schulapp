@@ -12,6 +12,7 @@ import { createSubject } from "@/lib/subjects";
 import { berlinZeitpunkt } from "@/lib/tag";
 
 import { archivSeite } from "./archiv";
+import { fachSeite } from "./faecher";
 import { hausaufgabenSeite } from "./hausaufgaben";
 import { klausurenSeite } from "./klausur";
 
@@ -22,6 +23,7 @@ import { klausurenSeite } from "./klausur";
  */
 
 let nutzer = "";
+let fachId = "";
 
 /** Die Uhr der Loader: Berliner Wanduhrzeit */
 const um = (tag: string, hhmm = "15:00") => berlinZeitpunkt(tag, hhmm);
@@ -37,6 +39,7 @@ before(async () => {
     room: null,
     weightWritten: 60,
   } as never);
+  fachId = fach.id;
   for (const [title, date] of [
     ["Am Ersten", "2026-10-01"],
     ["Am Zweiten", "2026-10-02"],
@@ -88,6 +91,25 @@ describe("Archiv: Klausuren", () => {
       a.klausuren.map((k) => k.thema),
       ["Heute", "Am Zweiten", "Am Ersten"],
     );
+  });
+});
+
+describe("Archiv: Klausuren auf der Seite des Fachs", () => {
+  const zeilen = async (tag: string, hhmm?: string) =>
+    (await fachSeite(nutzer, { id: fachId }, um(tag, hhmm)))!.klausuren.map((k) => `${k.thema} ${k.vorbei ? "vorbei" : "kommt"}`);
+
+  it("Tag 14: wie die Liste „Klausuren“, kommende zuerst, vergangene unten und die jüngste zuerst", async () => {
+    assert.deepEqual(await zeilen("2026-10-15"), ["Heute kommt", "Kommend kommt", "Am Zweiten vorbei", "Am Ersten vorbei"]);
+  });
+
+  it("Tag 15 (ab 04:00 Berliner Zeit): die Klausur vom 1.10. steht nicht mehr im Fach", async () => {
+    assert.ok((await zeilen("2026-10-16", "03:30")).includes("Am Ersten vorbei"));
+    assert.deepEqual(await zeilen("2026-10-16", "04:00"), ["Kommend kommt", "Heute vorbei", "Am Zweiten vorbei"]);
+  });
+
+  it("später fällt eine nach der anderen ins Archiv, am Ende steht nichts mehr da", async () => {
+    assert.deepEqual(await zeilen("2026-10-19"), ["Kommend kommt", "Heute vorbei"]);
+    assert.deepEqual(await zeilen("2026-11-30"), []);
   });
 });
 
