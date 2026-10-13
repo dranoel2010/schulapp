@@ -516,7 +516,7 @@ describe("runIservFetch: Ferien aus IServ", () => {
     assert.equal(nachgezogen, 1);
   });
 
-  it("eine leere Antwort des Plugins löscht keinen freien Tag", async () => {
+  it("eine leere Antwort des Plugins löscht keinen freien Tag — auch nicht die dritte", async () => {
     let leer = false;
     const { store, lauf } = aufbau({ routen: mitFerien(() => json(leer ? [] : FEIERTAGE_FEED)) });
 
@@ -524,10 +524,12 @@ describe("runIservFetch: Ferien aus IServ", () => {
     const vorher = titel(store);
     leer = true;
 
-    const zweiter = await lauf(spaeter(3));
-    assert.equal(zweiter.status, "gelesen");
-    assert.match(zweiter.warnung ?? "", /Ferien und Feiertage: 0 statt 4 Termine/);
-    assert.deepEqual(titel(store), vorher);
+    for (const stunden of [3, 6, 9]) {
+      const ergebnis = await lauf(spaeter(stunden));
+      assert.equal(ergebnis.status, "teilweise", `nach ${stunden} Stunden`);
+      assert.match(ergebnis.satz ?? "", /^Ferien und Feiertage: IServ liefert Ferien und Feiertage leer/);
+      assert.deepEqual(titel(store), vorher);
+    }
   });
 
   it("eine kaputte Antwort des Plugins löscht nichts und meldet sich", async () => {

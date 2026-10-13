@@ -70,7 +70,12 @@ Ablauf im Ganzen:
 4. `scripts/nas.sh hoch`. Es hält an, wenn eine Datei fehlt.
 5. `/api/tag/stand` aufrufen, dann am Handy öffnen. Die App lädt einmal neu.
 6. Eine Aufgabe über die Zeile eintragen und abhaken. Dann im Google-Kalender „Schule“ nachsehen.
-7. Ferien prüfen: Nach dem nächsten Abruf bei IServ (der Kalender-Lauf fragt höchstens alle drei Stunden, zwischen 6 und 21 Uhr) stehen die Ferien unter Einstellungen › IServ › „Freie Tage“, mit „aus IServ“. In „Schule“ stehen die Herbstferien genau einmal. Wer nicht warten will: `UPDATE iserv_state SET last_attempt_at = NULL` und dann `kalender.sh`.
+7. Ferien prüfen: **Vor** dem Einspielen von `kombi-iserv-ferien.sql` die von Hand eingetragenen Ferien zählen, die noch kommen (seit dem 4.10. gab es die Ferienseite, für die Herbstferien steht also wahrscheinlich schon eine Zeile da):
+   ```sql
+   SELECT kind, title, starts_on, ends_on FROM free_periods
+    WHERE kind IN ('ferien', 'frei') AND ends_on >= current_date ORDER BY starts_on;
+   ```
+   Diese Zeilen bleiben stehen; der Abgleich fasst sie nie an. Nach dem nächsten Abruf bei IServ (der Kalender-Lauf fragt höchstens alle drei Stunden, zwischen 6 und 21 Uhr) stehen die Ferien unter Einstellungen › IServ › „Freie Tage“, mit „aus IServ“, die alten Zeilen daneben mit „von Hand eingetragen“. In „Schule“ stehen die Herbstferien trotzdem genau einmal: Eine Hand-Zeile, deren Tage die IServ-Ferien ganz abdecken, fällt in Google weg (und umgekehrt). Nur eine Hand-Zeile, die über die IServ-Ferien hinausragt, bliebe als zweiter Balken — dann ist sie wohl falsch eingetragen; löschen lässt sie sich nur per SQL (`DELETE FROM free_periods WHERE id = '…' AND quelle IS NULL`, vorher `npm run db:backup` bzw. Sicherung). Die Zählzeilen dazu stehen im Kopf von `kombi-iserv-ferien.sql`. Wer nicht warten will: `UPDATE iserv_state SET last_attempt_at = NULL` und dann `kalender.sh`.
 
 ## Was offen ist
 

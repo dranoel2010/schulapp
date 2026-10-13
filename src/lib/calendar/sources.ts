@@ -7,7 +7,7 @@ import {
 } from "@/lib/calendar/events";
 import { errorText } from "@/lib/calendar/error-text";
 import { examTopicTitles, listExams } from "@/lib/exams";
-import { listAllFreePeriods } from "@/lib/free-days";
+import { fuerKalender, listAllFreePeriods } from "@/lib/free-days";
 import { listHomework } from "@/lib/homework";
 import { iservAuswahl } from "@/lib/iserv/auswahl";
 import { iservConfig, iservConfigured } from "@/lib/iserv/config";
@@ -114,11 +114,15 @@ export const homeworkSource: CalendarSource = {
   },
 };
 
-/** ALLE freien Zeiträume — nicht `listFreePeriods()`, die filtert Vergangenes heraus. */
+/**
+ * ALLE freien Zeiträume — nicht `listFreePeriods()`, die filtert Vergangenes
+ * heraus. Dieselben Ferien, von Hand und aus IServ eingetragen, nur einmal
+ * (`fuerKalender()`).
+ */
 export const freePeriodSource: CalendarSource = {
   kind: "frei",
   async wanted(ctx) {
-    const periods = await listAllFreePeriods(ctx.userId);
+    const periods = fuerKalender(await listAllFreePeriods(ctx.userId));
 
     return periods.map((period) =>
       freePeriodEvent({ period, appOrigin: ctx.appOrigin }),

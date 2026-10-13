@@ -58,6 +58,47 @@ export function freiQuelleText(period: { quelle?: string | null }): string {
   return period.quelle === "iserv" ? "aus IServ" : "von Hand eingetragen";
 }
 
+/**
+ * Die Zeilen, die als Balken in den Google Kalender gehen — dieselben Ferien
+ * genau einmal.
+ *
+ * Bis zum 12.10.2026 trug der Mensch die Ferien von Hand ein; seitdem legt
+ * der Abgleich mit IServ sie selbst an (@/lib/iserv/ferien) und fasst eine
+ * von Hand eingetragene Zeile nie an. Stehen dieselben Herbstferien also
+ * einmal von Hand und einmal aus IServ da, bleiben in der App beide (Lernplan
+ * und Abruf nehmen ohnehin die Vereinigung der Tage), in Google aber nur
+ * eine:
+ *
+ *   1. Eine von Hand eingetragene Ferien- oder Frei-Zeile, deren Tage eine
+ *      IServ-Zeile ganz abdeckt, fällt weg — IServ hat den lesbaren Namen und
+ *      die richtigen Tage. Bei gleichen Tagen gewinnt IServ.
+ *   2. Eine IServ-Zeile, deren Tage eine (übrig gebliebene) von Hand
+ *      eingetragene Ferien- oder Frei-Zeile ganz abdeckt, fällt weg.
+ *
+ * Eine Klassenfahrt bleibt immer stehen und verdeckt nichts. Überschneiden
+ * sich zwei Zeilen nur teilweise, bleiben beide: Sonst fehlten Tage im
+ * Kalender.
+ */
+export function fuerKalender<
+  T extends Pick<FreePeriod, "id" | "kind" | "startsOn" | "endsOn"> & { quelle?: string | null },
+>(periods: readonly T[]): T[] {
+  const ferienArtig = (p: T) => p.kind === "ferien" || p.kind === "frei";
+  const deckt = (aussen: T, innen: T) =>
+    aussen.startsOn <= innen.startsOn && innen.endsOn <= aussen.endsOn;
+
+  const iserv = periods.filter((p) => p.quelle === "iserv");
+  const hand = periods.filter(
+    (p) => p.quelle !== "iserv" && !(ferienArtig(p) && iserv.some((i) => deckt(i, p))),
+  );
+  const handFerien = hand.filter(ferienArtig);
+  const iservBleibt = new Set(
+    iserv.filter((i) => !handFerien.some((h) => deckt(h, i))).map((i) => i.id),
+  );
+  const handBleibt = new Set(hand.map((h) => h.id));
+
+  return periods.filter((p) => (p.quelle === "iserv" ? iservBleibt.has(p.id) : handBleibt.has(p.id)));
+}
+
 /** Der Zeitraum, in den der Tag fällt — beide Enden zählen mit. */
 export function freePeriodOn<T extends FreeRange>(
   periods: readonly T[],

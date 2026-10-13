@@ -33,6 +33,30 @@
 --
 --   SELECT count(*) AS freie_zeitraeume FROM free_periods;
 --
+--   -- Von Hand eingetragene Ferien und freie Tage, die noch kommen (vor
+--   -- dieser Datei sind ALLE Zeilen von Hand eingetragen):
+--   SELECT count(*) AS hand_ferien_kommend FROM free_periods
+--    WHERE kind IN ('ferien', 'frei') AND ends_on >= current_date;
+--   SELECT kind, title, starts_on, ends_on FROM free_periods
+--    WHERE kind IN ('ferien', 'frei') AND ends_on >= current_date
+--    ORDER BY starts_on;
+--
+-- Diese Zeilen bleiben, wie sie sind — der Abgleich fasst sie nie an, und
+-- Lernplan und Abruf nehmen die Tage beider Zeilen zusammen. Im Google
+-- Kalender steht trotzdem jeder Zeitraum nur einmal: Eine Hand-Zeile, deren
+-- Tage eine IServ-Zeile ganz abdeckt, fällt dort weg, ebenso eine IServ-Zeile,
+-- die eine Hand-Zeile ganz abdeckt (`fuerKalender()` in src/lib/free-days.ts).
+-- Nur was sich teilweise überschneidet, steht zweimal da. Nach dem ersten
+-- Abruf zeigt dieselbe Abfrage mit `AND quelle IS NULL` die Hand-Zeilen; die
+-- mit IServ-Ferien überlappen, zählt:
+--
+--   SELECT count(*) AS hand_ueberlappt_iserv FROM free_periods h
+--    WHERE h.quelle IS NULL AND h.kind IN ('ferien', 'frei')
+--      AND h.ends_on >= current_date
+--      AND EXISTS (SELECT 1 FROM free_periods i
+--                   WHERE i.user_id = h.user_id AND i.quelle = 'iserv'
+--                     AND i.starts_on <= h.ends_on AND h.starts_on <= i.ends_on);
+--
 -- Danach: dieselbe Zahl; `SELECT count(*) FROM free_periods WHERE quelle IS
 -- NOT NULL OR iserv_key IS NOT NULL` gibt 0. Erst der nächste Abruf bei IServ
 -- (stündlicher Kalender-Cron, höchstens alle drei Stunden) legt Zeilen mit

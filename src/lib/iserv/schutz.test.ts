@@ -76,6 +76,20 @@ describe("pruefe", () => {
     }
   });
 
+  it("nimmt Ferien und Feiertage leer NIE — auch nicht beim dritten Mal, schon bei einem alten Termin", () => {
+    let alt = snap("ferien", items(1, 1, undefined, "ferien"));
+
+    for (let mal = 1; mal <= 4; mal += 1) {
+      const p = lauf("ferien", alt, ok([]));
+      assert.equal(p.entscheidung, "fehler", `Mal ${mal}`);
+      assert.equal(p.neu, null);
+      assert.match(p.satz ?? "", /Ferien und Feiertage leer — alter Stand \(1 Termine\) bleibt/);
+      alt = p.neu ?? alt;
+    }
+    // Eine Antwort mit Einträgen gilt wie sonst
+    assert.equal(lauf("ferien", alt, ok(items(1, 2, undefined, "ferien"))).entscheidung, "uebernehmen");
+  });
+
   it("hält ein leeres Klassenkalender-Ergebnis zweimal zurück und übernimmt es beim dritten gleichen", () => {
     let alt = snap("klasse", items(1, 12));
 

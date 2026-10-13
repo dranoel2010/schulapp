@@ -193,6 +193,49 @@ describe("ferienPlan", () => {
     const plan = ferienPlan([vorbei], [{ ...HERBST, endsOn: "2026-11-07" }], "2026-10-29");
     assert.deepEqual(plan.aendern.map((a) => [a.startsOn, a.endsOn]), [["2026-10-24", "2026-11-07"]]);
   });
+
+  it("derselbe Schlüssel ein Jahr später: die alte Zeile bleibt, wie sie war, die neuen Ferien kommen dazu", () => {
+    const vorjahr = zeile({ id: "a", iservKey: "ferien|X", startsOn: "2025-10-20", endsOn: "2025-11-01" });
+    const wunsch: FerienWunsch = { ...HERBST, schluessel: "ferien|X", alleSchluessel: ["ferien|X"] };
+    const plan = ferienPlan([vorjahr], [wunsch], "2026-10-13");
+
+    assert.deepEqual(plan.neu, [wunsch]);
+    assert.deepEqual(plan.loeschen, []);
+    // Nur der Schlüssel wandert ab — Anfang und Ende bleiben
+    assert.deepEqual(plan.aendern, [{ ...vorjahr, iservKey: "ferien|X@2025-10-20" }]);
+    // Und beim nächsten Lauf ist Ruhe
+    const danach = ferienPlan(
+      [{ ...vorjahr, iservKey: "ferien|X@2025-10-20" }, zeile({ id: "b", iservKey: "ferien|X" })],
+      [wunsch],
+      "2026-10-13",
+    );
+    assert.equal(planTutEtwas(danach), false);
+  });
+
+  it("eine vergangene Zeile, die direkt an die Ferien grenzt, wächst mit", () => {
+    const tagDavor = zeile({ id: "a", iservKey: "ferien|h", startsOn: "2026-10-22", endsOn: "2026-10-23" });
+    const plan = ferienPlan([tagDavor], [HERBST], "2026-10-26");
+    assert.deepEqual(plan.neu, []);
+    assert.deepEqual(plan.aendern.map((a) => [a.id, a.startsOn, a.endsOn]), [["a", "2026-10-22", "2026-11-07"]]);
+  });
+
+  it("laufende Ferien, deren Schlüssel weit weg wieder auftaucht, enden gestern und geben den Schlüssel ab", () => {
+    const laufend = zeile({ id: "a", iservKey: "ferien|h" });
+    const spaeter: FerienWunsch = { ...HERBST, startsOn: "2027-10-23", endsOn: "2027-11-06" };
+    const plan = ferienPlan([laufend], [spaeter], "2026-10-28");
+    assert.deepEqual(plan.neu, [spaeter]);
+    assert.deepEqual(plan.aendern, [{ ...laufend, iservKey: "ferien|h@2026-10-24", endsOn: "2026-10-27" }]);
+  });
+
+  it("legt nichts an, was MAX_FREE_DAYS lang oder länger wäre", () => {
+    const zuLang: FerienWunsch = { ...HERBST, startsOn: "2026-10-24", endsOn: "2027-02-01" };
+    assert.deepEqual(ferienPlan([], [zuLang], HEUTE).neu, []);
+    // Und eine vergangene Zeile wächst nicht über die Grenze
+    const vorbei = zeile({ id: "a", iservKey: "ferien|h", startsOn: "2026-08-01", endsOn: "2026-10-23" });
+    const plan = ferienPlan([vorbei], [HERBST], "2026-10-26");
+    assert.deepEqual(plan.neu, [HERBST]);
+    assert.deepEqual(plan.aendern.map((a) => [a.startsOn, a.endsOn]), [["2026-08-01", "2026-10-23"]]);
+  });
 });
 
 // ── Google: die Ferien genau einmal ──────────────────────────────────────────

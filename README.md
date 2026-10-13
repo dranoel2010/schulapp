@@ -2133,7 +2133,11 @@ gleich danach von ihm weg.
   derselbe), auch wenn IServ die Ferien verschiebt.
 - **Schutz:** Die freien Tage werden aus dem Stand gerechnet, den der Schutz
   gelten lässt (`schutz.ts`). Eine leere oder kaputte Antwort ändert ihn nicht
-  — und damit keinen freien Tag. Ohne jeden Stand des öffentlichen Kalenders
+  — und damit keinen freien Tag. Das Plugin `holiday` leer ist (wie der
+  öffentliche Kalender leer) nie echt — im Jahr gibt es immer Ferien und
+  Feiertage —, und bleibt ein Fehler, so oft es auch kommt; eine Zeile, die
+  schon angefangen hat, wächst nicht über ein Jahr, nur weil derselbe
+  Schlüssel wiederkommt, und kein Zeitraum wird 90 Tage oder länger. Ohne jeden Stand des öffentlichen Kalenders
   bleiben die freien Tage, wie sie sind. Vergangene freie Tage bleiben stehen;
   laufende Ferien, die IServ nicht mehr meldet, enden gestern.
 - **Anzeige:** Die Karte **IServ** listet die freien Tage, die noch kommen,
@@ -2151,6 +2155,16 @@ IServ-Termin stehen — lieber doppelt als gar nicht. **Nie** entfallen:
 Termine des Klassenkalenders (eine Abgabe am letzten Ferientag bleibt),
 Aufgaben, Termine mit Uhrzeit, Schulsamstage und alles, was keine Ferien
 sind.
+
+**Von Hand eingetragene Ferien daneben:** Vom 4.10.2026 bis Modell 23 gab es
+die Ferienseite; solche Zeilen (`quelle` leer) bleiben stehen, der Abgleich
+fasst sie nie an. In Google stehen dieselben Ferien trotzdem nur einmal
+(`fuerKalender()` in `src/lib/free-days.ts`): Eine Hand-Zeile für Ferien oder
+freie Tage, deren Tage eine IServ-Zeile ganz abdeckt, fällt dort weg (bei
+gleichen Tagen gewinnt IServ), ebenso eine IServ-Zeile, die eine Hand-Zeile
+ganz abdeckt. Was sich nur teilweise überschneidet, bleibt doppelt — sonst
+fehlten Tage. Eine Klassenfahrt bleibt immer. Gezählt wird das mit den
+Zeilen im Kopf von `scripts/kombi-iserv-ferien.sql`.
 
 ### Takt, Anmeldung, Sperre
 

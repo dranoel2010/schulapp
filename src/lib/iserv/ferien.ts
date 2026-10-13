@@ -218,7 +218,11 @@ export type FerienPlan = {
  *     höchstens verlängert, wenn IServ unter ihrem Schlüssel weiter meldet;
  *   - eine laufende Zeile (Anfang vor heute), die IServ nicht mehr meldet,
  *     endet gestern, statt zu verschwinden;
- *   - der Anfang einer laufenden Zeile rückt nie nach vorn.
+ *   - der Anfang einer laufenden Zeile rückt nie nach vorn;
+ *   - eine Zeile, die schon angefangen hat, nimmt einen Wunsch nur auf, wenn
+ *     er sie überschneidet oder an sie grenzt — sonst gibt sie ihren
+ *     Schlüssel ab (`Schlüssel@Anfang`) und der Wunsch wird neu angelegt;
+ *   - kein Zeitraum wird MAX_FREE_DAYS lang oder länger.
  *
  * Die Wünsche kommen aus den Snapshots, die @/lib/iserv/schutz bewacht: Eine
  * leere oder kaputte Antwort von IServ ändert den Snapshot nicht — und damit
@@ -226,23 +230,44 @@ export type FerienPlan = {
  */
 export function ferienPlan(
   bestehend: readonly IservFreiZeile[],
-  wuensche: readonly FerienWunsch[],
+  alleWuensche: readonly FerienWunsch[],
   heute: string,
 ): FerienPlan {
+  // Was zusammengeführt ein Vierteljahr oder länger wird, ist kein Zeitraum,
+  // den die App glaubt (@/lib/free-days, MAX_FREE_DAYS).
+  const wuensche = alleWuensche.filter((w) => daysBetween(w.startsOn, w.endsOn) < MAX_FREE_DAYS);
   const gestern = addDays(heute, -1);
   const vergangen = (z: IservFreiZeile) => z.endsOn < heute;
 
+  /**
+   * Darf diese Zeile den Wunsch aufnehmen? Eine Zeile, die schon angefangen
+   * hat, behält ihren Anfang — also nur, wenn sie den Wunsch überschneidet
+   * oder direkt an ihn grenzt und das Ganze nicht länger als MAX_FREE_DAYS
+   * wird. Sonst wüchse sie über ein Jahr, nur weil IServ einen Schlüssel ein
+   * Jahr später wieder vergibt.
+   */
+  const passt = (z: IservFreiZeile, w: FerienWunsch) => {
+    if (z.startsOn >= heute) return true;
+    const beruehrt = z.startsOn <= addDays(w.endsOn, 1) && w.startsOn <= addDays(z.endsOn, 1);
+    const anfang = z.startsOn < w.startsOn ? z.startsOn : w.startsOn;
+    const ende = vergangen(z) && z.endsOn > w.endsOn ? z.endsOn : w.endsOn;
+    return beruehrt && daysBetween(anfang, ende) < MAX_FREE_DAYS;
+  };
+
   const frei = new Set(bestehend.map((z) => z.id));
+  /** Zeilen, die ihren Schlüssel an einen neuen Zeitraum abgeben */
+  const abgeben = new Set<string>();
   const paare: { zeile: IservFreiZeile; wunsch: FerienWunsch }[] = [];
   const ohne: FerienWunsch[] = [];
 
-  // 1. Am Schlüssel.
+  // 1. Am Schlüssel — eine angefangene Zeile nur, wenn sie zum Wunsch passt.
   for (const wunsch of wuensche) {
     const zeile = bestehend.find((z) => frei.has(z.id) && wunsch.alleSchluessel.includes(z.iservKey));
-    if (zeile) {
+    if (zeile && passt(zeile, wunsch)) {
       frei.delete(zeile.id);
       paare.push({ zeile, wunsch });
     } else {
+      if (zeile) abgeben.add(zeile.id);
       ohne.push(wunsch);
     }
   }
@@ -251,10 +276,16 @@ export function ferienPlan(
   const neu: FerienWunsch[] = [];
   for (const wunsch of ohne) {
     const zeile = bestehend.find(
-      (z) => frei.has(z.id) && !vergangen(z) && z.startsOn <= wunsch.endsOn && wunsch.startsOn <= z.endsOn,
+      (z) =>
+        frei.has(z.id) &&
+        !vergangen(z) &&
+        z.startsOn <= wunsch.endsOn &&
+        wunsch.startsOn <= z.endsOn &&
+        passt(z, wunsch),
     );
     if (zeile) {
       frei.delete(zeile.id);
+      abgeben.delete(zeile.id);
       paare.push({ zeile, wunsch });
     } else {
       neu.push(wunsch);
@@ -280,12 +311,17 @@ export function ferienPlan(
     }
   }
 
-  // 3. Was IServ nicht mehr meldet.
+  // 3. Was IServ nicht mehr meldet. Eine Zeile, die ihren Schlüssel abgibt,
+  //    bekommt einen eigenen (Schlüssel@Anfang) — der Index lässt jeden
+  //    Schlüssel nur einmal zu, und geändert wird vor dem Anlegen.
   const loeschen: string[] = [];
   for (const zeile of bestehend) {
-    if (!frei.has(zeile.id) || vergangen(zeile)) continue;
-    if (zeile.startsOn < heute) {
-      aendern.push({ ...zeile, endsOn: gestern });
+    if (!frei.has(zeile.id)) continue;
+    const iservKey = abgeben.has(zeile.id) ? `${zeile.iservKey}@${zeile.startsOn}` : zeile.iservKey;
+    if (vergangen(zeile)) {
+      if (iservKey !== zeile.iservKey) aendern.push({ ...zeile, iservKey });
+    } else if (zeile.startsOn < heute) {
+      aendern.push({ ...zeile, iservKey, endsOn: gestern });
     } else {
       loeschen.push(zeile.id);
     }
