@@ -20,7 +20,13 @@ import { ablaufAusMenuNehmen, ablaufStore, ablaufTagSetzen } from "@/components/
 import { AufgabeZeile } from "@/components/kombi/ablauf/aufgabe";
 import { BlattZeile, type BlattAnzeige } from "@/components/kombi/ablauf/blatt-zeile";
 import { blattFertig } from "@/components/kombi/ablauf/status-texte";
-import { ablageEmpfangen, blaetterStore, vorLandungMelden, type Landung } from "@/components/kombi/ablauf/blaetter-store";
+import {
+  ablageEmpfangen,
+  blaetterStore,
+  haengendeFortsetzen,
+  vorLandungMelden,
+  type Landung,
+} from "@/components/kombi/ablauf/blaetter-store";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi, type Ansicht } from "@/components/kombi/kontext";
 import { warmCamera } from "@/components/kombi/kamera/stream";
@@ -53,11 +59,16 @@ const sIdx = (s: Schritt) => STEPS.indexOf(s);
 const ORDER: Record<Ansicht, number> = { morgens: 0, ablauf: 1, ueberblick: 2, frueh: 3 };
 const OFFEN = new Set(["hochladen", "haengt", "einordnen", "abschrift_laeuft"]);
 
+/** Kam die letzte Antwort von /api/ablauf ohne Netz aus dem Daten-Cache des Service Workers? */
+let zuletztAusCache = false;
+
 async function ablaufHolen(): Promise<AblaufDaten | null> {
   try {
     const r = await fetch("/api/ablauf", { headers: { accept: "application/json" }, cache: "no-store" });
     if (!r.ok) return null;
-    return (await r.json()) as AblaufDaten;
+    const d = (await r.json()) as AblaufDaten;
+    zuletztAusCache = !!r.headers.get("x-schulapp-aus-cache");
+    return d;
   } catch {
     return null;
   }
@@ -103,6 +114,9 @@ export function AblaufEbene() {
     gestartet: false,
     daten: null as AblaufDaten | null,
   });
+
+  /** „Keine Verbindung · Erneut“ für den Ablauf ohne Daten (unten gesetzt) */
+  const keineVerbindungRef = useRef<() => void>(() => {});
 
   /** laufende Actions je Aufgabe: ihre optimistische Änderung bleibt, bis die Action fertig ist */
   const laufend = useRef(new Map<string, number>());
@@ -327,9 +341,22 @@ export function AblaufEbene() {
   useEffect(() => {
     flowRef.current = bandRef.current?.closest<HTMLElement>("#flow") ?? null;
     let weg = false;
+    // Aufnahmen, die beim letzten Mal hängen blieben (Neuladen, von Android beendet), gehen weiter
+    void haengendeFortsetzen((text) => toast(text));
     void laden().then((d) => {
-      if (weg || !d) return;
+      if (weg) return;
+      if (!d) {
+        // Ohne Netz und ohne gecachte Fassung: „Keine Verbindung · Erneut“,
+        // sobald der Ablauf zu sehen ist; das Netz zurück lädt von selbst nach
+        setTimeout(() => {
+          if (!weg && !z.current.daten && z.current.sichtbar) keineVerbindungRef.current();
+        }, 0);
+        return;
+      }
       z.current.live = d.ansichtAblauf;
+      // Eine Fassung aus dem Cache kann von einer anderen Tageszeit stammen:
+      // ob der Ablauf dran ist, sagen dann die Tagesdaten der Startseite
+      if (zuletztAusCache) return;
       // Nur ein echter Stapel hält den Ablauf auf; ein Overlay (Menü, Kamera)
       // aus der Zeit vor dem Neuladen nicht (Kriterium 11).
       const state = window.history.state as { stapel?: unknown[] } | null;
@@ -360,6 +387,67 @@ export function AblaufEbene() {
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [laden, setView]);
+
+  // ── Ohne Netz: nachladen, sobald es zurück ist (auch nach Kaltstart offline) ──
+
+  useEffect(() => {
+    keineVerbindungRef.current = () =>
+      fehlerToast(
+        "Keine Verbindung",
+        () =>
+          void laden().then((d) => {
+            if (!d && z.current.sichtbar) keineVerbindungRef.current();
+          }),
+        "Erneut",
+      );
+  }, [fehlerToast, laden]);
+
+  useEffect(() => {
+    const online = () => void laden();
+    window.addEventListener("online", online);
+    return () => window.removeEventListener("online", online);
+  }, [laden]);
+
+  /*
+   * Die Startseite wechselt beim Kaltstart selbst in den Ablauf (TagDaten
+   * sagen „ablauf“), ohne über die Shell zu gehen — etwa ohne Netz, wenn
+   * /api/ablauf nicht antwortet und der Weg oben nie `setView` ruft. Dann
+   * richtet sich die Ebene hier nachträglich ein: Schritt sichtbar, Daten
+   * holen. Kommt der Wechsel über die Shell, hat ihr Handler das im selben
+   * Takt schon getan, und hier geschieht nichts.
+   */
+  useEffect(() => {
+    const nachziehen = (v: Ansicht) => {
+      const an = !!flowRef.current?.classList.contains("on");
+      if (v === "ablauf" && an && (!z.current.sichtbar || z.current.schritt == null)) {
+        zeigeAnsicht("ablauf", { anim: false });
+        if (!z.current.daten)
+          void laden().then((d) => {
+            if (!d && z.current.sichtbar) keineVerbindungRef.current();
+          });
+      } else if (v !== "ablauf" && !an && z.current.sichtbar) {
+        z.current.view = v;
+        z.current.sichtbar = false;
+        z.current.ausMenu = false;
+        setAusMenu(false);
+        ablaufStore.setzen({ sichtbar: false });
+      }
+    };
+    const onAnsicht = (e: Event) => {
+      const v = (e as CustomEvent<{ ansicht?: Ansicht }>).detail?.ansicht;
+      if (v) setTimeout(() => nachziehen(v), 0);
+    };
+    window.addEventListener("kombi:ansicht", onAnsicht);
+    // Die Startseite malt vor dieser Ebene: ihr Wechsel beim Kaltstart kann
+    // schon vor diesem Hörer geschehen sein
+    const t = setTimeout(() => {
+      if (flowRef.current?.classList.contains("on")) nachziehen("ablauf");
+    }, 0);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("kombi:ansicht", onAnsicht);
+    };
+  }, [zeigeAnsicht, laden]);
 
   // Nach einer Action anderswo (Zeile, Seite): neu holen
   const tagStand = kombi.tagDaten?.stand;

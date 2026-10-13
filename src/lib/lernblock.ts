@@ -1,10 +1,11 @@
-import { and, asc, eq, gt, inArray, isNotNull, lt, or } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 
 import { db } from "@/db";
 import { examTopics, exams, studyBlocks, type StudyBlock } from "@/db/schema";
 import { lernblockEreignisseLoeschen, protokollieren } from "@/lib/protokoll";
 import { recallItems } from "@/recall/schema";
 import { faelligHeute, type FaelligerBaustein } from "@/recall/sessions";
+import { versucheDesTages } from "@/recall/themen";
 
 /**
  * Der Lernblock mit Uhr (Modell 23, Plan 3.5).
@@ -320,4 +321,44 @@ export async function fragenFuerLernblock(
     .filter((x): x is { frage: FaelligerBaustein; r: number; i: number } => x.r !== null)
     .sort((a, b) => a.r - b.r || a.i - b.i)
     .map((x) => x.frage);
+}
+
+/**
+ * Der erste Versuch von heute (App-Tag) je Frage dieses Blocks: itemId →
+ * gewusst. Daraus zählt das Blockende „n Fragen, … beim ersten Mal“ — aus
+ * `recall_attempts`, nicht aus dem Speicher der Seite, damit die Zählung ein
+ * Neuladen übersteht (Android beendet eine PWA im Hintergrund). Wie beim
+ * Wiederholen (`themaTagesbericht`, UMSETZUNG 3.4 Nr. 6). „Fragen des Blocks“
+ * heißt wie in `fragenFuerLernblock`: an einem Klausurthema oder an der
+ * Klausur selbst; zurückgezogene Fragen zählen nicht (V2 6.4).
+ */
+export async function ersteVersucheImBlock(
+  userId: string,
+  blockId: string,
+  heute: string,
+): Promise<Record<string, boolean>> {
+  const versuche = await versucheDesTages(userId, heute);
+  const ids = [...new Set(versuche.flatMap((v) => (v.itemId ? [v.itemId] : [])))];
+  if (ids.length === 0) return {};
+  const block = await eigenerBlock(userId, blockId);
+  const themen = await db
+    .select({ subjectTopicId: examTopics.subjectTopicId })
+    .from(examTopics)
+    .where(eq(examTopics.examId, block.examId));
+  const vokabeln = new Set(themen.flatMap((t) => (t.subjectTopicId ? [t.subjectTopicId] : [])));
+  const zeilen = await db
+    .select({ id: recallItems.id, subjectTopicId: recallItems.subjectTopicId, examId: recallItems.examId })
+    .from(recallItems)
+    .where(and(eq(recallItems.userId, userId), inArray(recallItems.id, ids), isNull(recallItems.retiredAt)));
+  const imBlock = new Set(
+    zeilen
+      .filter((z) => (z.subjectTopicId && vokabeln.has(z.subjectTopicId)) || z.examId === block.examId)
+      .map((z) => z.id),
+  );
+  const erste: Record<string, boolean> = {};
+  for (const v of versuche) {
+    if (!v.itemId || !imBlock.has(v.itemId) || v.itemId in erste) continue;
+    erste[v.itemId] = v.correct;
+  }
+  return erste;
 }

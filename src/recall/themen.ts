@@ -118,7 +118,7 @@ export function appTagVon(zeitpunkt: Date): string {
 }
 
 /** Die Versuche eines App-Tags (siehe Dateikopf), älteste zuerst. */
-async function versucheDesTages(userId: string, heute: string) {
+export async function versucheDesTages(userId: string, heute: string) {
   return db
     .select({
       id: recallAttempts.id,

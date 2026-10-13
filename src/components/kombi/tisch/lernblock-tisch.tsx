@@ -230,7 +230,9 @@ export function LernblockTisch() {
             kombi.toast(r.fehler);
             return;
           }
-          if (r.daten.fragen.length === 0 && !r.daten.material) {
+          // Wurden heute schon Fragen des Blocks beantwortet, ist er nicht leer:
+          // das Ende nennt sie (auch nach einem Neuladen)
+          if (r.daten.fragen.length === 0 && !r.daten.material && Object.keys(r.daten.erste).length === 0) {
             // Nichts zu lernen und kein Blatt: keine Uhr, keine leere
             // Endkarte ohne Ausweg. Hat erst dieses Öffnen die Uhr gestartet,
             // geht sie still zurück auf Ruhe (wie „Block beenden“ unter einer
@@ -255,7 +257,7 @@ export function LernblockTisch() {
           setDaten(r.daten);
           if (r.daten.fragen.length === 0) {
             // Ohne offene Fragen: direkt das Ende des Blocks und das Material
-            setEnde(blockKartenErgebnis(blockId));
+            setEnde(blockKartenErgebnis(blockId, r.daten.erste));
             if (r.daten.material) {
               const m = r.daten.material;
               setTimeout(() => {
@@ -497,7 +499,7 @@ export function LernblockTisch() {
               <p className="t-thema">Lernblock · {block?.titel ?? ""}</p>
             </div>
             {daten && !ende && daten.fragen.length > 0 ? (
-              <BlockKarten blockId={daten.block.id} fragen={daten.fragen} onEnde={kartenEnde} deps={kartenDeps} />
+              <BlockKarten blockId={daten.block.id} fragen={daten.fragen} erste={daten.erste} onEnde={kartenEnde} deps={kartenDeps} />
             ) : (
               <div style={{ flex: "1 1 auto" }} />
             )}

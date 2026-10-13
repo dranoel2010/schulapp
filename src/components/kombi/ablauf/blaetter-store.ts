@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  aufnahmeFortschritt,
+  aufnahmeMerken,
+  aufnahmeVergessen,
+  haengendeLesen,
+  mitSperre,
+  neueUid,
+} from "@/components/kombi/ablauf/aufnahmen-speicher";
 import type { PreparedPage } from "@/components/material/prepare-page";
 import type { BlattKurz } from "@/lib/kombi/blaetter";
 
@@ -124,17 +132,35 @@ function online(): Promise<void> {
 }
 
 /**
- * Ein neues Blatt hochladen: erste Seite, dann die weiteren an dasselbe Blatt.
- * Ohne Netz „hängt“ die Zeile und es geht weiter, sobald das Gerät wieder
- * online ist. Gibt das Blatt zurück, oder wirft mit einem Satz für den Toast.
+ * Uploads, die nur im Speicher der Seite liegen (IndexedDB nicht verfügbar):
+ * solange es sie gibt, fragt der Browser vor dem Neuladen oder Schließen nach.
  */
-export async function blattHochladen(
+let ungesichert = 0;
+const vorDemVerlassen = (e: BeforeUnloadEvent) => {
+  e.preventDefault();
+  e.returnValue = "";
+};
+function ungesichertZaehlen(d: 1 | -1): void {
+  const vorher = ungesichert;
+  ungesichert = Math.max(0, ungesichert + d);
+  if (!vorher && ungesichert) addEventListener("beforeunload", vorDemVerlassen);
+  else if (vorher && !ungesichert) removeEventListener("beforeunload", vorDemVerlassen);
+}
+
+/**
+ * Die Seiten ab `ab` senden: die erste legt das Blatt an, die weiteren hängen
+ * an dasselbe. Ohne Netz „hängt“ die Zeile und es geht weiter, sobald das
+ * Gerät wieder online ist. Jeder Schritt steht in IndexedDB, bis alles da ist.
+ */
+async function hochladenAb(
   key: string,
-  seiten: Aufnahme[],
+  uid: string,
+  fassungen: PreparedPage[],
   ziel: "liste" | "zeile",
-): Promise<BlattKurz> {
-  const fehler = fehlerWeiche;
-  fehlerWeiche = null;
+  ab: number,
+  id: string | null,
+  fehler: string | null,
+): Promise<BlattKurz | null> {
   const versuch = async <T,>(f: () => Promise<T>): Promise<T> => {
     for (;;) {
       try {
@@ -147,17 +173,101 @@ export async function blattHochladen(
       }
     }
   };
-  const erste = await seiten[0].fassungen;
-  let kurz = await versuch(() =>
-    senden(erste, { seiten: String(seiten.length), ziel, ...(fehler ? { fehler } : {}) }),
-  );
-  blaetterStore.setzen(key, { id: kurz.id, kurz, lokal: seiten.length > 1 ? "hochladen" : null });
-  for (const s of seiten.slice(1)) {
-    const f = await s.fassungen;
-    kurz = await versuch(() => senden(f, { attach: kurz.id, folge: "1" }));
+  let kurz: BlattKurz | null = null;
+  let blattId = id;
+  try {
+    for (let i = ab; i < fassungen.length; i++) {
+      const felder: Record<string, string> =
+        i === 0 || !blattId
+          ? { seiten: String(fassungen.length), ziel, ...(fehler ? { fehler } : {}) }
+          : { attach: blattId, folge: "1" };
+      const k = await versuch(() => senden(fassungen[i], felder));
+      kurz = k;
+      if (!blattId) {
+        blattId = k.id;
+        blaetterStore.setzen(key, { id: k.id, kurz: k, lokal: i + 1 < fassungen.length ? "hochladen" : null });
+      }
+      await aufnahmeFortschritt(uid, i + 1, blattId);
+    }
+  } catch (e) {
+    // Der Server hat abgelehnt (kein Netzfehler): nicht bei jedem Start erneut
+    await aufnahmeVergessen(uid);
+    throw e;
   }
-  blaetterStore.setzen(key, { kurz, lokal: null });
+  await aufnahmeVergessen(uid);
+  if (kurz) blaetterStore.setzen(key, { kurz, lokal: null });
   return kurz;
+}
+
+/**
+ * Ein neues Blatt hochladen: erste Seite, dann die weiteren an dasselbe Blatt.
+ * Die Fassungen liegen vorher in IndexedDB; ein Neuladen oder das Beenden der
+ * App verliert das Foto deshalb nicht. Gibt das Blatt zurück, oder wirft mit
+ * einem Satz für den Toast.
+ */
+export async function blattHochladen(
+  key: string,
+  seiten: Aufnahme[],
+  ziel: "liste" | "zeile",
+): Promise<BlattKurz> {
+  const fehler = fehlerWeiche;
+  fehlerWeiche = null;
+  const fassungen = await Promise.all(seiten.map((s) => s.fassungen));
+  const eintrag = blaetterStore.get().find((b) => b.key === key);
+  const uid = neueUid();
+  const gesichert = await aufnahmeMerken({
+    uid,
+    ziel,
+    tag: eintrag?.tag ?? null,
+    bild: eintrag?.bild ?? seiten[0].bild,
+    order: eintrag?.order ?? Date.now(),
+    seiten: fassungen,
+    gesendet: 0,
+    id: null,
+  });
+  if (!gesichert) ungesichertZaehlen(1);
+  try {
+    const kurz = await mitSperre(uid, false, () => hochladenAb(key, uid, fassungen, ziel, 0, null, fehler));
+    if (!kurz) throw new UploadFehler("Nicht gespeichert", false);
+    return kurz;
+  } finally {
+    if (!gesichert) ungesichertZaehlen(-1);
+  }
+}
+
+let fortgesetzt = false;
+
+/**
+ * Beim Start der Shell: was beim letzten Mal hängen blieb (ohne Netz
+ * fotografiert, dann neu geladen oder von Android beendet), steht wieder in
+ * der Liste und geht weiter an den Server. `melden` bekommt den Satz für den
+ * Toast, wenn der Server ein Blatt ablehnt.
+ */
+export async function haengendeFortsetzen(melden: (text: string) => void): Promise<void> {
+  if (fortgesetzt) return;
+  fortgesetzt = true;
+  for (const a of await haengendeLesen()) {
+    void mitSperre(a.uid, true, async () => {
+      const eintrag = blaetterStore.neu({
+        id: a.id,
+        lokal: "hochladen",
+        bild: a.bild,
+        seiten: a.seiten.length,
+        order: a.order,
+        kurz: null,
+        tag: a.tag,
+      });
+      try {
+        const kurz = await hochladenAb(eintrag.key, a.uid, a.seiten, a.ziel, a.gesendet, a.id, null);
+        // alles war schon da: die Liste vom Server kennt das Blatt
+        if (!kurz) blaetterStore.weg(eintrag.key);
+      } catch (e) {
+        blaetterStore.weg(eintrag.key);
+        melden(e instanceof Error ? e.message : "Nicht gespeichert");
+      }
+      return null;
+    });
+  }
 }
 
 /** „Seite dazu“ an ein vorhandenes Blatt. */

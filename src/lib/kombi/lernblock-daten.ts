@@ -16,7 +16,7 @@ import {
 } from "@/db/schema";
 import { addDays } from "@/lib/dates";
 import { missedBlocks } from "@/lib/exams";
-import { fragenFuerLernblock } from "@/lib/lernblock";
+import { ersteVersucheImBlock, fragenFuerLernblock } from "@/lib/lernblock";
 
 /**
  * Was die Oberfläche vom Lernblock wissen muss (Modell 23, Abschnitt F):
@@ -261,6 +261,12 @@ export type LernblockTischDaten = {
   klausurDatum: string;
   /** Die heute offenen Fragen der Klausurthemen, ohne Lösung (A2) */
   fragen: BlockFrage[];
+  /**
+   * Heute (App-Tag) schon beantwortete Fragen des Blocks: itemId → beim
+   * ersten Versuch gewusst. Für „n Fragen, … beim ersten Mal“ am Blockende,
+   * auch nach einem Neuladen.
+   */
+  erste: Record<string, boolean>;
   material: MaterialDaten | null;
 };
 
@@ -339,10 +345,11 @@ export async function lernblockTisch(
     .limit(1);
   if (!zeile) return null;
 
-  const [staende, fragen, material] = await Promise.all([
+  const [staende, fragen, material, erste] = await Promise.all([
     blattStaende(userId, [blockId]),
     fragenFuerLernblock(userId, blockId, heute),
     materialFuerLernblock(userId, zeile.block),
+    ersteVersucheImBlock(userId, blockId, heute),
   ]);
 
   return {
@@ -356,6 +363,7 @@ export async function lernblockTisch(
       heuteDaneben: f.heuteDaneben,
       // solution, misconception und sourceQuote stehen hier ABSICHTLICH nicht (A2)
     })),
+    erste,
     material,
   };
 }

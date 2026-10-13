@@ -19,6 +19,7 @@ import { buzz, E, flip, reduce } from "@/lib/kombi/motion";
 import {
   datumFuer,
   headlineFor,
+  istAelter,
   moAbgaben,
   ueberblickAufgaben,
   type Ansicht,
@@ -486,6 +487,37 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
       setView("ablauf", { anim: false });
     }
   }, [setView]);
+
+  /*
+   * Kaltstart ohne Netz: Der Service Worker liefert die Startseite mit den
+   * Tagesdaten vom Laden ihres HTML; die Shell holt gleich danach die neueren
+   * aus dem Daten-Cache (etwa nach „Überspringen“ oder Abhaken). Sagen die
+   * eine andere Ansicht, gilt deren — noch beim Kaltstart, ohne Wechsel-
+   * Bewegung und nur, bevor man etwas angetippt hat. Danach gilt wieder:
+   * gewechselt wird nur beim Zurückkommen aus dem Hintergrund.
+   */
+  const kaltstart = useRef<{ bis: number; stand: string | null; ansicht: Ansicht | null } | null>(null);
+  useEffect(() => {
+    const dd = dRef.current;
+    kaltstart.current = { bis: Date.now() + 3000, stand: dd?.stand ?? null, ansicht: dd?.ansicht ?? null };
+    const weg = () => {
+      kaltstart.current = null;
+    };
+    window.addEventListener("pointerdown", weg, { capture: true, once: true });
+    return () => window.removeEventListener("pointerdown", weg, { capture: true });
+  }, []);
+  useEffect(() => {
+    const k = kaltstart.current;
+    if (!k || !live) return;
+    if (Date.now() > k.bis) {
+      kaltstart.current = null;
+      return;
+    }
+    if (live.stand === k.stand || live.ansicht === k.ansicht || (k.stand && istAelter(live, { stand: k.stand }))) return;
+    kaltstart.current = null;
+    if (document.querySelector("#tisch.open, #cam.open, #lbTisch.open")) return;
+    setView(live.ansicht === "ablauf" && !ablaufDa() ? "ueberblick" : live.ansicht, { anim: false });
+  }, [live, setView]);
 
   // Nur beim Zurückkommen aus dem Hintergrund, nie während der Bildschirm sichtbar ist (V2 3.2)
   useEffect(() => {

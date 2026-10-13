@@ -19,10 +19,11 @@ import {
   blockPausieren,
   blockRest,
   blockStarten,
+  ersteVersucheImBlock,
   fragenFuerLernblock,
 } from "@/lib/lernblock";
 import { protokollVomTag } from "@/lib/protokoll";
-import { recallItems, recallSchedule } from "@/recall/schema";
+import { recallAttempts, recallItems, recallSchedule } from "@/recall/schema";
 
 const TAG = "2026-10-12";
 const T0 = new Date("2026-10-12T14:40:00.000Z");
@@ -149,5 +150,36 @@ describe("Lernblock gegen die Datenbank", () => {
       fragen.map((f) => f.itemId),
       [f2, f1, f4],
     );
+  });
+
+  it("ersteVersucheImBlock: der erste Versuch von heute je Frage des Blocks, auch nach einem Neuladen", async () => {
+    const quadrat = await thema("Quadratische Ergänzung");
+    const [k2] = await testDb
+      .insert(exams)
+      .values({ userId: nutzer, subjectId: fach, date: "2026-10-20" })
+      .returning({ id: exams.id });
+    await testDb.insert(examTopics).values({ examId: k2.id, title: "Quadratische Ergänzung", sortOrder: 0, subjectTopicId: quadrat });
+    const [block] = await testDb
+      .insert(studyBlocks)
+      .values({ examId: k2.id, date: TAG, minutes: 25 })
+      .returning({ id: studyBlocks.id });
+    const a = await frage("Ergänzen?", quadrat, null);
+    const b = await frage("Klausur selbst?", null, k2.id);
+    const fremd = await frage("anderes Thema?", await thema("Potenzen"), null);
+    const zurueck = await frage("zurückgezogen?", quadrat, null);
+    await testDb.update(recallItems).set({ retiredAt: plus(0) }).where(eq(recallItems.id, zurueck));
+    const versuch = (itemId: string, correct: boolean, ms: number, answeredOn = TAG) =>
+      testDb.insert(recallAttempts).values({ userId: nutzer, itemId, answeredOn, gapDays: 0, answerText: "x", correct, createdAt: plus(ms) });
+
+    assert.deepEqual(await ersteVersucheImBlock(nutzer, block.id, TAG), {});
+    await versuch(a, false, 1 * MIN);
+    await versuch(a, true, 2 * MIN);
+    await versuch(b, true, 3 * MIN);
+    await versuch(fremd, true, 4 * MIN);
+    await versuch(zurueck, true, 5 * MIN);
+    // gestern zählt nicht
+    await testDb.insert(recallAttempts).values({ userId: nutzer, itemId: b, answeredOn: "2026-10-11", gapDays: 0, answerText: "x", correct: false, createdAt: new Date("2026-10-11T15:00:00.000Z") });
+
+    assert.deepEqual(await ersteVersucheImBlock(nutzer, block.id, TAG), { [a]: false, [b]: true });
   });
 });

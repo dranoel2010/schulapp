@@ -33,6 +33,7 @@ import { festeSeiteVon, zuletztMerken } from "@/components/kombi/zeile/zuletzt";
 import { E, moveTo, reduce, springOpts } from "@/lib/kombi/motion";
 import type { TagDaten } from "@/lib/kombi/tag-daten";
 import { istAelter } from "@/lib/kombi/startseite";
+import { uhrzeit } from "@/lib/kombi/text";
 import { themeColor, themeColorBeobachten } from "@/lib/kombi/theme-color";
 
 /**
@@ -115,6 +116,28 @@ const gleich = (a: StapelEintrag, b: StapelEintrag) =>
 
 function stateJetzt(): Partial<KombiState> & Record<string, unknown> {
   return (window.history.state ?? {}) as Partial<KombiState> & Record<string, unknown>;
+}
+
+/**
+ * Kam diese Seite ohne Netz aus dem Cache des Service Workers? Der Worker
+ * legt dafür eine Marke in seinen Daten-Cache (public/sw.js, `NAV_MARKE`);
+ * die Kopfzeilen einer Navigation kann die Seite nicht lesen. Gibt den Stand
+ * des HTML zurück (ms, 0 = unbekannt).
+ */
+async function navigationAusCache(): Promise<{ gespeichert: number } | null> {
+  try {
+    if (!("caches" in window)) return null;
+    const cache = await caches.open("schulapp-v3-daten");
+    const url = new URL("/__schulapp/navigation", window.location.origin).href;
+    const r = await cache.match(url);
+    if (!r) return null;
+    const j = (await r.json()) as { pfad?: string; zeit?: number; gespeichert?: number | null };
+    await cache.delete(url);
+    if (j.pfad !== window.location.pathname || typeof j.zeit !== "number" || Date.now() - j.zeit > 60_000) return null;
+    return { gespeichert: typeof j.gespeichert === "number" ? j.gespeichert : 0 };
+  } catch {
+    return null;
+  }
 }
 
 async function seiteHolen(art: string, params: Record<string, string>): Promise<SeitenAntwort> {
@@ -270,6 +293,11 @@ export function KombiShell({ children }: { children: ReactNode }) {
     },
     [hideToast],
   );
+
+  const toastAktuell = useRef(toast);
+  useEffect(() => {
+    toastAktuell.current = toast;
+  }, [toast]);
 
   const fehlerToast = useCallback(
     (text: string, erneut: () => void, label: string) => toast(text, erneut, text, label),
@@ -581,6 +609,10 @@ export function KombiShell({ children }: { children: ReactNode }) {
       // Neuladen ohne Stapel): ihre Daten kommen aus dem Server-Render, also
       // rendert der Router sie neu (Plan 2.4, Punkt 2 erlaubt das für Routen).
       router.refresh();
+      // Dieselben Daten auch in den Daten-Cache: ohne Netz liefert der Service
+      // Worker sonst das HTML vom ersten Laden, ohne die Änderung von eben.
+      const hier = artAusSegmenten(window.location.pathname.split("/").filter(Boolean));
+      if (hier && seitenArt(hier.art)) auftraege.push(seiteHolen(hier.art, hier.params).catch(() => {}));
     } else if (oben && oben.typ === "stapel") {
       const key = oben.key;
       auftraege.push(
@@ -662,6 +694,14 @@ export function KombiShell({ children }: { children: ReactNode }) {
   // ihren Eintrag wieder abräumt.
 
   const offeneEbenen = useRef<{ name: UeberEbene; schliessen: () => void }[]>([]);
+  /**
+   * Nach einem Neuladen mit offenem Overlay (Menü, Sheet, Tisch, Bestätigung):
+   * das Overlay ist zu, sein Eintrag in der History aber noch da. Die Shell
+   * geht einmal (bei verschachtelten Overlays mehrmals) zurück auf den
+   * Eintrag darunter und schreibt dort den Stapel dieser Ladung hinein — sonst
+   * bewirkte der nächste Android-Zurück-Druck sichtbar nichts.
+   */
+  const overlayAbbau = useRef<{ stapel: StapelEintrag[]; ohneRoute: boolean } | null>(null);
   const nachPop = useRef<(() => void)[]>([]);
 
   const ebeneAuf = useCallback(
@@ -697,6 +737,19 @@ export function KombiShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
+      const abbau = overlayAbbau.current;
+      if (abbau) {
+        const st = (e.state ?? {}) as Partial<KombiState> & Record<string, unknown>;
+        if (st.overlay) {
+          window.history.back();
+          return;
+        }
+        overlayAbbau.current = null;
+        const neu: Partial<KombiState> & Record<string, unknown> = { ...st, kombi: 1, stapel: abbau.stapel, idx: idx.current, ladung: LADUNG };
+        if (abbau.ohneRoute) delete neu.route;
+        window.history.replaceState(neu, "");
+        return;
+      }
       if (ignorierePop.current > 0) {
         ignorierePop.current -= 1;
         if (ignorierePop.current === 0) nachPop.current.splice(0).forEach((f) => f());
@@ -811,10 +864,43 @@ export function KombiShell({ children }: { children: ReactNode }) {
     // Seite seiner Adresse nennt — so stellt ihn auch ein späteres Neuladen
     // mit Netz (echte Route) richtig wieder her.
     if (ersatzStart) delete (ohneOverlay as Partial<KombiState>).route;
+    const stapelHier = s.kombi && !ersatzStart ? gespeichert : unten;
     window.history.replaceState(
-      { ...ohneOverlay, kombi: 1, stapel: s.kombi && !ersatzStart ? gespeichert : unten, idx: idx.current, ladung: LADUNG },
+      { ...ohneOverlay, kombi: 1, stapel: stapelHier, idx: idx.current, ladung: LADUNG },
       "",
     );
+    // Der Eintrag des Overlays selbst bleibt sonst stehen: zurück auf den darunter
+    if (_liegengeblieben) {
+      overlayAbbau.current = { stapel: stapelHier, ohneRoute: ersatzStart };
+      window.history.back();
+    }
+
+    // Ohne Netz aus dem Cache: Die Daten-Antworten im Cache können neuer sein
+    // als das HTML (nach dem Laden wurde abgehakt oder eingetragen). TagDaten
+    // von dort nehmen, wenn sie neuer sind, und den Stand nennen. Eine
+    // Stapelseite auf der Shell nennt ihn selbst („Ohne Verbindung · Stand …“).
+    void navigationAusCache().then(async (nav) => {
+      if (!nav) return;
+      let stand = nav.gespeichert;
+      if (istStart) {
+        try {
+          const r = await fetch("/api/tag/daten", { headers: { accept: "application/json" } });
+          if (r.ok) {
+            const d = (await r.json()) as TagDaten;
+            setTagDaten((alt) => (alt && istAelter(d, alt) ? alt : d));
+            const t = Date.parse(r.headers.get("x-schulapp-gespeichert") ?? "");
+            if (r.headers.get("x-schulapp-aus-cache") && Number.isFinite(t)) stand = Math.max(stand, t);
+          }
+        } catch {
+          // nichts im Daten-Cache: es bleibt beim HTML
+        }
+      }
+      if (ersatzStart || !stand) return;
+      // Ein Toast, der schon steht („Keine Verbindung · Erneut“), geht vor
+      setTimeout(() => {
+        if (!toastRef.current?.classList.contains("on")) toastAktuell.current(`Ohne Verbindung · Stand ${uhrzeit(new Date(stand))}`);
+      }, 400);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

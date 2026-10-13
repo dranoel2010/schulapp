@@ -5,9 +5,11 @@
  *  - /_next/static und /icons  → cache-first (die Dateinamen enthalten einen Hash,
  *    das Zeug ändert sich nie)
  *  - Seitenaufrufe             → network-first, sonst die zuletzt geladene Fassung,
- *    sonst die Offline-Seite
- *  - Daten der Shell (Modell 23, Plan 2.4 Punkt 8): /api/seite/*, /api/tag/daten
- *    und /api/tag/stand → network-first in den eigenen Cache `schulapp-v3-daten`
+ *    sonst die Offline-Seite. Für „/“ und die Stapelseiten ohne Netz die Shell
+ *    mit den Daten aus dem Daten-Cache, wenn die neuer sind (siehe networkFirst)
+ *  - Daten der Shell (Modell 23, Plan 2.4 Punkt 8): /api/seite/*, /api/tag/daten,
+ *    /api/tag/stand und /api/ablauf → network-first in den eigenen Cache
+ *    `schulapp-v3-daten`
  *  - alles andere              → unangetastet ans Netz
  */
 
@@ -16,14 +18,27 @@ const STATIC_CACHE = `${VERSION}-static`;
 const PAGE_CACHE = `${VERSION}-pages`;
 const DATA_CACHE = `${VERSION}-daten`;
 
-/** Die drei Ausnahmen von „alles unter /api/ unberührt“ (Plan 2.4, Punkt 8). */
+/**
+ * Die Ausnahmen von „alles unter /api/ unberührt“ (Plan 2.4, Punkt 8). Dazu
+ * der Ablauf nach der Schule: ohne ihn bliebe die Startseite beim Kaltstart
+ * ohne Netz leer.
+ */
 function istShellDaten(pathname) {
   return (
     pathname.startsWith("/api/seite/") ||
     pathname === "/api/tag/daten" ||
-    pathname === "/api/tag/stand"
+    pathname === "/api/tag/stand" ||
+    pathname === "/api/ablauf"
   );
 }
+
+/**
+ * Wo die Seite nachsieht, ob ihre Navigation ohne Netz aus dem Cache kam
+ * (src/components/kombi/shell.tsx, `navigationAusCache`). Ein Eintrag im
+ * Daten-Cache statt eines Kopfes: die Kopfzeilen einer Navigation kann die
+ * Seite nicht lesen.
+ */
+const NAV_MARKE = "/__schulapp/navigation";
 const OFFLINE_URL = "/offline";
 
 /**
@@ -36,6 +51,48 @@ const STAPEL_PFADE = new RegExp(
 );
 function stapelPfad(pathname) {
   return STAPEL_PFADE.test(pathname);
+}
+
+/**
+ * Die Datenadresse hinter einer Stapelseite — wie `artAusSegmenten` in
+ * registry.tsx und `seiteHolen` in shell.tsx sie bilden.
+ */
+const EINFACH = {
+  stundenplan: "woche",
+  hausaufgaben: "hausaufgaben",
+  klausuren: "klausuren",
+  noten: "noten",
+  material: "ablage",
+  faecher: "faecher",
+  einstellungen: "einstellungen",
+};
+const MIT_ID = { klausuren: "klausur", material: "blatt", faecher: "fach" };
+function stapelDaten(pathname) {
+  const s = pathname.split("/").filter(Boolean).map((x) => decodeURIComponent(x));
+  let art = null;
+  let id = null;
+  if (s.length === 1 && Object.hasOwn(EINFACH, s[0])) art = EINFACH[s[0]];
+  else if (s.length === 2 && Object.hasOwn(MIT_ID, s[0])) [art, id] = [MIT_ID[s[0]], s[1]];
+  else if (s.length === 3 && s[0] === "noten" && s[1] === "fach") [art, id] = ["notenfach", s[2]];
+  if (!art) return null;
+  return new URL(`/api/seite/${art}${id ? `?${new URLSearchParams({ id })}` : ""}`, self.location.origin).href;
+}
+
+/** Wann eine Antwort in den Cache kam (0: unbekannt, etwa aus einer älteren Fassung des Workers). */
+function gespeichertUm(response) {
+  const t = response ? Date.parse(response.headers.get("x-schulapp-gespeichert") || "") : NaN;
+  return Number.isFinite(t) ? t : 0;
+}
+
+/** Eine Antwort mit dem Zeitpunkt des Speicherns, für den Cache. */
+async function mitZeitpunkt(response) {
+  const headers = new Headers(response.headers);
+  headers.set("x-schulapp-gespeichert", new Date().toISOString());
+  return new Response(await response.arrayBuffer(), {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 self.addEventListener("install", (event) => {
@@ -139,21 +196,57 @@ async function networkFirst(request, event) {
     // sich, sie später für eine Navigation zu verwenden.
     if (response.ok && !response.redirected) {
       const copy = response.clone();
-      event.waitUntil(caches.open(PAGE_CACHE).then((c) => c.put(request, copy)));
+      event.waitUntil(
+        mitZeitpunkt(copy).then((c) => caches.open(PAGE_CACHE).then((cache) => cache.put(request, c))),
+      );
     }
     return response;
   } catch {
+    const pfad = new URL(request.url).pathname;
     const cached = await caches.match(request, { cacheName: PAGE_CACHE });
-    if (cached) return cached;
 
-    // Stapelseiten (Modell 23) entstehen per pushState, nicht als Navigation:
-    // ihre Adresse steht nie im PAGE_CACHE. Ohne Netz kommt dann die gecachte
-    // Startseite unter dieser Adresse; die Shell legt die Seite darauf und
-    // holt ihre Daten aus dem Daten-Cache, wie beim Öffnen über die Zeile.
-    if (stapelPfad(new URL(request.url).pathname)) {
-      const start = await caches.match(new URL("/", self.location.origin).href, { cacheName: PAGE_CACHE });
-      if (start) return start;
+    /*
+     * „/“ und Stapelseiten: Das HTML im Cache trägt die Daten vom Zeitpunkt
+     * seines Ladens. Was danach geschah (abgehakt, eingetragen), steht nur
+     * im Daten-Cache — die Shell holt TagDaten und Seitendaten nach jeder
+     * Action neu. Deshalb hier die Shell ausliefern und die Seite ihre Daten
+     * aus dem Daten-Cache nehmen lassen, wenn die neuer sind als das HTML
+     * der Adresse. Stapelseiten, die per pushState entstanden, haben gar
+     * kein eigenes HTML; sie bekommen die Startseite unter ihrer Adresse,
+     * und die Shell legt die Seite darauf.
+     */
+    const istStart = pfad === "/";
+    if (istStart || stapelPfad(pfad)) {
+      const start = istStart ? cached : await caches.match(new URL("/", self.location.origin).href, { cacheName: PAGE_CACHE });
+      let antwort = cached;
+      if (!istStart && start) {
+        const datenUrl = stapelDaten(pfad);
+        const daten = datenUrl ? await caches.match(datenUrl, { cacheName: DATA_CACHE }) : null;
+        if (!cached || (daten && gespeichertUm(daten) >= gespeichertUm(cached))) antwort = start;
+      }
+      if (antwort) {
+        // Für die Shell: diese Seite kam ohne Netz, Stand des HTML
+        try {
+          const cache = await caches.open(DATA_CACHE);
+          await cache.put(
+            new URL(NAV_MARKE, self.location.origin).href,
+            new Response(
+              JSON.stringify({
+                pfad,
+                zeit: Date.now(),
+                gespeichert: gespeichertUm(antwort) || null,
+              }),
+              { headers: { "content-type": "application/json" } },
+            ),
+          );
+        } catch {
+          // ohne Marke fehlt nur der Hinweis „Ohne Verbindung“
+        }
+        return antwort;
+      }
     }
+
+    if (cached) return cached;
 
     const offline = await caches.match(OFFLINE_URL);
     if (offline) return offline;

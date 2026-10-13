@@ -41,30 +41,40 @@ export type BlockKartenDeps = {
 export type BlockKartenProps = {
   blockId: string;
   fragen: BlockFrage[];
+  /** Heute schon beantwortete Fragen des Blocks vom Server: itemId → beim ersten Mal gewusst */
+  erste: Record<string, boolean>;
   /** n Fragen, ok davon beim ersten Mal gewusst */
   onEnde: (ergebnis: { n: number; ok: number }) => void;
   deps: BlockKartenDeps;
 };
 
 // ── Stand je Block über Schließen und Wiederöffnen (Prototyp `db.block.session`) ──
+//
+// Der Prototyp hält die Sitzung in `db.block.session`, sie übersteht ein
+// Neuladen. Hier kommt der Stand vom Server (`erste`, aus den heutigen
+// `recall_attempts` der Fragen des Blocks) und wird mit dem Speicher der Seite
+// zusammengelegt: der weiß von Urteilen, deren Aufruf noch unterwegs ist.
 
 type Stand = { sass: Set<string>; first: Record<string, boolean> };
 const staende = new Map<string, Stand>();
 
-function standVon(blockId: string): Stand {
+function standVon(blockId: string, erste: Record<string, boolean>): Stand {
   let s = staende.get(blockId);
   if (!s) {
     s = { sass: new Set(), first: {} };
     staende.set(blockId, s);
   }
+  for (const [id, ok] of Object.entries(erste)) if (!(id in s.first)) s.first[id] = ok;
   return s;
 }
 
-/** Was der Block bisher an Fragen hatte: für das Ende ohne offene Fragen. */
-export function blockKartenErgebnis(blockId: string): { n: number; ok: number } {
-  const s = staende.get(blockId);
-  if (!s) return { n: 0, ok: 0 };
-  return { n: s.sass.size, ok: Object.values(s.first).filter(Boolean).length };
+/** Fragen, die der Block heute schon hatte (gewusst oder beantwortet) */
+const bisher = (s: Stand) => new Set([...s.sass, ...Object.keys(s.first)]);
+
+/** Was der Block heute an Fragen hatte: für das Ende ohne offene Fragen. */
+export function blockKartenErgebnis(blockId: string, erste: Record<string, boolean>): { n: number; ok: number } {
+  const s = standVon(blockId, erste);
+  return { n: bisher(s).size, ok: Object.values(s.first).filter(Boolean).length };
 }
 
 // ── DOM-Helfer (wie `h` im Prototyp, nie innerHTML aus Daten) ────────────────
@@ -173,14 +183,15 @@ function erzeugeKarten(
   t: Teile,
   blockId: string,
   fragen: BlockFrage[],
+  erste: Record<string, boolean>,
   onEnde: (e: { n: number; ok: number }) => void,
   deps: BlockKartenDeps,
 ): Steuerung {
   const { tisch, stack } = t;
-  const stand = standVon(blockId);
+  const stand = standVon(blockId, erste);
   const fragenMap = new Map(fragen.map((f) => [f.itemId, f]));
-  // Was heute schon saß, zählt mit: der Zähler zeigt den ganzen Block
-  const frueher = [...stand.sass].filter((id) => !fragenMap.has(id)).length;
+  // Was heute schon dran war, zählt mit: der Zähler zeigt den ganzen Block
+  const frueher = [...bisher(stand)].filter((id) => !fragenMap.has(id)).length;
   const T = {
     queue: fragen.map((f) => f.itemId),
     qi: 0,
@@ -908,7 +919,7 @@ function erzeugeKarten(
   };
 }
 
-export function BlockKarten({ blockId, fragen, onEnde, deps }: BlockKartenProps) {
+export function BlockKarten({ blockId, fragen, erste, onEnde, deps }: BlockKartenProps) {
   const ticksRef = useRef<HTMLDivElement>(null);
   const metaRef = useRef<HTMLDivElement>(null);
   const countRef = useRef<HTMLParagraphElement>(null);
@@ -938,6 +949,7 @@ export function BlockKarten({ blockId, fragen, onEnde, deps }: BlockKartenProps)
       },
       blockId,
       fragen,
+      erste,
       (e) => rueckruf.current.onEnde(e),
       {
         toast: (...a) => rueckruf.current.deps.toast(...a),
@@ -949,7 +961,7 @@ export function BlockKarten({ blockId, fragen, onEnde, deps }: BlockKartenProps)
       s.ende();
       steuerung.current = null;
     };
-  }, [blockId, fragen]);
+  }, [blockId, fragen, erste]);
 
   const ohneFokus = (e: { preventDefault: () => void }) => e.preventDefault();
 
