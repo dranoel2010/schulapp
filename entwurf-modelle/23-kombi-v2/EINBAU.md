@@ -88,7 +88,7 @@ Ablauf im Ganzen:
 Bis zu deiner Antwort gilt der Vorschlag. Antwort etwa „4 ja, 6 nein“.
 
 7. **Arbeitsblätter vorab bauen:** für Übungsthemen und Lernblöcke von heute und morgen, höchstens eins je Thema und Tag. Jedes Blatt ist ein Opus-Aufruf. *Vorschlag: ja.*
-8. **Fachfarben:** bleiben gespeichert, werden aber nirgends mehr gezeigt. *Vorschlag: ja.*
+8. **Fachfarben:** bleiben gespeichert, werden aber nirgends mehr gezeigt, auch nicht auf „Fragen-Vorschläge“ und im Fach-PDF. Ausnahme ist nur das Farbfeld im Fach-Formular. *Vorschlag: ja.*
 9. **Wann auf den NAS:** erst nach deinem Durchklicken am Handy? *Vorschlag: ja.*
 10. **Üben nach Mitternacht:** Antworten zwischen 0 und 4 Uhr zählen beim Speichern zum neuen Tag, in der Anzeige zum alten. *Vorschlag: so lassen.*
 

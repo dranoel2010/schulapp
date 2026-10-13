@@ -76,13 +76,14 @@ export type KlausurSeite = {
   blaetter: { id: string; titel: string; datum: string; thema: string; deckblatt: string | null }[];
 };
 
-/** Was der Plan-Generator zu melden hat, in Alltagssprache (wie bisher auf /lernen). */
-export function warnungText(warnings: PlanWarning[], tageBis: number): string | null {
+/**
+ * Was der Plan-Generator zu melden hat, in Alltagssprache (wie bisher auf
+ * /lernen). Nur vor dem Klausurtag gerufen: am Klausurtag plant die Seite
+ * nichts mehr, also gibt es auch nichts zu warnen.
+ */
+export function warnungText(warnings: PlanWarning[]): string | null {
   if (warnings.includes("tight")) {
     return "Bis zur Prüfung bleibt nur ein Lerntag. Der Plan bringt alle Themen an diesem Tag unter, zum Wiederholen reicht die Zeit nicht mehr.";
-  }
-  if (warnings.includes("no-days") && tageBis === 0) {
-    return "Die Prüfung ist heute — für einen verteilten Plan bleibt keine Zeit mehr.";
   }
   return null;
 }
@@ -157,16 +158,15 @@ export async function klausurSeite(
     gestrichen: blocks.length - geplant.length,
     minutenProTag: exam.minutesPerDay,
     vorlauf: exam.leadDays,
-    warnung: topics.length > 0 && tageBis >= 0 ? warnungText(
+    warnung: topics.length > 0 && tageBis > 0 ? warnungText(
             planWarnungen(
               plan.warnings,
               plan.studyDays,
               geplant.filter((b) => b.kind === "probe").map((b) => b.date),
             ),
-            tageBis,
           ) : null,
     verpasst:
-      verpassteBloecke.length && exam.date >= heute
+      verpassteBloecke.length && exam.date > heute
         ? {
             anzahl: verpassteBloecke.length,
             minuten: verpassteBloecke.reduce((s, b) => s + b.minutes, 0),

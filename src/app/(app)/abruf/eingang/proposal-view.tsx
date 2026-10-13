@@ -52,7 +52,6 @@ export type Frage = {
 export type Vorschlag = {
   id: string;
   subjectName: string;
-  subjectColorHex: string;
   klausurtag: string;
   note: string | null;
   fragen: Frage[];
@@ -106,10 +105,7 @@ export function ProposalView({ vorschlag }: { vorschlag: Vorschlag }) {
         <CardContent className="space-y-1">
           <p className="text-ink">
             {alle} {alle === 1 ? "Frage" : "Fragen"} für{" "}
-            <span style={{ color: vorschlag.subjectColorHex }}>
-              {vorschlag.subjectName}
-            </span>{" "}
-            am {vorschlag.klausurtag}.
+            {vorschlag.subjectName} am {vorschlag.klausurtag}.
           </p>
           {vorschlag.note ? (
             <p className="text-[15px] text-ink-2">{vorschlag.note}</p>

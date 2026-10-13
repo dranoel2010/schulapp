@@ -732,6 +732,9 @@ export async function catchUpMissed(
   const exam = await findExam(userId, examId);
   if (!exam) return;
   if (!isCalendarDate(today)) return;
+  // Am Klausurtag und danach wird nichts mehr verteilt: die Blöcke bleiben,
+  // wo sie sind, statt auf einen Nachmittag nach der Klausur zu rutschen.
+  if (exam.date <= today) return;
 
   const [topics, all] = await Promise.all([
     db
@@ -989,8 +992,8 @@ export async function blocksForDay(
 
 /**
  * Offene Blöcke aus der Vergangenheit — die Grundlage für die Nachfrage
- * "gestern nicht geschafft". Prüfungen, die schon vorbei sind, fragen nicht
- * mehr nach.
+ * "gestern nicht geschafft". Prüfungen, die heute sind oder schon vorbei,
+ * fragen nicht mehr nach.
  */
 export async function missedBlocks(
   userId: string,
@@ -1019,7 +1022,8 @@ export async function missedBlocks(
       and(
         eq(studyBlocks.status, "open"),
         lt(studyBlocks.date, today),
-        gte(exams.date, today),
+        // Am Klausurtag wird nicht mehr geübt: auch nicht nachgeholt.
+        gt(exams.date, today),
       ),
     )
     .orderBy(asc(exams.date), asc(studyBlocks.date), asc(studyBlocks.sortOrder));

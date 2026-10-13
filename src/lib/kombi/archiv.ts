@@ -25,16 +25,24 @@ export function klausurVorbei(datum: string, heute: string): boolean {
 }
 
 /**
- * Was die Seite einer Klausur zum Planen zeigt. Ist sie vorbei (meist über
- * das Archiv erreicht), plant die App nichts mehr: kein Lernplan-Hinweis,
- * kein „Themen eintragen“, kein „Termine neu rechnen“. Ein Lernplan mit
- * Blöcken bleibt als Rückblick stehen („3 von 4 Blöcken erledigt“).
+ * Ist für die Klausur nichts mehr zu planen? Ab dem Klausurtag selbst: am
+ * Klausurtag wird nicht mehr geübt, also auch nichts nachgeholt.
+ */
+export function klausurPlanVorbei(datum: string, heute: string): boolean {
+  return datum <= heute;
+}
+
+/**
+ * Was die Seite einer Klausur zum Planen zeigt. Ab dem Klausurtag plant die
+ * App nichts mehr: kein Lernplan-Hinweis, kein „Themen eintragen“, kein
+ * „Termine neu rechnen“. Ein Lernplan mit Blöcken bleibt als Rückblick
+ * stehen („3 von 4 Blöcken erledigt“).
  */
 export function klausurPlanAnsicht(k: { datum: string; heute: string; themen: number; bloecke: number }): {
   lernplan: boolean;
   termineNeu: boolean;
 } {
-  if (!klausurVorbei(k.datum, k.heute)) return { lernplan: true, termineNeu: true };
+  if (!klausurPlanVorbei(k.datum, k.heute)) return { lernplan: true, termineNeu: true };
   return { lernplan: k.themen > 0 && k.bloecke > 0, termineNeu: false };
 }
 

@@ -67,7 +67,7 @@ const sheets: PdfSheetEntry[] = blaetter.map((b) => ({
 }));
 
 const eingabe: SubjectPdfInput = {
-  subject: { name: "Geografie", color: "orange" },
+  subject: { name: "Geografie" },
   sheets,
   today: "2026-09-05",
   cutOff: false,

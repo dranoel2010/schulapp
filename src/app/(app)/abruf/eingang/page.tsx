@@ -4,7 +4,6 @@ import { ButtonLink } from "@/components/kombi/form";
 import { Card, CardContent } from "@/components/kombi/form";
 import { EmptyState } from "@/components/kombi/form";
 import { requireUser } from "@/lib/auth";
-import { subjectColor } from "@/lib/colors";
 import { formatGerman } from "@/lib/dates";
 import { offeneVorschlaege, vorschlagsErgebnis } from "@/recall/proposals";
 
@@ -165,7 +164,6 @@ export default async function EingangPage({
               vorschlag={{
                 id: v.id,
                 subjectName: v.subjectName,
-                subjectColorHex: subjectColor(v.subjectColor).hex,
                 // Die lange Form und nicht die kurze: „Mi, 14.9." endet selbst
                 // mit einem Punkt, und im Satz „…am Mi, 14.9.." stehen dann
                 // zwei. Im Browser gesehen, nicht im Test.

@@ -1,6 +1,5 @@
 import PDFDocument from "pdfkit";
 
-import { subjectColor } from "@/lib/colors";
 import { formatGerman } from "@/lib/dates";
 import { splitTranscript } from "@/lib/transcripts";
 
@@ -112,14 +111,15 @@ export type PdfSheetEntry = {
 /** Alles, was das Dokument braucht — und nichts darüber hinaus. */
 export type SubjectPdfInput = {
   /**
-   * Name und Farbschlüssel des Fachs, wie sie in der Ablage stehen.
+   * Name des Fachs, wie er in der Ablage steht. Die Fachfarbe kommt nicht
+   * mit: die App zeigt sie nirgends mehr, also auch das PDF nicht.
    *
    * Ohne das Kürzel, obwohl `MaterialTranscriptExport` es mitbringt. Es gibt
    * hier keine Stelle, die zu eng für den vollen Namen wäre: die Fußzeile hat
    * die halbe Seitenbreite, das sind bei 8 Punkt gut sechzig Zeichen. Und wer
    * einen Stapel Ausdrucke sortiert, liest dort lieber „Geschichte" als „G".
    */
-  subject: { name: string; color: string };
+  subject: { name: string };
   /** Die Blätter, aufsteigend nach Schultag — so, wie die Auswahlschicht sie gibt. */
   sheets: PdfSheetEntry[];
   /** Der Tag, an dem das PDF entsteht; steht im Kopf. */
@@ -284,8 +284,6 @@ export async function buildSubjectPdf(
   loadImage: LoadPageImage,
 ): Promise<Uint8Array<ArrayBuffer>> {
   const fonts = loadPdfFonts();
-  const accent = subjectColor(input.subject.color).hex;
-
   const doc = new PDFDocument({
     size: [PAGE.width, PAGE.height],
     margins: MARGIN,
@@ -326,7 +324,6 @@ export async function buildSubjectPdf(
   const state: DrawState = {
     doc,
     fonts,
-    accent,
     missing: new Map<string, true>(),
     imagesSkippedForBudget: 0,
     imagesSkippedForFormat: 0,
@@ -379,8 +376,6 @@ export async function buildSubjectPdf(
 type DrawState = {
   doc: PDFKit.PDFDocument;
   fonts: PdfFonts;
-  /** Die Farbe des Fachs, als Hex. */
-  accent: string;
   /** Zeichen, die keine der beiden Schriften kann — Reihenfolge des Auftretens. */
   missing: Map<string, true>;
   imagesSkippedForBudget: number;
@@ -462,9 +457,9 @@ export function groupByTopic(sheets: PdfSheetEntry[]): TopicGroup[] {
 function drawHeader(state: DrawState, input: SubjectPdfInput): void {
   const { doc } = state;
 
-  // Der farbige Balken über dem Namen ist dasselbe Zeichen wie die Fächerfarbe
-  // in der Ablage: man erkennt das Fach, bevor man den Namen liest.
-  doc.roundedRect(LEFT, doc.y, 44, 5, 2.5).fill(state.accent);
+  // Der Balken über dem Namen setzt den Anfang des Dokuments ab. Er steht in
+  // der Textfarbe und nicht in der Fachfarbe: die zeigt die App nirgends mehr.
+  doc.roundedRect(LEFT, doc.y, 44, 5, 2.5).fill(INK);
   doc.y += 5 + 16;
 
   drawRich(state, input.subject.name, {
@@ -545,15 +540,14 @@ function drawTopicHeading(state: DrawState, title: string | null): void {
   // Umbruch mit verworfen — deshalb steht er davor und nicht danach.
   ensureSpace(state, 140);
 
-  doc.roundedRect(LEFT, doc.y, 24, 3.5, 1.75).fill(state.accent);
+  doc.roundedRect(LEFT, doc.y, 24, 3.5, 1.75).fill(INK);
   doc.y += 3.5 + 10;
 
   drawRich(state, title ?? "Ohne Thema", {
     size: SIZE.topic,
-    // Themen sind der einzige Text im Dokument in der Farbe des Fachs. Ohne
-    // Fettung ist das der stärkste Unterschied, den es hier gibt — und er
-    // knüpft an das an, was die App auf dem Bildschirm tut.
-    color: title === null ? MUTED : state.accent,
+    // Ohne Fettung tragen Größe und Sperrung die Überschrift, die Farbe ist
+    // die des Textes. Die Fachfarbe zeigt die App nirgends mehr.
+    color: title === null ? MUTED : INK,
     characterSpacing: 0.4,
   });
 

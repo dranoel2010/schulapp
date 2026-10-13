@@ -1,8 +1,15 @@
 import { and, asc, eq, gt, gte, inArray, isNull, lt, lte } from "drizzle-orm";
 
 import { db } from "@/db";
-import { arbeitsblaetter, exams, studyBlocks, subjectTopics, tagesprotokoll, type ThemaArt } from "@/db/schema";
-import { ersterSchultagAb, nachlegenPlan, tagesauswahl, zaehltZurGrenze } from "@/recall/dauertakt";
+import { arbeitsblaetter, exams, studyBlocks, subjects, subjectTopics, tagesprotokoll, type ThemaArt } from "@/db/schema";
+import {
+  ersterSchultagAb,
+  nachlegenPlan,
+  tagesauswahl,
+  tagUnterGrenze,
+  zaehltZurGrenze,
+  type GrenzThema,
+} from "@/recall/dauertakt";
 import { addDays, berlinDay } from "@/lib/dates";
 import { naechsteKlausur } from "@/recall/items";
 import { istId } from "@/recall/ids";
@@ -527,6 +534,11 @@ export async function fragenZumThema(
  * der Lernplan danach anlegt (`naechsterNachgelegt()`); erst wenn auch der
  * fehlt, `null`, dann entfällt die Zeile (V2 6.5). Ein ausgewertetes Übungsthema übergeht Termine bis zum Tag der
  * Auswertung, wie beim Lesen der fälligen Themen.
+ *
+ * Zählt das Thema zur Grenze „eins am Tag“ (ohne Klausur, außerhalb der
+ * Epoche), rechnet der Tag die Belegung mit (`tagUnterGrenze()`): Themen mit
+ * früherem Termin kommen an ihrem Tag zuerst, dieses rückt dahinter. Ferien
+ * sind frei, ein Tag darin rückt auf den ersten danach.
  */
 export async function naechsterTerminThema(
   userId: string,
@@ -540,16 +552,97 @@ export async function naechsterTerminThema(
   if (ids.length === 0) return null;
   const zu = new Set(imDurchgang ?? (await fragenZumThema(userId, heute, key)).map((f) => f.scheduleId));
   const zeilen = await db
-    .select({ id: recallSchedule.id, dueOn: recallSchedule.dueOn })
+    .select({ id: recallSchedule.id, itemId: recallSchedule.itemId, dueOn: recallSchedule.dueOn })
     .from(recallSchedule)
     .where(and(inArray(recallSchedule.itemId, ids), isNull(recallSchedule.doneAt)))
     .orderBy(asc(recallSchedule.dueOn));
   // Ein ausgewertetes Übungsthema übergeht Termine bis zum Tag der Auswertung (wie `gruppiert()`).
   const ausgewertet = key.startsWith("ohne:") ? null : (await blattStaende(userId, [key], heute)).get(key)?.ausgewertet;
-  const zeile = zeilen.find((z) => !zu.has(z.id) && !(ausgewertet && z.dueOn <= ausgewertet));
+  const zaehlend = (z: { id: string; dueOn: string }) => !zu.has(z.id) && !(ausgewertet && z.dueOn <= ausgewertet);
+  const zeile = zeilen.find(zaehlend);
+
+  const fach = key.startsWith("ohne:") ? key.slice(5) : aufloesen(key)?.subjectId;
+  if (fach && istId(fach)) {
+    const [klausur, epoche] = await Promise.all([naechsteKlausur(userId, fach, heute), epochenFach(userId)]);
+    if (zaehltZurGrenze({ klausur, istEpoche: fach === epoche })) {
+      // je Baustein der früheste Termin, der nach dieser Runde noch offen ist
+      const termine = zeile
+        ? [...new Map(zeilen.filter(zaehlend).reverse().map((z) => [z.itemId, z.dueOn])).values()]
+        : [await nachgelegterTag(userId, fach, heute)].filter((d): d is string => d !== null);
+      if (termine.length === 0) return null;
+      const [andere, zeitraeume] = await Promise.all([
+        grenzThemen(userId, heute, aufloesen, epoche),
+        listFreePeriods(userId, heute),
+      ]);
+      const name = `${(await fachName(userId, fach)) ?? ""} ${key.startsWith("ohne:") ? OHNE_THEMA : (aufloesen(key)?.title ?? "")}`;
+      return tagUnterGrenze({ key, termine, name }, andere, addDays(heute, 1), zeitraeume);
+    }
+  }
+
   if (!zeile) return naechsterNachgelegt(userId, key, heute, aufloesen);
   // Ein noch offener Termin bis heute kommt morgen (`faelligHeute()` holt ihn dann).
   return zeile.dueOn <= heute ? addDays(heute, 1) : zeile.dueOn;
+}
+
+/**
+ * Alle Themen, die zur Grenze „eins am Tag“ zählen oder nach ihrer Klausur
+ * dazu kommen, mit je Baustein dem frühesten offenen Termin, der dann zählt.
+ * Außerhalb der Epoche:
+ *
+ * - ohne Klausur im Fach: alle offenen Termine;
+ * - mit Klausur: nur die Termine nach dem Klausurtag. Bis dahin gehört das
+ *   Thema zum Lernplan und belegt keinen Platz; danach (Erhaltung) zählt es
+ *   wie jedes andere. Die Termine davor arbeitet der Lernplan ab.
+ *
+ * Ein ausgewertetes Übungsthema übergeht Termine bis zum Tag der Auswertung,
+ * wie `gruppiert()`.
+ */
+async function grenzThemen(
+  userId: string,
+  heute: string,
+  aufloesen: (id: string | null) => Thema | null,
+  epoche: string | null,
+): Promise<GrenzThema[]> {
+  const zeilen = await db
+    .select({
+      itemId: recallSchedule.itemId,
+      dueOn: recallSchedule.dueOn,
+      subjectId: recallItems.subjectId,
+      subjectTopicId: recallItems.subjectTopicId,
+      fach: subjects.name,
+    })
+    .from(recallSchedule)
+    .innerJoin(recallItems, eq(recallItems.id, recallSchedule.itemId))
+    .innerJoin(subjects, eq(subjects.id, recallItems.subjectId))
+    .where(and(eq(recallItems.userId, userId), isNull(recallItems.retiredAt), isNull(recallSchedule.doneAt)))
+    .orderBy(asc(recallSchedule.dueOn));
+  const faecher = [...new Set(zeilen.map((z) => z.subjectId))].filter((f) => f !== epoche);
+  const klausuren = new Map(
+    await Promise.all(faecher.map(async (f) => [f, await naechsteKlausur(userId, f, heute)] as const)),
+  );
+  const mitKey = zeilen
+    .filter((z) => {
+      if (z.subjectId === epoche) return false;
+      const klausur = klausuren.get(z.subjectId) ?? null;
+      return zaehltZurGrenze({ klausur, istEpoche: false }) || (klausur !== null && z.dueOn > klausur);
+    })
+    .map((z) => ({ ...z, key: schluesselVon(aufloesen, z) }));
+  const topicIds = [...new Set(mitKey.flatMap((z) => (z.key.startsWith("ohne:") ? [] : [z.key])))];
+  const blaetter = await blattStaende(userId, topicIds, heute);
+
+  const themen = new Map<string, { name: string; jeBaustein: Map<string, string> }>();
+  for (const z of mitKey) {
+    const ausgewertet = blaetter.get(z.key)?.ausgewertet;
+    if (ausgewertet && z.dueOn <= ausgewertet) continue;
+    let t = themen.get(z.key);
+    if (!t) {
+      t = { name: `${z.fach} ${aufloesen(z.subjectTopicId)?.title ?? OHNE_THEMA}`, jeBaustein: new Map() };
+      themen.set(z.key, t);
+    }
+    // aufsteigend sortiert: der erste Termin je Baustein ist der früheste
+    if (!t.jeBaustein.has(z.itemId)) t.jeBaustein.set(z.itemId, z.dueOn);
+  }
+  return [...themen].map(([key, t]) => ({ key, name: t.name, termine: [...t.jeBaustein.values()] }));
 }
 
 /**
@@ -567,11 +660,14 @@ async function naechsterNachgelegt(
 ): Promise<string | null> {
   const fach = key.startsWith("ohne:") ? key.slice(5) : aufloesen(key)?.subjectId;
   if (!fach || !istId(fach)) return null;
+  const [tag, zeitraeume] = await Promise.all([nachgelegterTag(userId, fach, heute), listFreePeriods(userId, heute)]);
+  return tag ? ersterSchultagAb(tag, zeitraeume) : null;
+}
+
+/** Der erste Tag, den `nachlegenPlan()` nach einer Runde heute anlegt, ohne Rücksicht auf Ferien. */
+async function nachgelegterTag(userId: string, fach: string, heute: string): Promise<string | null> {
   const klausurtag = await naechsteKlausur(userId, fach, heute);
-  const [sperrtage, zeitraeume] = await Promise.all([
-    klausurtag ? sperrtageAb(userId, heute) : Promise.resolve([]),
-    listFreePeriods(userId, heute),
-  ]);
+  const sperrtage = klausurtag ? await sperrtageAb(userId, heute) : [];
   const plan = nachlegenPlan({
     klausurtag,
     heute,
@@ -581,8 +677,7 @@ async function naechsterNachgelegt(
     aufgenommen: heute,
     ausgewertet: null,
   });
-  const tag = plan.map((t) => t.dueOn).sort()[0];
-  return tag ? ersterSchultagAb(tag, zeitraeume) : null;
+  return plan.map((t) => t.dueOn).sort()[0] ?? null;
 }
 
 /**

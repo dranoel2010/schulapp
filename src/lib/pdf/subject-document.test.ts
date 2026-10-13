@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { crc32, deflateSync } from "node:zlib";
+import { crc32, deflateSync, inflateSync } from "node:zlib";
 
 import {
   buildSubjectPdf,
@@ -246,7 +246,7 @@ const loadImage: LoadPageImage = async (pageId) => {
 };
 
 const EINGABE = {
-  subject: { name: "Mathematik", color: "blue" },
+  subject: { name: "Mathematik" },
   sheets: SHEETS,
   today: "2026-09-05",
   cutOff: false,
@@ -668,5 +668,49 @@ describe("withDeadline", () => {
 
     // Warten, bis der verspätete Wurf wirklich gefallen ist.
     await new Promise((resolve) => setTimeout(resolve, 60));
+  });
+});
+
+describe("Farben im Fach-PDF", () => {
+  /** Alle Farben („r g b scn“) aus den gepackten Inhaltsströmen. */
+  function fuellfarben(bytes: Uint8Array): string[] {
+    const roh = Buffer.from(bytes);
+    const text = roh.toString("latin1");
+    const farben: string[] = [];
+    const muster = /stream\r?\n/g;
+    let treffer: RegExpExecArray | null;
+
+    while ((treffer = muster.exec(text)) !== null) {
+      const anfang = treffer.index + treffer[0].length;
+      const ende = text.indexOf("endstream", anfang);
+      if (ende < 0) break;
+      try {
+        const inhalt = inflateSync(roh.subarray(anfang, ende)).toString("latin1");
+        for (const f of inhalt.matchAll(/([\d.]+) ([\d.]+) ([\d.]+) scn\b/g)) {
+          farben.push(
+            [f[1], f[2], f[3]]
+              .map((n) => Math.round(Number(n) * 255).toString(16).padStart(2, "0"))
+              .join(""),
+          );
+        }
+      } catch {
+        // Bilder und Schriften sind keine Inhaltsströme.
+      }
+      muster.lastIndex = ende + "endstream".length;
+    }
+    return farben;
+  }
+
+  it("zeigt keine Fachfarbe, nur die Farben des Textes", async () => {
+    const bytes = await buildSubjectPdf(EINGABE, loadImage);
+    const farben = new Set(fuellfarben(bytes));
+
+    assert.ok(farben.has("1c1917"), "die Textfarbe fehlt, die Prüfung liest nichts");
+    for (const farbe of farben) {
+      assert.ok(
+        ["1c1917", "6d6762", "857f78", "e7e4e0", "b45309", "000000", "ffffff"].includes(farbe),
+        `unerwartete Farbe #${farbe}`,
+      );
+    }
   });
 });

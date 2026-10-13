@@ -383,6 +383,37 @@ describe("„Wieder dran“ am Ende einer Runde ohne Klausur", () => {
     assert.equal(await naechsterTerminThema(w, t, DI), "2026-10-31");
   });
 
+  it("zwei Themen ohne Klausur mit Terminen in den Ferien: das zweite bekommt den Tag danach", async () => {
+    const w = await testNutzer("Wieder dran zwei");
+    const en = await fach(w, "Englisch", "E");
+    const fr = await fach(w, "Französisch", "F");
+    const tEn = await thema(w, en, "Wortschatz");
+    const tFr = await thema(w, fr, "Vokabeln");
+    const iEn = await frage(w, en, tEn, [], [DI]);
+    await frage(w, fr, tFr, [], ["2026-10-14"]);
+    await testDb.insert(freePeriods).values({ userId: w, kind: "ferien", startsOn: "2026-10-19", endsOn: "2026-10-30" });
+    // Di: Englisch endet, der Dauertakt legt den 27.10. an, Ferien schieben auf Sa 31.10.
+    assert.equal(await naechsterTerminThema(w, tEn, DI), "2026-10-31");
+    await testDb.update(recallSchedule).set({ doneAt: berlinStunde(DI, 18) }).where(eq(recallSchedule.itemId, iEn));
+    await dauertaktNachlegen(w, "2026-10-14");
+    // Mi: Französisch endet, sein Termin wäre der 28.10.; am 31.10. kommt Englisch (27.10.), also So 1.11.
+    assert.equal(await naechsterTerminThema(w, tFr, "2026-10-14"), "2026-11-01");
+  });
+
+  it("ein Fach, dessen Klausur vorher liegt, zählt danach mit: seine Erhaltung kommt zuerst", async () => {
+    const w = await testNutzer("Wieder dran nach Klausur");
+    const en = await fach(w, "Englisch", "E");
+    const ma = await fach(w, "Mathematik", "M");
+    await testDb.insert(exams).values({ userId: w, subjectId: ma, kind: "klausur", date: "2026-10-16", title: "Probe" });
+    const tEn = await thema(w, en, "Wortschatz");
+    await frage(w, en, tEn, [], [DI]);
+    // Mathe: ein Termin vor der Klausur (Lernplan, zählt nicht) und die Erhaltung am 23.10. in den Ferien
+    await frage(w, ma, await thema(w, ma, "Brüche"), [], ["2026-10-15", "2026-10-23"]);
+    await testDb.insert(freePeriods).values({ userId: w, kind: "ferien", startsOn: "2026-10-19", endsOn: "2026-10-30" });
+    // Englisch käme am 27.10., beide rücken auf Sa 31.10.; dort hat Mathe den älteren Termin
+    assert.equal(await naechsterTerminThema(w, tEn, DI), "2026-11-01");
+  });
+
   it("mit Klausur im Fach: der erste Termin des Lernplans", async () => {
     const w = await testNutzer("Wieder dran Klausur");
     const ma = await fach(w, "Mathematik", "M");

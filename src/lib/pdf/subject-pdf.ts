@@ -102,7 +102,7 @@ export async function renderSubjectPdf(
 
   const bytes = await buildSubjectPdf(
     {
-      subject: { name: subject.name, color: subject.color },
+      subject: { name: subject.name },
       sheets: sheets.map(toEntry),
       today,
       cutOff: atLimit,

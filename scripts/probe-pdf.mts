@@ -58,7 +58,7 @@ const webp = await sharp({
   .toBuffer();
 
 const eingabe: SubjectPdfInput = {
-  subject: { name: "Mathematik", color: "blue" },
+  subject: { name: "Mathematik" },
   today: "2026-09-05",
   cutOff: false,
   sheets: [

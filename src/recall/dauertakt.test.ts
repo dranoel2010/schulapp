@@ -7,6 +7,7 @@ import {
   ersterSchultagAb,
   nachlegenPlan,
   tagesauswahl,
+  tagUnterGrenze,
   zaehltZurGrenze,
   type BausteinStand,
 } from "@/recall/dauertakt";
@@ -162,5 +163,47 @@ describe("ersterSchultagAb", () => {
   it("ein Tag in den Ferien rückt auf den ersten Tag danach, auch über zwei Zeiträume", () => {
     assert.equal(ersterSchultagAb("2026-10-27", [herbst]), "2026-10-31");
     assert.equal(ersterSchultagAb("2026-10-27", [herbst, brueckentag]), "2026-11-02");
+  });
+});
+
+describe("tagUnterGrenze", () => {
+  const FERIEN = [{ startsOn: "2026-10-19", endsOn: "2026-10-30" }];
+  const en = { key: "en", termine: ["2026-10-27"], name: "Englisch Wortschatz" };
+  const fr = { key: "fr", termine: ["2026-10-28"], name: "Französisch Vocabulaire" };
+
+  it("allein: der eigene Termin, aus den Ferien auf den ersten Tag danach", () => {
+    assert.equal(tagUnterGrenze(en, [], "2026-10-14", FERIEN), "2026-10-31");
+    assert.equal(tagUnterGrenze(en, [], "2026-10-14", []), "2026-10-27");
+  });
+
+  it("zwei Themen mit Terminen in den Ferien: das zweite bekommt den Tag danach", () => {
+    assert.equal(tagUnterGrenze(en, [fr], "2026-10-14", FERIEN), "2026-10-31");
+    assert.equal(tagUnterGrenze(fr, [en], "2026-10-15", FERIEN), "2026-11-01");
+  });
+
+  it("ein drittes rückt weiter, ein späteres stört nicht", () => {
+    const de = { key: "de", termine: ["2026-10-20"], name: "Deutsch Kommasetzung" };
+    const spaet = { key: "sp", termine: ["2026-11-05"], name: "Spanisch" };
+    assert.equal(tagUnterGrenze(fr, [en, de, spaet], "2026-10-15", FERIEN), "2026-11-02");
+  });
+
+  it("gleicher Termin: mehr fällige Fragen zuerst, dann alphabetisch", () => {
+    const a = { key: "a", termine: ["2026-10-27"], name: "A" };
+    const b = { key: "b", termine: ["2026-10-27", "2026-10-27"], name: "B" };
+    assert.equal(tagUnterGrenze(a, [b], "2026-10-14", []), "2026-10-28");
+    const c = { key: "c", termine: ["2026-10-27"], name: "C" };
+    assert.equal(tagUnterGrenze(a, [c], "2026-10-14", []), "2026-10-27");
+    assert.equal(tagUnterGrenze(c, [a], "2026-10-14", []), "2026-10-28");
+  });
+
+  it("ein überfälliges anderes Thema belegt morgen, das eigene kommt danach", () => {
+    const alt = { key: "alt", termine: ["2026-10-10"], name: "Alt" };
+    const eigen = { key: "e", termine: ["2026-10-14"], name: "Eigen" };
+    assert.equal(tagUnterGrenze(eigen, [alt], "2026-10-14", []), "2026-10-15");
+  });
+
+  it("ein freier Platz vor dem eigenen Termin wird nicht vorgezogen", () => {
+    const frueh = { key: "f", termine: ["2026-10-15"], name: "Früh" };
+    assert.equal(tagUnterGrenze(en, [frueh], "2026-10-14", []), "2026-10-27");
   });
 });

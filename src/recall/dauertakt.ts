@@ -181,3 +181,54 @@ export function ersterSchultagAb(
   }
   return d;
 }
+
+/**
+ * Ein Thema, das zur Grenze „eins am Tag“ zählt, mit dem, was für die
+ * Reihenfolge von `tagesauswahl()` zählt: je Baustein der früheste offene
+ * Termin (wie `faelligHeute()`) und der Name („⟨Fach⟩ ⟨Thema⟩“).
+ */
+export type GrenzThema = { key: string; termine: readonly string[]; name: string };
+
+/**
+ * Der Tag, an dem `eigen` unter der Grenze „eins am Tag“ wirklich drankommt,
+ * frühestens `ab` (der Tag nach dem heutigen Durchgang). Gerechnet wie die
+ * Startseite an jedem Tag: von den fälligen Themen ohne Klausur kommt das
+ * fälligste (ältester Termin, dann mehr fällige Fragen, dann alphabetisch);
+ * es belegt den Tag, die übrigen warten auf den nächsten. Ferien sind frei
+ * (`ersterSchultagAb`). So sagt „Wieder dran“ zwei Themen, deren Termine in
+ * die Ferien fallen, nicht beiden denselben ersten Tag danach zu.
+ */
+export function tagUnterGrenze(
+  eigen: GrenzThema,
+  andere: readonly GrenzThema[],
+  ab: string,
+  zeitraeume: readonly { startsOn: string; endsOn: string }[],
+): string {
+  const erster = (t: GrenzThema) => t.termine.reduce((m, d) => (d < m ? d : m), t.termine[0]);
+  const fragen = (t: GrenzThema, tag: string) => t.termine.filter((d) => d <= tag).length;
+  const vor = (a: GrenzThema, b: GrenzThema, tag: string): number =>
+    erster(a) < erster(b) ? -1 : erster(a) > erster(b) ? 1 : fragen(b, tag) - fragen(a, tag) || a.name.localeCompare(b.name, "de");
+
+  if (eigen.termine.length === 0) return ersterSchultagAb(ab, zeitraeume);
+  let wartend = andere.filter((t) => t.key !== eigen.key && t.termine.length > 0);
+  let tag = ersterSchultagAb(ab, zeitraeume);
+  // Jeder Tag mit fälligem Thema vergibt seinen Platz, an eins der anderen
+  // oder an `eigen`. Mehr Tage als Themen braucht es also nicht; leere Tage
+  // werden übersprungen und zählen nicht.
+  const tage = wartend.length + 1;
+  for (let vergeben = 0; vergeben < tage; ) {
+    const faellig = [eigen, ...wartend].filter((t) => erster(t) <= tag);
+    if (faellig.length === 0) {
+      // bis zum nächsten Termin springen, der überhaupt etwas fällig macht
+      const naechster = [eigen, ...wartend].map(erster).reduce((m, d) => (d < m ? d : m));
+      tag = ersterSchultagAb(naechster, zeitraeume);
+      continue;
+    }
+    vergeben += 1;
+    const zuerst = faellig.slice().sort((a, b) => vor(a, b, tag))[0];
+    if (zuerst === eigen) return tag;
+    wartend = wartend.filter((t) => t !== zuerst);
+    tag = ersterSchultagAb(addDays(tag, 1), zeitraeume);
+  }
+  return tag;
+}

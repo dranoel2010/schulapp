@@ -541,9 +541,18 @@ describe("replanOpen", () => {
     assert.ok(result.every((b) => b.minutes >= 10));
   });
 
-  it("legt alles auf heute, wenn die Prüfung schon läuft", () => {
+  it("legt am Klausurtag nichts mehr, auch nicht auf heute", () => {
     const result = replanOpen({
       ...plan({ examDate: "2026-05-11", today: "2026-05-11" }),
+      open,
+    });
+
+    assert.deepEqual(result, []);
+  });
+
+  it("legt alles auf heute, wenn die Prüfung morgen ist und kein Tag mehr frei", () => {
+    const result = replanOpen({
+      ...plan({ examDate: "2026-05-12", today: "2026-05-11" }),
       open,
     });
 

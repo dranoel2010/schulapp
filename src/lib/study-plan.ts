@@ -361,6 +361,9 @@ export function replanOpen(
 ): { id: string; date: string; minutes: number; sortOrder: number }[] {
   const open = input.open ?? [];
   if (open.length === 0) return [];
+  // Am Klausurtag wird nicht mehr geübt: nichts bekommt einen Tag, der
+  // Aufrufer lässt die Blöcke stehen oder streicht sie.
+  if (input.examDate <= input.today) return [];
 
   const minutesPerDay = sanitizeMinutes(input.minutesPerDay);
   const studyDays = studyDaysFor(input);
@@ -393,7 +396,7 @@ export function replanOpen(
   const freeLearnDays = preferFree(learnDays);
   const freeReviewDays = preferFree(reviewDays);
 
-  // Wenn nichts mehr übrig ist, bleibt heute — auch wenn die Prüfung schon läuft.
+  // Wenn nichts mehr übrig ist, bleibt heute (die Prüfung ist frühestens morgen).
   const lastResort = [input.today];
   const learnTargets =
     freeLearnDays.length > 0

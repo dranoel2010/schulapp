@@ -33,9 +33,12 @@ describe("Archiv: Klausuren", () => {
   });
 
   it("eine vergangene Klausur plant nichts mehr: kein Lernplan-Hinweis, kein „Termine neu rechnen“", () => {
-    // vorher und am Klausurtag: alles wie bisher
+    // vorher: alles wie bisher, am Vortag noch geplant
     assert.deepEqual(klausurPlanAnsicht({ datum: "2026-09-27", heute: "2026-09-20", themen: 0, bloecke: 0 }), { lernplan: true, termineNeu: true });
-    assert.deepEqual(klausurPlanAnsicht({ datum: "2026-09-27", heute: "2026-09-27", themen: 0, bloecke: 0 }), { lernplan: true, termineNeu: true });
+    assert.deepEqual(klausurPlanAnsicht({ datum: "2026-09-27", heute: "2026-09-26", themen: 2, bloecke: 3 }), { lernplan: true, termineNeu: true });
+    // am Klausurtag wird nicht mehr geübt: kein „Termine neu rechnen“, der Plan nur als Rückblick
+    assert.deepEqual(klausurPlanAnsicht({ datum: "2026-09-27", heute: "2026-09-27", themen: 0, bloecke: 0 }), { lernplan: false, termineNeu: false });
+    assert.deepEqual(klausurPlanAnsicht({ datum: "2026-09-27", heute: "2026-09-27", themen: 2, bloecke: 3 }), { lernplan: true, termineNeu: false });
     // vorbei, ohne Themen oder ohne Blöcke: kein Lernplan, kein „Themen eintragen“
     assert.deepEqual(klausurPlanAnsicht({ datum: "2026-09-27", heute: "2026-10-12", themen: 0, bloecke: 0 }), { lernplan: false, termineNeu: false });
     assert.deepEqual(klausurPlanAnsicht({ datum: "2026-09-27", heute: "2026-09-28", themen: 2, bloecke: 0 }), { lernplan: false, termineNeu: false });

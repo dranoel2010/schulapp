@@ -212,7 +212,7 @@ export async function lernblockUeberblick(
     .from(studyBlocks)
     .innerJoin(exams, and(eq(exams.id, studyBlocks.examId), eq(exams.userId, userId)))
     .innerJoin(subjects, eq(subjects.id, exams.subjectId))
-    .where(and(eq(studyBlocks.date, tag), eq(studyBlocks.status, "open"), sql`${exams.date} >= ${tag}`))
+    .where(and(eq(studyBlocks.date, tag), eq(studyBlocks.status, "open"), sql`${exams.date} > ${tag}`))
     .orderBy(asc(exams.date), asc(exams.createdAt));
   const heuteWeitere: LernblockUeberblick["heuteWeitere"] = [];
   for (const a of andere) {
