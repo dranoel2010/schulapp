@@ -7,6 +7,7 @@ import {
   planEintragArt,
   planEintragTitel,
   probeTagFuer,
+  probeTagGueltig,
   PROBE_MINUTEN,
   replanOpen,
   studyDaysFor,
@@ -784,6 +785,66 @@ describe("Probeklausur (Antwort 4 vom 13.10.2026)", () => {
     // Nur noch ein Lerntag am Sonntag: die Probe bekommt keinen Platz.
     const sonntag = replanOpen({ ...plan({ examDate: "2026-10-19", today: "2026-10-18" }), open });
     assert.equal(sonntag.find((b) => b.id === "p1"), undefined);
+  });
+
+  it("replanOpen am Probetag: eine Probe ohne Lerntag davor bleibt, wenn nichts mehr durchzuarbeiten ist", () => {
+    // Klausur Montag, Probe Freitag, heute Freitag: es bleiben Fr, Sa, So.
+    const ohneLernen = [
+      { id: "r1", topicId: "t1", kind: "review" as const },
+      { id: "p1", topicId: null, kind: "probe" as const, date: "2026-10-16" },
+    ];
+    const r = replanOpen({ ...plan({ examDate: "2026-10-19", today: "2026-10-16" }), open: ohneLernen });
+    assert.equal(r.find((b) => b.id === "p1")?.date, "2026-10-16");
+    assert.ok(r.find((b) => b.id === "r1")!.date > "2026-10-16");
+
+    // Auch ohne bisherigen Tag: nichts durchzuarbeiten, die Probe bekommt Freitag.
+    const neu = replanOpen({
+      ...plan({ examDate: "2026-10-19", today: "2026-10-16" }),
+      open: [{ id: "p1", topicId: null, kind: "probe" as const }],
+    });
+    assert.equal(neu.find((b) => b.id === "p1")?.date, "2026-10-16");
+
+    // Ist ihr Tag heute, bleibt sie auch mit offenem Lernblock; der kommt danach.
+    const mitLernen = replanOpen({
+      ...plan({ examDate: "2026-10-19", today: "2026-10-16" }),
+      open: [{ id: "l1", topicId: "t1", kind: "learn" as const }, { id: "p1", topicId: null, kind: "probe" as const }],
+    });
+    assert.equal(mitLernen.find((b) => b.id === "p1")?.date, "2026-10-16");
+    assert.ok(mitLernen.find((b) => b.id === "l1")!.date > "2026-10-16");
+  });
+
+  it("replanOpen: eine Probe, deren Tag noch gilt, bleibt dort, auch wenn weniger als vier Lerntage übrig sind", () => {
+    // Klausur Freitag 23.10., Probe Mittwoch 21.10. (zwei Tage vorher), heute ihr Tag.
+    const open = [
+      { id: "r1", topicId: "t1", kind: "review" as const },
+      { id: "p1", topicId: null, kind: "probe" as const, date: "2026-10-21" },
+    ];
+    const r = replanOpen({ ...plan({ examDate: "2026-10-23", today: "2026-10-21" }), open });
+    assert.equal(r.find((b) => b.id === "p1")?.date, "2026-10-21");
+    // Ohne bisherigen Tag gälte bei zwei Lerntagen ein Tag Abstand.
+    const ohne = replanOpen({
+      ...plan({ examDate: "2026-10-23", today: "2026-10-21" }),
+      open: open.map(({ id, topicId, kind }) => ({ id, topicId, kind })),
+    });
+    assert.equal(ohne.find((b) => b.id === "p1")?.date, "2026-10-22");
+    // Ein Tag, der nicht mehr gilt (frei, vorbei, falscher Abstand), wird neu gelegt.
+    const frei = replanOpen({ ...plan({ examDate: "2026-10-23", today: "2026-10-19" }), excludedDates: ["2026-10-21"], open });
+    assert.equal(frei.find((b) => b.id === "p1")?.date, "2026-10-20");
+    const weit = replanOpen({
+      ...plan({ examDate: "2026-10-23", today: "2026-10-13" }),
+      open: [{ id: "p1", topicId: null, kind: "probe" as const, date: "2026-10-15" }],
+    });
+    assert.equal(weit.find((b) => b.id === "p1")?.date, "2026-10-21");
+  });
+
+  it("probeTagGueltig: ein oder zwei Tage Abstand, Schultag, Lerntag", () => {
+    const tage = range("2026-10-21", "2026-10-22");
+    assert.equal(probeTagGueltig("2026-10-23", tage, "2026-10-21"), true);
+    assert.equal(probeTagGueltig("2026-10-23", tage, "2026-10-22"), true);
+    assert.equal(probeTagGueltig("2026-10-23", tage, "2026-10-20"), false, "vorbei");
+    assert.equal(probeTagGueltig("2026-10-23", tage, "2026-10-23"), false, "Klausurtag");
+    assert.equal(probeTagGueltig("2026-10-19", range("2026-10-16", "2026-10-18"), "2026-10-16"), true);
+    assert.equal(probeTagGueltig("2026-10-19", range("2026-10-16", "2026-10-18"), "2026-10-17"), false, "Samstag");
   });
 
   it("Namen der Planeinträge", () => {

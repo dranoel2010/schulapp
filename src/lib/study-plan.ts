@@ -141,7 +141,10 @@ function splitDays(days: string[]): {
  */
 export function probeTagFuer(examDate: string, studyDays: string[]): string | null {
   if (studyDays.length === 0) return null;
-  const abstand = studyDays.length >= 4 ? 2 : 1;
+  return probeTagMitAbstand(examDate, studyDays, studyDays.length >= 4 ? 2 : 1);
+}
+
+function probeTagMitAbstand(examDate: string, studyDays: string[], abstand: number): string | null {
   const ziel = addDays(examDate, -abstand);
   const schultage = studyDays.filter((day) => weekdayIndex(day) < 5);
   const passend = schultage.filter((day) => day <= ziel);
@@ -153,6 +156,18 @@ export function probeTagFuer(examDate: string, studyDays: string[]): string | nu
 }
 
 /**
+ * Darf eine Probeklausur, die schon im Plan steht, an ihrem Tag bleiben? Ja,
+ * wenn der Tag noch ein Lerntag ist (nicht vorbei, nicht frei, nicht der
+ * Prüfungstag) und zur Regel passt, mit zwei oder einem Tag Abstand. Der
+ * Abstand gilt ab dem Planen: bleiben beim Nachholen weniger als vier
+ * Lerntage, rückt die Probe deshalb nicht auf den Tag vor der Prüfung.
+ */
+export function probeTagGueltig(examDate: string, studyDays: string[], tag: string): boolean {
+  if (!studyDays.includes(tag) || weekdayIndex(tag) >= 5) return false;
+  return probeTagMitAbstand(examDate, studyDays, 2) === tag || probeTagMitAbstand(examDate, studyDays, 1) === tag;
+}
+
+/**
  * Teilt die Lerntage auf: Probetag, Tage zum Durcharbeiten, Tage zum
  * Wiederholen.
  *
@@ -161,13 +176,26 @@ export function probeTagFuer(examDate: string, studyDays: string[]): string | nu
  * Probe am Freitag davor, das Wochenende dazwischen) sind Wiederholungstage.
  * Liegt vor der Probe kein Tag zum Durcharbeiten mehr, entfällt sie, außer
  * sie ist der einzige Lerntag überhaupt (siehe `probeTagFuer`).
+ *
+ * Beim Neuverteilen (`replanOpen`) gilt das Entfallen nur, wenn noch etwas
+ * durchzuarbeiten ist: `fest` ist der Tag einer Probe, die schon im Plan
+ * steht und bleiben darf, `behalten` heißt, sie bleibt auch ohne Lerntag
+ * davor (nichts mehr durchzuarbeiten, oder ihr Tag ist heute). `abstand`
+ * legt eine Probe neu, deren Tag nicht mehr gilt, mit dem Abstand, den sie
+ * beim Planen bekommen hat.
  */
 export function tageAufteilen(
   examDate: string,
   studyDays: string[],
   mitProbe: boolean,
+  optionen: { fest?: string | null; abstand?: 1 | 2; behalten?: (probeTag: string) => boolean } = {},
 ): { probeTag: string | null; learnDays: string[]; reviewDays: string[] } {
-  const probeTag = mitProbe ? probeTagFuer(examDate, studyDays) : null;
+  const probeTag = !mitProbe
+    ? null
+    : (optionen.fest ??
+      (optionen.abstand && studyDays.length > 0
+        ? probeTagMitAbstand(examDate, studyDays, optionen.abstand)
+        : probeTagFuer(examDate, studyDays)));
   if (!probeTag) return { probeTag: null, ...splitDays(studyDays) };
 
   const rest = studyDays.filter((day) => day !== probeTag);
@@ -176,7 +204,14 @@ export function tageAufteilen(
   const { learnDays, reviewDays } = splitDays(rest);
   const vorher = learnDays.filter((day) => day < probeTag);
   const nachher = learnDays.filter((day) => day > probeTag);
-  if (vorher.length === 0) return { probeTag: null, ...splitDays(studyDays) };
+  if (vorher.length === 0) {
+    if (optionen.fest || optionen.behalten?.(probeTag)) {
+      // Die Probe bleibt; was noch durchzuarbeiten ist, kommt danach, zuerst
+      // durcharbeiten, dann wiederholen.
+      return { probeTag, ...splitDays(rest) };
+    }
+    return { probeTag: null, ...splitDays(studyDays) };
+  }
 
   return {
     probeTag,
@@ -320,7 +355,8 @@ export function buildPlan(input: PlanInput): Plan {
  */
 export function replanOpen(
   input: PlanInput & {
-    open: { id: string; topicId: string | null; kind: PlanKind }[];
+    /** `date`: der bisherige Tag (nur bei der Probeklausur ausgewertet) */
+    open: { id: string; topicId: string | null; kind: PlanKind; date?: string | null }[];
   },
 ): { id: string; date: string; minutes: number; sortOrder: number }[] {
   const open = input.open ?? [];
@@ -328,8 +364,21 @@ export function replanOpen(
 
   const minutesPerDay = sanitizeMinutes(input.minutesPerDay);
   const studyDays = studyDaysFor(input);
-  const hatProbe = open.some((block) => block.kind === "probe");
-  const { probeTag, learnDays, reviewDays } = tageAufteilen(input.examDate, studyDays, hatProbe);
+  const ersteProbe = open.find((block) => block.kind === "probe");
+  // Eine Probe, die schon im Plan steht und deren Tag noch gilt, bleibt dort.
+  const fest =
+    ersteProbe?.date && probeTagGueltig(input.examDate, studyDays, ersteProbe.date)
+      ? ersteProbe.date
+      : null;
+  // Muss sie neu gelegt werden, behält sie ihren Abstand vom Planen (zwei
+  // Tage oder einer), statt ihn aus den übrigen Lerntagen neu zu rechnen.
+  const abstand = ersteProbe?.date && !fest ? (ersteProbe.date <= addDays(input.examDate, -2) ? 2 : 1) : undefined;
+  const lernenOffen = open.some((block) => block.kind === "learn");
+  const { probeTag, learnDays, reviewDays } = tageAufteilen(input.examDate, studyDays, Boolean(ersteProbe), {
+    fest,
+    abstand,
+    behalten: (tag) => !lernenOffen || tag === input.today,
+  });
 
   // Tage, an denen schon gelernt wurde, sind ganz oder teilweise verbraucht.
   // Wir weichen zuerst auf Tage mit Platz aus; ist gar keiner mehr frei, wird
@@ -361,9 +410,10 @@ export function replanOpen(
 
   const learn = open.filter((block) => block.kind === "learn");
   const review = open.filter((block) => block.kind === "review");
-  // Die Probeklausur hat ihren eigenen Tag. Gibt es keinen mehr (weniger als
-  // zwei Lerntage), bekommt sie keinen Platz: der Aufrufer streicht sie,
-  // statt sie auf den Prüfungstag oder in die Vergangenheit zu legen.
+  // Die Probeklausur hat ihren eigenen Tag. Gibt es keinen mehr (kein
+  // Schultag vor der Prüfung, oder vor ihr wäre noch durchzuarbeiten), bekommt
+  // sie keinen Platz: der Aufrufer streicht sie, statt sie auf den
+  // Prüfungstag oder in die Vergangenheit zu legen.
   const probe = open.filter((block) => block.kind === "probe");
 
   const dateById = new Map<string, string>();

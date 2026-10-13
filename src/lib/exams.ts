@@ -20,6 +20,8 @@ import { blockAngefangen } from "@/lib/lernblock";
 import { normalizeTopics, topicKey } from "@/lib/topics";
 import {
   buildPlan,
+  PROBE_MINUTEN,
+  probeTagFuer,
   replanOpen,
   type Plan,
   type PlanKind,
@@ -501,6 +503,24 @@ async function occupiedAcrossExams(
   return byDay;
 }
 
+/**
+ * Zieht eine Probeklausur auf einen neuen Tag nach: ein noch nicht gebautes
+ * Blatt bekommt den neuen Tag in den Kopf.
+ */
+async function probeBlattTagNachziehen(tx: Pick<typeof db, "update">, userId: string, blockId: string, tag: string): Promise<void> {
+  await tx
+    .update(arbeitsblaetter)
+    .set({ tag })
+    .where(
+      and(
+        eq(arbeitsblaetter.userId, userId),
+        eq(arbeitsblaetter.studyBlockId, blockId),
+        isNull(arbeitsblaetter.subjectTopicId),
+        eq(arbeitsblaetter.status, "wartet"),
+      ),
+    );
+}
+
 export async function generatePlan(
   userId: string,
   examId: string,
@@ -554,7 +574,11 @@ export async function generatePlan(
     (block) => !wanderndIds.has(block.id) && (!frei(block) || eigenesBlatt.has(block.id)),
   );
 
-  if (settled.length === 0 && wandernd.length === 0) {
+  // Die Probe, die schon im Plan steht (mit Blatt zuerst), bleibt auf ihrem
+  // Tag, solange er gilt (`replanOpen`, `probeTagGueltig`).
+  const bisherigeProbe = wandernd[0] ?? blocks.find((block) => frei(block) && block.kind === "probe");
+
+  if (settled.length === 0 && !bisherigeProbe) {
     // Nichts angefangen: der alte Plan darf komplett weichen.
     await db.transaction(async (tx) => {
       await tx.delete(studyBlocks).where(eq(studyBlocks.examId, examId));
@@ -587,6 +611,20 @@ export async function generatePlan(
     if (index >= 0) remaining.splice(index, 1);
   }
 
+  // Der neue Plan lässt die Probe weg, wenn vor ihr kein Tag zum
+  // Durcharbeiten liegt. Ist aber schon alles durchgearbeitet (der Stoff
+  // steckt in `settled`) oder steht sie schon heute im Plan, gehört sie
+  // trotzdem hinein: das entscheidet `replanOpen`, wie beim Nachholen. Eine
+  // erledigte oder gestrichene Probe deckt ihren Posten schon ab.
+  if (
+    mitProbe(exam.kind) &&
+    !plan.blocks.some((block) => block.kind === "probe") &&
+    !settled.some((block) => block.kind === "probe") &&
+    probeTagFuer(exam.date, plan.studyDays)
+  ) {
+    remaining.push({ date: today, topicId: null, kind: "probe", minutes: PROBE_MINUTEN, sortOrder: 0 });
+  }
+
   const scheduled = replanOpen({
     examDate: exam.date,
     today,
@@ -600,6 +638,7 @@ export async function generatePlan(
       id: String(index),
       topicId: block.topicId,
       kind: block.kind,
+      date: block.kind === "probe" ? (bisherigeProbe?.date ?? null) : null,
     })),
   });
 
@@ -646,17 +685,7 @@ export async function generatePlan(
         .set({ date: v.date, minutes: v.minutes, sortOrder: v.sortOrder })
         .where(and(eq(studyBlocks.id, v.id), eq(studyBlocks.examId, examId)));
       // Ein noch nicht gebautes Blatt bekommt den neuen Tag in den Kopf.
-      await tx
-        .update(arbeitsblaetter)
-        .set({ tag: v.date })
-        .where(
-          and(
-            eq(arbeitsblaetter.userId, userId),
-            eq(arbeitsblaetter.studyBlockId, v.id),
-            isNull(arbeitsblaetter.subjectTopicId),
-            eq(arbeitsblaetter.status, "wartet"),
-          ),
-        );
+      await probeBlattTagNachziehen(tx, userId, v.id, v.date);
     }
     if (gestrichen.length > 0) {
       await tx
@@ -741,6 +770,7 @@ export async function catchUpMissed(
       id: block.id,
       topicId: block.topicId,
       kind: toPlanKind(block.kind),
+      date: block.date,
     })),
   });
 
@@ -751,6 +781,9 @@ export async function catchUpMissed(
       const slot = placed.get(block.id);
 
       if (slot) {
+        if (block.kind === "probe" && slot.date !== block.date) {
+          await probeBlattTagNachziehen(tx, userId, block.id, slot.date);
+        }
         await tx
           .update(studyBlocks)
           .set({
@@ -850,6 +883,7 @@ export async function moveOffFreeDays(
         id: block.id,
         topicId: block.topicId,
         kind: toPlanKind(block.kind),
+        date: block.date,
       })),
     });
 
@@ -871,6 +905,9 @@ export async function moveOffFreeDays(
           continue;
         }
 
+        if (block.kind === "probe" && slot.date !== block.date) {
+          await probeBlattTagNachziehen(tx, userId, block.id, slot.date);
+        }
         await tx
           .update(studyBlocks)
           .set({

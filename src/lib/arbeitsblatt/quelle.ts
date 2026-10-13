@@ -124,6 +124,10 @@ export type BlockZiel = {
   klausurtag: string;
   /** `study_blocks.kind`: learn | review */
   kind: string;
+  /** Der Titel der Klausur, falls sie einen hat („Quadratische Funktionen“) */
+  klausurTitel: string | null;
+  /** Die Titel aller Klausurthemen, in ihrer Reihenfolge */
+  klausurThemenTitel: string[];
   /** Alle Fach-Themen der Klausur (für die Quelle eines Blocks ohne Thema) */
   klausurThemen: { subjectTopicId: string; title: string; art: "abfragen" | "ueben" }[];
 };
@@ -138,6 +142,7 @@ export async function blockZiel(userId: string, blockId: string): Promise<BlockZ
       kind: studyBlocks.kind,
       fach: subjects.name,
       klausurtag: exams.date,
+      klausurTitel: exams.title,
     })
     .from(studyBlocks)
     .innerJoin(exams, eq(exams.id, studyBlocks.examId))
@@ -167,6 +172,8 @@ export async function blockZiel(userId: string, blockId: string): Promise<BlockZ
     fach: block.fach,
     klausurtag: block.klausurtag,
     kind: block.kind,
+    klausurTitel: block.klausurTitel?.trim() || null,
+    klausurThemenTitel: themen.map((t) => t.stTitle ?? t.title),
     klausurThemen: themen
       .filter((t) => t.subjectTopicId !== null && t.stTitle !== null)
       .map((t) => ({
@@ -194,6 +201,21 @@ export function blockAlsBlatt(ziel: BlockZiel): boolean {
   return ziel.klausurThemen.length > 0 && ziel.klausurThemen.every((t) => t.art === "ueben");
 }
 
+/**
+ * Die Überschrift des Blatts eines Lernblocks: sein Thema, sonst
+ * „Gesamtwiederholung“. Bei der Probeklausur steht dort, was sie prüft (wie
+ * im Prototyp „Quadratische Funktionen“): der Titel der Klausur, sonst ihr
+ * Thema. Dass es eine Probeklausur ist, sagen schon Tisch und Planzeile.
+ */
+export function blattThema(ziel: BlockZiel): string {
+  if (ziel.kind === "probe") {
+    if (ziel.klausurTitel) return ziel.klausurTitel;
+    if (ziel.klausurThemenTitel.length > 0) return ziel.klausurThemenTitel.join(", ");
+    return "Probeklausur";
+  }
+  return ziel.themaTitel ?? "Gesamtwiederholung";
+}
+
 /** Die Quelle eines Lernblocks: sein Thema, sonst alle Klausurthemen mit Fach-Thema. */
 export async function quelleFuerBlock(userId: string, ziel: BlockZiel): Promise<Quelle> {
   if (ziel.subjectTopicId && ziel.kind !== "probe") {
@@ -206,7 +228,7 @@ export async function quelleFuerBlock(userId: string, ziel: BlockZiel): Promise<
   }
   return {
     fach: ziel.fach,
-    thema: ziel.kind === "probe" ? "Probeklausur" : (ziel.themaTitel ?? "Gesamtwiederholung"),
+    thema: blattThema(ziel),
     blaetter: await blaetterZu(userId, [...ids]),
   };
 }

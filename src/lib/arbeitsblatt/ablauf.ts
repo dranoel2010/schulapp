@@ -16,7 +16,7 @@ import { blockAngefangen, blockErledigt, blockMinuten } from "@/lib/lernblock";
 import { themaArt } from "@/lib/themen-art";
 import { recallItems, recallSchedule } from "@/recall/schema";
 
-import { blockAlsBlatt, blockZiel } from "./quelle";
+import { blattThema, blockAlsBlatt, blockZiel } from "./quelle";
 import { inhaltSchema, type ArbeitsblattInhalt } from "./schema";
 import {
   arbeitsblattFuer,
@@ -244,7 +244,7 @@ export async function blattStand(
     if (ziel) {
       block = { klausurtag: ziel.klausurtag, label: blockLabel(ziel) };
       fach = ziel.fach;
-      thema = ziel.kind === "probe" ? "Probeklausur" : (ziel.themaTitel ?? "Gesamtwiederholung");
+      thema = blattThema(ziel);
     }
   }
   if (zeile.subjectTopicId) {

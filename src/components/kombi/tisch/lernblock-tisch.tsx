@@ -190,6 +190,12 @@ export function LernblockTisch() {
       if (!blockId || offenRef.current) return;
       const vorher = blockLesen(blockId) ?? null;
       if (vorher && zustand(vorher) === "erledigt") return;
+      // Eine Probeklausur ohne Angabe zum Blatt (etwa aus der Zeile) geht an
+      // den Tisch des Blatts; der gibt sie mit `blatt: false` zurück, wenn es fehlt.
+      if (vorher?.art === "probe" && o?.blatt === undefined) {
+        kombi.openTisch({ ...o, blatt: true });
+        return;
+      }
 
       kombi.closeMenu();
       kombi.hideToast();
@@ -232,7 +238,11 @@ export function LernblockTisch() {
           }
           // Wurden heute schon Fragen des Blocks beantwortet, ist er nicht leer:
           // das Ende nennt sie (auch nach einem Neuladen)
-          if (r.daten.fragen.length === 0 && !r.daten.material && Object.keys(r.daten.erste).length === 0) {
+          // Die Probeklausur ist nur ein Blatt (Prototyp): hierher kommt sie
+          // nur, wenn es fehlt oder sein Bau gescheitert ist, und fällt nicht
+          // in die Karten.
+          const probe = r.daten.block.art === "probe";
+          if (probe || (r.daten.fragen.length === 0 && !r.daten.material && Object.keys(r.daten.erste).length === 0)) {
             // Nichts zu lernen und kein Blatt: keine Uhr, keine leere
             // Endkarte ohne Ausweg. Hat erst dieses Öffnen die Uhr gestartet,
             // geht sie still zurück auf Ruhe (wie „Block beenden“ unter einer
@@ -475,6 +485,7 @@ export function LernblockTisch() {
   const kartenEnde = useCallback((e: { n: number; ok: number }) => setEnde(e), []);
 
   const fach = daten?.fach ?? sitzung?.fach ?? "";
+  const istProbe = block?.art === "probe";
   const datum = daten?.klausurDatum ?? sitzung?.klausurDatum ?? "";
 
   return (
@@ -503,7 +514,7 @@ export function LernblockTisch() {
             ) : (
               <div style={{ flex: "1 1 auto" }} />
             )}
-            {material && !ende ? (
+            {material && !ende && !istProbe ? (
               <button className="t-mat" type="button" onClick={openMaterial}>
                 <span>
                   Material · {material.titel.split(",")[0]}, {material.seiten}{" "}
@@ -517,10 +528,14 @@ export function LernblockTisch() {
       <div className={`t-end${ende ? " on" : ""}`} ref={endRef}>
         {ende ? (
           <>
-            <h2 className="sans">{ende.leer ? "Heute nichts offen." : "Fragen für heute durch."}</h2>
+            <h2 className="sans">
+              {ende.leer ? (istProbe ? "Heute kein Blatt." : "Heute nichts offen.") : "Fragen für heute durch."}
+            </h2>
             <p>
               {ende.leer
-                ? "Zu diesem Thema gibt es heute keine Fragen und kein Blatt."
+                ? istProbe
+                  ? "Für die Probeklausur ließ sich heute kein Blatt bauen."
+                  : "Zu diesem Thema gibt es heute keine Fragen und kein Blatt."
                 : ende.n
                   ? `${ende.n} ${ende.n === 1 ? "Frage" : "Fragen"}, ${ende.ok === ende.n ? "alle" : ende.ok} beim ersten Mal.`
                   : "Heute waren keine Fragen offen."}
@@ -539,7 +554,7 @@ export function LernblockTisch() {
                   Stoff und Fragen
                 </button>
               ) : null}
-              {rest > 0 && material ? (
+              {rest > 0 && material && !istProbe ? (
                 <button className="tlink" type="button" onClick={openMaterial}>
                   Weiter mit Material
                 </button>

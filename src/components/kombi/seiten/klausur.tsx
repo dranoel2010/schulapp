@@ -390,7 +390,7 @@ function PlanZeile({
   const geschluckt = useRef(false);
 
   const uhrOeffnen = (origin: HTMLElement) =>
-    kombi.openTisch({ mode: "block", origin, blockId: b.id, fach, klausurDatum, blatt: !!b.blatt && !b.blatt.fehlgeschlagen });
+    kombi.openTisch({ mode: "block", origin, blockId: b.id, fach, klausurDatum, blatt: b.art === "probe" || (!!b.blatt && !b.blatt.fehlgeschlagen) });
 
   const tippen = () => {
     if (geschluckt.current) {

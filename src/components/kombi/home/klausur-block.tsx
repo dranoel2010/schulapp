@@ -162,7 +162,9 @@ function LernblockZeile({ block: vomServer, fach, klausurDatum }: { block: Block
               blockId: block.id,
               fach,
               klausurDatum,
-              blatt: !!block.blatt && !block.blatt.fehlgeschlagen,
+              // Die Probeklausur ist immer ein Blatt: der Tisch des Blatts baut es
+              // nach oder sagt, dass es fehlt (nie die Karten)
+              blatt: block.art === "probe" || (!!block.blatt && !block.blatt.fehlgeschlagen),
             })
           }
         >
