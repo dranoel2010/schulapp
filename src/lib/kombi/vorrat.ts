@@ -119,6 +119,9 @@ export type ZeilenVorrat = {
  */
 export const ERLEDIGT_SUCHE_TAGE = 14;
 
+/** So viele Tage steht eine erledigte Hausaufgabe noch auf der Seite „Hausaufgaben“ unter „Erledigt“. */
+export const ERLEDIGT_LISTE_TAGE = 2;
+
 // ── Kalender (Prototyp Z. 1104–1128) ─────────────────────────────────────────
 
 export function addTage(tag: string, n: number): string {
@@ -170,10 +173,14 @@ export function schluss(v: Pick<ZeilenVorrat, "frei" | "stunden">, tag: string):
   return ls.length ? ls[ls.length - 1].bis : null;
 }
 
-/** „heute“, „morgen“, „in n Tagen“ (Prototyp `relTage`, Z. 1376). */
+/** „heute“, „morgen“, „in n Tagen“ (Prototyp `relTage`, Z. 1376); vergangene Tage „gestern“, „vor n Tagen“. */
 export function relTage(heute: string, tag: string): string {
   const n = diffDays(heute, tag);
-  return n === 0 ? "heute" : n === 1 ? "morgen" : `in ${n} Tagen`;
+  if (n === 0) return "heute";
+  if (n === 1) return "morgen";
+  if (n > 1) return `in ${n} Tagen`;
+  if (n === -1) return "gestern";
+  return `vor ${-n} Tagen`;
 }
 
 /** Klausuren in ≤ 14 Tagen, die nächste zuerst (Prototyp `klausurenBald`). */

@@ -834,6 +834,8 @@ export function Zeile({
       } else if (i.typ === "details") {
         const url = i.url;
         nachSchliessen(() => router.push(url));
+      } else if (i.typ === "wiederOeffnen") {
+        setDone(v?.aufgaben.find((y) => y.id === i.aufgabe.id) ?? i.aufgabe);
       } else if (i.typ === "undo") {
         kombi.undoJetzt()?.run();
         z.scrollNeu = true;

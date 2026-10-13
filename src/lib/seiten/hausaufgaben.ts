@@ -1,4 +1,5 @@
 import { listHomework } from "@/lib/homework";
+import { ERLEDIGT_LISTE_TAGE } from "@/lib/kombi/vorrat";
 import { jetzt } from "@/lib/tag";
 
 import { aufgabeDaten, heuteApp, schulKalender, type AufgabeDaten } from "./gemeinsam";
@@ -38,7 +39,7 @@ export async function hausaufgabenSeite(userId: string, jetztZeit?: Date): Promi
   const heuteSchule = kal.schultag(heute);
   // gleiche Fälligkeit: in der Reihenfolge des Eintragens (Prototyp `offeneFuer`, Z. 1782)
   const alle = [...liste].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map(aufgabeDaten);
-  const grenze = now.getTime() - 2 * 864e5;
+  const grenze = now.getTime() - ERLEDIGT_LISTE_TAGE * 864e5;
 
   return {
     heute,

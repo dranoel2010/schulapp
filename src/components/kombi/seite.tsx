@@ -48,18 +48,29 @@ export function SeitenInhalt({
   params,
   daten,
   ausCache,
+  ohneNetz = false,
 }: {
   art: string;
   params: Record<string, string>;
   daten: unknown;
   ausCache?: string | null;
+  /** ohne Netz und ohne gecachte Daten wiederhergestellt */
+  ohneNetz?: boolean;
 }) {
   const s = seitenArt(art);
   if (!s) return null;
   const sub = daten === undefined ? null : (s.untertitel?.(params, daten) ?? null);
+  const titel = s.titel(params, daten);
+  if (daten === undefined && ohneNetz)
+    return (
+      <>
+        <h2 className="p-title">{titel || "Ohne Verbindung"}</h2>
+        <p className="empty">{titel ? "Ohne Verbindung. Diese Seite war noch nicht geöffnet." : "Diese Seite war noch nicht geöffnet."}</p>
+      </>
+    );
   return (
     <>
-      <h2 className="p-title">{s.titel(params, daten)}</h2>
+      <h2 className="p-title">{titel}</h2>
       {ausCache ? <p className="p-sub">Ohne Verbindung · Stand {uhrzeit(new Date(ausCache))}</p> : null}
       {sub ? <p className="p-sub">{sub}</p> : null}
       {daten === undefined ? null : <s.Inhalt params={params} daten={daten} />}

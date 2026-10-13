@@ -54,6 +54,24 @@ describe("Antworten beim Tippen (Wortlaut wie im Prototyp)", () => {
     );
   });
 
+  it("»klausur« nach geschriebenen Klausuren: erst die kommende, sonst die zuletzt vergangene, nie „in -n Tagen“", () => {
+    const k1 = v.klausuren[0];
+    const mk = (id: string, fachId: string, datum: string, thema: string) => ({ ...k1, id, fachId, datum, thema, plan: [] });
+    const alt = [mk("kA", "ma", "2026-10-16", "Quadratische Funktionen"), mk("kB", "ma", "2026-10-17", "Parabeln")];
+    const am = (klausuren: typeof v.klausuren, s: string) => {
+      const vv = { ...v, heute: "2026-10-19", klausuren };
+      const pp = parse(s, { faecher: vv.faecher, heute: vv.heute, naechsteStunde: (f, ab) => nextLesson(vv, f, ab), ctx: null, override: null });
+      return answerFor(pp, { ...u, v: vv });
+    };
+    // die kommende liegt mehr als 14 Tage entfernt: sie gilt, nicht die älteste vergangene
+    const weit = am([...alt, mk("kC", "ma", "2026-11-20", "Wurzeln")], "klausur");
+    assert.equal(weit?.l2, "Freitag, 20.11., in 32 Tagen");
+    // keine kommende mehr: die zuletzt geschriebene, als „vor n Tagen“
+    const vorbei = am(alt, "mathe klausur");
+    assert.equal(vorbei?.l2, "Samstag, 17.10., vor 2 Tagen");
+    assert.ok(vorbei?.kind === "klausur" && vorbei.inhalt.art === "klausur" && vorbei.inhalt.kopf === "Parabeln, vor 2 Tagen");
+  });
+
   it("»wiederholen mathe«: nur Mathematik, das erste Thema", () => {
     const a = antwort("wiederholen mathe");
     assert.equal(a.kind, "nav");
@@ -116,6 +134,12 @@ describe("Suche", () => {
     const vier = mit(4);
     assert.notEqual(vier.top.key, "a:a3");
     assert.ok(vier.groups.some((g) => g.items?.some((i) => i.key === "a:a3" && i.done)));
+    // nicht mehr in der Hausaufgabenliste: ein Tipp öffnet sie wieder, statt in die Liste ohne sie zu führen
+    const it4 = vier.groups.flatMap((g) => g.items ?? []).find((i) => i.key === "a:a3")!;
+    assert.equal(it4.intern?.typ, "wiederOeffnen");
+    assert.equal(it4.ziel, undefined);
+    const frisch = mit(1).groups.flatMap((g) => g.items ?? []).find((i) => i.key === "a:a3")!;
+    assert.equal(frisch.ziel?.typ, "seite");
     const alt = mit(15);
     assert.ok(!alt.groups.some((g) => g.items?.some((i) => i.key === "a:a3")));
     assert.notEqual(alt.top.key, "a:a3");

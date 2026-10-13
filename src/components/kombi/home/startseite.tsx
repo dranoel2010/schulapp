@@ -471,7 +471,12 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
   useEffect(() => {
     if (!d) return;
     if (liveRef.current == null) liveRef.current = d.ansicht;
-    if (viewRef.current == null) setView(startAnsicht(d) ?? "ueberblick", { anim: false });
+    if (viewRef.current == null) {
+      // Auch hier gilt der Ablauf nach dem Malen: wer über eine Stapel-URL
+      // (Push-Erinnerung, Lesezeichen) einsteigt, sieht ihn beim Zurück
+      const ablauf = d.ansicht === "ablauf" && !(gemerkt && gemerkt.tag === d.tag) && ablaufDa();
+      setView(ablauf ? "ablauf" : (startAnsicht(d) ?? "ueberblick"), { anim: false });
+    }
   }, [d, setView]);
 
   // Der Ablauf nach dem Malen (Abschnitt C), wenn der Server ihn nennt

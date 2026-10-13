@@ -1,6 +1,7 @@
 import { bare, norm, type FachEintrag } from "@/lib/kombi/fach-alias";
 import { TAG, TK, dm, kurz, lang, wd } from "@/lib/kombi/text";
 import {
+  ERLEDIGT_LISTE_TAGE,
   ERLEDIGT_SUCHE_TAGE,
   addTage,
   fmtRest,
@@ -263,7 +264,10 @@ export function answerFor(p: Pick<Geparst, "words" | "fach">, u: SuchUmgebung): 
   if (has("klausur") || has("klausuren")) {
     const k =
       klausurenBald(v).find((x) => !fach || x.fachId === fach.id) ??
-      v.klausuren.find((x) => !fach || x.fachId === fach.id);
+      // Rückfall: erst die nächste künftige, dann die zuletzt vergangene — der Vorrat
+      // enthält auch vergangene Klausuren (includePast) und ist aufsteigend sortiert
+      [...v.klausuren].sort((a, b) => (a.datum < b.datum ? -1 : 1)).find((x) => x.datum >= heute && (!fach || x.fachId === fach.id)) ??
+      [...v.klausuren].sort((a, b) => (a.datum < b.datum ? 1 : -1)).find((x) => !fach || x.fachId === fach.id);
     if (k)
       return {
         kind: "klausur",
@@ -348,7 +352,9 @@ export type Option = {
     | { typ: "eintragen" }
     | { typ: "rueck"; due: string }
     | { typ: "undo" }
-    | { typ: "details"; url: string };
+    | { typ: "details"; url: string }
+    /** erledigte Aufgabe, die nicht mehr in der Hausaufgabenliste steht: wieder öffnen wie der Haken */
+    | { typ: "wiederOeffnen"; aufgabe: VorratAufgabe };
 };
 
 export type Gruppe = {
@@ -404,14 +410,22 @@ export function suche(
     groups.push({
       key: "g:aufg",
       label: "Aufgaben",
-      items: aufg.map((a) => ({
-        key: "a:" + a.id,
-        l1: [{ t: F(v, a.fachId).kurz, k: "b" as const }, { t: " " }, ...hl(a.text, qs)],
-        l2: `bis ${lang(a.due)}`,
-        task: a,
-        done: !!u.doneFuer(a),
-        ziel: { typ: "seite", art: "hausaufgaben", params: { flash: a.id } },
-      })),
+      items: aufg.map((a) => {
+        const d = u.doneFuer(a);
+        // Die Liste zeigt Erledigtes nur ERLEDIGT_LISTE_TAGE lang: ältere erledigte
+        // Aufgaben öffnet ein Tipp auf die Zeile wieder, statt in eine Liste ohne sie zu führen.
+        const ausListe = !!d && d < u.jetzt - ERLEDIGT_LISTE_TAGE * 864e5;
+        return {
+          key: "a:" + a.id,
+          l1: [{ t: F(v, a.fachId).kurz, k: "b" as const }, { t: " " }, ...hl(a.text, qs)],
+          l2: `bis ${lang(a.due)}`,
+          task: a,
+          done: !!d,
+          ...(ausListe
+            ? { intern: { typ: "wiederOeffnen" as const, aufgabe: a } }
+            : { ziel: { typ: "seite" as const, art: "hausaufgaben" as const, params: { flash: a.id } } }),
+        };
+      }),
     });
   const kl = v.klausuren.filter((k) => {
     const f = F(v, k.fachId);

@@ -83,6 +83,8 @@ type Ebene =
        * beim Abgleich bleibt sie liegen, statt zu gehen.
        */
       basis?: boolean;
+      /** Wiederhergestellt ohne Netz und ohne gecachte Daten: Leerzustand statt stummer Seite */
+      ohneNetz?: boolean;
     }
   | { key: string; typ: "route"; geht?: boolean; still?: boolean };
 
@@ -733,6 +735,43 @@ export function KombiShell({ children }: { children: ReactNode }) {
 
   // ── Start: Eintrag beschriften, Stapel nach Neuladen wiederherstellen ──────
 
+  /**
+   * Daten einer wiederhergestellten Stapelseite holen. Ohne Netz (und ohne
+   * Daten im Cache) bekommt sie einen Leerzustand; die oberste meldet dazu
+   * „Keine Verbindung · Erneut“ wie `openPage`.
+   */
+  const stapelNachladen = useCallback(
+    (key: string, art: string, params: Record<string, string>, melden: boolean) => {
+      holen(art, params).then(
+        (a) =>
+          setzeEbenen((alt) =>
+            alt.map((x) =>
+              x.key === key && x.typ === "stapel" ? { ...x, daten: a.daten, ausCache: a.ausCache, ohneNetz: false } : x,
+            ),
+          ),
+        () => {
+          setzeEbenen((alt) => alt.map((x) => (x.key === key && x.typ === "stapel" ? { ...x, ohneNetz: true } : x)));
+          if (melden) toast("Keine Verbindung", () => stapelNachladenRef.current(key, art, params, true), "Keine Verbindung", "Erneut");
+        },
+      );
+    },
+    [holen, setzeEbenen, toast],
+  );
+  const stapelNachladenRef = useRef(stapelNachladen);
+  useEffect(() => {
+    stapelNachladenRef.current = stapelNachladen;
+  }, [stapelNachladen]);
+
+  // Kommt die Verbindung zurück, laden die Seiten ohne Daten nach
+  useEffect(() => {
+    const online = () => {
+      for (const e of ebenenRef.current)
+        if (e.typ === "stapel" && !e.geht && e.ohneNetz && e.daten === undefined) stapelNachladenRef.current(e.key, e.art, e.params, false);
+    };
+    window.addEventListener("online", online);
+    return () => window.removeEventListener("online", online);
+  }, []);
+
   useEffect(() => {
     const s = stateJetzt();
     if (s.kombi && typeof s.idx === "number") idx.current = s.idx;
@@ -760,15 +799,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
         ),
         ...alt,
       ]);
-      unten.forEach((e, i) =>
-        holen(e.art, e.params).then(
-          (a) =>
-            setzeEbenen((alt) =>
-              alt.map((x) => (x.key === keys[i] && x.typ === "stapel" ? { ...x, daten: a.daten, ausCache: a.ausCache } : x)),
-            ),
-          () => {},
-        ),
-      );
+      unten.forEach((e, i) => stapelNachladen(keys[i], e.art, e.params, i === unten.length - 1));
     }
     // Diesen Eintrag übernimmt die jetzige Ladung (auch nach Neuladen). Ein
     // liegengebliebenes Overlay (Menü, Sheet, Kamera) gibt es nach dem
@@ -1238,7 +1269,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
                   if (el) elemente.current.set(e.key, el);
                 }}
               >
-                <SeitenInhalt art={e.art} params={e.params} daten={e.daten} ausCache={e.ausCache} />
+                <SeitenInhalt art={e.art} params={e.params} daten={e.daten} ausCache={e.ausCache} ohneNetz={e.ohneNetz} />
               </Seite>
             ),
           )}
