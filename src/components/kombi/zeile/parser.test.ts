@@ -60,6 +60,18 @@ describe("Parser der Zeile", () => {
     assert.equal(p.taskText, "Passé composé");
   });
 
+  it("»archiv« ist nur vorne ein Ziel: nach einem Fach im Satz bleibt es eine Aufgabe (Antwort 11)", () => {
+    const p = parse("Geschichte Archiv besuchen bis Freitag", umg());
+    assert.equal(p.intent, "eintragen");
+    assert.equal(p.eFach?.name, "Geschichte");
+    assert.equal(p.taskText, "Archiv besuchen");
+    assert.equal(parse("geschichte archiv besuchen", umg()).intent, "eintragen");
+    // vorne, mit Ziel davor oder allein nach dem Fach: das Archiv
+    for (const q of ["archiv", "Archiv geschichte", "klausuren archiv", "geschichte archiv"]) {
+      assert.equal(parse(q, umg()).intent, "suchen", q);
+    }
+  });
+
   it("Präfix ? und + schlagen alles andere", () => {
     assert.equal(parse("?mathe heft", umg()).why, "praefix");
     assert.equal(parse("+karten erstellen", umg()).taskText, "Karten erstellen");

@@ -349,6 +349,17 @@ export function KombiShell({ children }: { children: ReactNode }) {
   );
 
   /**
+   * Die Route der aktuellen Adresse neu rendern lassen und ihre Daten auch in
+   * den Daten-Cache legen: ohne Netz liefert der Service Worker sonst das
+   * HTML vom ersten Laden, ohne die Änderung von eben.
+   */
+  const routeNeu = useCallback((): Promise<unknown> => {
+    router.refresh();
+    const hier = artAusSegmenten(window.location.pathname.split("/").filter(Boolean));
+    return hier && seitenArt(hier.art) ? seiteHolen(hier.art, hier.params).catch(() => {}) : Promise.resolve();
+  }, [router]);
+
+  /**
    * Eine Seite geht (Zurück-Taste, Randwisch, Pfeil): die Stapelseite, die
    * danach oben liegt, holt still ihre Daten neu — eine Action auf der Seite
    * darüber (etwa „Note eintragen“) kann sie verändert haben. Der Inhalt
@@ -360,7 +371,14 @@ export function KombiShell({ children }: { children: ReactNode }) {
       const i = liste.findIndex((x) => x.key === gehtKey);
       if (liste.slice(i + 1).some((x) => !x.geht)) return;
       const unten = liste.slice(0, Math.max(0, i)).reverse().find((x) => !x.geht);
-      if (!unten || unten.typ !== "stapel") return;
+      if (!unten) return;
+      if (unten.typ === "route") {
+        // Eine Route darunter (direkt aufgerufen, dann eine Seite darüber):
+        // nach dem Zurück ist die Adresse wieder ihre, also rendert der Router
+        // sie neu. Gehört die Adresse noch einer Stapelseite, bleibt es dabei.
+        if (!(stateJetzt().stapel ?? []).length) void routeNeu();
+        return;
+      }
       const key = unten.key;
       seiteHolen(unten.art, unten.params).then(
         (a) =>
@@ -370,7 +388,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
         () => {},
       );
     },
-    [setzeEbenen],
+    [setzeEbenen, routeNeu],
   );
 
   // Einfahren neuer Ebenen und Ausfahren gehender, nach dem Rendern
@@ -629,30 +647,34 @@ export function KombiShell({ children }: { children: ReactNode }) {
         })
         .catch(() => {}),
     ];
-    const oben = [...ebenenRef.current].reverse().find((e) => !e.geht);
+    // Alle Stapelseiten neu holen, nicht nur die oberste: eine Änderung oben
+    // (etwa eine im Archiv wieder geöffnete Aufgabe) betrifft oft auch die
+    // Seite darunter („Hausaufgaben“). Eine Route darunter holt erst das
+    // Zurück neu (freigelegtNachladen): router.refresh() rendert die Route
+    // der Adresse, und die gehört gerade der Stapelseite oben.
+    const lebend = ebenenRef.current.filter((e) => !e.geht);
+    const oben = lebend[lebend.length - 1];
     if (oben && oben.typ === "route") {
       // Die oberste Ebene ist eine echte Route (direkter Aufruf, Push-Erinnerung,
       // Neuladen ohne Stapel): ihre Daten kommen aus dem Server-Render, also
       // rendert der Router sie neu (Plan 2.4, Punkt 2 erlaubt das für Routen).
-      router.refresh();
-      // Dieselben Daten auch in den Daten-Cache: ohne Netz liefert der Service
-      // Worker sonst das HTML vom ersten Laden, ohne die Änderung von eben.
-      const hier = artAusSegmenten(window.location.pathname.split("/").filter(Boolean));
-      if (hier && seitenArt(hier.art)) auftraege.push(seiteHolen(hier.art, hier.params).catch(() => {}));
-    } else if (oben && oben.typ === "stapel") {
-      const key = oben.key;
+      auftraege.push(routeNeu());
+    }
+    for (const e of lebend) {
+      if (e.typ !== "stapel") continue;
+      const key = e.key;
       auftraege.push(
-        seiteHolen(oben.art, oben.params)
+        seiteHolen(e.art, e.params)
           .then((a) =>
             setzeEbenen((alt) =>
-              alt.map((e) => (e.key === key && e.typ === "stapel" ? { ...e, daten: a.daten, ausCache: a.ausCache } : e)),
+              alt.map((x) => (x.key === key && x.typ === "stapel" ? { ...x, daten: a.daten, ausCache: a.ausCache } : x)),
             ),
           )
           .catch(() => {}),
       );
     }
     await Promise.all(auftraege);
-  }, [setzeEbenen, router]);
+  }, [setzeEbenen, routeNeu]);
 
   // ── Sheet (Prototyp Z. 3333–3366) ───────────────────────────────────────────
 

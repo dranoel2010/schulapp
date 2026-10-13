@@ -24,6 +24,20 @@ export function klausurVorbei(datum: string, heute: string): boolean {
   return datum < heute;
 }
 
+/**
+ * Was die Seite einer Klausur zum Planen zeigt. Ist sie vorbei (meist über
+ * das Archiv erreicht), plant die App nichts mehr: kein Lernplan-Hinweis,
+ * kein „Themen eintragen“, kein „Termine neu rechnen“. Ein Lernplan mit
+ * Blöcken bleibt als Rückblick stehen („3 von 4 Blöcken erledigt“).
+ */
+export function klausurPlanAnsicht(k: { datum: string; heute: string; themen: number; bloecke: number }): {
+  lernplan: boolean;
+  termineNeu: boolean;
+} {
+  if (!klausurVorbei(k.datum, k.heute)) return { lernplan: true, termineNeu: true };
+  return { lernplan: k.themen > 0 && k.bloecke > 0, termineNeu: false };
+}
+
 /** Gehört die Klausur ins Archiv? Ab Tag 15 nach dem Klausurtag. */
 export function klausurImArchiv(datum: string, heute: string): boolean {
   return daysBetween(datum, heute) > KLAUSUR_LISTE_TAGE;

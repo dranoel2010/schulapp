@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { appTag, berlinZeitpunkt } from "@/lib/tag";
 
-import { aufgabeImArchiv, klausurImArchiv, klausurVorbei } from "./archiv";
+import { aufgabeImArchiv, klausurImArchiv, klausurPlanAnsicht, klausurVorbei } from "./archiv";
 
 /**
  * Antwort 11: die Grenzen des Archivs. Klausuren zählen in App-Tagen
@@ -14,6 +14,17 @@ import { aufgabeImArchiv, klausurImArchiv, klausurVorbei } from "./archiv";
 const tagUm = (tag: string, hhmm: string) => appTag(berlinZeitpunkt(tag, hhmm));
 
 describe("Archiv: Klausuren", () => {
+  it("eine vergangene Klausur plant nichts mehr: kein Lernplan-Hinweis, kein „Termine neu rechnen“", () => {
+    // vorher und am Klausurtag: alles wie bisher
+    assert.deepEqual(klausurPlanAnsicht({ datum: "2026-09-27", heute: "2026-09-20", themen: 0, bloecke: 0 }), { lernplan: true, termineNeu: true });
+    assert.deepEqual(klausurPlanAnsicht({ datum: "2026-09-27", heute: "2026-09-27", themen: 0, bloecke: 0 }), { lernplan: true, termineNeu: true });
+    // vorbei, ohne Themen oder ohne Blöcke: kein Lernplan, kein „Themen eintragen“
+    assert.deepEqual(klausurPlanAnsicht({ datum: "2026-09-27", heute: "2026-10-12", themen: 0, bloecke: 0 }), { lernplan: false, termineNeu: false });
+    assert.deepEqual(klausurPlanAnsicht({ datum: "2026-09-27", heute: "2026-09-28", themen: 2, bloecke: 0 }), { lernplan: false, termineNeu: false });
+    // vorbei mit Blöcken: der Plan bleibt als Rückblick
+    assert.deepEqual(klausurPlanAnsicht({ datum: "2026-09-27", heute: "2026-10-12", themen: 2, bloecke: 3 }), { lernplan: true, termineNeu: false });
+  });
+
   it("am Klausurtag steht sie oben, am Tag danach unten (vorbei)", () => {
     assert.equal(klausurVorbei("2026-10-01", "2026-10-01"), false);
     assert.equal(klausurVorbei("2026-10-01", "2026-10-02"), true);

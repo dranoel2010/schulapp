@@ -16,6 +16,7 @@ import { useKombi } from "@/components/kombi/kontext";
 import { TextLine } from "@/components/kombi/seiten/zeilen";
 import { blockMerken, useBlock, zustand } from "@/components/kombi/lernblock/uhr";
 import { useOptimistischeAktion } from "@/lib/kombi/aktion";
+import { klausurPlanAnsicht } from "@/lib/kombi/archiv";
 import type { BlockVorher } from "@/app/(app)/lernblock-actions";
 import type { BlockDaten } from "@/lib/kombi/lernblock-daten";
 import { E, moveTo, reduce, rubber } from "@/lib/kombi/motion";
@@ -95,6 +96,8 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
 
   const heute = daten.heute;
   const kommend = diffDays(heute, daten.datum) > 0;
+  // Vorbei (Archiv, unten in „Klausuren“): kein Planen mehr, nur noch der Rückblick
+  const ansicht = klausurPlanAnsicht({ datum: daten.datum, heute, themen: daten.themen, bloecke: sicht.length });
   const geplant = sicht.length;
   const erledigt = sicht.filter((b) => b.status === "done").length;
 
@@ -163,9 +166,9 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
   return (
     <>
       {daten.thema ? <p style={{ fontSize: 17 }}>{daten.thema}</p> : null}
-      <h3 className="p-lab">Lernplan</h3>
+      {ansicht.lernplan ? <h3 className="p-lab">Lernplan</h3> : null}
 
-      {daten.themen === 0 ? (
+      {!ansicht.lernplan ? null : daten.themen === 0 ? (
         <>
           <p className="p-sub">
             Die App verteilt die Themen auf die Tage vor der Prüfung. Sobald du einträgst, was drankommt, steht der Plan.
@@ -318,25 +321,29 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
           <span />
         </button>
       ) : null}
-      <button
-        className="lrow plain"
-        type="button"
-        disabled={!!arbeitet}
-        onClick={() =>
-          void mitToast("termine", termineNeuAction, (r: { termine: number }) =>
-            r.termine === 0 ? "Keine offenen Termine" : r.termine === 1 ? "Ein Termin neu gelegt" : `${r.termine} Termine neu gelegt`,
-          )
-        }
-      >
-        <span>
-          <b>Termine neu rechnen</b>
-        </span>
-        <span />
-      </button>
-      <p className="p-sub">
-        Nach einer neuen oder verschobenen Klausur: legt die Wiederholungstermine wieder vor die Klausur. Am Takt ändert sich
-        nichts.
-      </p>
+      {ansicht.termineNeu ? (
+        <>
+          <button
+            className="lrow plain"
+            type="button"
+            disabled={!!arbeitet}
+            onClick={() =>
+              void mitToast("termine", termineNeuAction, (r: { termine: number }) =>
+                r.termine === 0 ? "Keine offenen Termine" : r.termine === 1 ? "Ein Termin neu gelegt" : `${r.termine} Termine neu gelegt`,
+              )
+            }
+          >
+            <span>
+              <b>Termine neu rechnen</b>
+            </span>
+            <span />
+          </button>
+          <p className="p-sub">
+            Nach einer neuen oder verschobenen Klausur: legt die Wiederholungstermine wieder vor die Klausur. Am Takt ändert sich
+            nichts.
+          </p>
+        </>
+      ) : null}
       <Link className="lrow plain" href={`/abruf/klausur?id=${daten.id}`}>
         <span>
           <b>Stoff und Fragen</b>

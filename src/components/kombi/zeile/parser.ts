@@ -59,10 +59,14 @@ export const ZIEL = [
   "faecher", "einstellungen", "foto", "kamera", "lernblock", "wiederholen", "wiederholung", "ueberblick", "packen", "epoche",
   // App: weitere Navigationsantworten (Plan 2.2, „Neue Ziele für die Zeile“)
   "eingangskorb", "eingang", "bausteine",
-  // Antwort 11: Vergangenes nach zwei Wochen
-  "archiv",
 ];
-export const ZIEL_REST = ["arbeit", "test", "hausaufgaben", "ha", "aufgaben", "vokabeln"];
+/**
+ * Ziele, die nur als erstes Wort (oder allein nach einem Fach) eins sind: im
+ * Rest einer Aufgabe meinen sie etwas anderes („Geschichte Archiv besuchen“).
+ * Antwort 11: das Archiv.
+ */
+export const ZIEL_ANFANG = ["archiv"];
+export const ZIEL_REST = ["arbeit", "test", "hausaufgaben", "ha", "aufgaben", "vokabeln", ...ZIEL_ANFANG];
 export const FRAGE_REST = FRAGE.concat(["haben wir", "hab ich auf", "muss ich"]);
 export const WH_WORDS = ["wiederholen", "wiederholung", "abfragen", "abfrage", "karten"];
 
@@ -175,7 +179,7 @@ export function parse(raw: string, u: ParseUmgebung, hold?: Absicht | null): Gep
     if (/\?\s*$/.test(text) || FRAGE.some((q) => n === q || n.startsWith(q + " "))) {
       intent = "suchen";
       why = "frage";
-    } else if (words.length && ZIEL.includes(bare(words[0]))) {
+    } else if (words.length && (ZIEL.includes(bare(words[0])) || ZIEL_ANFANG.includes(bare(words[0])))) {
       intent = "suchen";
       why = "ziel";
     } else if (fachAtStart && restWords.length) {
