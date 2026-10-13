@@ -35,7 +35,9 @@ export function whUnterzeile(t: {
 
 /** Die Textzeile ohne Knopf: „Für heute durch. Nächstes Thema Dienstag.“ */
 export function whText(durch: boolean, naechstesThema: string | null): string {
-  const nd = naechstesThema ? ` Nächstes Thema ${naechstesThema}.` : "";
+  // „Dienstag, 27.10.“ endet schon auf einen Punkt; kein zweiter dahinter
+  const satz = naechstesThema && !naechstesThema.endsWith(".") ? `${naechstesThema}.` : naechstesThema;
+  const nd = satz ? ` Nächstes Thema ${satz}` : "";
   return durch ? `Für heute durch.${nd}` : `Heute ist nichts fällig.${nd}`;
 }
 

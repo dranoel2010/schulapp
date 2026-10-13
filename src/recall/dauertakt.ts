@@ -20,10 +20,12 @@ import { addDays } from "@/lib/dates";
  *    bleiben, wie sie sind.
  *
  * 2. **Maß halten** (`tagesauswahl`): Von den heute fälligen Themen ohne
- *    Klausur kommt höchstens eins auf die Startseite, das fälligste. Themen
- *    mit Klausur zählen nicht dazu, sie gehören zum Lernplan. Steht heute ein
- *    offener Lernblock an, rutscht das Thema ohne Klausur hinter die Themen
- *    mit Klausur. In Ferien gibt es nichts.
+ *    Klausur und außerhalb der Epoche kommt höchstens eins auf die
+ *    Startseite, das fälligste. Themen mit Klausur und Themen des
+ *    Epochenfachs zählen nicht dazu: die einen gehören zum Lernplan, die
+ *    anderen zum Hauptunterricht, der gerade läuft, und kommen alle. Steht
+ *    heute ein offener Lernblock an, rutscht das begrenzte Thema hinter die
+ *    übrigen. In Ferien gibt es nichts.
  */
 
 /**
@@ -72,36 +74,66 @@ export function dauertaktTermin(b: BausteinStand): string | null {
 export type AuswahlThema = {
   /** nächste Klausur des Fachs oder null */
   klausur: string | null;
+  /** Thema des Epochenfachs (Hauptunterricht) */
+  istEpoche: boolean;
   /** heute schon angefangen */
   angefangen: boolean;
 };
 
 export type AuswahlLage = {
   ferien: boolean;
-  /** Themen ohne Klausur, die heute schon beendet wurden */
+  /** Themen ohne Klausur und außerhalb der Epoche, die heute schon beendet wurden */
   ohneKlausurBeendet: number;
   /** Steht heute ein offener Lernblock an? */
   lernblockOffen: boolean;
 };
 
 /**
+ * Zählt ein Thema zur Grenze „höchstens eins am Tag“? Nur Themen ohne
+ * Klausur und außerhalb der Epoche (Antwort 6). Die Epoche ist der Unterricht,
+ * der gerade läuft: ihre Themen kommen wie die mit Klausur alle, auch ohne
+ * Klausur, und nehmen Englisch oder Französisch den Platz nicht weg.
+ */
+export const zaehltZurGrenze = (t: { klausur: string | null; istEpoche: boolean }): boolean =>
+  t.klausur === null && !t.istEpoche;
+
+/**
  * Was von den fälligen Themen (schon sortiert, das fälligste zuerst) heute
- * auf die Startseite kommt. Themen mit Klausur bleiben alle. Von denen ohne
- * Klausur bleibt höchstens eins je Tag; ein angefangenes behält seinen Platz
- * immer. Mit offenem Lernblock stehen sie hinter den Themen mit Klausur.
+ * auf die Startseite kommt. Themen mit Klausur und Themen der Epoche bleiben
+ * alle. Von den übrigen bleibt höchstens eins je Tag; ein angefangenes behält
+ * seinen Platz immer. Mit offenem Lernblock stehen sie hinter den anderen.
  */
 export function tagesauswahl<T extends AuswahlThema>(sortiert: readonly T[], lage: AuswahlLage): T[] {
   if (lage.ferien) return [];
   let frei = Math.max(0, OHNE_KLAUSUR_JE_TAG - lage.ohneKlausurBeendet);
-  for (const t of sortiert) if (t.klausur === null && t.angefangen) frei -= 1;
+  for (const t of sortiert) if (zaehltZurGrenze(t) && t.angefangen) frei -= 1;
   const bleibt = sortiert.filter((t) => {
-    if (t.klausur !== null || t.angefangen) return true;
+    if (!zaehltZurGrenze(t) || t.angefangen) return true;
     if (frei <= 0) return false;
     frei -= 1;
     return true;
   });
   if (!lage.lernblockOffen) return bleibt;
-  const rang = (t: T) => (t.angefangen ? 0 : t.klausur !== null ? 1 : 2);
+  const rang = (t: T) => (t.angefangen ? 0 : zaehltZurGrenze(t) ? 2 : 1);
   // Array.prototype.sort ist stabil: innerhalb eines Rangs bleibt die Folge
   return bleibt.slice().sort((a, b) => rang(a) - rang(b));
+}
+
+/**
+ * Der erste Tag ab `tag`, der nicht frei ist: Ferien sind ganz frei, dort
+ * kommt nichts („Nächstes Thema …“ nennt dann den ersten Tag danach). Beide
+ * Enden eines Zeitraums zählen mit, wie bei `freePeriodOn()`.
+ */
+export function ersterSchultagAb(
+  tag: string,
+  zeitraeume: readonly { startsOn: string; endsOn: string }[],
+): string {
+  let d = tag;
+  // Jeder Schritt springt hinter einen Zeitraum; mehr Schritte als Zeiträume braucht es nicht.
+  for (let schritt = 0; schritt <= zeitraeume.length; schritt += 1) {
+    const frei = zeitraeume.find((z) => z.startsOn <= d && d <= z.endsOn);
+    if (!frei) return d;
+    d = addDays(frei.endsOn, 1);
+  }
+  return d;
 }

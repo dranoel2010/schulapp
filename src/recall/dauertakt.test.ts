@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { DAUERTAKT, dauertaktTermin, tagesauswahl, type BausteinStand } from "@/recall/dauertakt";
+import {
+  DAUERTAKT,
+  dauertaktTermin,
+  ersterSchultagAb,
+  tagesauswahl,
+  zaehltZurGrenze,
+  type BausteinStand,
+} from "@/recall/dauertakt";
 
 const stand = (s: Partial<BausteinStand> = {}): BausteinStand => ({
   klausur: false,
@@ -41,8 +48,14 @@ describe("dauertaktTermin", () => {
   });
 });
 
-type T = { name: string; klausur: string | null; angefangen: boolean };
-const t = (name: string, klausur: string | null = null, angefangen = false): T => ({ name, klausur, angefangen });
+type T = { name: string; klausur: string | null; angefangen: boolean; istEpoche: boolean };
+const t = (name: string, klausur: string | null = null, angefangen = false, istEpoche = false): T => ({
+  name,
+  klausur,
+  angefangen,
+  istEpoche,
+});
+const epoche = (name: string): T => t(name, null, false, true);
 const lage = { ferien: false, ohneKlausurBeendet: 0, lernblockOffen: false };
 const namen = (l: T[]) => l.map((x) => x.name);
 
@@ -75,5 +88,40 @@ describe("tagesauswahl", () => {
   it("ohne Themen ohne Klausur bleibt die Folge unverändert", () => {
     const sortiert = [t("Funktionen", "2026-10-20"), t("Brüche", "2026-11-02")];
     assert.deepEqual(namen(tagesauswahl(sortiert, lage)), ["Funktionen", "Brüche"]);
+  });
+
+  it("die Epoche ohne Klausur zählt nicht zur Grenze: Epoche und Französisch kommen beide", () => {
+    const sortiert = [epoche("Reformation"), t("Vokabeln"), epoche("Bauernkrieg"), t("Passé composé")];
+    assert.deepEqual(namen(tagesauswahl(sortiert, lage)), ["Reformation", "Vokabeln", "Bauernkrieg"]);
+  });
+
+  it("eine beendete Epoche verbraucht den Platz nicht, ein beendetes Französisch schon", () => {
+    const sortiert = [epoche("Reformation"), t("Vokabeln")];
+    assert.deepEqual(namen(tagesauswahl(sortiert, { ...lage, ohneKlausurBeendet: 1 })), ["Reformation"]);
+  });
+
+  it("mit offenem Lernblock steht die Epoche bei den Klausurthemen, das begrenzte Thema hinten", () => {
+    const sortiert = [t("Vokabeln"), epoche("Reformation"), t("Funktionen", "2026-10-20")];
+    assert.deepEqual(namen(tagesauswahl(sortiert, { ...lage, lernblockOffen: true })), ["Reformation", "Funktionen", "Vokabeln"]);
+  });
+});
+
+describe("zaehltZurGrenze", () => {
+  it("nur ohne Klausur und außerhalb der Epoche", () => {
+    assert.equal(zaehltZurGrenze({ klausur: null, istEpoche: false }), true);
+    assert.equal(zaehltZurGrenze({ klausur: null, istEpoche: true }), false);
+    assert.equal(zaehltZurGrenze({ klausur: "2026-10-20", istEpoche: false }), false);
+  });
+});
+
+describe("ersterSchultagAb", () => {
+  const herbst = { kind: "ferien", startsOn: "2026-10-19", endsOn: "2026-10-30" };
+  const brueckentag = { kind: "frei", startsOn: "2026-10-31", endsOn: "2026-11-01" };
+  it("ein Tag außerhalb der Ferien bleibt", () => {
+    assert.equal(ersterSchultagAb("2026-10-18", [herbst]), "2026-10-18");
+  });
+  it("ein Tag in den Ferien rückt auf den ersten Tag danach, auch über zwei Zeiträume", () => {
+    assert.equal(ersterSchultagAb("2026-10-27", [herbst]), "2026-10-31");
+    assert.equal(ersterSchultagAb("2026-10-27", [herbst, brueckentag]), "2026-11-02");
   });
 });

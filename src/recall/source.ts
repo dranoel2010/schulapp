@@ -350,7 +350,7 @@ export async function sperrtageAb(
  * wiederholt), das Tagesprotokoll („Für heute durch.“), die Art eines Themas
  * (Abfragen oder Üben) und der Wortlaut der Texte rund um „Wiederholen“.
  */
-export { freePeriodToday } from "@/lib/free-days";
+export { freePeriodToday, listFreePeriods } from "@/lib/free-days";
 export { protokollVomTag } from "@/lib/protokoll";
 export { themaArt } from "@/lib/themen-art";
 export { weekdayOrDate } from "@/lib/kombi/text";

@@ -5,12 +5,12 @@ import { before, describe, it } from "node:test";
 
 import { and, eq, isNull } from "drizzle-orm";
 
-import { exams, freePeriods, studyBlocks, subjectTopics, subjects } from "@/db/schema";
+import { exams, freePeriods, lessons, studyBlocks, subjectTopics, subjects } from "@/db/schema";
 import { protokollieren } from "@/lib/protokoll";
 import { DAUERTAKT } from "@/recall/dauertakt";
 import { dauertaktNachlegen } from "@/recall/nachlegen";
 import { recallItems, recallSchedule } from "@/recall/schema";
-import { berlinStunde, faelligeThemen, wiederholenStand } from "@/recall/themen";
+import { berlinStunde, faelligeThemen, naechsterTerminUeberhaupt, wiederholenStand } from "@/recall/themen";
 import { addDays } from "@/lib/dates";
 
 /**
@@ -109,6 +109,18 @@ describe("dauertaktNachlegen", () => {
     assert.equal((await offeneTermine(zurueck)).length, 0);
     assert.equal((await offeneTermine(messung)).length, 0);
   });
+
+  it("gleichzeitige Aufrufe legen keinen Termin doppelt an", async () => {
+    const g = await testNutzer("Gleichzeitig");
+    const sp = await fach(g, "Englisch", "E");
+    const ids = [
+      await frage(g, sp, null, ["2026-09-20"]),
+      await frage(g, sp, null, ["2026-09-21"]),
+    ];
+    const ergebnis = await Promise.all([1, 2, 3].map(() => dauertaktNachlegen(g, MO)));
+    assert.equal(ergebnis.reduce((a, b) => a + b, 0), 2);
+    for (const id of ids) assert.equal((await offeneTermine(id)).length, 1);
+  });
 });
 
 describe("Themen ohne Klausur auf der Startseite", () => {
@@ -196,5 +208,94 @@ describe("Themen ohne Klausur auf der Startseite", () => {
     // auch nach dem Beenden des Klausurthemas bleibt der Platz für Englisch
     await protokollieren(m, MO, "thema_beendet", tm, { n: 2 });
     assert.deepEqual((await faelligeThemen(m, MO)).map((x) => x.titel), ["Vokabeln"]);
+  });
+});
+
+describe("die Epoche zählt nicht zur Grenze", () => {
+  it("Epoche ohne Klausur und Französisch erscheinen beide", async () => {
+    const e = await testNutzer("Epoche");
+    const ge = await fach(e, "Geschichte", "Ge");
+    const sp = await fach(e, "Französisch", "F");
+    // Geschichte in der ersten Stunde Mo bis Fr: das Epochenfach, ohne Klausur
+    await testDb.insert(lessons).values([1, 2, 3, 4, 5].map((weekday) => ({ userId: e, subjectId: ge, weekday, period: 1 })));
+    const tGe = await thema(e, ge, "Reformation");
+    const tGe2 = await thema(e, ge, "Bauernkrieg");
+    for (let k = 0; k < 5; k++) await frage(e, ge, tGe, [], [MO]);
+    await frage(e, ge, tGe2, [], [MO]);
+    await frage(e, sp, await thema(e, sp, "Vokabeln"), [], ["2026-10-08"]);
+    const t = await faelligeThemen(e, MO);
+    assert.deepEqual(t.map((x) => x.titel), ["Vokabeln", "Reformation", "Bauernkrieg"]);
+    assert.equal(t[1].istEpoche, true);
+    assert.deepEqual(await wiederholenStand(e, MO), { kind: "knopf", n: 3, sub: "Zuerst Französisch · Vokabeln" });
+    // Ein beendetes Epochenthema verbraucht den Platz für Französisch nicht
+    await protokollieren(e, MO, "thema_beendet", tGe2, { n: 1 });
+    assert.deepEqual((await faelligeThemen(e, MO)).map((x) => x.titel), ["Vokabeln", "Reformation"]);
+  });
+
+  it("das Epochenfach ohne Klausur bekommt weiter den Dauertakt", async () => {
+    const e = await testNutzer("Epoche Takt");
+    const ge = await fach(e, "Geschichte", "Ge");
+    await testDb.insert(lessons).values([1, 2, 3, 4, 5].map((weekday) => ({ userId: e, subjectId: ge, weekday, period: 1 })));
+    const id = await frage(e, ge, await thema(e, ge, "Reformation"), ["2026-09-10"]);
+    assert.equal(await dauertaktNachlegen(e, MO), 1);
+    assert.deepEqual((await offeneTermine(id)).map((t) => t.dueOn), [addDays("2026-09-10", DAUERTAKT)]);
+  });
+});
+
+describe("„Nächstes Thema“ zählt zurückgehaltene Themen mit", () => {
+  it("ein Thema ohne Klausur beendet, ein zweites zurückgehalten: morgen", async () => {
+    const z = await testNutzer("Zurück");
+    const sp = await fach(z, "Französisch", "F");
+    const en = await fach(z, "Englisch", "E");
+    const tFr = await thema(z, sp, "Vokabeln");
+    await frage(z, sp, tFr, [], ["2026-10-08"]);
+    await frage(z, en, await thema(z, en, "Irregular verbs"), [], ["2026-10-10"]);
+    await frage(z, en, await thema(z, en, "Reported speech"), [], ["2026-10-22"]);
+    assert.deepEqual((await faelligeThemen(z, MO)).map((x) => x.titel), ["Vokabeln"]);
+    await protokollieren(z, MO, "thema_beendet", tFr, { n: 1 });
+    assert.deepEqual(await faelligeThemen(z, MO), []);
+    assert.equal(await naechsterTerminUeberhaupt(z, MO), "2026-10-13");
+    assert.deepEqual(await wiederholenStand(z, MO), {
+      kind: "text",
+      text: "Für heute durch. Nächstes Thema Dienstag.",
+      ok: true,
+    });
+    // und tatsächlich steht morgen wieder ein Thema im Knopf
+    assert.equal((await faelligeThemen(z, "2026-10-13")).length, 1);
+  });
+
+  it("morgen beginnen Ferien: der erste Tag danach", async () => {
+    const z = await testNutzer("Zurück Ferien");
+    const sp = await fach(z, "Französisch", "F");
+    const en = await fach(z, "Englisch", "E");
+    const tFr = await thema(z, sp, "Vokabeln");
+    await frage(z, sp, tFr, [], ["2026-10-08"]);
+    await frage(z, en, await thema(z, en, "Irregular verbs"), [], ["2026-10-10"]);
+    await testDb.insert(freePeriods).values({ userId: z, kind: "ferien", startsOn: "2026-10-18", endsOn: "2026-10-30" });
+    await protokollieren(z, "2026-10-17", "thema_beendet", tFr, { n: 1 });
+    assert.equal(await naechsterTerminUeberhaupt(z, "2026-10-17"), "2026-10-31");
+    assert.deepEqual(await wiederholenStand(z, "2026-10-17"), {
+      kind: "text",
+      text: "Für heute durch. Nächstes Thema Samstag, 31.10.",
+      ok: true,
+    });
+  });
+
+  it("ein Termin in den Ferien rückt auf den ersten Tag danach", async () => {
+    const z = await testNutzer("Termin Ferien");
+    const sp = await fach(z, "Französisch", "F");
+    await frage(z, sp, await thema(z, sp, "Vokabeln"), [], ["2026-10-27"]);
+    await testDb.insert(freePeriods).values({ userId: z, kind: "ferien", startsOn: "2026-10-19", endsOn: "2026-10-30" });
+    assert.equal(await naechsterTerminUeberhaupt(z, MO), "2026-10-31");
+  });
+
+  it("ohne Zurückgehaltene gilt weiter der nächste Termin", async () => {
+    const z = await testNutzer("Nichts zurück");
+    const sp = await fach(z, "Französisch", "F");
+    const tFr = await thema(z, sp, "Vokabeln");
+    await frage(z, sp, tFr, [], [MO]);
+    await frage(z, sp, await thema(z, sp, "Grammatik"), [], ["2026-10-22"]);
+    await protokollieren(z, MO, "thema_beendet", tFr, { n: 1 });
+    assert.equal(await naechsterTerminUeberhaupt(z, MO), "2026-10-22");
   });
 });

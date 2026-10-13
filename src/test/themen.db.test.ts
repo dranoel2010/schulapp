@@ -80,9 +80,11 @@ async function frage(nutzer: string, subjectId: string, topicId: string | null, 
 }
 
 /**
- * Eine ferne Klausur im Fach: Diese Tests prüfen die Reihenfolge aller
- * fälligen Themen. Ohne Klausur käme nur eins am Tag (Antwort 6, eigene Tests
- * in dauertakt.db.test.ts).
+ * Eine ferne Klausur im Fach: Einzelne Tests hier prüfen die Reihenfolge
+ * mehrerer Themen außerhalb der Epoche. Ohne Klausur käme davon nur eins am
+ * Tag (Antwort 6, eigene Tests in dauertakt.db.test.ts). Die Grundlage V2 2.5
+ * (Geschichte als Epoche, Mathe mit Klausur, Französisch) braucht keine: die
+ * Epoche zählt nicht zur Grenze.
  */
 async function klausurSpaeter(nutzer: string, subjectId: string) {
   await testDb.insert(exams).values({ userId: nutzer, subjectId, kind: "klausur", date: "2026-12-18", title: "Später" });
@@ -108,8 +110,6 @@ before(async () => {
   // Hauptunterricht: Geschichte in der ersten Stunde an allen fünf Tagen
   await testDb.insert(lessons).values([1, 2, 3, 4, 5].map((weekday) => ({ userId: nutzer, subjectId: ge, weekday, period: 1 })));
   await testDb.insert(exams).values({ userId: nutzer, subjectId: ma, kind: "klausur", date: "2026-10-16", title: "QF" });
-  await klausurSpaeter(nutzer, ge);
-  await klausurSpaeter(nutzer, fr);
   // V2 2.5: Geschichte seit Sa 10.10. (10 Fragen), Mathe am 12.10. mit Klausur (12), Französisch am 12.10. (8)
   for (let k = 0; k < 10; k++) await frage(nutzer, ge, tGe, ["2026-10-10", "2026-10-13"], `G${k}`);
   for (let k = 0; k < 12; k++) await frage(nutzer, ma, tMa, [MO, "2026-10-15"], `M${k}`);

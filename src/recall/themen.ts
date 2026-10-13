@@ -2,7 +2,7 @@ import { and, asc, eq, gt, gte, inArray, isNull, lt, lte } from "drizzle-orm";
 
 import { db } from "@/db";
 import { arbeitsblaetter, exams, studyBlocks, subjectTopics, tagesprotokoll, type ThemaArt } from "@/db/schema";
-import { tagesauswahl } from "@/recall/dauertakt";
+import { ersterSchultagAb, tagesauswahl, zaehltZurGrenze } from "@/recall/dauertakt";
 import { addDays, berlinDay } from "@/lib/dates";
 import { naechsteKlausur } from "@/recall/items";
 import { istId } from "@/recall/ids";
@@ -11,6 +11,7 @@ import {
   fachName,
   fragenText,
   freePeriodToday,
+  listFreePeriods,
   protokollVomTag,
   themaArt,
   weekdayOrDate,
@@ -351,18 +352,33 @@ async function gruppiert(userId: string, heute: string, subjectId?: string) {
  * gescheitert ist, fällt für heute auf Karten zurück.
  *
  * Ohne `subjectId` hält die Liste Maß (Antwort 6, `tagesauswahl()` in
- * @/recall/dauertakt): von den Themen ohne Klausur höchstens eins am Tag,
- * das fälligste; mit offenem Lernblock hinter den Themen mit Klausur.
+ * @/recall/dauertakt): von den Themen ohne Klausur und außerhalb der Epoche
+ * höchstens eins am Tag, das fälligste; mit offenem Lernblock hinter den
+ * übrigen.
  */
 export async function faelligeThemen(
   userId: string,
   heute: string,
   optionen: { subjectId?: string } = {},
 ): Promise<FaelligesThema[]> {
-  if (await freePeriodToday(userId, heute)) return [];
+  return (await themenAuswahl(userId, heute, optionen)).themen;
+}
+
+/**
+ * Wie `faelligeThemen()`, dazu die Zahl der Themen, die heute fällig sind,
+ * aber nur wegen der Grenze „eins am Tag“ fehlen. Sie kommen morgen (oder am
+ * ersten Tag nach den Ferien); „Nächstes Thema …“ braucht das.
+ */
+export async function themenAuswahl(
+  userId: string,
+  heute: string,
+  optionen: { subjectId?: string } = {},
+): Promise<{ themen: FaelligesThema[]; zurueckgehalten: number }> {
+  const nichts = { themen: [], zurueckgehalten: 0 };
+  if (await freePeriodToday(userId, heute)) return nichts;
 
   const { gruppen, blaetter, aufloesen } = await gruppiert(userId, heute, optionen.subjectId);
-  if (gruppen.size === 0) return [];
+  if (gruppen.size === 0) return nichts;
 
   // Angefangen: heutige Versuche an Fragen dieses Themas (Plan 3.4). Bewusste
   // Abweichung vom Prototyp: dort gilt ein Thema schon als angefangen, wenn der
@@ -421,21 +437,27 @@ export async function faelligeThemen(
       `${a.fach} ${a.titel}`.localeCompare(`${b.fach} ${b.titel}`, "de"),
   );
   // Ein Fach ausdrücklich geöffnet: alles, was dort fällig ist
-  if (optionen.subjectId) return sortiert;
+  if (optionen.subjectId) return { themen: sortiert, zurueckgehalten: 0 };
   // Startseite, Tisch und Zeile: Maß halten bei Themen ohne Klausur (Antwort 6)
   const [ohneKlausurBeendet, lernblockOffen] = await Promise.all([
-    beendetOhneKlausur(userId, heute, aufloesen, klausurJeFach),
+    beendetOhneKlausur(userId, heute, aufloesen, klausurJeFach, epoche),
     offenerLernblock(userId, heute),
   ]);
-  return tagesauswahl(sortiert, { ferien: false, ohneKlausurBeendet, lernblockOffen });
+  const themenHeute = tagesauswahl(sortiert, { ferien: false, ohneKlausurBeendet, lernblockOffen });
+  return { themen: themenHeute, zurueckgehalten: sortiert.length - themenHeute.length };
 }
 
-/** Wie viele Themen ohne Klausur heute (App-Tag) schon beendet wurden. */
+/**
+ * Wie viele Themen heute (App-Tag) schon beendet wurden, die zur Grenze
+ * „eins am Tag“ zählen: ohne Klausur und außerhalb der Epoche
+ * (`zaehltZurGrenze()` in @/recall/dauertakt).
+ */
 async function beendetOhneKlausur(
   userId: string,
   heute: string,
   aufloesen: (id: string | null) => Thema | null,
   klausurJeFach: Map<string, string | null>,
+  epoche: string | null,
 ): Promise<number> {
   const keys = [...(await beendeteThemen(userId, heute)).keys()];
   let n = 0;
@@ -443,7 +465,7 @@ async function beendetOhneKlausur(
     const fach = key.startsWith("ohne:") ? key.slice(5) : aufloesen(key)?.subjectId;
     if (!fach) continue;
     const klausur = klausurJeFach.has(fach) ? klausurJeFach.get(fach) : await naechsteKlausur(userId, fach, heute);
-    if (!klausur) n += 1;
+    if (zaehltZurGrenze({ klausur: klausur ?? null, istEpoche: fach === epoche })) n += 1;
   }
   return n;
 }
@@ -511,8 +533,31 @@ export async function naechsterTerminThema(
   return zeile.dueOn <= heute ? addDays(heute, 1) : zeile.dueOn;
 }
 
-/** „Nächstes Thema ⟨Tag⟩“: der kleinste offene Termin überhaupt nach heute. */
-export async function naechsterTerminUeberhaupt(userId: string, heute: string): Promise<string | null> {
+/**
+ * „Nächstes Thema ⟨Tag⟩“: der Tag, an dem wieder ein Thema kommt.
+ *
+ * Fehlen heute fällige Themen nur wegen der Grenze „eins am Tag“
+ * (`zurueckgehalten`, aus `themenAuswahl()`), kommen sie morgen. Sonst gilt
+ * der kleinste offene Termin nach heute. Fällt der Tag in Ferien, rückt er auf
+ * den ersten Tag danach. Ohne `zurueckgehalten` rechnet die Funktion die Zahl
+ * selbst aus.
+ */
+export async function naechsterTerminUeberhaupt(
+  userId: string,
+  heute: string,
+  zurueckgehalten?: number,
+): Promise<string | null> {
+  const [rest, zeitraeume] = await Promise.all([
+    zurueckgehalten ?? themenAuswahl(userId, heute).then((a) => a.zurueckgehalten),
+    listFreePeriods(userId, heute),
+  ]);
+  if (rest > 0) return ersterSchultagAb(addDays(heute, 1), zeitraeume);
+  const termin = await kleinsterTerminNachHeute(userId, heute);
+  return termin ? ersterSchultagAb(termin, zeitraeume) : null;
+}
+
+/** Der kleinste offene Termin nach heute. */
+async function kleinsterTerminNachHeute(userId: string, heute: string): Promise<string | null> {
   const [zeile] = await db
     .select({ dueOn: recallSchedule.dueOn })
     .from(recallSchedule)
@@ -576,8 +621,12 @@ export async function themaTagesbericht(
 }
 
 /** „Nächstes Thema …“ als Text, oder null. */
-export async function naechstesThemaText(userId: string, heute: string): Promise<string | null> {
-  const t = await naechsterTerminUeberhaupt(userId, heute);
+export async function naechstesThemaText(
+  userId: string,
+  heute: string,
+  zurueckgehalten?: number,
+): Promise<string | null> {
+  const t = await naechsterTerminUeberhaupt(userId, heute, zurueckgehalten);
   return t ? weekdayOrDate(t, heute) : null;
 }
 
@@ -590,9 +639,12 @@ export async function wiederholenStand(userId: string, heute: string): Promise<W
     .where(and(eq(recallItems.userId, userId), isNull(recallItems.retiredAt)))
     .limit(1);
   if (!eine) return { kind: "leer" };
-  const themen = await faelligeThemen(userId, heute);
+  const { themen, zurueckgehalten } = await themenAuswahl(userId, heute);
   if (themen.length) return { kind: "knopf", n: themen.length, sub: whUnterzeile(themen[0]) };
-  const [durch, nd] = await Promise.all([heuteDurch(userId, heute), naechstesThemaText(userId, heute)]);
+  const [durch, nd] = await Promise.all([
+    heuteDurch(userId, heute),
+    naechstesThemaText(userId, heute, zurueckgehalten),
+  ]);
   return { kind: "text", text: whText(durch, nd), ok: durch };
 }
 
