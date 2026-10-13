@@ -1,4 +1,5 @@
-import type { IservStateRow } from "@/db/schema";
+import type { FreePeriod, IservStateRow } from "@/db/schema";
+import { freeLabel, freiQuelleText } from "@/lib/free-days";
 import type { Eintrag, IservAuswertung } from "@/lib/iserv/auswahl";
 import type { IservConfigResult } from "@/lib/iserv/config";
 import type { Snapshot } from "@/lib/iserv/schutz";
@@ -114,9 +115,43 @@ export type IservStatus = {
   knapp: Eintrag[];
   /** Höchstens zehn, ab heute */
   ausgelassenFrei: Eintrag[];
+  /**
+   * Die freien Tage der App, die heute oder später noch gelten — mit ihrer
+   * Herkunft („aus IServ“ oder „von Hand eingetragen“), höchstens zwölf
+   */
+  freieTage: FreierTag[];
   exerciseFields: string | null;
   running: boolean;
 };
+
+export type FreierTag = {
+  titel: string;
+  von: string;
+  /** Inklusiv */
+  bis: string;
+  aus: "iserv" | "hand";
+  /** „aus IServ“ oder „von Hand eingetragen“ */
+  herkunft: string;
+};
+
+/** Die freien Tage ab heute, der früheste zuerst. */
+export function freieTageAbHeute(
+  zeitraeume: readonly Pick<FreePeriod, "kind" | "title" | "startsOn" | "endsOn" | "quelle">[],
+  heute: string,
+  max = 12,
+): FreierTag[] {
+  return zeitraeume
+    .filter((z) => z.endsOn >= heute)
+    .sort((a, b) => (a.startsOn < b.startsOn ? -1 : a.startsOn > b.startsOn ? 1 : 0))
+    .slice(0, max)
+    .map((z) => ({
+      titel: freeLabel(z),
+      von: z.startsOn,
+      bis: z.endsOn,
+      aus: z.quelle === "iserv" ? "iserv" : "hand",
+      herkunft: freiQuelleText(z),
+    }));
+}
 
 const ROLLEN: readonly IservRolle[] = [
   "oeffentlich",
@@ -181,6 +216,8 @@ export function baueIservStatus(input: {
   row: IservStateRow | null;
   snapshots: ReadonlyMap<IservQuelle, Snapshot>;
   auswertung: IservAuswertung | null;
+  /** Alle freien Zeiträume der App (auch die von Hand), für die Liste „Freie Tage“ */
+  freie?: readonly Pick<FreePeriod, "kind" | "title" | "startsOn" | "endsOn" | "quelle">[];
   heute: string;
   jetzt: Date;
   running: boolean;
@@ -206,7 +243,12 @@ export function baueIservStatus(input: {
         ? iservStaleSince(row, input.jetzt)
         : null,
     quellen: row ? leseQuellen(row.sourcesJson) : [],
-    zahlen: { klasse: zahl("klasse"), oeffentlich: zahl("oeffentlich"), aufgaben: zahl("aufgaben") },
+    zahlen: {
+      klasse: zahl("klasse"),
+      oeffentlich: zahl("oeffentlich"),
+      aufgaben: zahl("aufgaben"),
+      ferien: zahl("ferien"),
+    },
     counts: {
       genommen: a?.genommen.length ?? 0,
       knapp: a?.knapp.length ?? 0,
@@ -218,6 +260,7 @@ export function baueIservStatus(input: {
     zweifel: a ? abHeute(a.zweifel, input.heute, 20) : [],
     knapp: a ? abHeute(a.knapp, input.heute, 50) : [],
     ausgelassenFrei: a ? abHeute(a.ausgelassenFrei, input.heute, 10) : [],
+    freieTage: freieTageAbHeute(input.freie ?? [], input.heute),
     exerciseFields: row?.exerciseFields ?? null,
     running: input.running,
   };

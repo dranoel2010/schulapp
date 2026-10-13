@@ -287,6 +287,7 @@ h1.q{font-family:var(--sans);font-size:32px;line-height:1.08;font-weight:650;let
 .lesson em{display:block;font-style:normal;font-size:15px;color:var(--ink-2);margin-top:2px}
 .lesson .tag{display:block;font-size:15px;font-weight:650;color:var(--ink);margin-top:4px}
 .free{font-size:15px;color:var(--ink-2);padding:14px 0}
+.free-quelle{color:var(--ink-3)}
 .plan{margin-top:2px}
 .prow{display:grid;grid-template-columns:58px minmax(0,1fr) auto;column-gap:10px;align-items:start;padding:10px 0}
 .prow.exday{border-top:1px solid var(--line);margin-top:4px;padding-top:14px}

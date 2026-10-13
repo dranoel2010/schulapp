@@ -1,7 +1,8 @@
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 
 import { db } from "@/db";
-import { iservSnapshots, iservState, type IservStateRow } from "@/db/schema";
+import { freePeriods, iservSnapshots, iservState, type IservStateRow } from "@/db/schema";
+import { ferienPlan, planTutEtwas, type FerienWunsch } from "@/lib/iserv/ferien";
 import type { Snapshot } from "@/lib/iserv/schutz";
 import { ISERV_QUELLEN, iservItemsSchema, type IservQuelle } from "@/lib/iserv/types";
 
@@ -89,11 +90,30 @@ export type RunInput = {
   sourcesJson?: string;
   /** Nur gesetzt, wenn noch keine Felder vermerkt sind */
   exerciseFields?: string;
+  /**
+   * Die freien Zeiträume, die IServ meldet (@/lib/iserv/ferien) — undefined:
+   * die freien Tage nicht anfassen (kein Stand des öffentlichen Kalenders)
+   */
+  ferien?: { wuensche: readonly FerienWunsch[]; heute: string };
 };
 
-/** Was ein Abruf ergab — Snapshots und Zustand in EINER kurzen Transaktion. */
-export async function saveRun(userId: string, input: RunInput): Promise<void> {
-  await db.transaction(async (tx) => {
+export type RunErgebnis = {
+  /** Hat der Abgleich eine Zeile in `free_periods` angelegt, geändert oder entfernt? */
+  ferienGeaendert: boolean;
+};
+
+/**
+ * Was ein Abruf ergab — Snapshots, Zustand und die freien Tage aus IServ in
+ * EINER kurzen Transaktion. Scheitert der Ferienabgleich, kommt auch der Rest
+ * nicht an, und der Lauf meldet sich als Fehler.
+ *
+ * Die freien Tage: Gelesen und geschrieben werden NUR Zeilen mit
+ * `quelle = 'iserv'` — von Hand eingetragene fasst diese Funktion nie an.
+ * Erst wird gelöscht, dann geändert, dann angelegt, damit kein Schlüssel kurz
+ * zweimal dasteht (Index `free_periods_iserv_key_idx`).
+ */
+export async function saveRun(userId: string, input: RunInput): Promise<RunErgebnis> {
+  return db.transaction(async (tx) => {
     for (const snap of input.snapshots) {
       const values = {
         remoteId: snap.remoteId,
@@ -139,6 +159,55 @@ export async function saveRun(userId: string, input: RunInput): Promise<void> {
             }),
       })
       .where(eq(iservState.userId, userId));
+
+    if (!input.ferien) return { ferienGeaendert: false };
+
+    const bestehend = await tx
+      .select({
+        id: freePeriods.id,
+        iservKey: freePeriods.iservKey,
+        kind: freePeriods.kind,
+        title: freePeriods.title,
+        startsOn: freePeriods.startsOn,
+        endsOn: freePeriods.endsOn,
+      })
+      .from(freePeriods)
+      .where(and(eq(freePeriods.userId, userId), eq(freePeriods.quelle, "iserv")));
+
+    const plan = ferienPlan(
+      bestehend.flatMap((z) => (z.iservKey ? [{ ...z, iservKey: z.iservKey }] : [])),
+      input.ferien.wuensche,
+      input.ferien.heute,
+    );
+    if (!planTutEtwas(plan)) return { ferienGeaendert: false };
+
+    const nurIserv = (id: string) =>
+      and(eq(freePeriods.id, id), eq(freePeriods.userId, userId), eq(freePeriods.quelle, "iserv"));
+
+    for (const id of plan.loeschen) {
+      await tx.delete(freePeriods).where(nurIserv(id));
+    }
+    for (const z of plan.aendern) {
+      await tx
+        .update(freePeriods)
+        .set({ iservKey: z.iservKey, kind: z.kind, title: z.title, startsOn: z.startsOn, endsOn: z.endsOn })
+        .where(nurIserv(z.id));
+    }
+    if (plan.neu.length > 0) {
+      await tx.insert(freePeriods).values(
+        plan.neu.map((w) => ({
+          userId,
+          quelle: "iserv",
+          iservKey: w.schluessel,
+          kind: w.kind,
+          title: w.title,
+          startsOn: w.startsOn,
+          endsOn: w.endsOn,
+        })),
+      );
+    }
+
+    return { ferienGeaendert: true };
   });
 }
 

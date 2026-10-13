@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { CardContent, SeitenKopf } from "@/components/kombi/form";
 import { addDays, berlinDay, formatGerman, timeInBerlin, todayInBerlin } from "@/lib/dates";
 import type { Eintrag } from "@/lib/iserv/auswahl";
-import { BLOCK_TEXT, type IservStatus } from "@/lib/iserv/report";
+import { BLOCK_TEXT, type FreierTag, type IservStatus } from "@/lib/iserv/report";
 import type { IservRolle } from "@/lib/iserv/types";
 
 import { retryIservAction } from "./actions";
@@ -101,7 +101,46 @@ function Liste({
   );
 }
 
-const VERWENDET: readonly IservRolle[] = ["klasse", "oeffentlich", "aufgaben"];
+const VERWENDET: readonly IservRolle[] = ["klasse", "oeffentlich", "aufgaben", "feiertage"];
+
+/** „Sa, 24.10. – Sa, 7.11.“ oder ein Tag */
+function zeitraum(tag: FreierTag): string {
+  return tag.von === tag.bis
+    ? formatGerman(tag.von, "kurz")
+    : `${formatGerman(tag.von, "kurz")} – ${formatGerman(tag.bis, "kurz")}`;
+}
+
+/**
+ * Die freien Tage der App, die noch kommen, und woher jeder kommt. Nur
+ * Anzeige: Eine Seite zum Eintragen gibt es seit Modell 23 nicht mehr — was
+ * IServ meldet, trägt der Abruf selbst ein.
+ */
+function FreieTage({ tage }: { tage: FreierTag[] }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-[15px] font-[560]">Freie Tage</p>
+      {tage.length === 0 ? (
+        <p className="text-[15px] text-ink-2">Keine freien Tage, die noch kommen.</p>
+      ) : (
+        <ul className="space-y-2">
+          {tage.map((tag) => (
+            <li key={`${tag.von}-${tag.titel}`} className="text-[15px]">
+              <span className="text-ink-2">{zeitraum(tag)}</span>
+              {" · "}
+              <span className="break-words">{tag.titel}</span>
+              <span className="text-ink-3"> · {tag.herkunft}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-[0.8125rem] text-ink-3">
+        Ferien und unterrichtsfreie Tage für alle kommen aus IServ (Ferien und
+        Feiertage, dazu der Schulkalender). An diesen Tagen plant die App keine
+        Lernblöcke, keinen Abruf und keine Erinnerung.
+      </p>
+    </div>
+  );
+}
 
 function RetryForm() {
   return (
@@ -117,7 +156,11 @@ export function IservCard({ status }: { status: IservStatus }) {
   const verwendet = status.quellen.filter((q) => VERWENDET.includes(q.rolle));
   const uebergangen = status.quellen.filter((q) => !VERWENDET.includes(q.rolle));
   const zahlFuer = (rolle: IservRolle) =>
-    rolle === "klasse" || rolle === "oeffentlich" || rolle === "aufgaben" ? status.zahlen[rolle] : 0;
+    rolle === "klasse" || rolle === "oeffentlich" || rolle === "aufgaben"
+      ? status.zahlen[rolle]
+      : rolle === "feiertage"
+        ? status.zahlen.ferien
+        : 0;
 
   return (
     <>
@@ -127,10 +170,11 @@ export function IservCard({ status }: { status: IservStatus }) {
         sub={
           <>
               Die App meldet sich mit deinem IServ-Konto an und liest — nur lesen —
-              den Kalender deiner Klasse, den öffentlichen Schulkalender und deine
-              Aufgaben, höchstens alle drei Stunden zwischen 6 und 21 Uhr. In
-              „Schule“ landet nur, was deine Klasse betrifft; im Zweifel bleibt ein
-              Termin draußen. Das Passwort steht nur auf dem Server.
+              den Kalender deiner Klasse, den öffentlichen Schulkalender, deine
+              Aufgaben und die Ferien, höchstens alle drei Stunden zwischen 6 und
+              21 Uhr. In „Schule“ landet nur, was deine Klasse betrifft; im Zweifel
+              bleibt ein Termin draußen. Ferien und unterrichtsfreie Tage werden
+              freie Tage der App. Das Passwort steht nur auf dem Server.
           </>
         }
       />
@@ -196,6 +240,8 @@ export function IservCard({ status }: { status: IservStatus }) {
           </dl>
         ) : null}
 
+        {state.kind !== "nicht-eingerichtet" ? <FreieTage tage={status.freieTage} /> : null}
+
         {state.kind === "aktiv" && status.naechste.length > 0 ? (
           <div className="space-y-2">
             <p className="text-[15px] font-[560]">Als Nächstes</p>
@@ -239,8 +285,9 @@ export function IservCard({ status }: { status: IservStatus }) {
               <Liste eintraege={status.ausgelassenFrei} mitGrund={false} />
               <p className="mt-2 text-[0.8125rem] text-ink-3">
                 Ferien und unterrichtsfreie Tage aus dem Schulkalender, die schon
-                als freie Tage der App im Kalender stehen. Termine deiner Klasse
-                und Aufgaben fallen hier nie weg.
+                als freie Tage der App im Kalender stehen — so erscheinen sie
+                dort genau einmal. Termine deiner Klasse und Aufgaben fallen hier
+                nie weg.
               </p>
             </div>
           </details>

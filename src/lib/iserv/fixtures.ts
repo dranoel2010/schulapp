@@ -251,7 +251,14 @@ export function klassenFeed(abruf = 1): Record<string, unknown>[] {
   return KLASSE_ROH.map((roh) => iservTermin(roh, abruf));
 }
 
-/** Gesetzliche Feiertage, im Stil des Plugins: 02:00 Ortszeit. */
+/**
+ * Das Plugin „holiday“ („Ferien & Feiertage“): zuerst gesetzliche Feiertage im
+ * Stil des Plugins (02:00 Ortszeit), dahinter Schulferien. Erfunden wie alles
+ * hier — die Ferien liegen absichtlich NICHT genau wie im öffentlichen
+ * Kalender: Das Plugin zählt die Herbstferien von Montag bis Freitag, der
+ * Schulkalender von Samstag bis Samstag (dasselbe Muster wie an der echten
+ * Schule; nur ein Wochenende Unterschied). Das Ende ist exklusiv.
+ */
 export const FEIERTAGE_FEED = [
   {
     id: "holiday-holidays_statutory_de_BE-000000000001@iserv.example.test",
@@ -273,7 +280,30 @@ export const FEIERTAGE_FEED = [
     plugin: "holiday",
     displayFields: [{ text: "Gesetzlicher Feiertag", label: "Art" }],
   },
+  {
+    id: "holiday-vacations_de_XX-000000000101@iserv.example.test",
+    title: "Herbstferien",
+    start: "2026-10-26T00:00:00+01:00",
+    end: "2026-11-07T00:00:00+01:00",
+    allDay: true,
+    editable: false,
+    plugin: "holiday",
+    displayFields: [{ text: "Ferien", label: "Art" }],
+  },
+  {
+    id: "holiday-vacations_de_XX-000000000102@iserv.example.test",
+    title: "Weihnachtsferien",
+    start: "2026-12-21T00:00:00+01:00",
+    end: "2027-01-02T00:00:00+01:00",
+    allDay: true,
+    editable: false,
+    plugin: "holiday",
+    displayFields: [{ text: "Ferien", label: "Art" }],
+  },
 ];
+
+/** Nur die gesetzlichen Feiertage aus `FEIERTAGE_FEED`. */
+export const NUR_FEIERTAGE = FEIERTAGE_FEED.slice(0, 2);
 
 /**
  * Aufgaben im ANGENOMMENEN Format (siehe `parseAufgabenFeed()`): ganztägig,

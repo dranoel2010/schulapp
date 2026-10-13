@@ -4,7 +4,7 @@ import { SeitenKopf } from "@/components/kombi/form";
 import { TextLine } from "@/components/kombi/seiten/zeilen";
 import { requireUser } from "@/lib/auth";
 import { addDays, formatGerman, todayInBerlin } from "@/lib/dates";
-import { freeLabel, listFreePeriods } from "@/lib/free-days";
+import { freeLabel, freiQuelleText, listFreePeriods } from "@/lib/free-days";
 import { listSubjects } from "@/lib/subjects";
 import { isDefaultPeriods, isoWeekNumber, loadWeek, weekdayOf } from "@/lib/timetable";
 
@@ -71,7 +71,7 @@ export default async function TimetableEditPage() {
                 period.startsOn === period.endsOn
                   ? formatGerman(period.startsOn, "kurz")
                   : `${formatGerman(period.startsOn, "kurz")} bis ${formatGerman(period.endsOn, "kurz")}`
-              } — an diesen Tagen fällt der Unterricht aus.`}
+              } (${freiQuelleText(period)}) — an diesen Tagen fällt der Unterricht aus.`}
             </p>
           ))}
 

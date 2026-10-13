@@ -7,6 +7,7 @@ import {
   EVENTSOURCES,
   FEIERTAGE_FEED,
   iservTermin,
+  NUR_FEIERTAGE,
   klassenFeed,
   LANGER_TITEL,
   oeffentlicherFeed,
@@ -27,6 +28,7 @@ import {
   klasseVeraltet,
   parseAufgabenFeed,
   parseEventSources,
+  parseFerienFeed,
   parseKalenderFeed,
 } from "@/lib/iserv/parse";
 import { leseQuellen } from "@/lib/iserv/report";
@@ -54,7 +56,11 @@ describe("parseEventSources", () => {
     assert.deepEqual(hinweise, []);
     assert.equal(quellen[1].url, `${ORIGIN}/iserv/calendar/feed/calendar?cal=/%2Bpublic/calendar`);
     assert.equal(quellen[2].url, `${ORIGIN}/iserv/calendar4/plugin?plugin=exercise`);
-    assert.equal(quellen[3].url, null, "Feiertage werden nicht geholt");
+    assert.equal(
+      quellen[3].url,
+      `${ORIGIN}/iserv/calendar4/plugin?plugin=holiday`,
+      "Ferien und Feiertage werden geholt — als freie Tage der App",
+    );
     assert.equal(quellen[0].label, "Arbeitsmaterial_10");
   });
 
@@ -210,7 +216,7 @@ describe("parseKalenderFeed", () => {
 
   it("legt Feiertage im 02:00-Stil auf den richtigen Tag", () => {
     const feiertage = parseKalenderFeed(
-      FEIERTAGE_FEED.map((f, i) => ({ ...f, uid: `feiertag-${i}` })),
+      NUR_FEIERTAGE.map((f, i) => ({ ...f, uid: `feiertag-${i}` })),
       "oeffentlich",
       "x",
     ).items;
@@ -358,5 +364,51 @@ describe("parseAufgabenFeed (angenommenes Format)", () => {
   it("wirft „format“, wenn alles unlesbar ist", () => {
     wirft(() => parseAufgabenFeed([{ title: "x" }], "Aufgaben", ORIGIN), "format");
     assert.deepEqual(parseAufgabenFeed([], "Aufgaben", ORIGIN), { items: [], unlesbar: 0, felder: [] });
+  });
+});
+
+describe("parseFerienFeed", () => {
+  it("liest Ferien und Feiertage ganztägig, das Ende exklusiv, in Berliner Tagen", () => {
+    const { items, unlesbar } = parseFerienFeed(FEIERTAGE_FEED, "Ferien & Feiertage");
+
+    assert.equal(unlesbar, 0);
+    assert.deepEqual(
+      items.map((i) => [i.titel, i.ersterTag, i.letzterTag, i.quelle, i.ganztaegig]),
+      [
+        ["Tag der Deutschen Einheit", "2026-10-03", "2026-10-03", "ferien", true],
+        ["1. Weihnachtsfeiertag", "2026-12-25", "2026-12-25", "ferien", true],
+        // Über die Zeitumstellung (25.10.) hinweg: Ende 7.11. 00:00 exklusiv → 6.11.
+        ["Herbstferien", "2026-10-26", "2026-11-06", "ferien", true],
+        ["Weihnachtsferien", "2026-12-21", "2027-01-01", "ferien", true],
+      ],
+    );
+    assert.equal(items[2].fremdId, "ferien|holiday-vacations_de_XX-000000000101@iserv.example.test");
+    // Kein Feld, das Namen Dritter oder HTML tragen könnte
+    assert.equal(items[0].beschreibung, null);
+    assert.equal(items[0].ort, null);
+  });
+
+  it("übergeht Einträge mit Uhrzeit still und zählt kaputte", () => {
+    const { items, unlesbar } = parseFerienFeed(
+      [
+        ...NUR_FEIERTAGE,
+        { id: "h-zeit", title: "Ferienprogramm", start: "2026-10-27T10:00:00+01:00", end: "2026-10-27T12:00:00+01:00", allDay: false },
+        { id: "h-kaputt", title: "", start: "2026-10-27T00:00:00+01:00", allDay: true },
+      ],
+      "x",
+    );
+    assert.equal(items.length, 2);
+    assert.equal(unlesbar, 1);
+  });
+
+  it("ein Eintrag ohne Ende ist ein Tag", () => {
+    const { items } = parseFerienFeed([{ id: 7, title: "Brückentag", start: "2027-05-07T00:00:00+02:00", allDay: true }], "x");
+    assert.deepEqual([items[0].ersterTag, items[0].letzterTag, items[0].fremdId], ["2027-05-07", "2027-05-07", "ferien|7"]);
+  });
+
+  it("wirft „format“ bei keiner Liste oder wenn alles unlesbar ist", () => {
+    wirft(() => parseFerienFeed({ ferien: [] }, "x"), "format");
+    wirft(() => parseFerienFeed([{ title: "Herbstferien" }], "x"), "format");
+    assert.deepEqual(parseFerienFeed([], "x"), { items: [], unlesbar: 0 });
   });
 });

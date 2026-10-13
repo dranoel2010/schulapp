@@ -10,9 +10,8 @@ import { users } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { disconnectGoogle, recreateCalendar } from "@/lib/calendar/connect";
 import { requestCalendarSync, syncCalendar } from "@/lib/calendar/sync";
-import { todayInBerlin } from "@/lib/dates";
-import { moveOffFreeDays } from "@/lib/exams";
 import { formErrors, type FieldErrors } from "@/lib/form-errors";
+import { abrufNeuGeplant, freieTageNachgezogen } from "@/lib/frei-nachlauf";
 import {
   createFreePeriod,
   deleteFreePeriod,
@@ -23,7 +22,6 @@ import { runIservFetch } from "@/lib/iserv/abruf";
 import { LAUF_BUDGET_HAND_MS } from "@/lib/iserv/config";
 import { unblockIserv } from "@/lib/iserv/store";
 import { revokeConnection } from "@/lib/oauth";
-import { neuPlanen } from "@/recall/items";
 
 /**
  * Einstellungen, die der Nutzer selbst dreht.
@@ -258,21 +256,9 @@ export async function retryIservAction(): Promise<void> {
 }
 
 async function replanAroundFreeDays(userId: string): Promise<number> {
-  const today = todayInBerlin();
-  const moved = await moveOffFreeDays(userId, today);
-  await replanRecall(userId);
-  return moved;
+  return freieTageNachgezogen(userId);
 }
 
-/**
- * Der Abrufkern darf fehlen (scripts/abruf-rueckbau.sql) — dann bleibt es beim
- * Lernplan, und das Eintragen der Ferien scheitert nicht an einem Modul, das es
- * nicht mehr gibt.
- */
 async function replanRecall(userId: string): Promise<void> {
-  try {
-    await neuPlanen(userId, todayInBerlin());
-  } catch (error) {
-    console.error("Abruf nicht neu geplant", error);
-  }
+  await abrufNeuGeplant(userId);
 }

@@ -66,7 +66,7 @@ const CAL_FEED_PATH = "/iserv/calendar/feed/calendar";
 /** Der Plugin-Pfad wechselt je IServ-Version: calendar4/plugin, calendar/feed/plugin, calendar/api/plugin (seit 7.10.2026). */
 const PLUGIN_FEED_PATH = /^\/iserv\/calendar\d*\/(?:feed\/|api\/)?plugin$/;
 
-const VERWENDET: ReadonlySet<IservRolle> = new Set(["oeffentlich", "klasse", "aufgaben"]);
+const VERWENDET: ReadonlySet<IservRolle> = new Set(["oeffentlich", "klasse", "aufgaben", "feiertage"]);
 
 /** Endet der Gruppenname oder das Label auf die Klasse („arbeitsmaterial.10", „Klasse 10a")? */
 export function passtZurKlasse(id: string, label: string, klasse: number): boolean {
@@ -137,11 +137,14 @@ export function klassenProblem(
 
 /**
  * Die Kalender aus `/iserv/calendar/api/eventsources`, je mit ihrer Rolle für
- * die App. Genommen werden nur drei: der öffentliche Kalender, der
- * Gruppenkalender der Klasse und das Aufgaben-Plugin. Der Klausurplan wird
- * erkannt, aber nicht geholt — das Modul fehlt an dieser Schule; die Rolle ist
- * die Stelle, an der er später andockt. Gesetzliche Feiertage betreffen keine
- * Klasse, und weitere Gruppenkalender (AGs, Kurse) auch nicht ausdrücklich.
+ * die App. Genommen werden vier: der öffentliche Kalender, der
+ * Gruppenkalender der Klasse, das Aufgaben-Plugin und — seit dem 12.10.2026 —
+ * das Plugin „holiday“ mit Ferien und Feiertagen. Dessen Einträge werden nie
+ * IServ-Termine in Google, sondern freie Tage der App (@/lib/iserv/ferien);
+ * der Nutzer hat bestätigt, dass die Ferien darin für seine Schule stimmen.
+ * Der Klausurplan wird erkannt, aber nicht geholt — das Modul fehlt an dieser
+ * Schule; die Rolle ist die Stelle, an der er später andockt. Weitere
+ * Gruppenkalender (AGs, Kurse) betreffen die Klasse nicht ausdrücklich.
  *
  * Die Feed-Adresse kommt IMMER aus der Antwort und wird nie fest eingebaut:
  * Der Pfad des Plugins wechselt je IServ-Version.
@@ -197,9 +200,9 @@ export function parseEventSources(
     } else if (typ === "plugin" && id === "exam-plan") {
       rolle = "klausurplan";
       grund = "Klausurplan vorhanden — noch nicht übernommen";
-    } else if (typ === "plugin" && id === "holiday") {
+    } else if (typ === "plugin" && id === "holiday" && !quellen.some((q) => q.rolle === "feiertage")) {
       rolle = "feiertage";
-      grund = "gesetzliche Feiertage — betreffen keine Klasse";
+      grund = "Ferien und Feiertage — als freie Tage der App übernommen";
     }
 
     roh.push({ id, url: eintrag.url, typ, abo });
@@ -290,7 +293,7 @@ export function parseEventSources(
  */
 export function parseKalenderFeed(
   json: unknown,
-  quelle: Exclude<IservQuelle, "aufgaben">,
+  quelle: Extract<IservQuelle, "klasse" | "oeffentlich">,
   label: string,
 ): { items: IservItem[]; unlesbar: number } {
   if (!Array.isArray(json)) throw formatFehler("Kalender-Feed ist keine Liste");
@@ -491,4 +494,87 @@ export function parseAufgabenFeed(
   }
 
   return { items, unlesbar, felder: [...felder].sort() };
+}
+
+// ── Ferien-Plugin ────────────────────────────────────────────────────────────
+
+/**
+ * Das Plugin „holiday“ (/iserv/calendar…/plugin?plugin=holiday&start=…&end=…):
+ * Ferien und gesetzliche Feiertage, im selben Format wie das Aufgaben-Plugin —
+ * `{ id, title, start, end, allDay, displayFields }`, ganztägig im Stil
+ * „02:00 Ortszeit“, Ende EXKLUSIV.
+ *
+ * Genommen wird nur, was ganztägig ist; ein Eintrag mit Uhrzeit ist kein
+ * freier Tag und wird still übergangen (nicht „unlesbar“). Der Schlüssel ist
+ * „ferien|<id>“: Die id im Plugin trägt, anders als die `id` eines
+ * Kalendertermins, keine Mikrozeit der Anfrage. Ändert sie sich doch einmal,
+ * findet der Abgleich die Ferien über die Überschneidung wieder
+ * (@/lib/iserv/ferien) — die Zeile in der App und der Balken in Google
+ * bleiben dieselben.
+ *
+ * Unlesbar ist ein Eintrag ohne id, Titel oder Anfang; sind ALLE unlesbar,
+ * ist das ein Formatwechsel und wirft — der alte Stand bleibt
+ * (@/lib/iserv/schutz).
+ */
+export function parseFerienFeed(
+  json: unknown,
+  label: string,
+): { items: IservItem[]; unlesbar: number } {
+  if (!Array.isArray(json)) throw formatFehler("Ferien-Feed ist keine Liste");
+  if (json.length > MAX_EINTRAEGE) throw formatFehler(`mehr als ${MAX_EINTRAEGE} Ferien und Feiertage`);
+
+  const items: IservItem[] = [];
+  const gesehen = new Set<string>();
+  let unlesbar = 0;
+
+  for (const eintrag of json) {
+    if (!istObjekt(eintrag)) {
+      unlesbar += 1;
+      continue;
+    }
+
+    const id = typeof eintrag.id === "string"
+      ? eintrag.id.trim()
+      : typeof eintrag.id === "number" && Number.isFinite(eintrag.id)
+        ? String(eintrag.id)
+        : "";
+    const titel = typeof eintrag.title === "string" ? saeubere(eintrag.title, TITEL_MAX) : "";
+    const start = zeitpunkt(eintrag.start);
+
+    if (!id || !titel || !start) {
+      unlesbar += 1;
+      continue;
+    }
+    if (eintrag.allDay !== true) continue;
+
+    const end = zeitpunkt(eintrag.end);
+    const ersterTag = berlinDay(start);
+    const endeExklusiv = end && end > start ? berlinDay(end) : addDays(ersterTag, 1);
+    const letzterTag = maxTag(ersterTag, addDays(endeExklusiv, -1));
+
+    const fremdId = `ferien|${id}`;
+    if (gesehen.has(fremdId)) continue;
+    gesehen.add(fremdId);
+
+    items.push({
+      quelle: "ferien",
+      fremdId,
+      kalender: label,
+      titel,
+      ort: null,
+      beschreibung: null,
+      link: null,
+      ganztaegig: true,
+      ersterTag,
+      letzterTag,
+      beginn: null,
+      ende: null,
+    });
+  }
+
+  if (json.length > 0 && unlesbar === json.length) {
+    throw formatFehler("kein einziger Eintrag im Ferien-Feed lesbar");
+  }
+
+  return { items, unlesbar };
 }

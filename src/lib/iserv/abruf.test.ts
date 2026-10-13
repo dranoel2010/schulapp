@@ -9,6 +9,7 @@ import { IservZugang, type IservConfig } from "@/lib/iserv/config";
 import {
   AUFGABEN_FEED,
   EVENTSOURCES,
+  FEIERTAGE_FEED,
   fakeIserv,
   json,
   klassenFeed,
@@ -20,8 +21,9 @@ import {
   QUELLE_ZWEITE_KLASSE_10,
   type FakeOptionen,
 } from "@/lib/iserv/fixtures";
+import { ferienPlan, type IservFreiZeile } from "@/lib/iserv/ferien";
 import type { Snapshot } from "@/lib/iserv/schutz";
-import type { IservStore, RunInput } from "@/lib/iserv/store";
+import type { IservStore, RunErgebnis, RunInput } from "@/lib/iserv/store";
 import { iservItemsSchema, type IservQuelle } from "@/lib/iserv/types";
 
 /**
@@ -42,6 +44,9 @@ class SpeicherStore implements IservStore {
   state: IservStateRow | null = null;
   rows = new Map<IservQuelle, { json: string; snap: Omit<Snapshot, "items"> }>();
   saves: RunInput[] = [];
+  /** Die Zeilen von `free_periods` mit quelle = 'iserv', im Arbeitsspeicher */
+  frei: IservFreiZeile[] = [];
+  private naechsteId = 1;
 
   ensureState = async (userId: string) => {
     this.state ??= {
@@ -71,7 +76,7 @@ class SpeicherStore implements IservStore {
     return map;
   };
 
-  saveRun = async (_userId: string, input: RunInput) => {
+  saveRun = async (_userId: string, input: RunInput): Promise<RunErgebnis> => {
     this.saves.push(input);
     for (const snap of input.snapshots) {
       const { items, ...rest } = snap;
@@ -92,6 +97,24 @@ class SpeicherStore implements IservStore {
       s.lastError = input.error;
       s.lastErrorAt = input.attemptAt;
     }
+
+    if (!input.ferien) return { ferienGeaendert: false };
+    const plan = ferienPlan(this.frei, input.ferien.wuensche, input.ferien.heute);
+    const weg = new Set(plan.loeschen);
+    this.frei = this.frei
+      .filter((z) => !weg.has(z.id))
+      .map((z) => plan.aendern.find((a) => a.id === z.id) ?? z);
+    for (const w of plan.neu) {
+      this.frei.push({
+        id: `frei-${this.naechsteId++}`,
+        iservKey: w.schluessel,
+        kind: w.kind,
+        title: w.title,
+        startsOn: w.startsOn,
+        endsOn: w.endsOn,
+      });
+    }
+    return { ferienGeaendert: plan.neu.length + plan.aendern.length + plan.loeschen.length > 0 };
   };
 
   blockIserv = async (_userId: string, reason: string, sentence: string) => {
@@ -182,13 +205,13 @@ function enthaeltPasswort(text: string): boolean {
 // ── Die Fälle ────────────────────────────────────────────────────────────────
 
 describe("runIservFetch", () => {
-  it("liest alles und schreibt drei Snapshots", async () => {
+  it("liest alles und schreibt vier Snapshots", async () => {
     const { store, fake, lauf } = aufbau();
     const ergebnis = await lauf();
 
     assert.equal(ergebnis.status, "gelesen", JSON.stringify(ergebnis));
     assert.equal(ergebnis.satz, null);
-    assert.deepEqual([...store.rows.keys()].sort(), ["aufgaben", "klasse", "oeffentlich"]);
+    assert.deepEqual([...store.rows.keys()].sort(), ["aufgaben", "ferien", "klasse", "oeffentlich"]);
     assert.equal(store.state?.lastSuccessAt, JETZT);
     assert.equal(store.state?.failuresInRow, 0);
     assert.equal(fake.posts().length, 1);
@@ -201,6 +224,7 @@ describe("runIservFetch", () => {
     assert.equal(snaps.get("oeffentlich")?.items.length, 37);
     assert.equal(snaps.get("klasse")?.items.length, 4);
     assert.equal(snaps.get("aufgaben")?.items.length, 3);
+    assert.equal(snaps.get("ferien")?.items.length, 4);
   });
 
   it("merkt sich die Feldnamen der Aufgaben einmal", async () => {
@@ -229,9 +253,10 @@ describe("runIservFetch", () => {
     assert.equal((await lauf(spaeter(1))).status, "nicht-faellig");
     assert.equal(fake.protokoll.length, anfragen);
 
-    // Ein Abruf drei Stunden später nutzt die Session: vier Anfragen, keine Anmeldung.
+    // Ein Abruf drei Stunden später nutzt die Session: fünf Anfragen
+    // (eventsources und vier Feeds), keine Anmeldung.
     assert.equal((await lauf(spaeter(3))).status, "gelesen");
-    assert.equal(fake.protokoll.length, anfragen + 4);
+    assert.equal(fake.protokoll.length, anfragen + 5);
     assert.equal(fake.posts().length, 1);
   });
 
@@ -442,5 +467,126 @@ describe("runIservFetch", () => {
     assert.ok(!enthaeltPasswort(alles), "das Passwort steht irgendwo");
     assert.ok(!alles.includes(BENUTZER), "der Benutzer steht irgendwo");
     assert.ok(!/code=c-456|state=s-123/.test(alles), "eine Adresse mit Query steht irgendwo");
+  });
+});
+
+// ── Ferien aus IServ ─────────────────────────────────────────────────────────
+
+describe("runIservFetch: Ferien aus IServ", () => {
+  /** Das Plugin-Ende der Attrappe, mit umschaltbarer Ferien-Antwort. */
+  function mitFerien(antwort: () => Response) {
+    return {
+      "/iserv/calendar4/plugin": ({ url }: { url: URL }) => {
+        const plugin = url.searchParams.get("plugin");
+        if (plugin === "exercise") return json(AUFGABEN_FEED);
+        if (plugin === "holiday") return antwort();
+        return json([], 404);
+      },
+    };
+  }
+
+  const titel = (store: SpeicherStore) =>
+    [...store.frei].sort((a, b) => (a.startsOn < b.startsOn ? -1 : 1)).map((z) => `${z.title} ${z.startsOn}–${z.endsOn}`);
+
+  it("legt Ferien und unterrichtsfreie Tage an und zieht die Pläne einmal nach", async () => {
+    const { store, deps, lauf } = aufbau();
+    let nachgezogen = 0;
+    deps.nachFerien = async () => {
+      nachgezogen += 1;
+    };
+
+    assert.equal((await lauf()).status, "gelesen");
+    assert.deepEqual(titel(store), [
+      "Pädagogischer Tag 2026-10-22–2026-10-23",
+      "Herbstferien 2026-10-24–2026-11-07",
+      "3. Pädagogischer Tag 2026-11-30–2026-11-30",
+      "Weihnachtsferien 2026-12-18–2027-01-02",
+      "Osterferien 2027-03-20–2027-04-04",
+      "Brückentag 2027-05-07–2027-05-07",
+    ]);
+    assert.equal(nachgezogen, 1);
+    assert.ok(protokoll.some((zeile) => zeile.includes("freie Tage aus IServ geändert")));
+    // Kein Titel aus IServ im Protokoll
+    assert.ok(!protokoll.some((zeile) => zeile.includes("Herbstferien")));
+
+    // Derselbe Stand drei Stunden später: nichts zu tun, nichts nachzuziehen.
+    const ids = store.frei.map((z) => z.id).sort();
+    assert.equal((await lauf(spaeter(3))).status, "gelesen");
+    assert.deepEqual(store.frei.map((z) => z.id).sort(), ids);
+    assert.equal(nachgezogen, 1);
+  });
+
+  it("eine leere Antwort des Plugins löscht keinen freien Tag", async () => {
+    let leer = false;
+    const { store, lauf } = aufbau({ routen: mitFerien(() => json(leer ? [] : FEIERTAGE_FEED)) });
+
+    await lauf();
+    const vorher = titel(store);
+    leer = true;
+
+    const zweiter = await lauf(spaeter(3));
+    assert.equal(zweiter.status, "gelesen");
+    assert.match(zweiter.warnung ?? "", /Ferien und Feiertage: 0 statt 4 Termine/);
+    assert.deepEqual(titel(store), vorher);
+  });
+
+  it("eine kaputte Antwort des Plugins löscht nichts und meldet sich", async () => {
+    let kaputt = false;
+    const { store, lauf } = aufbau({
+      routen: mitFerien(() => (kaputt ? json({ fehler: "wartung" }) : json(FEIERTAGE_FEED))),
+    });
+
+    await lauf();
+    const vorher = titel(store);
+    kaputt = true;
+
+    const zweiter = await lauf(spaeter(3));
+    assert.equal(zweiter.status, "teilweise");
+    assert.match(zweiter.satz ?? "", /^Ferien und Feiertage:/);
+    assert.deepEqual(titel(store), vorher);
+  });
+
+  it("ein leerer öffentlicher Kalender löscht keinen freien Tag", async () => {
+    let leer = false;
+    const { store, lauf } = aufbau({
+      routen: {
+        "/iserv/calendar/feed/calendar": ({ url }) => {
+          const cal = url.searchParams.get("cal");
+          if (cal === "/+public/calendar") return json(leer ? [] : oeffentlicherFeed());
+          if (cal === "/arbeitsmaterial.10/calendar") return json(klassenFeed());
+          return json([], 404);
+        },
+      },
+    });
+
+    await lauf();
+    const vorher = titel(store);
+    leer = true;
+
+    assert.equal((await lauf(spaeter(3))).status, "fehler");
+    assert.deepEqual(titel(store), vorher);
+  });
+
+  it("ohne Stand des öffentlichen Kalenders bleiben die freien Tage, wie sie sind", async () => {
+    const { store, lauf } = aufbau({
+      routen: {
+        "/iserv/calendar/feed/calendar": () => json({ error: "x" }, 503),
+      },
+    });
+
+    assert.equal((await lauf()).status, "fehler");
+    assert.equal(store.saves.at(-1)?.ferien, undefined);
+    assert.deepEqual(store.frei, []);
+  });
+
+  it("scheitert das Nachziehen der Pläne, bleibt der Abruf gelesen", async () => {
+    const { store, deps, lauf } = aufbau();
+    deps.nachFerien = async () => {
+      throw new Error("Lernplan kaputt");
+    };
+
+    assert.equal((await lauf()).status, "gelesen");
+    assert.ok(store.frei.length > 0);
+    assert.ok(protokoll.some((zeile) => zeile.includes("nicht nachgezogen")));
   });
 });

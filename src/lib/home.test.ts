@@ -342,6 +342,8 @@ describe("dayLine", () => {
       startsOn: MONDAY,
       endsOn: MONDAY,
       createdAt: new Date(0),
+      quelle: null,
+      iservKey: null,
     };
 
     assert.equal(

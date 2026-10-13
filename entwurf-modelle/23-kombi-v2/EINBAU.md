@@ -40,11 +40,11 @@ Am Handy geht die Kamera nur über HTTPS. Dafür auf dem Mac `tailscale funnel 3
 
 ## Auf den NAS: SQL zuerst, dann hochfahren
 
-**Erst wenn der IServ-Ferienabgleich gebaut ist.** Die Ferien-Seite gibt es in Modell 23 nicht mehr (dein Wunsch vom 12.10.). Die Ferien sollen künftig von selbst aus IServ kommen. Bis das gebaut ist, könnte niemand Ferien eintragen, und die App würde in den Ferien Lernblöcke planen.
+**Nur zusammen mit dem IServ-Ferienabgleich** (Branch `iserv-ferien`, abgezweigt von `modell-23`). Die Ferien-Seite gibt es in Modell 23 nicht mehr (dein Wunsch vom 12.10.). Der Abgleich holt Ferien und unterrichtsfreie Tage selbst aus IServ und trägt sie als freie Tage ein. Ohne ihn könnte niemand Ferien eintragen, und die App würde in den Ferien Lernblöcke planen.
 
 **Vor dem Push** wird der ganze Branch nach echten Namen und Schuldaten durchsucht, weil das Repo öffentlich ist. Gepusht wird erst nach deinem Ja.
 
-Die Datenbank auf dem NAS kennt die neuen Tabellen noch nicht. Die sechs Dateien müssen **vor** `nas.sh hoch` hinein, **in genau dieser Reihenfolge**:
+Die Datenbank auf dem NAS kennt die neuen Tabellen noch nicht. Die sieben Dateien müssen **vor** `nas.sh hoch` hinein, **in genau dieser Reihenfolge**:
 
 1. `scripts/kombi-tagesprotokoll.sql`
 2. `scripts/kombi-lernblock-uhr.sql`
@@ -52,6 +52,7 @@ Die Datenbank auf dem NAS kennt die neuen Tabellen noch nicht. Die sechs Dateien
 4. `scripts/kombi-themen-art.sql`
 5. `scripts/kombi-arbeitsblaetter.sql`
 6. `scripts/kombi-arbeitsblaetter-checks.sql` (geht nur nach 5)
+7. `scripts/kombi-iserv-ferien.sql` (Ferien aus IServ: zwei Spalten an `free_periods`)
 
 Jede Datei einzeln so (Dateinamen austauschen):
 
@@ -65,10 +66,11 @@ Ablauf im Ganzen:
 
 1. `modell-23` in `main` mischen und pushen. `nas.sh hoch` holt nur `main`.
 2. Auf dem NAS das Repo aktualisieren, damit die SQL-Dateien unter `repo/scripts/` liegen.
-3. Die sechs SQL-Dateien einspielen, wie oben.
+3. Die sieben SQL-Dateien einspielen, wie oben.
 4. `scripts/nas.sh hoch`. Es hält an, wenn eine Datei fehlt.
 5. `/api/tag/stand` aufrufen, dann am Handy öffnen. Die App lädt einmal neu.
 6. Eine Aufgabe über die Zeile eintragen und abhaken. Dann im Google-Kalender „Schule“ nachsehen.
+7. Ferien prüfen: Nach dem nächsten Abruf bei IServ (der Kalender-Lauf fragt höchstens alle drei Stunden, zwischen 6 und 21 Uhr) stehen die Ferien unter Einstellungen › IServ › „Freie Tage“, mit „aus IServ“. In „Schule“ stehen die Herbstferien genau einmal. Wer nicht warten will: `UPDATE iserv_state SET last_attempt_at = NULL` und dann `kalender.sh`.
 
 ## Was offen ist
 

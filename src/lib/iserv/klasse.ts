@@ -300,6 +300,16 @@ export function istFreiTitel(eingabe: { titel: string; ganztaegig: boolean }): b
   return FREI.test(t) || (eingabe.ganztaegig && FERIEN.test(t));
 }
 
+/**
+ * Nennt der Titel Ferien („Herbstferien“, „Ferientag“)? Nur für ganztägige
+ * Einträge sinnvoll — @/lib/iserv/ferien unterscheidet damit die Art eines
+ * freien Zeitraums („ferien“ oder „frei“). „Ferienbetreuung“ sind keine
+ * Ferien.
+ */
+export function istFerienTitel(titel: string): boolean {
+  return FERIEN.test(normalisiere(titel));
+}
+
 /** Ein Titelteil aus ISERV_AUCH/ISERV_NIE trifft nur als ganzes Wort — „msa" trifft nicht „gemsa". */
 function enthaeltTeil(titel: string, teil: string): boolean {
   const escaped = teil.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

@@ -18,9 +18,12 @@ import { addDays, daysBetween, isCalendarDate } from "@/lib/dates";
  * Erinnerung. Eine Unterscheidung „Ferien, aber gelernt wird trotzdem" gibt es
  * bewusst nicht.
  *
- * Eingetragen wird von Hand. Sechs Ferien und eine Klassenfahrt im Jahr sind
- * schneller getippt, als eine Online-Quelle für das richtige Bundesland
- * eingebunden und aktuell gehalten ist.
+ * Woher sie kommen: Bis zum 12.10.2026 nur von Hand. Seitdem legt der Abruf
+ * bei IServ Ferien und unterrichtsfreie Tage selbst an (@/lib/iserv/ferien,
+ * Spalte `quelle = 'iserv'`); die Seite zum Eintragen gibt es seit Modell 23
+ * nicht mehr. Von Hand eingetragene Zeilen (`quelle` leer) bleiben gültig und
+ * werden vom Abgleich nie angefasst. Wo die App einen freien Tag zeigt, sagt
+ * sie mit `freiQuelleText()`, woher er kommt.
  */
 
 export const FREE_KINDS = ["ferien", "klassenfahrt", "frei"] as const;
@@ -48,6 +51,11 @@ export function freeLabel(period: {
 }): string {
   if (period.title) return period.title;
   return FREE_KIND_LABELS[period.kind as FreeKind] ?? "Schulfrei";
+}
+
+/** Woher ein freier Zeitraum kommt, als kurzer Zusatz: „aus IServ“ oder „von Hand eingetragen“. */
+export function freiQuelleText(period: { quelle?: string | null }): string {
+  return period.quelle === "iserv" ? "aus IServ" : "von Hand eingetragen";
 }
 
 /** Der Zeitraum, in den der Tag fällt — beide Enden zählen mit. */

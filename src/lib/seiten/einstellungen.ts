@@ -54,7 +54,9 @@ export async function einstellungenSeite(userId: string): Promise<EinstellungenD
     erinnerung: `Lernerinnerung um ${nutzer[0]?.reminderHour ?? 17} Uhr`,
     abschrift: claudeConfigured() ? "Claude ist eingerichtet" : "Claude ist nicht eingerichtet",
     kalender: KALENDER[kalender.state.kind] ?? "",
-    iserv: iservConfigured() ? "Eingerichtet" : "Auf diesem Server nicht eingerichtet",
+    iserv: iservConfigured()
+      ? "Eingerichtet, liefert auch Ferien und freie Tage"
+      : "Auf diesem Server nicht eingerichtet",
     verbindungen:
       verbindungen.length === 0
         ? "Nichts verbunden"

@@ -401,14 +401,17 @@ stand() {
 # Modell 23 (Plan 5.7): je neue SQL-Datei eine Zeile. Die GIN-Indizes
 # (kombi-suche.sql) prüft `hoch` nicht: ohne Index ist die Suche nur
 # langsamer. Den getauschten CHECK (kombi-arbeitsblaetter-checks.sql) prüft
-# `spalten_pruefen` eigens am Ende, er hat keine Spalte.
+# `spalten_pruefen` eigens am Ende, er hat keine Spalte. Die siebte Datei
+# (kombi-iserv-ferien.sql, Ferien aus IServ) steht mit `free_periods.iserv_key`
+# da: ohne sie scheitert jede Seite, die freie Tage liest.
 PFLICHTSPALTEN="material_pages leser scripts/leser-tabellen.sql
 leser_laeufe frist_bis scripts/leser-laeufe-tabelle.sql
 tagesprotokoll typ scripts/kombi-tagesprotokoll.sql
 study_blocks pause_ms scripts/kombi-lernblock-uhr.sql
 subject_topics art scripts/kombi-themen-art.sql
 arbeitsblaetter inhalt scripts/kombi-arbeitsblaetter.sql
-leser_laeufe arbeitsblatt_id scripts/kombi-arbeitsblaetter.sql"
+leser_laeufe arbeitsblatt_id scripts/kombi-arbeitsblaetter.sql
+free_periods iserv_key scripts/kombi-iserv-ferien.sql"
 
 # Postgres im db-Container, Benutzer und Datenbank aus SEINER Umgebung — wie
 # psql_db() in scripts/kalender-einrichten.sh; "schulapp" nur als Rückfall.

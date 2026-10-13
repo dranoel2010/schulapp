@@ -12,16 +12,23 @@ import { z } from "zod";
  * Inhaltsänderung ändert, schriebe jeden Termin in Google bei jedem Lauf neu.
  */
 
-/** Woher ein Termin kommt: Gruppenkalender der Klasse, öffentlicher Schulkalender, Aufgaben. */
-export type IservQuelle = "klasse" | "oeffentlich" | "aufgaben";
+/**
+ * Woher ein Termin kommt: Gruppenkalender der Klasse, öffentlicher
+ * Schulkalender, Aufgaben — und seit dem 12.10.2026 das Plugin „holiday“
+ * (Ferien und Feiertage). Dessen Einträge kommen NIE als IServ-Termin in
+ * Google: Sie werden freie Tage der App (@/lib/iserv/ferien) und stehen als
+ * solche im Kalender.
+ */
+export type IservQuelle = "klasse" | "oeffentlich" | "aufgaben" | "ferien";
 
-export const ISERV_QUELLEN: readonly IservQuelle[] = ["klasse", "oeffentlich", "aufgaben"];
+export const ISERV_QUELLEN: readonly IservQuelle[] = ["klasse", "oeffentlich", "aufgaben", "ferien"];
 
-/** So heißen die drei in Sätzen — fest, damit kein Text aus IServ in einen Satz gerät. */
+/** So heißen die vier in Sätzen — fest, damit kein Text aus IServ in einen Satz gerät. */
 export const QUELL_NAMEN: Record<IservQuelle, string> = {
   klasse: "Klassenkalender",
   oeffentlich: "Öffentlicher Kalender",
   aufgaben: "Aufgaben",
+  ferien: "Ferien und Feiertage",
 };
 
 export type IservItem = {
@@ -29,7 +36,7 @@ export type IservItem = {
   /**
    * Grundlage für Schlüssel und Event-ID:
    * "cal|<uid>|<recurrenceId>" | "cal|<uid>|@<beginnUTC>" | "cal|<uid>|" |
-   * "aufgabe|<n>" | "aufgabe|id:<id>"
+   * "aufgabe|<n>" | "aufgabe|id:<id>" | "ferien|<id im Plugin>"
    */
   fremdId: string;
   /** Label der IServ-Quelle, gesäubert */
@@ -68,7 +75,7 @@ const TAG = /^\d{4}-\d{2}-\d{2}$/;
  */
 export const iservItemSchema = z
   .object({
-    quelle: z.enum(["klasse", "oeffentlich", "aufgaben"]),
+    quelle: z.enum(["klasse", "oeffentlich", "aufgaben", "ferien"]),
     fremdId: z.string().min(1),
     kalender: z.string(),
     titel: z.string().min(1),

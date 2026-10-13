@@ -21,6 +21,8 @@ import { klausurThema } from "./klausur";
 export type WocheTag = {
   tag: string;
   frei: string | null;
+  /** „aus IServ“ oder „von Hand eingetragen“, nur an einem freien Tag */
+  freiHerkunft: string | null;
   stunden: (StundeDaten & { klausur: string | null })[];
   abgeben: AufgabeDaten[];
 };
@@ -72,6 +74,7 @@ export async function wocheSeite(
       return {
         tag: d,
         frei: kal.frei(d),
+        freiHerkunft: kal.freiHerkunft(d),
         stunden: stunden.map((s) => {
           // Die Klausur steht in der ersten Stunde ihres Fachs an dem Tag.
           const erste = stunden.find((x) => x.fachId === s.fachId);
