@@ -23,6 +23,8 @@ export type ZeilenKontext = {
   editId?: string;
   text?: string;
   fachPills?: boolean;
+  /** Beim Ändern: das volle Formular (Fach, Text, Fälligkeit, Notiz, Löschen) */
+  details?: string;
 };
 
 export type ParseUmgebung = {

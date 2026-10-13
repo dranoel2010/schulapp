@@ -9,7 +9,9 @@ import { TextLine } from "./zeilen";
 
 /**
  * Hausaufgaben (Prototyp `PAGES.hausaufgaben` und `hausaufgabenGroups`,
- * Z. 3026–3105): „Für ⟨Tag⟩“, „Später“, „Erledigt“. Ist „Für ⟨Tag⟩“ leer,
+ * Z. 3026–3105): „Für ⟨Tag⟩“, „Später“, „Erledigt“ — davor „Heute“ mit
+ * den heute fälligen, noch offenen Aufgaben (sonst fänden sie sich nach der
+ * Schule nur über das Fach). Ist „Für ⟨Tag⟩“ leer,
  * steht dort „Für ⟨Tag⟩ ist nichts offen.“ Darunter der Weg zum Formular mit
  * Details (Plan 2.2).
  */
@@ -22,20 +24,22 @@ export function HausaufgabenInhalt({ daten: vomServer }: { daten: HausaufgabenDa
   // gezeigt wird der Stand, den der FLIP-Lauf übernommen hat (useAufgaben)
   const { stand: daten, anwenden, schalten, loeschen, ankerRef } = useAufgaben(vomServer);
   const fuer = `Für ${tagName(daten.ns, daten.heute)}`;
-  const gruppen: [string, HausaufgabenDaten["fuer"], ZeilenModus][] = [
-    [fuer, anwenden(daten.fuer), "page"],
-    ["Später", anwenden(daten.spaeter), "page-sp"],
-    ["Erledigt", anwenden(daten.erledigt), "page"],
+  // [Überschrift, Liste, Modus, leer zeigen]: „Heute“ nur, wenn etwas offen ist
+  const gruppen: [string, HausaufgabenDaten["fuer"], ZeilenModus, boolean][] = [
+    ["Heute", anwenden(daten.heuteFaellig ?? []), "page", false],
+    [fuer, anwenden(daten.fuer), "page", true],
+    ["Später", anwenden(daten.spaeter), "page-sp", false],
+    ["Erledigt", anwenden(daten.erledigt), "page", false],
   ];
 
   return (
     <>
       <div ref={ankerRef}>
-        {gruppen.map(([l, liste, modus], i) => (
-          <div className="group" data-g={l} key={l} hidden={!liste.length && i > 0}>
+        {gruppen.map(([l, liste, modus, leerZeigen]) => (
+          <div className="group" data-g={l} key={l} hidden={!liste.length && !leerZeigen}>
             <h3 className="lab">{l}</h3>
             <div>
-              {!liste.length && i === 0 ? <p className="empty">{`${fuer} ist nichts offen.`}</p> : null}
+              {!liste.length && leerZeigen ? <p className="empty">{`${fuer} ist nichts offen.`}</p> : null}
               {liste.map((a) => (
                 <AufgabeZeile
                   key={a.id}

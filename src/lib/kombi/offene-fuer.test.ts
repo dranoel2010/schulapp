@@ -140,10 +140,34 @@ describe("headlineFor (Prototyp Z. 1633)", () => {
 });
 
 describe("moAbgaben", () => {
+  const schultagMo = { tag: "2026-10-12", schultag: true };
   it("offene zuerst, erledigte darunter in der Reihenfolge des Abhakens", () => {
     const spaet = { ...geschichte, done: true, doneAt: "2026-10-12T05:12:00.000Z" };
-    assert.deepEqual(moAbgaben([spaet, englisch], "2026-10-12").map((a) => a.fach), ["Englisch", "Geschichte"]);
-    assert.deepEqual(moAbgaben([englisch, geschichte], "2026-10-12").map((a) => a.fach), ["Geschichte", "Englisch"]);
+    assert.deepEqual(moAbgaben([spaet, englisch], "2026-10-12", schultagMo).map((a) => a.fach), ["Englisch", "Geschichte"]);
+    assert.deepEqual(moAbgaben([englisch, geschichte], "2026-10-12", schultagMo).map((a) => a.fach), ["Geschichte", "Englisch"]);
+  });
+});
+
+describe("Überfällige Abgaben (Abnahme 13.10.2026)", () => {
+  // Englisch, fällig Mo 12.10., noch offen
+  const vokabeln = aufgabe("Englisch", "Vokabeln Unit 3", "2026-10-12");
+  it("Dienstagabend kündigt der Überblick sie für Mittwoch an, die Vorschau zeigt sie", () => {
+    const di = daten({ tag: "2026-10-13", naechsterSchultag: "2026-10-14" });
+    assert.equal(headlineFor("ueberblick", di, [vokabeln]), "Noch eine Aufgabe für Mittwoch");
+    assert.equal(headlineFor("frueh", di, [vokabeln]), "Morgen eine Abgabe");
+    assert.deepEqual(moAbgaben([vokabeln], "2026-10-14", di).map((a) => a.text), ["Vokabeln Unit 3"]);
+  });
+  it("Mittwochmorgen steht sie unter „Abgeben“ und zählt in der Überschrift", () => {
+    const mi = daten({ tag: "2026-10-14", naechsterSchultag: "2026-10-15" });
+    const heute = aufgabe("Mathe", "S. 90", "2026-10-14");
+    assert.equal(headlineFor("morgens", mi, [vokabeln, heute]), "Heute zwei Abgaben");
+    assert.deepEqual(moAbgaben([heute, vokabeln], "2026-10-14", mi).map((a) => a.fach), ["Englisch", "Mathe"]);
+  });
+  it("erledigt zählt sie nicht mehr; heute an einem Schultag Fälliges wird erst morgen überfällig", () => {
+    const mi = daten({ tag: "2026-10-14", naechsterSchultag: "2026-10-15" });
+    assert.equal(headlineFor("morgens", mi, [{ ...vokabeln, done: true }]), "Heute nichts abzugeben");
+    const heute = aufgabe("Mathe", "S. 90", "2026-10-14");
+    assert.equal(headlineFor("frueh", mi, [heute]), "Morgen nichts abzugeben");
   });
 });
 

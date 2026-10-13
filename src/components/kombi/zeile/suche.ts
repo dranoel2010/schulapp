@@ -128,6 +128,23 @@ export function schlussMs(v: ZeilenVorrat, tag: string): number | null {
   return s ? zeitpunkt(tag, s) : null;
 }
 
+/**
+ * Was an einem Tag abzugeben ist: die an dem Tag fälligen und davor, was
+ * überfällig und noch offen ist (wie `abgabenAm` der Startseite). Heute an
+ * einem Schultag Fälliges zählt erst ab morgen als überfällig, so wie der
+ * Überblick es für den nächsten Schultag nicht mitzählt.
+ */
+function abgabenAm(v: ZeilenVorrat, day: string): VorratAufgabe[] {
+  const heute = v.heute;
+  const ueber =
+    day >= heute
+      ? v.aufgaben
+          .filter((a) => !a.done && a.due < day && a.due <= heute && !(a.due === heute && isSchool(v, heute)))
+          .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0))
+      : [];
+  return [...ueber, ...v.aufgaben.filter((a) => a.due === day)];
+}
+
 function morgenAnswer(v: ZeilenVorrat, day: string): TagInhalt {
   const ls = lessonsOn(v, day);
   const fr = inFerien(v, day);
@@ -139,13 +156,13 @@ function morgenAnswer(v: ZeilenVorrat, day: string): TagInhalt {
       fach: F(v, l.fachId).name,
       em: l.hu ? `Hauptunterricht${l.raum ? ` · ${l.raum}` : ""}` : (l.raum ?? ""),
     })),
-    abgeben: v.aufgaben.filter((a) => a.due === day),
+    abgeben: abgabenAm(v, day),
   };
 }
 
 const morgenSumm = (v: ZeilenVorrat, d: string) => {
   const n = lessonsOn(v, d).length;
-  const a = v.aufgaben.filter((x) => x.due === d).length;
+  const a = abgabenAm(v, d).length;
   return `${n} ${n === 1 ? "Stunde" : "Stunden"}, ${a} ${a === 1 ? "Abgabe" : "Abgaben"}`;
 };
 
@@ -329,7 +346,8 @@ export type Option = {
     | { typ: "override"; intent: "suchen" | "eintragen" }
     | { typ: "eintragen" }
     | { typ: "rueck"; due: string }
-    | { typ: "undo" };
+    | { typ: "undo" }
+    | { typ: "details"; url: string };
 };
 
 export type Gruppe = {

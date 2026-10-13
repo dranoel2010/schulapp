@@ -13,6 +13,12 @@ export type HausaufgabenDaten = {
   heute: string;
   /** Der nächste Schultag */
   ns: string;
+  /**
+   * Heute an einem Schultag fällig und noch offen. Der Morgens-Ablauf zeigt
+   * sie unter „Abgeben“; auf dieser Seite stehen sie den ganzen Tag unter
+   * „Heute“, damit man sie auch nachmittags abhaken oder ändern kann.
+   */
+  heuteFaellig: AufgabeDaten[];
   fuer: AufgabeDaten[];
   spaeter: AufgabeDaten[];
   erledigt: AufgabeDaten[];
@@ -36,6 +42,7 @@ export async function hausaufgabenSeite(userId: string, jetztZeit?: Date): Promi
   return {
     heute,
     ns,
+    heuteFaellig: heuteSchule ? alle.filter((a) => !a.done && a.due === heute) : [],
     // Was bis zum nächsten Schultag fällig ist, ohne die heutigen Abgaben an
     // einem Schultag — die stehen morgens (Prototyp `offeneFuer`, Z. 1782).
     fuer: alle

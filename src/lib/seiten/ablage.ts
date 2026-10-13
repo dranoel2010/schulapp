@@ -1,3 +1,7 @@
+import { and, eq, isNull } from "drizzle-orm";
+
+import { db } from "@/db";
+import { materials } from "@/db/schema";
 import { claudeConfigured } from "@/lib/claude/client";
 import { berlinDay } from "@/lib/dates";
 import { countInbox } from "@/lib/inbox";
@@ -46,6 +50,19 @@ export function blattZeile(b: MaterialListItem): BlattZeile {
   };
 }
 
+/**
+ * Die Blätter, deren `filed_at` leer ist. Ihr Fach ist vorläufig (geraten aus
+ * der letzten Stunde): Ablage und Fachseite führen sie nicht unter einem Fach
+ * (Plan 3.8), sie sind über den Eingangskorb erreichbar.
+ */
+export async function blaetterImKorb(userId: string): Promise<Set<string>> {
+  const zeilen = await db
+    .select({ id: materials.id })
+    .from(materials)
+    .where(and(eq(materials.userId, userId), isNull(materials.filedAt)));
+  return new Set(zeilen.map((z) => z.id));
+}
+
 export type AblageDaten = {
   filter: { art: "fach" | "thema"; id: string; titel: string } | null;
   /** Mit Filter: die Themen des Fachs, an denen Blätter hängen (Themenfilter) */
@@ -58,9 +75,12 @@ export async function ablageSeite(
   userId: string,
   params: Record<string, string>,
 ): Promise<AblageDaten> {
-  const [faecher, eingang] = await Promise.all([
+  const [faecher, eingang, imKorb] = await Promise.all([
     listSubjects(userId, { includeArchived: true }),
     countInbox(userId),
+    // Nicht eingeordnete Blätter (Plan 3.8): ihr Fach ist geraten und wird
+    // nicht gezeigt — sie stehen nur hinter „Eingangskorb · n Blätter“.
+    blaetterImKorb(userId),
   ]);
 
   // Das Thema gewinnt, wenn beides in der Adresse steht (wie bisher).
@@ -81,6 +101,7 @@ export async function ablageSeite(
   // Gruppen in der Reihenfolge, in der ihr jüngstes Blatt kommt (Prototyp `order`)
   const gruppen: AblageDaten["gruppen"] = [];
   for (const b of liste) {
+    if (imKorb.has(b.id)) continue;
     let g = gruppen.find((x) => x.fachId === b.subject.id);
     if (!g) {
       g = { fachId: b.subject.id, fach: b.subject.name, blaetter: [] };

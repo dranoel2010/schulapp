@@ -13,12 +13,14 @@ import {
   type PageActivity,
 } from "@/lib/materials";
 import { listSubjects } from "@/lib/subjects";
+import { blattStatusVon } from "@/lib/kombi/blaetter";
 
 import { acceptProposalAction, markFiledAction } from "./actions";
 import { SubmitButton } from "./proposal-form";
 import {
   MaterialGlance,
   OriginBadge,
+  korbStatusText,
   ProposalSummary,
   arrivedLabel,
 } from "./proposal-view";
@@ -147,6 +149,12 @@ export default async function InboxPage({
   // eine Liste. Archivierte sind dabei: ein Vorschlag darf auf ein abgewähltes
   // Fach zeigen, und dann soll dort sein Name stehen und nicht „ein anderes".
   const subjects = await listSubjects(user.id, { includeArchived: true });
+
+  // Nicht eingeordnete Blätter zeigen ihren Status statt des geratenen Fachs (Plan 3.8)
+  const status = await blattStatusVon(
+    user.id,
+    items.filter((item) => item.filedAt === null).map((item) => item.id),
+  );
   const subjectNames = new Map(
     subjects.map((subject) => [subject.id, subject.name] as const),
   );
@@ -317,6 +325,7 @@ export default async function InboxPage({
                 key={item.id}
                 item={item}
                 stand={activity.get(item.id)}
+                status={item.filedAt === null ? korbStatusText(status.get(item.id)) : null}
                 subjectNames={subjectNames}
                 today={today}
               />
@@ -343,9 +352,12 @@ export default async function InboxPage({
 function InboxRow({
   item,
   stand,
+  status,
   subjectNames,
   today,
 }: {
+  /** Statt des Fachs, solange das Blatt nicht eingeordnet ist */
+  status: string | null;
   item: InboxEntry;
   /**
    * Wie weit die App mit dem Lesen der Seiten ist. Fehlt, wenn das Blatt
@@ -365,7 +377,7 @@ function InboxRow({
 
   return (
     <li className="space-y-3">
-      <MaterialGlance item={item} />
+      <MaterialGlance item={item} status={status} />
 
       {/* Zwei leise Sätze, je einer nur, wenn er etwas sagt — an einem Blatt
           von vor dem 6.10.2026 steht keiner von beiden.

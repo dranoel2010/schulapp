@@ -148,11 +148,28 @@ export function offeneFuer(
     .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0));
 }
 
-/** Abgaben eines Tages: offene zuerst, erledigte darunter in der Reihenfolge des Abhakens. */
-export function moAbgaben(aufgaben: readonly AufgabeT[], tag: string): AufgabeT[] {
-  const alle = aufgaben.filter((a) => a.due === tag);
+/**
+ * Was an einem Tag abzugeben ist: das an dem Tag Fällige und alles, was davor
+ * fällig war und noch offen ist („war fällig Mo 12.10.“). Heute an einem
+ * Schultag Fälliges wird erst am nächsten Tag überfällig — so liest es auch
+ * `offeneFuer`: Morgenansicht und Abend-Überblick lesen dieselbe Menge.
+ */
+export function istAbgabeAm(a: AufgabeT, tag: string, d: Pick<TagDaten, "tag" | "schultag">): boolean {
+  if (a.due === tag) return true;
+  if (a.done || a.due >= tag || tag < d.tag || a.due > d.tag) return false;
+  return !(a.due === d.tag && d.schultag);
+}
+
+/** Abgaben eines Tages: offene zuerst (überfällige vorn), erledigte darunter in der Reihenfolge des Abhakens. */
+export function moAbgaben(
+  aufgaben: readonly AufgabeT[],
+  tag: string,
+  d: Pick<TagDaten, "tag" | "schultag">,
+): AufgabeT[] {
+  const alle = aufgaben.filter((a) => istAbgabeAm(a, tag, d));
   return alle
     .filter((a) => !a.done)
+    .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0))
     .concat(
       alle
         .filter((a) => a.done)
@@ -165,7 +182,7 @@ export function headlineFor(v: Ansicht, d: TagDaten, aufgaben: readonly AufgabeT
   const t = d.tag;
   if (v === "morgens" || v === "frueh") {
     const tag = v === "frueh" ? d.naechsterSchultag : t;
-    const n = aufgaben.filter((a) => a.due === tag).length;
+    const n = aufgaben.filter((a) => istAbgabeAm(a, tag, d)).length;
     // Als Vorschau am Abend gehört die Überschrift zum Tag der Datumszeile
     const w = v === "frueh" ? (diffDays(t, tag) === 1 ? "Morgen" : TAG[wd(tag)]) : "Heute";
     return n === 0 ? `${w} nichts abzugeben` : n === 1 ? `${w} eine Abgabe` : `${w} ${zahl(n)} Abgaben`;

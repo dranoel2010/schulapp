@@ -12,7 +12,7 @@ import { getSubject, listSubjects } from "@/lib/subjects";
 import { artAbgeleitet, themaArt } from "@/lib/themen-art";
 import { recallItems } from "@/recall/schema";
 
-import { blattZeile, type BlattZeile } from "./ablage";
+import { blaetterImKorb, blattZeile, type BlattZeile } from "./ablage";
 import { aufgabeDaten, heuteApp, schulKalender, type AufgabeDaten, type SchulKalender } from "./gemeinsam";
 import { klausurThema, type KlausurZeile } from "./klausur";
 
@@ -84,13 +84,14 @@ export async function fachSeite(
   if (!fach) return null;
   const heute = heuteApp(await jetzt());
 
-  const [kal, aufgaben, klausuren, titel, themen, blaetter] = await Promise.all([
+  const [kal, aufgaben, klausuren, titel, themen, blaetter, imKorb] = await Promise.all([
     schulKalender(userId, heute),
     listHomework(userId),
     listExams(userId, { includePast: true }),
     examTopicTitles(userId),
     listTopics(userId, fach.id),
     listMaterials(userId, { subjectId: fach.id }),
+    blaetterImKorb(userId),
   ]);
 
   const themenIds = themen.map((t) => t.id);
@@ -142,6 +143,7 @@ export async function fachSeite(
       fragen: fragenZahl.get(t.id) ?? 0,
       blatt: mitBlatt.has(t.id),
     })),
-    blaetter: blaetter.map(blattZeile),
+    // Nicht eingeordnete Blätter tragen ein geratenes Fach (Plan 3.8)
+    blaetter: blaetter.filter((b) => !imKorb.has(b.id)).map(blattZeile),
   };
 }

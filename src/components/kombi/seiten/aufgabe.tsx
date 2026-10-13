@@ -361,7 +361,7 @@ export function AufgabeZeile({
   const bearbeiten = () => {
     schliessen(true);
     if (a.details) router.push(`/hausaufgaben/${a.id}`);
-    else kombi.openZeile({ intent: "aendern", id: a.id, text: a.text, fach: a.fachId, due: a.due, dueAuto: false });
+    else kombi.openZeile({ intent: "aendern", id: a.id, text: a.text, fach: a.fachId, due: a.due, dueAuto: false, details: `/hausaufgaben/${a.id}` });
   };
 
   return (

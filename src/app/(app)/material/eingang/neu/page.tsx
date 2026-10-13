@@ -4,12 +4,13 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { todayInBerlin } from "@/lib/dates";
 import { PROPOSAL_TOPIC_LIMIT } from "@/lib/inbox";
+import { blattStatusVon } from "@/lib/kombi/blaetter";
 import { getMaterial } from "@/lib/materials";
 import { listSubjects } from "@/lib/subjects";
 
 import { createProposalAction } from "../actions";
 import { ProposalForm } from "../proposal-form";
-import { MaterialGlance } from "../proposal-view";
+import { MaterialGlance, korbStatusText } from "../proposal-view";
 
 /**
  * Einen Vorschlag von Hand anlegen.
@@ -61,6 +62,9 @@ export default async function NewProposalPage({
   // Auswahl. Dasselbe tut die Blattseite, und aus demselben Grund: das eigene
   // Fach eines Blattes muss vorschlagbar bleiben, sonst wäre der einzige Weg
   // zurück ein Vorschlag auf ein anderes.
+  const korbStatus = item.filedAt
+    ? null
+    : korbStatusText((await blattStatusVon(user.id, [item.id])).get(item.id));
   const subjects = active.some((subject) => subject.id === item.subject.id)
     ? active
     : [item.subject, ...active];
@@ -84,7 +88,10 @@ export default async function NewProposalPage({
           Der Vorschlag gilt diesem Blatt
         </h2>
 
-        <MaterialGlance item={item} />
+        <MaterialGlance
+          item={item}
+          status={korbStatus}
+        />
       </section>
 
       <ProposalForm

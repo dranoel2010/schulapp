@@ -1,7 +1,7 @@
-import { jetzt } from "@/lib/tag";
+import { istSchultag, jetzt, ladeKalender, nachSchulschluss } from "@/lib/tag";
 import { addDays, isCalendarDate } from "@/lib/dates";
 import { examTopicTitles, listExams } from "@/lib/exams";
-import { homeworkForRange } from "@/lib/homework";
+import { homeworkForRange, listHomework } from "@/lib/homework";
 import { weekdayOf } from "@/lib/timetable";
 
 import {
@@ -38,8 +38,9 @@ export async function wocheSeite(
   userId: string,
   params: Record<string, string>,
 ): Promise<WocheDaten> {
-  const heute = heuteApp(await jetzt());
-  const kal = await schulKalender(userId, heute);
+  const now = await jetzt();
+  const heute = heuteApp(now);
+  const [kal, kalender] = await Promise.all([schulKalender(userId, heute), ladeKalender(userId)]);
 
   let tag = params.tag && isCalendarDate(params.tag) ? params.tag : kal.naechsterSchultag(heute);
   const wdTag = weekdayOf(tag);
@@ -47,11 +48,20 @@ export async function wocheSeite(
   const montag = addDays(tag, 1 - weekdayOf(tag));
   const tage = [0, 1, 2, 3, 4].map((i) => addDays(montag, i));
 
-  const [aufgaben, klausuren, themen] = await Promise.all([
+  const [aufgaben, offen, klausuren, themen] = await Promise.all([
     homeworkForRange(userId, tage[0], tage[4]),
+    listHomework(userId),
     listExams(userId, { includePast: true }),
     examTopicTitles(userId),
   ]);
+
+  // Überfällige offene Aufgaben stehen am Tag, für den man packt: heute bis
+  // Schulschluss, danach am nächsten Schultag — wie Morgenansicht und Überblick.
+  const heuteSchule = istSchultag(kalender, heute);
+  const packTag = heuteSchule && !nachSchulschluss(kalender, now) ? heute : kal.naechsterSchultag(heute);
+  const ueberfaellig = offen
+    .filter((a) => a.dueDate < packTag && a.dueDate <= heute && !(a.dueDate === heute && heuteSchule))
+    .sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0));
 
   return {
     heute,
@@ -68,7 +78,7 @@ export async function wocheSeite(
           const k = erste === s ? klausuren.find((x) => x.date === d && x.subjectId === s.fachId) : undefined;
           return { ...s, klausur: k ? klausurThema(k, themen.get(k.id) ?? []) : null };
         }),
-        abgeben: aufgaben.filter((a) => a.dueDate === d).map(aufgabeDaten),
+        abgeben: [...(d === packTag ? ueberfaellig : []), ...aufgaben.filter((a) => a.dueDate === d)].map(aufgabeDaten),
       };
     }),
   };

@@ -75,6 +75,13 @@ type Ebene =
       ausCache: string | null;
       geht?: boolean;
       still?: boolean;
+      /**
+       * Die Seite stand vorher als echte Route da (Einstieg über eine andere
+       * Adresse als „/“) und wurde zur Stapelseite, als eine neue Route darüber
+       * kam. Ältere Einträge in der History kennen sie nicht als Stapelseite:
+       * beim Abgleich bleibt sie liegen, statt zu gehen.
+       */
+      basis?: boolean;
     }
   | { key: string; typ: "route"; geht?: boolean; still?: boolean };
 
@@ -150,6 +157,8 @@ export function KombiShell({ children }: { children: ReactNode }) {
   const vorgeladen = useRef(new Map<string, { zeit: number; p: Promise<SeitenAntwort> }>());
   const ignorierePop = useRef(0);
   const ausPop = useRef(false);
+  /** Der Eintrag, auf den Zurück/Vor zuletzt sprang, gehört einer echten Route */
+  const popRoute = useRef(false);
   const ausPopTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const idx = useRef(0);
   const zaehler = useRef(0);
@@ -299,6 +308,14 @@ export function KombiShell({ children }: { children: ReactNode }) {
           if (under && !reduce()) {
             under.style.transform = `translateX(${-0.24 * W}px)`;
             under.style.opacity = ".4";
+          }
+          // Eine abgelöste Route (`basis`), über der schon eine Seite liegt:
+          // dort, wo die Seite darüber sie hingelegt hätte
+          const i = ebenen.indexOf(e);
+          const ueber = ebenen.slice(i + 1).find((x) => !x.geht);
+          if (e.typ === "stapel" && e.basis && ueber && animiert.current.has(ueber.key) && !reduce()) {
+            el.style.transform = `translateX(${-0.24 * W}px)`;
+            el.style.opacity = ".4";
           }
           continue;
         }
@@ -469,8 +486,17 @@ export function KombiShell({ children }: { children: ReactNode }) {
       const aktuell = ebenenRef.current.filter(
         (e): e is Extract<Ebene, { typ: "stapel" }> => e.typ === "stapel" && !e.geht,
       );
+      // Abgelöste Routen (`basis`) nennt ein älterer Eintrag nicht: überspringen
       let p = 0;
-      while (p < aktuell.length && p < ziel.length && gleich(aktuell[p], ziel[p])) p++;
+      let q = 0;
+      for (;;) {
+        if (p >= aktuell.length) break;
+        if (q < ziel.length && gleich(aktuell[p], ziel[q])) {
+          p++;
+          q++;
+        } else if (aktuell[p].basis) p++;
+        else break;
+      }
       const weg = aktuell.slice(p);
       if (weg.length) {
         const oben = weg[weg.length - 1];
@@ -481,7 +507,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
             .map((e) => (e.key === oben.key ? { ...e, geht: true } : e)),
         );
       }
-      const dazu = ziel.slice(p);
+      const dazu = ziel.slice(q);
       dazu.forEach((eintrag, i) => {
         const key = keyFuer(eintrag.art);
         const letzte = i === dazu.length - 1;
@@ -502,7 +528,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
   const popPage = useCallback(() => {
     const oben = obersteEbene();
     if (!oben) return;
-    if (oben.typ === "stapel") {
+    if (oben.typ === "stapel" && !(oben.basis && idx.current === 0)) {
       window.history.back();
       return;
     }
@@ -666,6 +692,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
         return;
       }
       if (typeof s.idx === "number") idx.current = s.idx;
+      popRoute.current = !!s.route;
       ausPop.current = true;
       clearTimeout(ausPopTimer.current);
       ausPopTimer.current = setTimeout(() => {
@@ -729,16 +756,57 @@ export function KombiShell({ children }: { children: ReactNode }) {
     const alteSegmente = segVorher.current ? segVorher.current.split("/") : [];
     segVorher.current = segKey;
     const route = ebenenRef.current.find((e) => e.typ === "route" && !e.geht);
+    const obenIstRoute = !!route && obersteEbene()?.key === route.key;
+    // Zurück auf einen Eintrag ohne Route, über dem die Route lag (die alte
+    // Route darunter ist inzwischen Stapelseite oder fort, siehe unten): die
+    // Route fährt aus, die Seiten darunter bleiben.
+    if (ausPop.current && !istStart && route && obenIstRoute && !popRoute.current && ebenenRef.current.some((e) => e.typ === "stapel" && !e.geht)) {
+      setzeEbenen((alt) => alt.map((e) => (e.key === route.key ? { ...e, geht: true } : e)));
+      ausPop.current = false;
+      return;
+    }
+    // Eine echte Route über Stapelseiten, unter denen noch die Einstiegsroute
+    // liegt (Neuladen, Lesezeichen, Push-Erinnerung): die neue Route kommt als
+    // oberste Ebene dazu. Die alte Route-Ebene darf keine fremden `children`
+    // mehr bekommen — sie wird zur Stapelseite derselben Adresse, oder geht,
+    // wo es keine gibt (Formulare).
+    if (!istStart && route && !obenIstRoute && !ausPop.current) {
+      const alt = artAusSegmenten(alteSegmente);
+      const key = alt ? keyFuer(alt.art) : null;
+      animiert.current.delete(route.key);
+      elemente.current.delete(route.key);
+      setzeEbenen((liste) => [
+        ...liste.flatMap((e): Ebene[] =>
+          e.key !== route.key
+            ? [e]
+            : alt && key
+              ? [{ key, typ: "stapel", art: alt.art, params: alt.params, daten: undefined, ausCache: null, still: true, basis: true }]
+              : [],
+        ),
+        { key: `route${++zaehler.current}`, typ: "route" },
+      ]);
+      if (alt && key) {
+        holen(alt.art, alt.params).then(
+          (a) =>
+            setzeEbenen((liste) =>
+              liste.map((e) => (e.key === key && e.typ === "stapel" ? { ...e, daten: a.daten, ausCache: a.ausCache } : e)),
+            ),
+          () => {},
+        );
+      }
+      beschriften(true);
+      return;
+    }
     // Route löst Route ab (Blatt per URL geöffnet → „Blatt bearbeiten“): die
     // bisherige Route legt sich als Stapelseite unter die neue, so wie eine
     // Stapelseite unter einem Formular liegen bleibt (2.4, Punkt 5). Sonst
     // läge unter dem einfahrenden Formular die Startseite.
-    const unter = !istStart && route && !ausPop.current && obersteEbene()?.key === route.key ? artAusSegmenten(alteSegmente) : null;
+    const unter = !istStart && route && !ausPop.current && obenIstRoute ? artAusSegmenten(alteSegmente) : null;
     if (unter && route) {
       const key = keyFuer(unter.art);
       setzeEbenen((alt) => [
         ...alt.filter((e) => e.key !== route.key),
-        { key, typ: "stapel", art: unter.art, params: unter.params, daten: undefined, ausCache: null, still: true },
+        { key, typ: "stapel", art: unter.art, params: unter.params, daten: undefined, ausCache: null, still: true, basis: true },
         { key: `route${++zaehler.current}`, typ: "route" },
       ]);
       holen(unter.art, unter.params).then(
@@ -1058,6 +1126,9 @@ export function KombiShell({ children }: { children: ReactNode }) {
     (window as unknown as { __kombi?: KombiApi }).__kombi = api;
   }, [api]);
 
+  // Nur die oberste lebende Route-Ebene zeigt die `children` (2.4, Punkt 5)
+  const routeMitInhalt = [...ebenen].reverse().find((e) => e.typ === "route" && !e.geht)?.key;
+
   return (
     <KombiKontext.Provider value={api}>
       <div id="app" ref={appRef}>
@@ -1091,7 +1162,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
                   if (el) elemente.current.set(e.key, el);
                 }}
               >
-                {istStart ? null : children}
+                {istStart || e.geht || e.key !== routeMitInhalt ? null : children}
               </Seite>
             ) : (
               <Seite

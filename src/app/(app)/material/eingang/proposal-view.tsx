@@ -100,7 +100,22 @@ export function OriginBadge({ origin }: { origin: ProposalOrigin }) {
  * <img> und nicht next/image: die Bildoptimierung schickt keine Cookies mit
  * und bekäme vom Route Handler zu Recht ein Nein.
  */
-export function MaterialGlance({ item }: { item: MaterialListItem }) {
+/** Was statt des Fachs an einem nicht eingeordneten Blatt steht (wie Blattseite und Überblick). */
+export function korbStatusText(status: string | undefined): string {
+  return status === "einordnen" ? "Wird eingeordnet …" : "Liegt im Eingangskorb";
+}
+
+export function MaterialGlance({
+  item,
+  status,
+}: {
+  item: MaterialListItem;
+  /**
+   * Solange das Blatt nicht eingeordnet ist, steht hier der Status statt des
+   * Fachs (Plan 3.8): das vorläufige Fach ist geraten.
+   */
+  status?: string | null;
+}) {
 
   return (
     <div className="flex items-start gap-3">
@@ -130,7 +145,7 @@ export function MaterialGlance({ item }: { item: MaterialListItem }) {
         <p className="mt-0.5 flex items-center gap-1.5 text-[15px] text-ink-2">
           <span className="truncate">
             {[
-              item.subject.name,
+              status ?? item.subject.name,
               formatGerman(item.capturedOn, "kurz"),
               item.pageCount > 1 ? `${item.pageCount} Seiten` : null,
             ]

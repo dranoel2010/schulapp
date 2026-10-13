@@ -546,7 +546,7 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
           {d ? (
             <Morgens
               morgen={d.morgens}
-              abgaben={zuEcht(moAbgaben(ordnung, d.morgens.tag))}
+              abgaben={zuEcht(moAbgaben(ordnung, d.morgens.tag, d))}
               heute={d.tag}
               {...handlers}
             />
@@ -564,7 +564,7 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
           {d ? (
             <Morgens
               morgen={d.frueh}
-              abgaben={zuEcht(moAbgaben(ordnung, d.frueh.tag))}
+              abgaben={zuEcht(moAbgaben(ordnung, d.frueh.tag, d))}
               heute={d.tag}
               {...handlers}
             />

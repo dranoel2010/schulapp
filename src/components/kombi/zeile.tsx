@@ -8,7 +8,7 @@
  */
 /* eslint-disable react-hooks/refs */
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, useSyncExternalStore, type Ref } from "react";
 
 import {
@@ -170,6 +170,7 @@ export function Zeile({
   onOffen?: (offen: boolean, ausHistory: boolean) => void;
 }) {
   const kombi = useKombi();
+  const router = useRouter();
   const pathname = usePathname();
   const [offen, setOffen] = useState(false);
   /** Tokens und Pillen bleiben bis zum Ende der Schließ-Bewegung stehen */
@@ -801,6 +802,7 @@ export function Zeile({
 
   const kuerzelFlug = useRef<DOMRect | null>(null);
   const letzteHits = useRef<React.ReactNode>(null);
+  const letzteLeer = useRef<{ label: string; items: Option[]; grid?: boolean }[] | null>(null);
   const showAnswer = (q: string, ans: Antwort) => {
     if (ans.kind === "nav") return;
     kuerzelFlug.current = feldRef.current?.getBoundingClientRect() ?? null;
@@ -829,6 +831,9 @@ export function Zeile({
         const r = z.rueck;
         z.rueck = null;
         if (r) doEintragen({ ...r, due: i.due, dueAuto: false });
+      } else if (i.typ === "details") {
+        const url = i.url;
+        nachSchliessen(() => router.push(url));
       } else if (i.typ === "undo") {
         kombi.undoJetzt()?.run();
         z.scrollNeu = true;
@@ -902,6 +907,13 @@ export function Zeile({
     grid: true,
     items: AREAS.map((a) => ({ key: "w:" + a.key, l1: a.label, ziel: a.ziel(v), cell: true })),
   });
+
+  // Während des Schließens bleibt der Inhalt stehen, wie er offen war (der
+  // Prototyp zeichnet erst beim nächsten Öffnen neu): sonst holte „Zuletzt
+  // geöffnet“ die eben geöffnete Seite noch in die Schließ-Bewegung, das Menü
+  // wüchse und die Maske, mit der alten Höhe berechnet, endete neben dem Dock.
+  const leerAnzeige = !offen && sichtbar && letzteLeer.current ? letzteLeer.current : leerGruppen;
+  if (offen) letzteLeer.current = leerGruppen;
 
   const optProps = {
     fachKurz,
@@ -985,14 +997,17 @@ export function Zeile({
               l1: [{ t: "Stattdessen suchen: " }, { t: `»${p.text}«`, k: "nw" }],
               intern: { typ: "override", intent: "suchen" },
             }
-          : null;
+          : z.ctx?.details
+            ? // Ändern kann keine Notiz setzen: der Weg zum vollen Formular
+              { key: "second", l1: "Mit Details bearbeiten", intern: { typ: "details", url: z.ctx.details } }
+            : null;
       // ohne Text wiederholt die erste Zeile nur den Platzhalter: dann stehen nur die Tokens da
       const zeigeErste = !!dup || !!p.taskText || !p.eFach || z.needFach;
       if (zeigeErste) ersteOpt = first;
       hitsInhalt = (
         <>
           {zeigeErste ? <Opt key="first" o={first} first onWaehlen={(o) => waehlen(o)} {...optProps} /> : null}
-          {second && p.text ? <Opt key="second" o={second} onWaehlen={(o) => waehlen(o)} {...optProps} /> : null}
+          {second && (p.text || second.intern?.typ === "details") ? <Opt key="second" o={second} onWaehlen={(o) => waehlen(o)} {...optProps} /> : null}
         </>
       );
     } else if (p) {
@@ -1347,7 +1362,7 @@ export function Zeile({
           <div className="m-scroll" id="mScroll" ref={scrollRef}>
             <div className={`m-layer${showLeer ? "" : " off"}`} id="mLeer" role="listbox" aria-label="Wohin?" ref={leerRef}>
               {/* mit Kontext bleibt die leere Ebene leer wie im Prototyp (dort nie befüllt), sonst vergrößert sie die Scrollhöhe */}
-              {(z.ctx && !showLeer ? [] : leerGruppen)
+              {(z.ctx && !showLeer ? [] : leerAnzeige)
                     .filter((g) => g.items.length)
                     .map((g) => (
                       <div key={g.label} className="m-group" role="group" aria-label={g.label} data-k={"lg:" + g.label}>
