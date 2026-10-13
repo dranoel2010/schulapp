@@ -2,6 +2,7 @@ import { blattStand } from "@/lib/arbeitsblatt/ablauf";
 import { asciiFileName } from "@/lib/pdf/filename";
 import { arbeitsblattDateiname, buildArbeitsblattPdf } from "@/lib/pdf/arbeitsblatt-document";
 import { getSessionUser } from "@/lib/session";
+import { jetzt } from "@/lib/tag";
 import { istId } from "@/recall/ids";
 
 /**
@@ -19,7 +20,7 @@ export async function GET(_request: Request, context: RouteContext<"/api/arbeits
   const { id } = await context.params;
   if (!istId(id)) return text("Dieses Arbeitsblatt gibt es nicht.", 404);
 
-  const stand = await blattStand(user.id, id, new Date());
+  const stand = await blattStand(user.id, id, await jetzt());
   if (!stand) return text("Dieses Arbeitsblatt gibt es nicht.", 404);
   if (!stand.inhalt) return text("Das Blatt wird gerade gebaut.", 409);
 
@@ -28,6 +29,7 @@ export async function GET(_request: Request, context: RouteContext<"/api/arbeits
     thema: stand.thema,
     tag: stand.tag,
     inhalt: stand.inhalt,
+    probe: stand.probe,
   });
   const name = arbeitsblattDateiname(stand);
   return new Response(new Uint8Array(pdf), {

@@ -179,12 +179,15 @@ describe("Suche", () => {
 
   it("»englisch klausur« ohne Englisch-Klausur im Vorrat: keine Klausur eines anderen Fachs obenan, sondern das Archiv (Abnahme 14)", () => {
     assert.ok(!v.klausuren.some((k) => k.fachId === "en"));
-    const a = antwort("englisch klausur");
-    assert.ok(a.kind === "nav");
-    if (a.kind !== "nav") return;
+    // „Archiv öffnen“ nur, wenn Englisch dort Klausuren hat
+    const mitArchiv: SuchUmgebung = { ...u, v: { ...v, archivFaecher: ["en"] } };
+    const a = answerFor(p("englisch klausur"), mitArchiv);
+    assert.ok(a && a.kind === "nav");
+    if (!a || a.kind !== "nav") return;
     assert.equal(a.l1, "Keine Klausur in Englisch");
+    assert.equal(a.l2, "Archiv öffnen");
     assert.deepEqual(a.ziel, { typ: "seite", art: "archiv" });
-    const r = suche(p("englisch klausur"), { ...u, server: { q: "", list: [] } });
+    const r = suche(p("englisch klausur"), { ...mitArchiv, server: { q: "", list: [] } });
     assert.equal(txtText(r.top.l1), "Keine Klausur in Englisch");
     assert.deepEqual(r.top.ziel, { typ: "seite", art: "archiv" });
     const alle = [r.top, ...r.groups.flatMap((g) => g.items ?? [])];
@@ -194,6 +197,33 @@ describe("Suche", () => {
     assert.ok(![r2.top, ...r2.groups.flatMap((g) => g.items ?? [])].some((i) => i.key.startsWith("k:") || txtText(i.l1) === "Klausur Mathematik"));
     // mit dem eigenen Fach bleibt alles wie gehabt
     assert.equal(antwort("mathe klausur").l1, "Klausur Mathematik");
+  });
+
+  it("»englisch klausur« für ein Fach ohne Klausur im Archiv: kein „Archiv öffnen“", () => {
+    assert.ok(!(v.archivFaecher ?? []).includes("en"));
+    const a = antwort("englisch klausur");
+    assert.ok(a.kind === "nav");
+    if (a.kind !== "nav") return;
+    assert.equal(a.l1, "Keine Klausur in Englisch");
+    assert.equal(a.l2 ?? null, null);
+    assert.equal(a.ziel, null);
+    const r = suche(p("englisch klausur"), { ...u, server: { q: "", list: [] } });
+    assert.equal(txtText(r.top.l1), "Keine Klausur in Englisch");
+    assert.equal(r.top.ziel, null);
+    // ein älterer Vorrat aus dem Cache ohne die Liste bietet das Archiv auch nicht an
+    const alt = answerFor(p("englisch klausur"), { ...u, v: { ...v, archivFaecher: undefined } });
+    assert.ok(alt && alt.kind === "nav" && alt.ziel === null);
+  });
+
+  it("die Gruppe „Themen“ lässt bei erkanntem Fach nur dessen Themen zu", () => {
+    const ohne = suche(p("quadratische"), { ...u, server: { q: "", list: [] } });
+    const alleOhne = [ohne.top, ...ohne.groups.flatMap((g) => g.items ?? [])];
+    assert.ok(alleOhne.some((i) => i.key.startsWith("th:") || txtText(i.l2).startsWith("Thema")), "ohne Fach findet »quadratische« das Mathe-Thema");
+    const r = suche(p("englisch quadratische"), { ...u, server: { q: "", list: [] } });
+    assert.ok(!r.groups.some((g) => g.key === "g:th"), "keine Gruppe „Themen“ mit dem Mathe-Thema");
+    assert.ok(![r.top, ...r.groups.flatMap((g) => g.items ?? [])].some((i) => txtText(i.l2).includes("Thema in Mathematik")));
+    const m = suche(p("mathe quadratische"), { ...u, server: { q: "", list: [] } });
+    assert.ok([m.top, ...m.groups.flatMap((g) => g.items ?? [])].some((i) => txtText(i.l2).includes("Thema in Mathematik")));
   });
 
   it("»vergangene« findet das Archiv als Bereich, das Raster „Wohin?“ bleibt bei neun", () => {

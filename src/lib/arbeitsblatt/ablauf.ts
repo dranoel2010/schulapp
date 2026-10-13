@@ -216,6 +216,8 @@ export type BlattStand = {
   hatFragen: boolean;
   /** Nur beim Blatt eines Lernblocks: Tag der Klausur und der Name des Blocks */
   block: { klausurtag: string; label: string } | null;
+  /** Das Blatt einer Probeklausur: der Kopf heißt „⟨Fach⟩ · Probeklausur“ */
+  probe: boolean;
 };
 
 /** „Lernblock · ⟨Thema⟩“, „Lernblock · Wiederholung“ oder „… · Gesamtwiederholung“ (Plan 3.5). */
@@ -239,10 +241,12 @@ export async function blattStand(
   let fach = "";
   let thema = "";
   let block: BlattStand["block"] = null;
+  let probe = false;
   if (zeile.studyBlockId) {
     const ziel = await blockZiel(userId, zeile.studyBlockId);
     if (ziel) {
       block = { klausurtag: ziel.klausurtag, label: blockLabel(ziel) };
+      probe = ziel.kind === "probe";
       fach = ziel.fach;
       thema = blattThema(ziel);
     }
@@ -292,6 +296,7 @@ export async function blattStand(
     wertung: Object.fromEntries(wertung),
     hatFragen,
     block,
+    probe,
   };
 }
 

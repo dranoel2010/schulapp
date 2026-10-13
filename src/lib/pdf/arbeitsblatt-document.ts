@@ -415,13 +415,18 @@ export type ArbeitsblattPdfDaten = {
   /** 'YYYY-MM-DD' — steht im Kopf */
   tag: string;
   inhalt: ArbeitsblattInhalt;
+  /** Probeklausur: Kopf „⟨Fach⟩ · Probeklausur“ statt „· Arbeitsblatt“ */
+  probe?: boolean;
 };
+
+/** Was rechts neben dem Fach im Kopf von Seite 1 steht. */
+export const blattArt = (d: { probe?: boolean }): string => (d.probe ? "Probeklausur" : "Arbeitsblatt");
 
 const EINZUG = 8 * MM;
 
 function seiteAufgaben(doc: Doc, s: Schriften, d: ArbeitsblattDatenMitDatum, k: number) {
   const { inhalt } = d;
-  let y = kopfzeile(doc, s, d.fach, "Arbeitsblatt", d.datum);
+  let y = kopfzeile(doc, s, d.fach, blattArt(d), d.datum);
   y = titel(doc, s, d.thema, y);
   y = unterzeile(doc, s, `${inhalt.teil} · ${inhalt.aufgaben.length} Aufgaben, von leicht nach schwer · etwa ${inhalt.minuten} Minuten`, y);
   y = quellenzeile(doc, s, quellenStuecke(inhalt, 8.5), y);
@@ -521,7 +526,7 @@ function zeichne(daten: ArbeitsblattDatenMitDatum, s: Schriften, k: number) {
     size: "A4",
     margin: 0,
     autoFirstPage: true,
-    info: { Title: `${daten.fach} · ${daten.thema} · Arbeitsblatt`, Author: "Schulapp" },
+    info: { Title: `${daten.fach} · ${daten.thema} · ${blattArt(daten)}`, Author: "Schulapp" },
   });
   const u1 = seiteAufgaben(doc, s, daten, k);
   doc.addPage({ size: "A4", margin: 0 });
@@ -605,6 +610,6 @@ export async function buildArbeitsblattPdf(daten: ArbeitsblattPdfDaten): Promise
 }
 
 /** Dateiname: „Arbeitsblatt Mathematik Quadratische Funktionen 2026-10-12.pdf“ */
-export function arbeitsblattDateiname(daten: Pick<ArbeitsblattPdfDaten, "fach" | "thema" | "tag">): string {
-  return `Arbeitsblatt ${daten.fach} ${daten.thema} ${daten.tag}.pdf`.replace(/[\\/:*?"<>|]/g, "-");
+export function arbeitsblattDateiname(daten: Pick<ArbeitsblattPdfDaten, "fach" | "thema" | "tag" | "probe">): string {
+  return `${blattArt(daten)} ${daten.fach} ${daten.thema} ${daten.tag}.pdf`.replace(/[\\/:*?"<>|]/g, "-");
 }

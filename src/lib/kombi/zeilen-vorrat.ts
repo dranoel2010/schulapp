@@ -32,6 +32,7 @@ import { blockRest, blockZustand } from "@/lib/lernblock";
 import { ablaufSchritt, ablaufStand, protokollVomTag } from "@/lib/protokoll";
 import { listSubjects } from "@/lib/subjects";
 import { DEFAULT_PERIODS, listLessons, listPeriods, periodTimes } from "@/lib/timetable";
+import { dauertaktSicher } from "@/recall/nachlegen";
 import { themenAuswahl, wiederholenStand, type FaelligesThema } from "@/recall/themen";
 
 /**
@@ -52,6 +53,8 @@ const ZEITFORMAT = (iso: Date) => berlinDay(iso);
 
 export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVorrat> {
   const heute = appTagVon(now);
+  // Themen ohne Klausur bekommen ihren nächsten Termin, bevor die Zeile sie liest (Antwort 6)
+  await dauertaktSicher(userId, heute);
 
   const [faecherRoh, periodenRoh, stundenRoh, freiRoh, aufgabenRoh, klausurenRoh, notenRoh, bloeckeHeute, stand, protokoll, schritt] =
     await Promise.all([
@@ -151,6 +154,9 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
   const klausuren: VorratKlausur[] = klausurenRoh
     .filter((k) => aktiv.has(k.subjectId) && !klausurImArchiv(k.date, heute))
     .map((k) => ({ id: k.id, fachId: k.subjectId, datum: k.date, thema: k.title?.trim() || "Klausur", plan: planVon(k.id) }));
+  const archivFaecher = [
+    ...new Set(klausurenRoh.filter((k) => aktiv.has(k.subjectId) && klausurImArchiv(k.date, heute)).map((k) => k.subjectId)),
+  ];
 
   // ── Noten je Fach, älteste zuerst ─────────────────────────────────────────
   const noten: Record<string, VorratNote[]> = {};
@@ -253,6 +259,7 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
     epoche,
     themenListe,
     grammatik,
+    archivFaecher,
   };
 }
 

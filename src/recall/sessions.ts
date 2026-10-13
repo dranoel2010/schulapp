@@ -392,6 +392,8 @@ export async function urteilFesthalten(
   userId: string,
   attemptId: string,
   correct: boolean,
+  /** Die App-Uhr des Aufrufers (`jetzt()`, mit Testuhr die Testuhr) */
+  now: Date = new Date(),
 ): Promise<{ ok: boolean; wiederholt: boolean }> {
   if (!istId(attemptId)) return { ok: false, wiederholt: false };
 
@@ -408,7 +410,7 @@ export async function urteilFesthalten(
   if (correct && versuch.scheduleId !== null) {
     await db
       .update(recallSchedule)
-      .set({ doneAt: new Date() })
+      .set({ doneAt: now })
       .where(eq(recallSchedule.id, versuch.scheduleId));
   }
 

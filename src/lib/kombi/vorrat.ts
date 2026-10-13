@@ -141,6 +141,12 @@ export type ZeilenVorrat = {
   themenListe: VorratThemaTreffer[];
   /** Grammatikthemen für „Blatt Grammatik …“, fälligstes zuerst */
   grammatik: VorratGrammatik[];
+  /**
+   * Fächer mit Klausuren im Archiv (ab Tag 15 nach dem Klausurtag): nur dort
+   * führt „⟨Fach⟩ klausur“ ohne anstehende Klausur ins Archiv. Fehlt in einem
+   * älteren Vorrat aus dem Cache.
+   */
+  archivFaecher?: string[];
 };
 
 /**

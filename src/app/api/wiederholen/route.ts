@@ -18,6 +18,7 @@ import {
 } from "@/recall/themen";
 import { freePeriodToday } from "@/lib/free-days";
 import { istId } from "@/recall/ids";
+import { dauertaktSicher } from "@/recall/nachlegen";
 
 /**
  * Was der Tisch zum Wiederholen braucht (Plan E, 3.4):
@@ -92,6 +93,8 @@ export async function GET(request: NextRequest) {
   }
   const heute = appTag(await jetzt());
   const sp = request.nextUrl.searchParams;
+  // Themen ohne Klausur bekommen ihren nächsten Termin, bevor der Tisch liest (Antwort 6)
+  await dauertaktSicher(user.id, heute);
 
   const thema = sp.get("thema");
   if (thema) {

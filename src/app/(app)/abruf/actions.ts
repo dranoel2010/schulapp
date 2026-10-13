@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { z } from "zod";
 
 import { requireUser } from "@/lib/auth";
+import { jetzt } from "@/lib/tag";
 import { claudeConfigured } from "@/lib/claude/client";
 import { todayInBerlin } from "@/lib/dates";
 import { formErrors, type FieldErrors } from "@/lib/form-errors";
@@ -363,7 +364,7 @@ export async function urteilAction(
 ): Promise<{ wiederholt: boolean }> {
   const user = await requireUser();
 
-  const ergebnis = await urteilFesthalten(user.id, attemptId, correct);
+  const ergebnis = await urteilFesthalten(user.id, attemptId, correct, await jetzt());
   return { wiederholt: ergebnis.wiederholt };
 }
 

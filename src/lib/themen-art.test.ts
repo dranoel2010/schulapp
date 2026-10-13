@@ -5,6 +5,7 @@ import {
   artAbgeleitet,
   gespeicherteArt,
   hatGrammatikStichwort,
+  istGrammatikThema,
   themaArt,
 } from "@/lib/themen-art";
 
@@ -41,6 +42,29 @@ describe("themaArt (Plan 3.6)", () => {
     assert.ok(hatGrammatikStichwort("Satzglieder bestimmen"));
     assert.ok(!hatGrammatikStichwort("Zeitungsartikel schreiben"));
     assert.ok(!hatGrammatikStichwort("Aktivitäten am Wochenende"));
+  });
+
+  it("Grammatik ohne das Wort Grammatik: if-sentences, conditional, tenses, subjonctif, passé composé, Konjunktiv", () => {
+    for (const titel of [
+      "Unit 3 if-sentences",
+      "If sentences type 1",
+      "Conditionals",
+      "Tenses revision",
+      "Le subjonctif",
+      "Passé composé mit être",
+      "Konjunktiv II",
+      "Gerund or infinitive",
+      "The passive",
+      "Modal verbs",
+      "Les pronoms relatifs",
+      "Adjektive und Adverbien",
+      "Präteritum und Perfekt",
+    ])
+      assert.ok(hatGrammatikStichwort(titel), titel);
+    for (const titel of ["Vokabeln Unit 3", "Romeo and Juliet", "Kurzgeschichte", "Le Petit Prince", "Gedichtanalyse", "Presentation skills", "D'accord ou pas"])
+      assert.ok(!hatGrammatikStichwort(titel), titel);
+    assert.equal(artAbgeleitet({ title: "Unit 3 if-sentences" }, { name: "Englisch" }), "ueben");
+    assert.ok(istGrammatikThema({ title: "Unit 3 if-sentences", art: null }, { name: "Englisch" }));
   });
 
   it("der gespeicherte Wert gewinnt", () => {

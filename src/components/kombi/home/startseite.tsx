@@ -131,6 +131,14 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
     aufgabenRef.current = aufgaben;
     dRef.current = d;
   });
+  // Versatz der App-Uhr (Server, mit Testuhr die Testuhr) zur Uhr des Geräts,
+  // gemessen beim Eintreffen der Tagesdaten: der vorläufige Erledigt-Zeitpunkt
+  // beim Abhaken rechnet damit, nicht mit der Uhr des Geräts allein.
+  const versatzRef = useRef(0);
+  useLayoutEffect(() => {
+    const s = d ? Date.parse(d.stand) : NaN;
+    versatzRef.current = Number.isFinite(s) ? s - Date.now() : 0;
+  }, [d]);
 
   const scope = () => document.getElementById(`m-${viewRef.current ?? "ueberblick"}`);
 
@@ -194,7 +202,7 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
       if (!a || a.done === done) return;
       const vorher: Ueber = { done: a.done, doneAt: a.doneAt };
       laufend.current.add(id);
-      setUeber((u) => ({ ...u, [id]: { done, doneAt: done ? new Date().toISOString() : null } }));
+      setUeber((u) => ({ ...u, [id]: { done, doneAt: done ? new Date(Date.now() + versatzRef.current).toISOString() : null } }));
       if (done) buzz();
       if (!haltenRef.current.size) setEingefroren(dRef.current);
       const gehaltenNeu = new Map(haltenRef.current).set(id, vorher.done);

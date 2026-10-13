@@ -236,6 +236,8 @@ describe("Probeklausur im Lernplan", () => {
     await testDb.update(exams).set({ title: null }).where(eq(exams.id, klausur));
     assert.equal(stand?.block?.label, "Probeklausur");
     assert.equal(stand?.fach, "Geschichte");
+    // Der Kopf heißt „Geschichte · Probeklausur“, nicht „· Arbeitsblatt“
+    assert.equal(stand?.probe, true);
   });
 
   it("Auswerten zählt wie eine Kartenrunde: fällige Termine bekommen done_at, die Probe ist erledigt", async () => {

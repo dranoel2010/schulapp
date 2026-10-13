@@ -81,6 +81,12 @@ describe("zeilenVorrat", () => {
     assert.ok(!morgen.klausuren.some((k) => k.thema === "Tag vierzehn"));
   });
 
+  it("nennt die Fächer mit Klausuren im Archiv, nur die", async () => {
+    const v = await zeilenVorrat(nutzer, JETZT);
+    const name = (id: string) => v.faecher.find((f) => f.id === id)?.name;
+    assert.deepEqual((v.archivFaecher ?? []).map(name), ["Geschichte"]);
+  });
+
   it("liefert die Grammatikthemen mit Blatt, fälligstes zuerst, Aliase beim Ziel", async () => {
     const v = await zeilenVorrat(nutzer, JETZT);
     assert.deepEqual(

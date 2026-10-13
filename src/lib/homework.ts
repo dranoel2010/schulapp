@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { db } from "@/db";
 import { isCalendarDate } from "@/lib/dates";
+import { jetzt } from "@/lib/tag";
 import {
   homework,
   subjects,
@@ -223,19 +224,22 @@ export async function updateHomework(
 }
 
 /**
- * Abhaken und wieder aufmachen. Der Zeitpunkt ist der jetzige — daraus liest
- * die Startseite später ab, was heute geschafft wurde.
+ * Abhaken und wieder aufmachen. Der Zeitpunkt ist der jetzige der App-Uhr
+ * (`jetzt()`, mit Testuhr die Testuhr) — daraus liest die Startseite später
+ * ab, was heute geschafft wurde, und das Archiv, was älter als zwei Tage ist.
  */
 export async function setHomeworkDone(
   userId: string,
   id: string,
   done: boolean,
+  now?: Date,
 ): Promise<void> {
   if (!isId(id)) return;
 
+  const zeit = done ? (now ?? (await jetzt())) : null;
   await db
     .update(homework)
-    .set({ doneAt: done ? new Date() : null })
+    .set({ doneAt: zeit })
     .where(and(eq(homework.userId, userId), eq(homework.id, id)));
 }
 

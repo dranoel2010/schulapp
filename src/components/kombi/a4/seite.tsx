@@ -98,6 +98,8 @@ export type A4Daten = {
   /** App-Tag 'YYYY-MM-DD' für den Kopf */
   tag: string;
   inhalt: ArbeitsblattInhalt;
+  /** Probeklausur: Kopf „⟨Fach⟩ · Probeklausur“ statt „· Arbeitsblatt“ */
+  probe?: boolean;
 };
 
 export function A4Seite({
@@ -118,7 +120,7 @@ export function A4Seite({
   const kopf = (
     <div className="a4-top">
       <span>
-        <b>{daten.fach}</b> · {seite === 1 ? "Arbeitsblatt" : "Lösungen"}
+        <b>{daten.fach}</b> · {seite === 1 ? (daten.probe ? "Probeklausur" : "Arbeitsblatt") : "Lösungen"}
       </span>
       <span>{datum}</span>
     </div>

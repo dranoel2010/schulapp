@@ -433,3 +433,20 @@ describe("„Wieder dran“ am Ende einer Runde ohne Klausur", () => {
     assert.equal(await naechsterTerminThema(w, t, DI), "2026-10-16");
   });
 });
+
+describe("auch die Zeile legt nach, nicht nur die Startseite", () => {
+  it("zeilenVorrat legt den fehlenden Termin an und zeigt das Thema, ein zweites Mal schreibt nichts", async () => {
+    await dbBereit();
+    const { zeilenVorrat } = await import("@/lib/kombi/zeilen-vorrat");
+    const n = await testNutzer("Dauertakt Zeile");
+    const en = await fach(n, "Englisch", "E");
+    const t = await thema(n, en, "Irregular verbs");
+    const id = await frage(n, en, t, ["2026-09-04", "2026-09-07", "2026-09-10", "2026-09-13"]);
+    assert.equal((await offeneTermine(id)).length, 0);
+    const v = await zeilenVorrat(n, berlinStunde(MO, 15));
+    assert.deepEqual(await offeneTermine(id), [{ dueOn: addDays("2026-09-13", DAUERTAKT), mode: "erhaltung", round: 5 }]);
+    assert.ok(v.themenAlle.some((x) => x.fachId === en), "das Thema steht im Vorrat der Zeile");
+    await zeilenVorrat(n, berlinStunde(MO, 16));
+    assert.equal((await offeneTermine(id)).length, 1);
+  });
+});

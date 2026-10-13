@@ -157,9 +157,9 @@ describe("Arbeitsblatt bauen (gemockter Claude-Aufruf)", () => {
   });
 
   it("Zeile und Auftrag folgen einer Regel: von Hand auf üben ohne Stichwort ist kein Grammatikthema", async () => {
-    const en = await fachMitThema(nutzer, "Englisch", "Unit 3 if-sentences", TAG);
+    const en = await fachMitThema(nutzer, "Englisch", "Unit 3 Holidays", TAG);
     await testDb.update(subjectTopics).set({ art: "ueben" }).where(eq(subjectTopics.id, en.topicId));
-    await blattMitAbschrift(nutzer, en.subjectId, en.topicId, "Unit 3", "2026-10-08", "If it rains, we stay at home.");
+    await blattMitAbschrift(nutzer, en.subjectId, en.topicId, "Unit 3", "2026-10-08", "We went to the seaside in August.");
     const [gr] = await testDb
       .insert(subjectTopics)
       .values({ userId: nutzer, subjectId: en.subjectId, title: "Present perfect", matchKey: "present perfect", lastSeenAt: TAG })

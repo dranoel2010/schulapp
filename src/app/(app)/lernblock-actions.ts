@@ -145,7 +145,7 @@ export async function lernblockUrteilAction(attemptId: string, sass: boolean): P
   const user = await requireUser();
   const p = z.object({ attemptId: id, sass: z.boolean() }).safeParse({ attemptId, sass });
   if (!p.success) return { ok: false };
-  const r = await urteilFesthalten(user.id, p.data.attemptId, p.data.sass);
+  const r = await urteilFesthalten(user.id, p.data.attemptId, p.data.sass, await jetzt());
   return { ok: r.ok };
 }
 

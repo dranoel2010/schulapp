@@ -9,7 +9,7 @@ import {
   UEBUNG_MATHE,
 } from "@/lib/arbeitsblatt/beispiel";
 import type { ArbeitsblattInhalt } from "@/lib/arbeitsblatt/schema";
-import { arbeitsblattDateiname, arbeitsblattMasse, buildArbeitsblattPdf } from "@/lib/pdf/arbeitsblatt-document";
+import { arbeitsblattDateiname, arbeitsblattMasse, blattArt, buildArbeitsblattPdf } from "@/lib/pdf/arbeitsblatt-document";
 
 function inhalt(fach: string, antwort: typeof UEBUNG_MATHE, abschrift: string): ArbeitsblattInhalt {
   const e = blattErgebnis(
@@ -119,5 +119,20 @@ describe("Arbeitsblatt als PDF (Plan H, ohne Datenbank)", () => {
       arbeitsblattDateiname({ fach: "Mathe", thema: "a/b: c", tag: "2026-10-12" }),
       "Arbeitsblatt Mathe a-b- c 2026-10-12.pdf",
     );
+  });
+
+  it("Probeklausur: Kopf, Titel und Dateiname sagen Probeklausur, sonst Arbeitsblatt", async () => {
+    assert.equal(blattArt({}), "Arbeitsblatt");
+    assert.equal(blattArt({ probe: false }), "Arbeitsblatt");
+    assert.equal(blattArt({ probe: true }), "Probeklausur");
+    assert.equal(
+      arbeitsblattDateiname({ fach: "Mathematik", thema: "Quadratische Funktionen", tag: "2026-10-15", probe: true }),
+      "Probeklausur Mathematik Quadratische Funktionen 2026-10-15.pdf",
+    );
+    // der Titel im PDF (UTF-16BE im Info-Wörterbuch) nennt die Art
+    const daten = { fach: "Mathematik", thema: "Quadratische Funktionen", tag: "2026-10-15", inhalt: inhalt("Mathematik", UEBUNG_MATHE, ABSCHRIFT_MATHE) };
+    const enthaelt = (pdf: Buffer, wort: string) => pdf.includes(Buffer.from(wort, "utf16le").swap16());
+    assert.ok(enthaelt(await buildArbeitsblattPdf({ ...daten, probe: true }), "Probeklausur"));
+    assert.ok(!enthaelt(await buildArbeitsblattPdf(daten), "Probeklausur"));
   });
 });

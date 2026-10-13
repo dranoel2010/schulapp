@@ -35,7 +35,7 @@ export const A4H = (297 * 96) / 25.4;
 
 export function a4Daten(stand: BlattStand): A4Daten | null {
   if (!stand.inhalt) return null;
-  return { fach: stand.fach, thema: stand.thema, tag: stand.tag, inhalt: stand.inhalt };
+  return { fach: stand.fach, thema: stand.thema, tag: stand.tag, inhalt: stand.inhalt, probe: stand.probe };
 }
 
 /** Der Knopftext tauscht wie Nr. 26: 160 ms ausblenden, dann der neue Text. */

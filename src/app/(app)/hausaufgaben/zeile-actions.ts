@@ -11,6 +11,7 @@ import { deleteHomework, getHomework, setHomeworkDone } from "@/lib/homework";
 import { appTagVon } from "@/lib/kombi/tag-daten";
 import { ownsSubject } from "@/lib/materials";
 import { protokollieren, protokollLoeschen } from "@/lib/protokoll";
+import { jetzt } from "@/lib/tag";
 
 /**
  * Die Actions der Aufgabenzeile auf den Nachschlage-Seiten (Hausaufgaben,
@@ -34,10 +35,11 @@ export async function aufgabeSetzenAction(
   if (!sauber.success) return { ok: false };
   const alt = await getHomework(user.id, sauber.data);
   if (!alt) return { ok: false };
-  await setHomeworkDone(user.id, sauber.data, done);
+  const now = await jetzt();
+  await setHomeworkDone(user.id, sauber.data, done, now);
   const protokollId = await protokollieren(
     user.id,
-    appTagVon(new Date()),
+    appTagVon(now),
     done ? "aufgabe_abgehakt" : "aufgabe_geoeffnet",
     sauber.data,
   );
@@ -79,7 +81,7 @@ export async function aufgabeLoeschenAction(
   const alt = await getHomework(user.id, sauber.data);
   if (!alt) return { ok: false };
   await deleteHomework(user.id, sauber.data);
-  const protokollId = await protokollieren(user.id, appTagVon(new Date()), "aufgabe_geloescht", sauber.data);
+  const protokollId = await protokollieren(user.id, appTagVon(await jetzt()), "aufgabe_geloescht", sauber.data);
   requestCalendarSync(user.id);
   return {
     ok: true,

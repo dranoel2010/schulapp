@@ -649,7 +649,7 @@ async function grenzThemen(
 
 /**
  * „Wieder dran“, wenn nach diesem Durchgang kein Termin mehr offen ist: der
- * Tag, den `dauertaktNachlegen()` beim nächsten Laden der Startseite anlegt,
+ * Tag, den `dauertaktNachlegen()` beim nächsten Lesen (Startseite, Zeile, Tisch) anlegt,
  * mit dem heutigen Durchgang als letztem Kontakt (`nachlegenPlan()`). Ohne
  * Klausur ist das der Dauertakt, mit Klausur der erste Termin des Lernplans.
  * Fällt der Tag in Ferien, rückt er auf den ersten Tag danach.

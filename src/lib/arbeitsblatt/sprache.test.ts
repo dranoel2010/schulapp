@@ -107,7 +107,9 @@ describe("Sprache ohne Grammatik (Probeklausur, Texte, Wortschatz)", () => {
     assert.equal(istGrammatikThema({ title: "Kommasetzung", art: null }, { name: "Deutsch" }), true);
     assert.equal(istGrammatikThema({ title: "Vokabeln Unit 3", art: null }, en), false);
     // von Hand auf üben gestellt, ohne Stichwort: Blatt ja, Grammatik nein
-    assert.equal(istGrammatikThema({ title: "Unit 3 if-sentences", art: "ueben" }, en), false);
+    assert.equal(istGrammatikThema({ title: "Unit 3 Holidays", art: "ueben" }, en), false);
+    // „if-sentences“ ist ein Stichwort: Grammatikthema auch ohne „Grammar“ im Titel
+    assert.equal(istGrammatikThema({ title: "Unit 3 if-sentences", art: null }, en), true);
     // Stichwort, aber von Hand auf abfragen gestellt: keins mehr
     assert.equal(istGrammatikThema({ title: "Simple past", art: "abfragen" }, en), false);
     // Stichwort in einem Fach ohne Sprache

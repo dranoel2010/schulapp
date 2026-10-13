@@ -14,7 +14,7 @@ import { appTagVon, themenAufloeser } from "@/recall/themen";
  * Termin mehr hat, bekommt genau einen neuen, `DAUERTAKT` Tage nach dem
  * letzten Kontakt (Betriebsart `erhaltung`).
  *
- * Läuft beim Laden der Startseite (`ladeTag()`). Es schreibt nur, wo ein
+ * Läuft vor jedem Lesen fälliger Themen (`dauertaktSicher()`). Es schreibt nur, wo ein
  * Termin fehlt, und ist deshalb beliebig oft aufrufbar: Der Tag des neuen
  * Termins hängt nicht am heutigen Tag, sondern am letzten Kontakt.
  *
@@ -151,4 +151,19 @@ export async function dauertaktNachlegen(userId: string, heute: string): Promise
     }
     return neu;
   });
+}
+
+/**
+ * `dauertaktNachlegen()` für die Lesewege: Startseite (`ladeTag()`), Zeile
+ * (`zeilenVorrat()`) und Tisch (`GET /api/wiederholen`). Jeder, der fällige
+ * Themen zeigt, legt vorher nach, damit ein Thema ohne Klausur nicht erst
+ * nach dem nächsten Laden der Startseite wieder auftaucht. Beliebig oft
+ * aufrufbar (siehe oben); ein Fehler darf das Lesen nicht verhindern.
+ */
+export async function dauertaktSicher(userId: string, heute: string): Promise<void> {
+  try {
+    await dauertaktNachlegen(userId, heute);
+  } catch (e) {
+    console.error("Dauertakt nicht nachgelegt:", e);
+  }
 }
