@@ -6,7 +6,7 @@ import { grammatikFolge, nextLesson, type VorratGrammatik, type ZeilenVorrat } f
 import { istGrammatikBlatt, spracheDesSatzes } from "./grammatik";
 import { parse } from "./parser";
 import { prototypVorrat } from "./prototyp-vorrat";
-import { answerFor, suche, txtText, type Antwort, type Ziel } from "./suche";
+import { answerFor, eintragenAnbieten, suche, txtText, type Antwort, type Ziel } from "./suche";
 
 /** „Blatt Grammatik Englisch“ in der Zeile (Antwort 5 vom 13.10.2026). */
 
@@ -129,6 +129,22 @@ describe("Zeile: Menü zu »Blatt Grammatik …«", () => {
   it("»Blatt aufnehmen« und die Ablage stehen nicht darunter", () => {
     const m = menue("Blatt Grammatik");
     assert.ok(!m.groups.some((g) => g.key === "g:act" || g.key === "g:ar"));
+  });
+
+  for (const satz of ["Blatt Grammatik Englisch", "blatt grammatik französisch", "blatt grammatik mathe"]) {
+    it(`»${satz}«: keine Eintragen-Zeile, keine Aufgaben, keine Klausuren`, () => {
+      const v = prototypVorrat();
+      assert.equal(eintragenAnbieten(p(v, satz)), false);
+      const m = menue(satz, v);
+      assert.ok(!m.groups.some((g) => g.key === "g:aufg" || g.key === "g:kl"));
+    });
+  }
+
+  it("ohne Grammatik bleibt »Als Aufgabe eintragen« und die Klausuren stehen da", () => {
+    const v = prototypVorrat();
+    assert.equal(eintragenAnbieten(p(v, "englisch vokabeln")), true);
+    assert.equal(eintragenAnbieten(p(v, "englisch wiederholen")), false);
+    assert.ok(menue("mathe klausur", v).groups.some((g) => g.key === "g:kl") || txtText(menue("mathe klausur", v).top.l1).startsWith("Klausur"));
   });
 
   it("»Blatt« allein bleibt die Ablage mit »Blatt aufnehmen«", () => {

@@ -388,6 +388,16 @@ export function snippet(text: string, qs: readonly string[]): string {
 export const vorschauUrl = (seiteId: string | null): string | null =>
   seiteId ? `/api/material/${encodeURIComponent(seiteId)}/vorschau` : null;
 
+/**
+ * Die Zeile „Als Aufgabe eintragen“ unter dem obersten Treffer: nur wenn ein
+ * Fach erkannt ist und der Satz kein Wiederholen und kein Grammatikblatt meint.
+ */
+export function eintragenAnbieten(p: Geparst): boolean {
+  if (!p.fach || !p.text) return false;
+  const W = p.words.map(bare);
+  return !WH_WORDS.some((w) => W.includes(w)) && !istGrammatikBlatt(p.words);
+}
+
 /** Was die Suche fürs Menü liefert: oberster Treffer und Gruppen. */
 export function suche(
   p: Geparst,
@@ -401,11 +411,12 @@ export function suche(
   const ans = answerFor(p, u);
   if (ans && ans.kind !== "nav") groups.push({ key: "g:ans", label: null, inhalt: ans.inhalt });
   if (ans && ans.kind === "nav" && ans.wahl) groups.push({ key: "g:gr", label: ans.wahl.label, items: ans.wahl.items });
-  // „Blatt Grammatik …“ meint das Arbeitsblatt: „Blatt aufnehmen“ und die Ablage stehen dann nicht darunter
+  // „Blatt Grammatik …“ meint das Arbeitsblatt: „Blatt aufnehmen“, Aufgaben, Klausuren und die Ablage stehen dann nicht darunter
   const grammatik = istGrammatikBlatt(p.words);
   const acts = grammatik ? [] : ACTIONS.filter((a) => qs.some((q) => wordHit(q, a.terms) || wordHit(q, a.label)));
   if (acts.length) groups.push({ key: "g:act", label: "Aktionen", items: acts.map((a) => ({ key: a.key, l1: hl(a.label, qs), ziel: a.ziel })) });
   const aufg = v.aufgaben
+    .filter(() => !grammatik)
     .filter((a) => {
       const f = F(v, a.fachId);
       const hay = `${f.name} ${f.kurz} ${a.text}`;
@@ -442,6 +453,7 @@ export function suche(
       }),
     });
   const kl = v.klausuren.filter((k) => {
+    if (grammatik) return false;
     const f = F(v, k.fachId);
     return (
       qs.some((q) => wordHit(q, `${f.name} ${f.kurz} ${k.thema} klausur`)) &&

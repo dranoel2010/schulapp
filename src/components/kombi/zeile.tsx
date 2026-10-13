@@ -24,10 +24,11 @@ import { warmCamera } from "@/components/kombi/kamera/stream";
 import { useKombi } from "@/components/kombi/kontext";
 import { Fachpillen } from "@/components/kombi/zeile/fachpillen";
 import { AntwortInhaltView, Opt } from "@/components/kombi/zeile/menu";
-import { parse, WH_WORDS, type Absicht, type Geparst, type ZeilenKontext } from "@/components/kombi/zeile/parser";
+import { parse, type Absicht, type Geparst, type ZeilenKontext } from "@/components/kombi/zeile/parser";
 import {
   AREAS,
   dublette,
+  eintragenAnbieten,
   rueckfrageTage,
   STOP,
   suche,
@@ -1016,7 +1017,7 @@ export function Zeile({
       const r = suche(p, { v, jetzt: jetzt(), doneFuer, server: z.server });
       ersteOpt = r.top;
       const zweite: Option | null =
-        p.fach && p.text && !WH_WORDS.some((w) => p!.words.map(bare).includes(w))
+        p.fach && eintragenAnbieten(p)
           ? {
               key: "second",
               l1: "Als Aufgabe eintragen",

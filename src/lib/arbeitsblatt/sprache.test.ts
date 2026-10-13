@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { blattAuftrag, type BlattVorab } from "@/lib/arbeitsblatt/auftrag";
 import { fachSprache, spracheAbsatz, spracheAusWort } from "@/lib/arbeitsblatt/sprache";
-import { artAbgeleitet } from "@/lib/themen-art";
+import { artAbgeleitet, grammatikBlatt } from "@/lib/themen-art";
 
 /** Antwort 5 vom 13.10.2026: das Grammatikblatt richtet sich nach der Sprache des Fachs. */
 
@@ -44,7 +44,7 @@ describe("Sprache des Arbeitsblatts", () => {
   });
 
   it("Englisch: Aufgaben auf Englisch, kurze deutsche Anweisung erlaubt, Teile kursiv", () => {
-    const a = spracheAbsatz("en");
+    const a = spracheAbsatz("en", { grammatik: true });
     assert.match(a, /Sprache des Blatts: Englisch\./);
     assert.match(a, /Aufgabenstellung \(q\) schreibst du auf Englisch/);
     assert.match(a, /Complete the sentences/);
@@ -54,7 +54,7 @@ describe("Sprache des Arbeitsblatts", () => {
   });
 
   it("Französisch: Aufgaben auf Französisch", () => {
-    const a = spracheAbsatz("fr");
+    const a = spracheAbsatz("fr", { grammatik: true });
     assert.match(a, /Sprache des Blatts: Französisch\./);
     assert.match(a, /auf Französisch, wie im Schulbuch/);
     assert.match(a, /Complète les phrases/);
@@ -62,7 +62,7 @@ describe("Sprache des Arbeitsblatts", () => {
   });
 
   it("Deutsch: alles auf Deutsch, nichts kursiv", () => {
-    const a = spracheAbsatz("de");
+    const a = spracheAbsatz("de", { grammatik: true });
     assert.match(a, /Sprache des Blatts: Deutsch\./);
     assert.match(a, /fr bleibt weg/);
     assert.ok(!a.includes("Arbeitsanweisung auf Deutsch in Klammern"));
@@ -97,5 +97,56 @@ describe("Auftrag an Opus mit Sprache", () => {
       const t = blattAuftrag(vorab({ papier, sprache: papier === "linien" ? "en" : null }));
       assert.ok(!t.includes("${"), `kein \${…} im Auftrag (${papier})`);
     }
+  });
+});
+
+describe("Sprache ohne Grammatik (Probeklausur, Texte, Wortschatz)", () => {
+  it("grammatikBlatt: nur Stichwort im Titel und keine Probe", () => {
+    assert.equal(grammatikBlatt("Simple past", false), true);
+    assert.equal(grammatikBlatt("Simple past", true), false);
+    assert.equal(grammatikBlatt("Vokabeln Unit 3", false), false);
+    assert.equal(grammatikBlatt("Kurzgeschichte", false), false);
+    assert.equal(grammatikBlatt("Kommasetzung", undefined), true);
+  });
+
+  it("Probeklausur in Englisch zu Vokabeln: Sprache ja, Grammatik nein", () => {
+    const t = blattAuftrag(
+      vorab({ thema: "Vokabeln Unit 3", probe: true, sprache: "en", grammatik: grammatikBlatt("Vokabeln Unit 3", true) }),
+    );
+    assert.match(t, /Sprache des Blatts: Englisch\./);
+    assert.match(t, /Aufgabenstellung \(q\) schreibst du auf Englisch/);
+    assert.ok(!t.includes("Grammatikblatt"));
+    assert.ok(!t.includes("die Grammatik, die sie üben"));
+    assert.ok(!t.includes("simple past"));
+  });
+
+  it("Probeklausur über ein Grammatikthema bleibt eine Probe, kein Grammatikblatt", () => {
+    const t = blattAuftrag(vorab({ thema: "Klausur: Short stories", probe: true, sprache: "en", grammatik: true }));
+    assert.ok(!t.includes("Grammatikblatt"));
+    assert.match(t, /Probeklausur/);
+  });
+
+  it("Deutsch, von Hand auf Üben gestellt ohne Stichwort: keine Regel, keine Satzglieder", () => {
+    const t = blattAuftrag(
+      vorab({ fach: "Deutsch", thema: "Kurzgeschichte", sprache: "de", grammatik: grammatikBlatt("Kurzgeschichte", false) }),
+    );
+    assert.match(t, /Sprache des Blatts: Deutsch\./);
+    assert.match(t, /fr bleibt weg/);
+    assert.ok(!t.includes("die Regel, die sie üben"));
+    assert.ok(!t.includes("Satzglieder"));
+    assert.ok(!t.includes("Grammatikblatt"));
+  });
+
+  it("Französisch ohne Grammatik: Aufgaben auf Französisch, ohne Grammatik-Beispiel", () => {
+    const a = spracheAbsatz("fr", { grammatik: false });
+    assert.match(a, /auf Französisch, wie im Schulbuch/);
+    assert.match(a, /Réponds aux questions/);
+    assert.ok(!a.includes("passé composé"));
+    assert.ok(!a.includes("Grammatik"));
+  });
+
+  it("ein Grammatikthema außerhalb einer Probe heißt weiter Grammatikblatt", () => {
+    const t = blattAuftrag(vorab({ sprache: "en", grammatik: true }));
+    assert.match(t, /Grammatikblatt für den Englischunterricht/);
   });
 });

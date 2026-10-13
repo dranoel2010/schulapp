@@ -82,6 +82,15 @@ export function hatGrammatikStichwort(titel: string): boolean {
   return STICHWORT_MUSTER.some((muster) => muster.test(text));
 }
 
+/**
+ * Ein Arbeitsblatt übt Grammatik, wenn sein Thema ein Grammatik-Stichwort
+ * trägt und es keine Probeklausur ist (die prüft den ganzen Stoff der Klausur).
+ * Ein von Hand auf „üben“ gestelltes Thema ohne Stichwort ist kein Grammatikblatt.
+ */
+export function grammatikBlatt(thema: string, probe: boolean | undefined): boolean {
+  return !probe && hatGrammatikStichwort(thema);
+}
+
 type FachArt = "rechnen" | "sprache" | "wissen";
 
 function fachArt(fachName: string): FachArt {

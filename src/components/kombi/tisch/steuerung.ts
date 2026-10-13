@@ -4,10 +4,11 @@ import { flushSync } from "react-dom";
 
 import { blattHolen, blattThemaHolen, blattVorwaermen, laufHolen, wiederholenHolen } from "@/components/kombi/tisch/daten";
 import type { BlattImSheet, FrageKarte, ThemaKurz, ThemaLauf } from "@/components/kombi/tisch/typen";
-import { whSetzen } from "@/components/kombi/tisch/wh-stand";
+import { whSetzen, whZuruecksetzen } from "@/components/kombi/tisch/wh-stand";
 import { E, buzz, moveTo, reduce, rubber, springOpts, swapText, vvStable } from "@/lib/kombi/motion";
 import { TAG, dm, fxTeile, tn, wd } from "@/lib/kombi/text";
 import { themeColor } from "@/lib/kombi/theme-color";
+import { endeHinweis, knopfNachSchliessen } from "@/lib/kombi/tisch-ende";
 import {
   fragenText,
   whLeerText,
@@ -103,6 +104,8 @@ type Zustand = {
   fertig: Set<string>;
   wiederDran: string | null;
   naechstesThema: string | null;
+  /** über „Blatt Grammatik …“ mit genau einem Thema geöffnet, das nicht fällig sein muss (@/lib/kombi/tisch-ende) */
+  einzeln: boolean;
   laeufe: Map<string, Promise<ThemaLauf>>;
   /** heute für Karten gewählt statt Arbeitsblatt (ohne `art` zu speichern) */
   lieberAbfragen: Set<string>;
@@ -215,6 +218,7 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     fertig: new Set(),
     wiederDran: null,
     naechstesThema: null,
+    einzeln: false,
     laeufe: new Map(),
     lieberAbfragen: new Set(),
   };
@@ -1134,7 +1138,8 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
       stop.addEventListener("click", () => closeTisch());
       rows.push(stop);
     } else {
-      rows.push(h("p", { class: "tnote" }, "Alle Themen für heute durch."));
+      const hinweis = endeHinweis(T.einzeln, rest.length);
+      if (hinweis) rows.push(h("p", { class: "tnote" }, hinweis));
       const fin = h("button", { class: "tlink", type: "button" }, "Fertig");
       fin.addEventListener("click", () => closeTisch());
       rows.push(fin);
@@ -1333,6 +1338,7 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     T.laeufe = new Map();
     T.lieberAbfragen = new Set();
     T.naechstesThema = daten.naechstesThema;
+    T.einzeln = !!opts.thema;
     if (daten.lauf) T.laeufe.set(daten.lauf.key, Promise.resolve(daten.lauf));
     const origin = opts.origin && opts.origin.isConnected ? opts.origin : null;
 
@@ -1438,8 +1444,10 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     if (a && tisch.contains(a)) a.blur();
     if (!ausHistory) historyZu();
     /* bleibt der Knopf, steht sein neuer Stand schon drin, bevor der Tisch in ihn zurückgeht: kein Textsprung am Ende */
-    const neu = whNeu();
-    if (neu.kind === "knopf") flushSync(() => whSetzen(neu, false));
+    /* ein einzeln geöffnetes Blatt weiß nichts über die fälligen Themen: dort gilt der Stand vom Server */
+    const neu = knopfNachSchliessen(T.einzeln, whNeu());
+    if (!neu) whZuruecksetzen();
+    else if (neu.kind === "knopf") flushSync(() => whSetzen(neu, false));
     const o = originNow();
     const oRect = o ? o.getBoundingClientRect() : null;
     zeile()?.classList.remove("hide");
@@ -1450,7 +1458,7 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     /* nach dem Schrumpfen: Zahl und Unterzeile blenden über, oder die Textzeile ersetzt den Knopf (Nr. 58) */
     setTimeout(
       () => {
-        whSetzen(neu, true);
+        if (neu) whSetzen(neu, true);
         void deps.neuLaden();
       },
       instant || reduce() ? 0 : 260,

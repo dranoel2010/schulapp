@@ -65,6 +65,12 @@ export type BlattVorab = {
    * auf Deutsch. Fehlt sie (Mathematik, Physik …), sagt der Auftrag nichts dazu.
    */
   sprache?: BlattSprache | null;
+  /**
+   * Ein Grammatikthema (Stichwort im Titel, @/lib/themen-art `grammatikBlatt`):
+   * nur dann heißt das Blatt im Sprach-Absatz „Grammatikblatt“. Bei einer
+   * Probeklausur gilt es nie, dort legt der Absatz nur die Sprache fest.
+   */
+  grammatik?: boolean;
 };
 
 /** So lange wie eine Klausur (@/lib/study-plan, PROBE_MINUTEN). */
@@ -93,7 +99,7 @@ export function blattAuftrag(vorab: BlattVorab): string {
     `Fach: ${vorab.fach}. Thema: ${vorab.thema}.`,
     "",
     ...(vorab.probe ? [probeAbsatz(), ""] : []),
-    ...(vorab.sprache ? [spracheAbsatz(vorab.sprache), ""] : []),
+    ...(vorab.sprache ? [spracheAbsatz(vorab.sprache, { grammatik: !!vorab.grammatik && !vorab.probe }), ""] : []),
     `1. Unter diesem Auftrag stehen die Abschriften seiner Blätter zu diesem Thema. Das ist der ganze Stoff. Schreib ${MIN_AUFGABEN} bis ${MAX_AUFGABEN} Aufgaben, von leicht nach schwer, im Stil der Aufgaben dort. Keine Aufgabe zu Stoff, der nicht in den Abschriften steht.`,
     "",
     `2. Jede Aufgabe trägt ein zitat: eine Stelle aus einer Abschrift, Zeichen für Zeichen so, wie sie dort steht — kopiere sie heraus. Es ist die Stelle, auf der die Aufgabe beruht (die Regel, das Beispiel, die Übung). Eine Stelle in ${klammer} war schon beim Abschreiben unsicher und taugt nicht. Die App prüft jedes Zitat; eine Aufgabe, deren Zitat nicht wörtlich dasteht, fällt weg.`,

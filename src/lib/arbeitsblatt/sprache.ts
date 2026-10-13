@@ -50,25 +50,47 @@ const BEISPIEL: Record<BlattSprache, string> = {
   de: "„Bestimme die Satzglieder.“, „Setze die Kommas.“",
 };
 
+/** Beispiele ohne Grammatik, für Probeklausuren und Themen über Texte oder Wortschatz. */
+const BEISPIEL_ALLGEMEIN: Record<BlattSprache, string> = {
+  en: "„Answer the questions.“, „Complete the sentences.“",
+  fr: "„Réponds aux questions.“, „Complète les phrases.“",
+  de: "„Beantworte die Fragen.“, „Erkläre mit eigenen Worten.“",
+};
+
 /**
  * Der Absatz im Auftrag, der die Sprache des Blatts festlegt. Bei Englisch und
  * Französisch steht das Blatt in der Fremdsprache wie im Schulbuch; bei
  * Deutsch ist alles auf Deutsch und nichts kursiv.
+ *
+ * `grammatik`: nur ein Grammatikthema (Stichwort im Titel, keine
+ * Probeklausur) heißt im Auftrag „Grammatikblatt“ und übt eine Regel aus den
+ * Abschriften. Sonst legt der Absatz nur die Sprache fest, damit er einer
+ * Probeklausur über Texte oder Wortschatz nicht widerspricht.
  */
-export function spracheAbsatz(sprache: BlattSprache): string {
+export function spracheAbsatz(sprache: BlattSprache, { grammatik }: { grammatik: boolean }): string {
   const name = SPRACH_NAME[sprache];
+  const beispiel = grammatik ? BEISPIEL[sprache] : BEISPIEL_ALLGEMEIN[sprache];
   if (sprache === "de") {
     return [
-      "Sprache des Blatts: Deutsch. Es ist ein Blatt für den Deutschunterricht: Aufgabenstellungen, Übungssätze und Lösungen stehen auf Deutsch,",
-      `etwa ${BEISPIEL.de}. Die Übungssätze dürfen neu sein; die Regel, die sie üben, kommt aus den Abschriften. fr bleibt weg, nichts wird kursiv gesetzt.`,
+      grammatik
+        ? `Sprache des Blatts: Deutsch. Es ist ein Grammatikblatt für den Deutschunterricht: Aufgabenstellungen, Übungssätze und Lösungen stehen auf Deutsch, etwa ${beispiel}.`
+        : `Sprache des Blatts: Deutsch. Aufgabenstellungen und Lösungen stehen auf Deutsch, etwa ${beispiel}.`,
+      ...(grammatik ? ["Die Übungssätze dürfen neu sein; die Regel, die sie üben, kommt aus den Abschriften."] : []),
+      "fr bleibt weg, nichts wird kursiv gesetzt.",
     ].join(" ");
   }
   return [
-    `Sprache des Blatts: ${name}. Es ist ein Grammatikblatt für den ${name}unterricht und sieht aus wie dort: die Aufgabenstellung (q) schreibst du auf ${name}, wie im Schulbuch, etwa ${BEISPIEL[sprache]}`,
+    grammatik
+      ? `Sprache des Blatts: ${name}. Es ist ein Grammatikblatt für den ${name}unterricht und sieht aus wie dort: die Aufgabenstellung (q) schreibst du auf ${name}, wie im Schulbuch, etwa ${beispiel}`
+      : `Sprache des Blatts: ${name}. Die Aufgabenstellung (q) schreibst du auf ${name}, wie im Schulbuch, etwa ${beispiel}`,
     "Dahinter darf eine kurze Arbeitsanweisung auf Deutsch in Klammern stehen, wenn sie die Aufgabe klarer macht, wie in der Schule üblich.",
-    `Übungssätze, Lückentexte und Teile stehen auf ${name} und bekommen fr = true; eine Übersetzungsaufgabe darf deutsche Sätze haben, die ins ${name}e übersetzt werden.`,
+    grammatik
+      ? `Übungssätze, Lückentexte und Teile stehen auf ${name} und bekommen fr = true; eine Übersetzungsaufgabe darf deutsche Sätze haben, die ins ${name}e übersetzt werden.`
+      : `Sätze, Texte und Teile auf ${name} bekommen fr = true; eine Übersetzungsaufgabe darf deutsche Sätze haben, die ins ${name}e übersetzt werden.`,
     `Die Lösungen auf Seite 2 (teile, erg) stehen auf ${name}; eine Erklärung (p) oder ein typischer Fehler (hint) darf kurz auf Deutsch sein.`,
-    `Die Übungssätze dürfen neu sein, mit Wörtern, die ein Schüler der 10. Klasse kennt; die Grammatik, die sie üben, kommt aus den Abschriften.`,
+    ...(grammatik
+      ? [`Die Übungssätze dürfen neu sein, mit Wörtern, die ein Schüler der 10. Klasse kennt; die Grammatik, die sie üben, kommt aus den Abschriften.`]
+      : []),
     "kurz und teil schreibst du auf Deutsch, mit dem Fachbegriff, wie er im Unterricht heißt.",
   ].join(" ");
 }

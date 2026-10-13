@@ -7,6 +7,7 @@ import { claudeRufen } from "@/lib/claude/client";
 import { messungZeile, type Messung } from "@/lib/claude/ergebnis";
 import { claudeAusgangMelden, claudeDeps, type ClaudeLeserDeps } from "@/lib/leser/claude-leser";
 import { laufVermerken } from "@/lib/leser/laeufe";
+import { grammatikBlatt } from "@/lib/themen-art";
 
 import { vorabBlaetter } from "./ablauf";
 import {
@@ -146,6 +147,7 @@ export async function blattBauen(
     zuletztFalsch: await zuletztFalsch(userId, zeile),
     probe,
     sprache: fachSprache(quelle.fach),
+    grammatik: grammatikBlatt(quelle.thema, probe),
   };
 
   const gerufen = await claudeRufen(
