@@ -31,6 +31,7 @@ import {
   type Schulkalender,
 } from "@/lib/tag";
 import { guessEpochSubject } from "@/lib/timetable";
+import { dauertaktNachlegen } from "@/recall/nachlegen";
 import { wiederholenStand } from "@/recall/themen";
 
 export type { TagDaten } from "@/lib/kombi/startseite";
@@ -129,6 +130,13 @@ export async function ladeTag(userId: string, now: Date): Promise<TagDaten> {
   const epochenFach = guessEpochSubject(
     alleStunden.map((s) => ({ period: s.period, subjectId: s.subject.id })),
   );
+
+  // Themen ohne Klausur bekommen ihren nächsten Termin, bevor „Wiederholen“ zählt (Antwort 6)
+  try {
+    await dauertaktNachlegen(userId, tag);
+  } catch (e) {
+    console.error("Dauertakt nicht nachgelegt:", e);
+  }
 
   const [offen, bisNs, klausuren, heuteBloecke, verpasst, karten, korb, wiederholen, klausurBlock] = await Promise.all([
     listHomework(userId),

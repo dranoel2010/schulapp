@@ -1,7 +1,8 @@
 import { and, asc, eq, gt, gte, inArray, isNull, lt, lte } from "drizzle-orm";
 
 import { db } from "@/db";
-import { arbeitsblaetter, subjectTopics, tagesprotokoll, type ThemaArt } from "@/db/schema";
+import { arbeitsblaetter, exams, studyBlocks, subjectTopics, tagesprotokoll, type ThemaArt } from "@/db/schema";
+import { tagesauswahl } from "@/recall/dauertakt";
 import { addDays, berlinDay } from "@/lib/dates";
 import { naechsteKlausur } from "@/recall/items";
 import { istId } from "@/recall/ids";
@@ -168,7 +169,7 @@ async function beendeteThemen(userId: string, heute: string): Promise<Map<string
 type Thema = { id: string; title: string; subjectId: string; art: ThemaArt | null; mergedInto: string | null };
 
 /** Alle Themen des Nutzers mit der Auflösung der Alias-Kette, im Speicher. */
-async function themenAufloeser(userId: string) {
+export async function themenAufloeser(userId: string) {
   const zeilen: Thema[] = await db
     .select({
       id: subjectTopics.id,
@@ -348,6 +349,10 @@ async function gruppiert(userId: string, heute: string, subjectId?: string) {
  *
  * In Ferien ist die Liste leer. Ein Übungsthema, dessen Blatt heute
  * gescheitert ist, fällt für heute auf Karten zurück.
+ *
+ * Ohne `subjectId` hält die Liste Maß (Antwort 6, `tagesauswahl()` in
+ * @/recall/dauertakt): von den Themen ohne Klausur höchstens eins am Tag,
+ * das fälligste; mit offenem Lernblock hinter den Themen mit Klausur.
  */
 export async function faelligeThemen(
   userId: string,
@@ -407,7 +412,7 @@ export async function faelligeThemen(
   }
 
   const klausurRang = (t: FaelligesThema) => t.klausur ?? "9999-12-31";
-  return themen.sort(
+  const sortiert = themen.sort(
     (a, b) =>
       Number(b.angefangen) - Number(a.angefangen) ||
       (a.aeltester < b.aeltester ? -1 : a.aeltester > b.aeltester ? 1 : 0) ||
@@ -415,6 +420,43 @@ export async function faelligeThemen(
       b.fragen - a.fragen ||
       `${a.fach} ${a.titel}`.localeCompare(`${b.fach} ${b.titel}`, "de"),
   );
+  // Ein Fach ausdrücklich geöffnet: alles, was dort fällig ist
+  if (optionen.subjectId) return sortiert;
+  // Startseite, Tisch und Zeile: Maß halten bei Themen ohne Klausur (Antwort 6)
+  const [ohneKlausurBeendet, lernblockOffen] = await Promise.all([
+    beendetOhneKlausur(userId, heute, aufloesen, klausurJeFach),
+    offenerLernblock(userId, heute),
+  ]);
+  return tagesauswahl(sortiert, { ferien: false, ohneKlausurBeendet, lernblockOffen });
+}
+
+/** Wie viele Themen ohne Klausur heute (App-Tag) schon beendet wurden. */
+async function beendetOhneKlausur(
+  userId: string,
+  heute: string,
+  aufloesen: (id: string | null) => Thema | null,
+  klausurJeFach: Map<string, string | null>,
+): Promise<number> {
+  const keys = [...(await beendeteThemen(userId, heute)).keys()];
+  let n = 0;
+  for (const key of keys) {
+    const fach = key.startsWith("ohne:") ? key.slice(5) : aufloesen(key)?.subjectId;
+    if (!fach) continue;
+    const klausur = klausurJeFach.has(fach) ? klausurJeFach.get(fach) : await naechsteKlausur(userId, fach, heute);
+    if (!klausur) n += 1;
+  }
+  return n;
+}
+
+/** Steht heute ein offener Lernblock einer Klausur an? */
+async function offenerLernblock(userId: string, heute: string): Promise<boolean> {
+  const [zeile] = await db
+    .select({ id: studyBlocks.id })
+    .from(studyBlocks)
+    .innerJoin(exams, and(eq(exams.id, studyBlocks.examId), eq(exams.userId, userId)))
+    .where(and(eq(studyBlocks.date, heute), eq(studyBlocks.status, "open")))
+    .limit(1);
+  return !!zeile;
 }
 
 /** Wie viele Themen heute fällig sind (die Zahl auf dem Überblick). */

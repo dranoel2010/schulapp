@@ -79,6 +79,15 @@ async function frage(nutzer: string, subjectId: string, topicId: string | null, 
   return i.id;
 }
 
+/**
+ * Eine ferne Klausur im Fach: Diese Tests prüfen die Reihenfolge aller
+ * fälligen Themen. Ohne Klausur käme nur eins am Tag (Antwort 6, eigene Tests
+ * in dauertakt.db.test.ts).
+ */
+async function klausurSpaeter(nutzer: string, subjectId: string) {
+  await testDb.insert(exams).values({ userId: nutzer, subjectId, kind: "klausur", date: "2026-12-18", title: "Später" });
+}
+
 let nutzer = "";
 let ge = "";
 let ma = "";
@@ -99,6 +108,8 @@ before(async () => {
   // Hauptunterricht: Geschichte in der ersten Stunde an allen fünf Tagen
   await testDb.insert(lessons).values([1, 2, 3, 4, 5].map((weekday) => ({ userId: nutzer, subjectId: ge, weekday, period: 1 })));
   await testDb.insert(exams).values({ userId: nutzer, subjectId: ma, kind: "klausur", date: "2026-10-16", title: "QF" });
+  await klausurSpaeter(nutzer, ge);
+  await klausurSpaeter(nutzer, fr);
   // V2 2.5: Geschichte seit Sa 10.10. (10 Fragen), Mathe am 12.10. mit Klausur (12), Französisch am 12.10. (8)
   for (let k = 0; k < 10; k++) await frage(nutzer, ge, tGe, ["2026-10-10", "2026-10-13"], `G${k}`);
   for (let k = 0; k < 12; k++) await frage(nutzer, ma, tMa, [MO, "2026-10-15"], `M${k}`);
@@ -128,6 +139,8 @@ describe("faelligeThemen", () => {
     const b = await fach(n, "Chemie", "Ch");
     const ta = await thema(n, a, "Zelle");
     const tb = await thema(n, b, "Atome");
+    await klausurSpaeter(n, a);
+    await klausurSpaeter(n, b);
     await frage(n, a, ta, [MO]);
     await frage(n, b, tb, [MO]);
     await frage(n, b, tb, [MO]);
@@ -174,6 +187,7 @@ describe("faelligeThemen", () => {
     const ta = await thema(n, a, "Alt");
     const tb = await thema(n, b, "Vokabeln");
     const tc = await thema(n, c, "Brüche");
+    for (const f of [a, b, c]) await klausurSpaeter(n, f);
     await frage(n, a, ta, ["2026-10-01"]);
     const eng = await frage(n, b, tb, [MO]);
     const s = await testDb.select().from(recallSchedule).where(inArray(recallSchedule.itemId, [eng]));
