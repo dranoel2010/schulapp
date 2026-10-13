@@ -181,9 +181,12 @@ export async function blockZiel(userId: string, blockId: string): Promise<BlockZ
  * Ist dieser Block ein Arbeitsblatt (Zusatz, Kriterium 4)? Mit eigenem
  * Fach-Thema: wenn dessen Art `ueben` ist. Ohne (Gesamtwiederholung, freies
  * Klausurthema): wenn der Stoff der Klausur aus Übungsthemen besteht — jedes
- * verknüpfte Klausurthema ist `ueben`, und es gibt mindestens eins.
+ * verknüpfte Klausurthema ist `ueben`, und es gibt mindestens eins. Die
+ * Probeklausur ist immer ein Blatt.
  */
 export function blockAlsBlatt(ziel: BlockZiel): boolean {
+  // Die Probeklausur ist immer ein Blatt, in jedem Fach (Antwort 4 vom 13.10.2026)
+  if (ziel.kind === "probe") return true;
   if (ziel.subjectTopicId) {
     const t = ziel.klausurThemen.find((k) => k.subjectTopicId === ziel.subjectTopicId);
     return t?.art === "ueben";
@@ -193,7 +196,7 @@ export function blockAlsBlatt(ziel: BlockZiel): boolean {
 
 /** Die Quelle eines Lernblocks: sein Thema, sonst alle Klausurthemen mit Fach-Thema. */
 export async function quelleFuerBlock(userId: string, ziel: BlockZiel): Promise<Quelle> {
-  if (ziel.subjectTopicId) {
+  if (ziel.subjectTopicId && ziel.kind !== "probe") {
     const q = await quelleFuerThema(userId, ziel.subjectTopicId);
     if (q) return q;
   }
@@ -203,7 +206,7 @@ export async function quelleFuerBlock(userId: string, ziel: BlockZiel): Promise<
   }
   return {
     fach: ziel.fach,
-    thema: ziel.themaTitel ?? "Gesamtwiederholung",
+    thema: ziel.kind === "probe" ? "Probeklausur" : (ziel.themaTitel ?? "Gesamtwiederholung"),
     blaetter: await blaetterZu(userId, [...ids]),
   };
 }

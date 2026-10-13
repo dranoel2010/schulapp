@@ -1,10 +1,12 @@
-import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lt, ne, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/db";
 import {
+  arbeitsblaetter,
   exams,
   examTopics,
+  leserLaeufe,
   studyBlocks,
   subjects,
   type Exam,
@@ -260,9 +262,58 @@ export async function deleteExam(
 ): Promise<void> {
   if (!isId(examId)) return;
 
-  await db
-    .delete(exams)
-    .where(and(eq(exams.userId, userId), eq(exams.id, examId)));
+  await db.transaction(async (tx) => {
+    await blockBlaetterLoeschen(
+      tx,
+      userId,
+      inArray(
+        studyBlocks.examId,
+        tx.select({ id: exams.id }).from(exams).where(and(eq(exams.userId, userId), eq(exams.id, examId))),
+      ),
+    );
+    await tx
+      .delete(exams)
+      .where(and(eq(exams.userId, userId), eq(exams.id, examId)));
+  });
+}
+
+type Schreiber = Pick<typeof db, "select" | "delete">;
+
+/**
+ * Löscht die Arbeitsblätter, die nur an Lernblöcken hängen (Probeklausur,
+ * Gesamtwiederholung: kein Fach-Thema), samt ihren Bauläufen — bevor die
+ * Blöcke selbst gehen. Sonst setzte der Fremdschlüssel `study_block_id` auf
+ * null, und `arbeitsblaetter_ziel_check` (Thema oder Block) wiese das Löschen
+ * der Klausur oder des Fachs ab; ebenso `leser_laeufe_ziel_check` beim Lauf.
+ * Die Bauläufe einer Klausur (Fragen) gehen beim Löschen ohnehin mit ihr.
+ */
+export async function blockBlaetterLoeschen(tx: Schreiber, userId: string, bloecke: SQL | undefined): Promise<void> {
+  const blaetter = tx
+    .select({ id: arbeitsblaetter.id })
+    .from(arbeitsblaetter)
+    .where(
+      and(
+        eq(arbeitsblaetter.userId, userId),
+        isNull(arbeitsblaetter.subjectTopicId),
+        inArray(arbeitsblaetter.studyBlockId, tx.select({ id: studyBlocks.id }).from(studyBlocks).where(bloecke)),
+      ),
+    );
+  await tx.delete(leserLaeufe).where(and(eq(leserLaeufe.userId, userId), inArray(leserLaeufe.arbeitsblattId, blaetter)));
+  await tx.delete(arbeitsblaetter).where(and(eq(arbeitsblaetter.userId, userId), inArray(arbeitsblaetter.id, blaetter)));
+}
+
+/**
+ * Die Blöcke, an denen ein Arbeitsblatt ohne Fach-Thema hängt (Probeklausur,
+ * Gesamtwiederholung). Beim Neuplanen bleiben sie stehen wie angefangene:
+ * ihr Blatt hängt nur an ihnen und ist vielleicht schon gebaut oder gedruckt.
+ */
+async function bloeckeMitEigenemBlatt(blockIds: string[]): Promise<Set<string>> {
+  if (blockIds.length === 0) return new Set();
+  const zeilen = await db
+    .select({ id: arbeitsblaetter.studyBlockId })
+    .from(arbeitsblaetter)
+    .where(and(isNull(arbeitsblaetter.subjectTopicId), inArray(arbeitsblaetter.studyBlockId, blockIds)));
+  return new Set(zeilen.map((z) => z.id).filter((id): id is string => id !== null));
 }
 
 /**
@@ -347,6 +398,7 @@ export async function setTopics(
     }
 
     if (removed.length > 0) {
+      await blockBlaetterLoeschen(tx, userId, inArray(studyBlocks.topicId, removed));
       await tx.delete(examTopics).where(inArray(examTopics.id, removed));
     }
 
@@ -486,10 +538,12 @@ export async function generatePlan(
     minutesPerDay: exam.minutesPerDay,
     excludedDates,
     occupied,
+    probe: mitProbe(exam.kind),
   });
 
-  // Erledigt, gestrichen oder angefangen: das bleibt stehen.
-  const settled = blocks.filter((block) => !frei(block));
+  // Erledigt, gestrichen, angefangen oder mit eigenem Arbeitsblatt: das bleibt stehen.
+  const eigenesBlatt = await bloeckeMitEigenemBlatt(blocks.map((block) => block.id));
+  const settled = blocks.filter((block) => !frei(block) || eigenesBlatt.has(block.id));
 
   if (settled.length === 0) {
     // Nichts angefangen: der alte Plan darf komplett weichen.
@@ -532,6 +586,7 @@ export async function generatePlan(
     minutesPerDay: exam.minutesPerDay,
     excludedDates,
     occupied,
+    probe: mitProbe(exam.kind),
     open: remaining.map((block, index) => ({
       id: String(index),
       topicId: block.topicId,
@@ -559,7 +614,13 @@ export async function generatePlan(
   await db.transaction(async (tx) => {
     await tx
       .delete(studyBlocks)
-      .where(and(eq(studyBlocks.examId, examId), freiSql));
+      .where(
+        and(
+          eq(studyBlocks.examId, examId),
+          freiSql,
+          eigenesBlatt.size > 0 ? notInArray(studyBlocks.id, [...eigenesBlatt]) : undefined,
+        ),
+      );
     if (rows.length > 0) {
       await tx.insert(studyBlocks).values(rows);
     }
@@ -627,6 +688,7 @@ export async function catchUpMissed(
     minutesPerDay: exam.minutesPerDay,
     excludedDates,
     occupied,
+    probe: mitProbe(exam.kind),
     open: open.map((block) => ({
       id: block.id,
       topicId: block.topicId,
@@ -648,6 +710,18 @@ export async function catchUpMissed(
             minutes: slot.minutes,
             sortOrder: slot.sortOrder,
           })
+          .where(
+            and(eq(studyBlocks.id, block.id), eq(studyBlocks.examId, examId)),
+          );
+        continue;
+      }
+
+      // Eine Probeklausur ohne Tag vor der Prüfung fällt weg: am Prüfungstag
+      // selbst schreibt niemand eine Probe.
+      if (block.kind === "probe") {
+        await tx
+          .update(studyBlocks)
+          .set({ status: "skipped" })
           .where(
             and(eq(studyBlocks.id, block.id), eq(studyBlocks.examId, examId)),
           );
@@ -723,6 +797,7 @@ export async function moveOffFreeDays(
       minutesPerDay: exam.minutesPerDay,
       excludedDates,
       occupied,
+      probe: mitProbe(exam.kind),
       open: open.map((block) => ({
         id: block.id,
         topicId: block.topicId,
@@ -735,7 +810,18 @@ export async function moveOffFreeDays(
     await db.transaction(async (tx) => {
       for (const block of open) {
         const slot = placed.get(block.id);
-        if (!slot) continue;
+        if (!slot) {
+          // Eine Probeklausur ohne Schultag vor der Prüfung fällt weg.
+          if (block.kind === "probe") {
+            await tx
+              .update(studyBlocks)
+              .set({ status: "skipped" })
+              .where(
+                and(eq(studyBlocks.id, block.id), eq(studyBlocks.examId, exam.id)),
+              );
+          }
+          continue;
+        }
 
         await tx
           .update(studyBlocks)
@@ -943,7 +1029,12 @@ function ownExamIds(userId: string) {
 }
 
 function toPlanKind(kind: string): PlanKind {
-  return kind === "review" ? "review" : "learn";
+  return kind === "review" || kind === "probe" ? kind : "learn";
+}
+
+/** Klausur und Test bekommen eine Probeklausur, Referat und Mündliches nicht. */
+export function mitProbe(examKind: string): boolean {
+  return examKind === "klausur" || examKind === "test";
 }
 
 async function countTopics(examIds: string[]): Promise<Map<string, number>> {

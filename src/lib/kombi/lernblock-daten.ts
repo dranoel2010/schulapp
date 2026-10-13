@@ -15,6 +15,7 @@ import {
   type StudyBlock,
 } from "@/db/schema";
 import { addDays } from "@/lib/dates";
+import { planEintragArt, planEintragTitel } from "@/lib/study-plan";
 import { missedBlocks } from "@/lib/exams";
 import { ersteVersucheImBlock, fragenFuerLernblock } from "@/lib/lernblock";
 
@@ -37,8 +38,8 @@ export type BlockDaten = {
   /** Tag des Blocks 'YYYY-MM-DD' */
   tag: string;
   minuten: number;
-  art: "learn" | "review";
-  /** „Scheitelpunktform“, „Wiederholung“ oder „Gesamtwiederholung“ (Plan 3.5) */
+  art: "learn" | "review" | "probe";
+  /** „Scheitelpunktform“, „Wiederholung“, „Probeklausur“ oder „Gesamtwiederholung“ (Plan 3.5) */
   titel: string;
   /** Das Klausurthema dahinter, falls es eins gibt */
   thema: string | null;
@@ -61,14 +62,13 @@ export type BlattStand = {
 
 /** Benennung der Planeinträge (Plan 3.5): ein Lernblock heißt nach seinem Thema. */
 export function blockTitel(art: string, thema: string | null): string {
-  if (art === "review") return "Wiederholung";
-  return thema ?? "Gesamtwiederholung";
+  return planEintragTitel(art, thema);
 }
 
 type BlockZeile = StudyBlock & { topic: ExamTopic | null };
 
 export function blockDaten(block: BlockZeile, blatt: BlattStand | null = null): BlockDaten {
-  const art = block.kind === "review" ? "review" : "learn";
+  const art = block.kind === "review" || block.kind === "probe" ? block.kind : "learn";
   const status = block.status === "done" || block.status === "skipped" ? block.status : "open";
   return {
     id: block.id,
@@ -202,7 +202,7 @@ export async function lernblockUeberblick(
       heute = blockDaten(ph, staende.get(ph.id) ?? null);
     } else {
       const nx = bloecke.find((b) => b.date > tag && b.status === "open");
-      if (nx) naechster = { tag: nx.date, art: nx.kind === "review" ? "Wiederholung" : "Lernblock" };
+      if (nx) naechster = { tag: nx.date, art: planEintragArt(nx.kind) };
     }
   }
 

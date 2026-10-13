@@ -3,6 +3,7 @@ import { and, asc, eq, gte, inArray, isNull, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { examTopics, materialTopics, materials, studyBlocks, subjectTopics } from "@/db/schema";
 import { berlinDay } from "@/lib/dates";
+import { planEintragArt, planEintragTitel } from "@/lib/study-plan";
 import { blocksForDay, listExams } from "@/lib/exams";
 import { listFreePeriods } from "@/lib/free-days";
 import { gradeLabel } from "@/lib/grade-scale";
@@ -137,8 +138,8 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
       .filter((r) => r.block.examId === examId)
       .map((r) => ({
         tag: r.block.date,
-        art: r.block.kind === "review" ? "Wiederholung" : "Lernblock",
-        thema: r.topic?.title ?? "Gesamtwiederholung",
+        art: planEintragArt(r.block.kind),
+        thema: r.block.kind === "probe" ? "ohne Hilfsmittel" : (r.topic?.title ?? "Gesamtwiederholung"),
         min: r.block.minutes,
         erledigt: r.block.status === "done",
       }));
@@ -175,7 +176,7 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
           return {
             key: offen.id,
             examId: offen.examId,
-            label: offen.kind === "review" ? "Wiederholung" : (offen.topic?.title ?? "Gesamtwiederholung"),
+            label: planEintragTitel(offen.kind, offen.topic?.title),
             minuten: offen.minutes,
             zustand: z === "erledigt" ? ("ruhe" as const) : z,
             restMs: blockRest(offen, now),

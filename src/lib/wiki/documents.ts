@@ -189,6 +189,7 @@ const BLOCK_STATUS_LABELS: Record<string, string> = {
 const BLOCK_KIND_LABELS: Record<string, string> = {
   learn: "durcharbeiten",
   review: "wiederholen",
+  probe: "Probeklausur",
 };
 
 /**
@@ -463,7 +464,9 @@ export function examDocument(detail: ExamDetail): WikiDocument {
             ...blocks.map(
               (block) =>
                 `| ${germanDate(block.date)} | ${block.minutes} | ${
-                  block.topic
+                  block.kind === "probe"
+                    ? "Alle Themen"
+                    : block.topic
                     ? inlineText(block.topic.title)
                     : "Gesamtwiederholung"
                 } | ${BLOCK_KIND_LABELS[block.kind] ?? block.kind} | ${

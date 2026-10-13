@@ -180,7 +180,9 @@ function dailyMessage(blocks: PlannedBlock[]): PushPayload {
 
 /** "45 min Mathe — Ableitungen" */
 function blockLine(block: PlannedBlock): string {
-  const topic = block.topic
+  const topic = block.kind === "probe"
+    ? "Probeklausur"
+    : block.topic
     ? block.kind === "review"
       ? `${block.topic.title} (Wiederholung)`
       : block.topic.title

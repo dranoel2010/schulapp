@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -20,6 +20,7 @@ import {
   tagesprotokoll,
   users,
 } from "@/db/schema";
+import { blockBlaetterLoeschen } from "@/lib/exams";
 import { hashPassword } from "@/lib/password";
 
 /**
@@ -99,6 +100,8 @@ async function saat() {
   await db.delete(tagesprotokoll).where(eq(tagesprotokoll.userId, uid));
   await db.delete(freePeriods).where(eq(freePeriods.userId, uid));
   await db.delete(materials).where(eq(materials.userId, uid));
+  // Blätter, die nur an einem Lernblock hängen (Probeklausur), gehen vor ihren Klausuren (@/lib/exams)
+  await blockBlaetterLoeschen(db, uid, inArray(studyBlocks.examId, db.select({ id: exams.id }).from(exams).where(eq(exams.userId, uid))));
   await db.delete(exams).where(eq(exams.userId, uid));
   await db.delete(homework).where(eq(homework.userId, uid));
   await db.delete(lessons).where(eq(lessons.userId, uid));
@@ -142,7 +145,8 @@ async function saat() {
   await db.insert(studyBlocks).values([
     { examId: klausur.id, topicId: thema.id, date: "2026-10-12", minutes: 25, kind: "learn", sortOrder: 0 },
     { examId: klausur.id, topicId: thema.id, date: "2026-10-14", minutes: 25, kind: "review", sortOrder: 0 },
-    { examId: klausur.id, topicId: null, date: "2026-10-15", minutes: 45, kind: "review", sortOrder: 0 },
+    // Die Probeklausur am Tag vor der Klausur, wie im Prototyp (Antwort 4)
+    { examId: klausur.id, topicId: null, date: "2026-10-15", minutes: 45, kind: "probe", sortOrder: 0 },
   ]);
 
   // Blätter mit Thema, eingeordnet; aufgenommen am Schultag (b7 nach b6)

@@ -56,7 +56,20 @@ export type BlattVorab = {
   papier: "kaestchen" | "linien";
   /** Aufgaben, die beim letzten Blatt dieses Themas falsch waren */
   zuletztFalsch: { kurz: string; q: string }[];
+  /** Probeklausur im Lernplan einer Klausur (Antwort 4 vom 13.10.2026): Klausurformat statt Übungsblatt */
+  probe?: boolean;
 };
+
+/** So lange wie eine Klausur (@/lib/study-plan, PROBE_MINUTEN). */
+const PROBE_MINUTEN_AUFTRAG = 45;
+
+/** Der Absatz, der aus dem Übungsblatt eine Probeklausur macht. */
+export function probeAbsatz(): string {
+  return [
+    `Dieses Blatt ist eine Probeklausur, ein oder zwei Tage vor der Klausur. Schreib es im Format einer Klassenarbeit: Aufgaben über den ganzen Stoff aller Abschriften verteilt, nicht nur über einen Teil, gemischt in Art und Schwierigkeit, von leicht nach schwer. Er bearbeitet es ohne Hilfsmittel und ohne Lösungshinweise in ${PROBE_MINUTEN_AUFTRAG} Minuten, deshalb steht in keiner Aufgabenstellung ein Hinweis auf den Lösungsweg.`,
+    `teil nennt in wenigen Wörtern den Stoff der Klausur, minuten ist ${PROBE_MINUTEN_AUFTRAG}.`,
+  ].join(" ");
+}
 
 /** Kästchen für Fächer, in denen gerechnet wird; sonst Linien. */
 export function papierFuer(fach: string): "kaestchen" | "linien" {
@@ -72,6 +85,7 @@ export function blattAuftrag(vorab: BlattVorab): string {
   return [
     `Fach: ${vorab.fach}. Thema: ${vorab.thema}.`,
     "",
+    ...(vorab.probe ? [probeAbsatz(), ""] : []),
     `1. Unter diesem Auftrag stehen die Abschriften seiner Blätter zu diesem Thema. Das ist der ganze Stoff. Schreib ${MIN_AUFGABEN} bis ${MAX_AUFGABEN} Aufgaben, von leicht nach schwer, im Stil der Aufgaben dort. Keine Aufgabe zu Stoff, der nicht in den Abschriften steht.`,
     "",
     `2. Jede Aufgabe trägt ein zitat: eine Stelle aus einer Abschrift, Zeichen für Zeichen so, wie sie dort steht — kopiere sie heraus. Es ist die Stelle, auf der die Aufgabe beruht (die Regel, das Beispiel, die Übung). Eine Stelle in ${klammer} war schon beim Abschreiben unsicher und taugt nicht. Die App prüft jedes Zitat; eine Aufgabe, deren Zitat nicht wörtlich dasteht, fällt weg.`,

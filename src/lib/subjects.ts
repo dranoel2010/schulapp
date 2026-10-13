@@ -1,8 +1,9 @@
-import { and, asc, eq, max } from "drizzle-orm";
+import { and, asc, eq, inArray, max } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/db";
-import { subjects, type Subject } from "@/db/schema";
+import { exams, studyBlocks, subjects, type Subject } from "@/db/schema";
+import { blockBlaetterLoeschen } from "@/lib/exams";
 import { SUBJECT_COLOR_KEYS } from "@/lib/colors";
 
 /**
@@ -134,9 +135,17 @@ export async function deleteSubject(
 ): Promise<void> {
   if (!isId(id)) return;
 
-  await db
-    .delete(subjects)
-    .where(and(eq(subjects.userId, userId), eq(subjects.id, id)));
+  await db.transaction(async (tx) => {
+    // Blätter, die nur an Lernblöcken der Klausuren dieses Fachs hängen (@/lib/exams)
+    await blockBlaetterLoeschen(
+      tx,
+      userId,
+      inArray(studyBlocks.examId, tx.select({ id: exams.id }).from(exams).where(and(eq(exams.userId, userId), eq(exams.subjectId, id)))),
+    );
+    await tx
+      .delete(subjects)
+      .where(and(eq(subjects.userId, userId), eq(subjects.id, id)));
+  });
 }
 
 export async function setArchived(

@@ -39,7 +39,7 @@ export type VorratAufgabe = {
 
 export type VorratPlanEintrag = {
   tag: string;
-  art: "Lernblock" | "Wiederholung";
+  art: "Lernblock" | "Wiederholung" | "Probeklausur";
   thema: string;
   min: number;
   erledigt: boolean;

@@ -3,7 +3,7 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { materialPages, materialTopics, materials, subjectTopics } from "@/db/schema";
 import { daysBetween } from "@/lib/dates";
-import { getExam, listExams } from "@/lib/exams";
+import { getExam, listExams, mitProbe } from "@/lib/exams";
 import { freeDatesFrom } from "@/lib/free-days";
 import { gradeLabel } from "@/lib/grade-scale";
 import { gradesBySubject } from "@/lib/grades";
@@ -107,6 +107,7 @@ export async function klausurSeite(
     leadDays: exam.leadDays,
     minutesPerDay: exam.minutesPerDay,
     excludedDates: freieTage,
+    probe: mitProbe(exam.kind),
   });
   const tageBis = daysBetween(heute, exam.date);
 

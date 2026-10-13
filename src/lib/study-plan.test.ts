@@ -4,6 +4,10 @@ import { describe, it } from "node:test";
 import { addDays, daysBetween } from "@/lib/dates";
 import {
   buildPlan,
+  planEintragArt,
+  planEintragTitel,
+  probeTagFuer,
+  PROBE_MINUTEN,
   replanOpen,
   studyDaysFor,
   type PlanInput,
@@ -644,5 +648,101 @@ describe("belegte Tage", () => {
 
     assert.equal(plan.blocks.length, 1);
     assert.equal(plan.blocks[0].minutes, 20, "45 minus 25 verbraucht");
+  });
+});
+
+describe("Probeklausur (Antwort 4 vom 13.10.2026)", () => {
+  // 12.10.2026 ist ein Montag, 16.10. ein Freitag, 19.10. ein Montag
+  it("mit genug Vorlauf zwei Tage vor der Klausur", () => {
+    assert.equal(probeTagFuer("2026-10-16", range("2026-10-12", "2026-10-15")), "2026-10-14");
+  });
+
+  it("mit wenig Vorlauf einen Tag vorher", () => {
+    assert.equal(probeTagFuer("2026-10-16", range("2026-10-14", "2026-10-15")), "2026-10-15");
+    assert.equal(probeTagFuer("2026-10-16", range("2026-10-13", "2026-10-15")), "2026-10-15");
+  });
+
+  it("Klausur am Montag: der Tag fällt aufs Wochenende, die Probe rückt auf Freitag", () => {
+    assert.equal(probeTagFuer("2026-10-19", range("2026-10-09", "2026-10-18")), "2026-10-16");
+    // wenig Vorlauf: Sonntag wäre dran, Freitag ist der nächstfrühere Schultag
+    assert.equal(probeTagFuer("2026-10-19", range("2026-10-16", "2026-10-18")), "2026-10-16");
+  });
+
+  it("ein freier Tag: der nächstfrühere Lerntag", () => {
+    const days = range("2026-10-10", "2026-10-15").filter((d) => d !== "2026-10-14");
+    assert.equal(probeTagFuer("2026-10-16", days), "2026-10-13");
+  });
+
+  it("nie am Prüfungstag, nie in der Vergangenheit, nicht bei nur einem Lerntag", () => {
+    assert.equal(probeTagFuer("2026-10-16", ["2026-10-15"]), null);
+    assert.equal(probeTagFuer("2026-10-16", []), null);
+    // nur Wochenende als Lerntage
+    assert.equal(probeTagFuer("2026-10-19", ["2026-10-17", "2026-10-18"]), null);
+  });
+
+  it("buildPlan legt sie allein auf ihren Tag, 45 Minuten, und lernt und wiederholt trotzdem jedes Thema", () => {
+    const result = buildPlan({ ...plan({ examDate: "2026-10-16", today: "2026-10-06" }), probe: true });
+    const probe = result.blocks.filter((b) => b.kind === "probe");
+    assert.equal(probe.length, 1);
+    assert.equal(probe[0].date, "2026-10-14");
+    assert.equal(probe[0].minutes, PROBE_MINUTEN);
+    assert.equal(probe[0].topicId, null);
+    assert.deepEqual(
+      result.blocks.filter((b) => b.date === "2026-10-14").map((b) => b.kind),
+      ["probe"],
+    );
+    assert.equal(result.blocks.filter((b) => b.kind === "learn").length, 5);
+    assert.equal(result.blocks.filter((b) => b.kind === "review").length, 5);
+    assert.ok(result.blocks.every((b) => b.date >= "2026-10-06" && b.date < "2026-10-16"));
+    assertSortOrder(result.blocks.filter((b) => b.kind !== "probe"));
+  });
+
+  it("ohne die Angabe gibt es keine Probeklausur (Referat, mündlich)", () => {
+    const result = buildPlan(plan({ examDate: "2026-10-16", today: "2026-10-06" }));
+    assert.ok(!result.blocks.some((b) => b.kind === "probe"));
+  });
+
+  it("zwei Lerntage: lernen am ersten, Probe am zweiten, ohne Warnung", () => {
+    const result = buildPlan({ ...plan({ examDate: "2026-10-16", today: "2026-10-14", topics: topics(2) }), probe: true });
+    assert.deepEqual(
+      result.blocks.map((b) => [b.date, b.kind]),
+      [
+        ["2026-10-14", "learn"],
+        ["2026-10-14", "learn"],
+        ["2026-10-15", "probe"],
+      ],
+    );
+    assert.deepEqual(result.warnings, []);
+  });
+
+  it("ein Lerntag: keine Probe", () => {
+    const result = buildPlan({ ...plan({ examDate: "2026-10-16", today: "2026-10-15" }), probe: true });
+    assert.ok(!result.blocks.some((b) => b.kind === "probe"));
+  });
+
+  it("replanOpen legt eine offene Probe auf ihren Tag und lässt sie ohne Tag weg", () => {
+    const open = [
+      { id: "l1", topicId: "t1", kind: "learn" as const },
+      { id: "r1", topicId: "t1", kind: "review" as const },
+      { id: "p1", topicId: null, kind: "probe" as const },
+    ];
+    const result = replanOpen({ ...plan({ examDate: "2026-10-16", today: "2026-10-12" }), open });
+    const p = result.find((b) => b.id === "p1");
+    assert.equal(p?.date, "2026-10-14");
+    assert.equal(p?.minutes, PROBE_MINUTEN);
+    assert.ok(result.filter((b) => b.id !== "p1").every((b) => b.date !== "2026-10-14"));
+
+    const knapp = replanOpen({ ...plan({ examDate: "2026-10-16", today: "2026-10-15" }), open });
+    assert.equal(knapp.find((b) => b.id === "p1"), undefined);
+    assert.ok(knapp.every((b) => b.date === "2026-10-15"));
+  });
+
+  it("Namen der Planeinträge", () => {
+    assert.equal(planEintragTitel("probe", null), "Probeklausur");
+    assert.equal(planEintragTitel("review", "Parabeln"), "Wiederholung");
+    assert.equal(planEintragTitel("learn", "Parabeln"), "Parabeln");
+    assert.equal(planEintragTitel("learn", null), "Gesamtwiederholung");
+    assert.equal(planEintragArt("probe"), "Probeklausur");
+    assert.equal(planEintragArt("learn"), "Lernblock");
   });
 });

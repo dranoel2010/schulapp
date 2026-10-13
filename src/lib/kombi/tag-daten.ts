@@ -19,6 +19,7 @@ import type {
 } from "@/lib/kombi/startseite";
 import { diffDays } from "@/lib/kombi/text";
 import { blockZustand } from "@/lib/lernblock";
+import { planEintragTitel } from "@/lib/study-plan";
 import { juengstesThema, listMaterialCards } from "@/lib/materials";
 import {
   ansicht as ansichtLaden,
@@ -62,11 +63,8 @@ function aufgabeT(h: HomeworkItem): AufgabeT {
   };
 }
 
-/** Planeintrag → „Scheitelpunktform“, „Wiederholung“, „Gesamtwiederholung“ (Plan 3.5). */
-function blockLabel(kind: string, thema: string | null | undefined): string {
-  if (kind === "review") return "Wiederholung";
-  return thema ? thema : "Gesamtwiederholung";
-}
+/** Planeintrag → „Scheitelpunktform“, „Wiederholung“, „Probeklausur“, „Gesamtwiederholung“ (Plan 3.5). */
+const blockLabel = planEintragTitel;
 
 function lernblockT(b: TodayBlock): LernblockT {
   return {

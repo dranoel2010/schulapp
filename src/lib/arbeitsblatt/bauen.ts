@@ -63,14 +63,17 @@ export type BauErgebnis =
   | { gebaut: false; grund: string }
   | { gebaut: true; status: "fertig" | "fehlgeschlagen"; ergebnis: LeserLaufErgebnis; grund: string };
 
-/** Die Quelle eines Blatts: über das Thema, sonst über den Block. */
-async function quelleFuer(userId: string, zeile: ArbeitsblattZeile): Promise<Quelle | null> {
+/** Die Quelle eines Blatts: über den Block, sonst über das Thema. `probe`: das Blatt einer Probeklausur. */
+async function quelleFuer(
+  userId: string,
+  zeile: ArbeitsblattZeile,
+): Promise<{ quelle: Quelle | null; probe: boolean }> {
   if (zeile.studyBlockId) {
     const ziel = await blockZiel(userId, zeile.studyBlockId);
-    if (ziel) return quelleFuerBlock(userId, ziel);
+    if (ziel) return { quelle: await quelleFuerBlock(userId, ziel), probe: ziel.kind === "probe" };
   }
-  if (zeile.subjectTopicId) return quelleFuerThema(userId, zeile.subjectTopicId);
-  return null;
+  if (zeile.subjectTopicId) return { quelle: await quelleFuerThema(userId, zeile.subjectTopicId), probe: false };
+  return { quelle: null, probe: false };
 }
 
 /** Was beim letzten ausgewerteten Blatt dieses Themas falsch war — „kommt aufs nächste Blatt“. */
@@ -123,7 +126,7 @@ export async function blattBauen(
   const zeile = await bauStarten(userId, blattId, jetzt());
   if (!zeile) return { gebaut: false, grund: "Kein Bau erlaubt (fertig, läuft schon oder zwei Versuche verbraucht)." };
 
-  const quelle = await quelleFuer(userId, zeile);
+  const { quelle, probe } = await quelleFuer(userId, zeile);
   if (!quelle || abschriftenDer(quelle).length === 0) {
     await bauFehlgeschlagen(userId, blattId);
     return {
@@ -140,6 +143,7 @@ export async function blattBauen(
     thema: quelle.thema,
     papier,
     zuletztFalsch: await zuletztFalsch(userId, zeile),
+    probe,
   };
 
   const gerufen = await claudeRufen(

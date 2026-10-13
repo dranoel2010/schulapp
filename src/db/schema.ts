@@ -292,7 +292,7 @@ export const studyBlocks = pgTable(
     }),
     date: date("date", { mode: "string" }).notNull(),
     minutes: integer("minutes").notNull().default(45),
-    /** learn = erstes Durcharbeiten, review = Wiederholung */
+    /** learn = erstes Durcharbeiten, review = Wiederholung, probe = Probeklausur */
     kind: text("kind").notNull().default("learn"),
     /** open | done | skipped */
     status: text("status").notNull().default("open"),
@@ -2194,7 +2194,7 @@ export type NewLeserLauf = typeof leserLaeufe.$inferInsert;
 /** Art einer Prüfung */
 export type ExamKind = "klausur" | "test" | "referat" | "muendlich";
 /** Art eines Lernblocks */
-export type StudyBlockKind = "learn" | "review";
+export type StudyBlockKind = "learn" | "review" | "probe";
 /** Zustand eines Lernblocks */
 export type StudyBlockStatus = "open" | "done" | "skipped";
 

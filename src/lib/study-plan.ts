@@ -1,4 +1,4 @@
-import { addDays, daysBetween } from "@/lib/dates";
+import { addDays, daysBetween, weekdayIndex } from "@/lib/dates";
 
 /**
  * Der Lernplan.
@@ -8,11 +8,20 @@ import { addDays, daysBetween } from "@/lib/dates";
  * ganzen Zeitraum gestreckt statt vorne zusammengedrängt — zwei Wochen vor der
  * Klausur alles zu lernen und danach nichts mehr bringt nichts.
  *
+ * Dazu kommt bei Klausur und Test eine Probeklausur (Antwort 4 vom
+ * 13.10.2026): ein Arbeitsblatt im Klausurformat über den ganzen Stoff, ein
+ * bis zwei Tage vor dem Termin (`probeTagFuer`). Ihr Tag gehört allein ihr,
+ * gelernt und wiederholt wird an den übrigen Tagen.
+ *
  * Alles hier ist reine Rechnung: keine Datenbank, keine Systemuhr. "heute"
  * kommt von außen, dieselbe Eingabe ergibt immer dieselbe Ausgabe.
  */
 
-export type PlanKind = "learn" | "review";
+/** learn = erstes Durcharbeiten, review = Wiederholung, probe = Probeklausur */
+export type PlanKind = "learn" | "review" | "probe";
+
+/** Eine Probeklausur dauert so lange wie eine Klausur. */
+export const PROBE_MINUTEN = 45;
 
 export type PlanTopic = { id: string; title: string };
 
@@ -51,6 +60,8 @@ export type PlanInput = {
    * Block auf denselben Tag wandern und das Tagesbudget verdoppeln.
    */
   occupied?: Record<string, number>;
+  /** Mit Probeklausur (bei Klausur und Test). Ohne Angabe: keine. */
+  probe?: boolean;
 };
 
 const FALLBACK_LEAD_DAYS = 10;
@@ -119,6 +130,28 @@ function splitDays(days: string[]): {
 }
 
 /**
+ * Der Tag der Probeklausur: mit genug Vorlauf (mindestens vier Lerntage) zwei
+ * Tage vor dem Termin, sonst einer. Fällt er auf ein Wochenende oder einen
+ * freien Tag, gilt der nächstfrühere Schultag unter den Lerntagen. Nie der
+ * Prüfungstag, nie vor heute (beides steckt schon in `studyDays`).
+ *
+ * Null, wenn es weniger als zwei Lerntage gibt — dann bleibt keine Zeit, vor
+ * der Probe etwas zu lernen — oder wenn kein Schultag in Frage kommt.
+ */
+export function probeTagFuer(examDate: string, studyDays: string[]): string | null {
+  if (studyDays.length < 2) return null;
+  const abstand = studyDays.length >= 4 ? 2 : 1;
+  const ziel = addDays(examDate, -abstand);
+  const schultage = studyDays.filter((day) => weekdayIndex(day) < 5);
+  const passend = schultage.filter((day) => day <= ziel);
+  if (passend.length > 0) return passend[passend.length - 1];
+  // Vor dem Ziel liegt kein Schultag (nur bei zwei Tagen Abstand möglich):
+  // dann der Tag davor, wenn er ein Schultag ist.
+  const vortag = addDays(examDate, -1);
+  return schultage.includes(vortag) ? vortag : null;
+}
+
+/**
  * Verteilt `count` Dinge gleichmäßig auf `slots` Tage: Ding Nummer `index`
  * landet auf Tag floor(index * slots / count). Dadurch bleibt der Abstand
  * zwischen zwei Themen überall gleich groß.
@@ -161,7 +194,7 @@ function collect(entries: { date: string; draft: Draft }[]): Map<string, Draft[]
 }
 
 function kindRank(kind: PlanKind): number {
-  return kind === "learn" ? 0 : 1;
+  return kind === "learn" ? 0 : kind === "review" ? 1 : 2;
 }
 
 /** Wie viele Minuten an einem Tag noch frei sind. */
@@ -178,12 +211,13 @@ export function buildPlan(input: PlanInput): Plan {
   const minutesPerDay = sanitizeMinutes(input.minutesPerDay);
   const topics = input.topics ?? [];
   const studyDays = studyDaysFor(input);
-  const { learnDays, reviewDays } = splitDays(studyDays);
+  const probeTag = input.probe ? probeTagFuer(input.examDate, studyDays) : null;
+  const { learnDays, reviewDays } = splitDays(studyDays.filter((day) => day !== probeTag));
 
   const warnings: PlanWarning[] = [];
   if (topics.length === 0) warnings.push("no-topics");
   if (studyDays.length === 0) warnings.push("no-days");
-  if (topics.length > 0 && studyDays.length > 0 && reviewDays.length === 0) {
+  if (topics.length > 0 && studyDays.length > 0 && reviewDays.length === 0 && !probeTag) {
     // Ein einziger Tag: es reicht gerade fürs Durcharbeiten, wiederholt wird nicht mehr.
     warnings.push("tight");
   }
@@ -210,6 +244,10 @@ export function buildPlan(input: PlanInput): Plan {
   const blocks: PlannedBlock[] = [];
 
   for (const day of studyDays) {
+    if (day === probeTag) {
+      blocks.push({ date: day, topicId: null, kind: "probe", minutes: PROBE_MINUTEN, sortOrder: 0 });
+      continue;
+    }
     const drafts = byDay.get(day);
     if (!drafts || drafts.length === 0) continue;
 
@@ -249,7 +287,9 @@ export function replanOpen(
 
   const minutesPerDay = sanitizeMinutes(input.minutesPerDay);
   const studyDays = studyDaysFor(input);
-  const { learnDays, reviewDays } = splitDays(studyDays);
+  const hatProbe = open.some((block) => block.kind === "probe");
+  const probeTag = hatProbe ? probeTagFuer(input.examDate, studyDays) : null;
+  const { learnDays, reviewDays } = splitDays(studyDays.filter((day) => day !== probeTag));
 
   // Tage, an denen schon gelernt wurde, sind ganz oder teilweise verbraucht.
   // Wir weichen zuerst auf Tage mit Platz aus; ist gar keiner mehr frei, wird
@@ -281,6 +321,10 @@ export function replanOpen(
 
   const learn = open.filter((block) => block.kind === "learn");
   const review = open.filter((block) => block.kind === "review");
+  // Die Probeklausur hat ihren eigenen Tag. Gibt es keinen mehr (weniger als
+  // zwei Lerntage), bekommt sie keinen Platz: der Aufrufer streicht sie,
+  // statt sie auf den Prüfungstag oder in die Vergangenheit zu legen.
+  const probe = open.filter((block) => block.kind === "probe");
 
   const dateById = new Map<string, string>();
   learn.forEach((block, index) => {
@@ -307,7 +351,17 @@ export function replanOpen(
     placement.set(block.id, { date, sortOrder });
   }
 
-  return open.map((block) => {
+  const geplant = open.flatMap((block) => {
+    if (block.kind !== "probe") return [block];
+    // Nur eine Probeklausur je Prüfung; eine zweite (Altlast) bekommt keinen Platz.
+    return probeTag && block === probe[0] ? [block] : [];
+  });
+
+  return geplant.map((block) => {
+    if (block.kind === "probe") {
+      const sortOrder = usedPerDay.get(probeTag!) ?? 0;
+      return { id: block.id, date: probeTag!, minutes: PROBE_MINUTEN, sortOrder };
+    }
     const place = placement.get(block.id) ?? { date: input.today, sortOrder: 0 };
     return {
       id: block.id,
@@ -322,4 +376,22 @@ export function replanOpen(
       sortOrder: place.sortOrder,
     };
   });
+}
+
+/**
+ * Der Name eines Planeintrags (Plan 3.5, Prototyp `planRows`): ein Lernblock
+ * heißt nach seinem Thema, sonst „Wiederholung“, „Probeklausur“ oder
+ * „Gesamtwiederholung“.
+ */
+export function planEintragTitel(kind: string, thema: string | null | undefined): string {
+  if (kind === "review") return "Wiederholung";
+  if (kind === "probe") return "Probeklausur";
+  return thema ? thema : "Gesamtwiederholung";
+}
+
+/** Die Art eines Planeintrags, wie die Lernblockzeile sie nennt („Nächster Lernblock Do · Probeklausur“). */
+export function planEintragArt(kind: string): "Lernblock" | "Wiederholung" | "Probeklausur" {
+  if (kind === "review") return "Wiederholung";
+  if (kind === "probe") return "Probeklausur";
+  return "Lernblock";
 }

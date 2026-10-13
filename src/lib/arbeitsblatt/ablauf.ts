@@ -220,6 +220,7 @@ export type BlattStand = {
 
 /** „Lernblock · ⟨Thema⟩“, „Lernblock · Wiederholung“ oder „… · Gesamtwiederholung“ (Plan 3.5). */
 export function blockLabel(ziel: { themaTitel: string | null; kind: string }): string {
+  if (ziel.kind === "probe") return "Probeklausur";
   if (ziel.themaTitel) return ziel.themaTitel;
   return ziel.kind === "review" ? "Wiederholung" : "Gesamtwiederholung";
 }
@@ -243,7 +244,7 @@ export async function blattStand(
     if (ziel) {
       block = { klausurtag: ziel.klausurtag, label: blockLabel(ziel) };
       fach = ziel.fach;
-      thema = ziel.themaTitel ?? "Gesamtwiederholung";
+      thema = ziel.kind === "probe" ? "Probeklausur" : (ziel.themaTitel ?? "Gesamtwiederholung");
     }
   }
   if (zeile.subjectTopicId) {

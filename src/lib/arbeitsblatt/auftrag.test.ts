@@ -125,4 +125,13 @@ describe("Arbeitsblatt: Auftrag und Antwort (Plan H)", () => {
     });
     assert.ok(text.includes("Bring x² + 8x + 10 in Scheitelpunktform."));
   });
+
+  it("Probeklausur: Klausurformat über den ganzen Stoff, 45 Minuten; sonst nicht", () => {
+    const vorab = { fach: "Geschichte", thema: "Probeklausur", papier: "linien" as const, zuletztFalsch: [] };
+    const probe = blattAuftrag({ ...vorab, probe: true });
+    assert.ok(probe.includes("Probeklausur, ein oder zwei Tage vor der Klausur"));
+    assert.ok(probe.includes("über den ganzen Stoff aller Abschriften"));
+    assert.ok(probe.includes("minuten ist 45"));
+    assert.ok(!blattAuftrag(vorab).includes("Probeklausur, ein oder zwei Tage"));
+  });
 });
