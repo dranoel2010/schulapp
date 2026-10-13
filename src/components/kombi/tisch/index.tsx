@@ -25,8 +25,8 @@ import { uhrzeit } from "@/lib/kombi/text";
  * Nach dem Auswerten schreibt die Steuerung das Themenende samt „Weiter mit
  * …“ (Prototyp `endThema`, Zweig Blatt).
  *
- * Der Lernblock hat seine eigene Ebene (./lernblock-tisch, Abschnitt F);
- * `#tClock`, `#tMat` und `#tConfirm` bleiben hier verborgen.
+ * Der Lernblock hat seine eigene Ebene (./lernblock-tisch, Abschnitt F)
+ * mit der Uhr `#tClock`; `#tMat` und `#tConfirm` bleiben hier verborgen.
  */
 
 /** Ist die App installiert (standalone)? Dann öffnet „Drucken“ das PDF (Plan H, „Drucken“). */
@@ -195,10 +195,6 @@ export function TischEbene() {
             <Icon name="close" />
           </button>
           <span className="t-of" id="tOf" />
-          <button className="t-clock" id="tClock" type="button" aria-label="Uhr anhalten" hidden>
-            <span className="ic" id="tClockIcon" hidden />
-            <span id="tClockText" />
-          </button>
         </div>
         <div className="t-head" id="tHead">
           <p className="t-fach" id="tFach" />

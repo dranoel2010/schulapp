@@ -492,23 +492,26 @@ export function KlausurenInhalt({ daten }: { params: Record<string, string>; dat
   return (
     <>
       {daten.klausuren.length === 0 ? <p className="empty">Noch keine Klausur eingetragen.</p> : null}
-      {daten.klausuren.map((k) => (
-        <button
-          key={k.id}
-          className="lrow plain"
-          type="button"
-          onPointerDown={() => kombi.vorladen("klausur", { id: k.id })}
-          onClick={() => kombi.openPage("klausur", { id: k.id })}
-        >
-          <span>
-            <b>{k.fach}</b>
-            <span className="s">
-              {lang(k.datum)} · {k.thema}
+      {/* eigener Behälter: die letzte Zeile bleibt :last-child, ohne Strich (Prototyp Z. 415) */}
+      <div>
+        {daten.klausuren.map((k) => (
+          <button
+            key={k.id}
+            className="lrow plain"
+            type="button"
+            onPointerDown={() => kombi.vorladen("klausur", { id: k.id })}
+            onClick={() => kombi.openPage("klausur", { id: k.id })}
+          >
+            <span>
+              <b>{k.fach}</b>
+              <span className="s">
+                {lang(k.datum)} · {k.thema}
+              </span>
             </span>
-          </span>
-          <Icon name="chevron_right" />
-        </button>
-      ))}
+            <Icon name="chevron_right" />
+          </button>
+        ))}
+      </div>
       {/* wie „Fach anlegen“ auf der Fächer-Seite (Plan 2.3: Textzeile mit Chevron) */}
       {daten.klausuren.length ? <div style={{ height: 16 }} /> : null}
       <TextLine href="/klausuren/neu">Klausur eintragen</TextLine>

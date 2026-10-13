@@ -22,9 +22,12 @@ export function FaecherInhalt({ daten }: { daten: FaecherDaten }) {
   return (
     <>
       {daten.faecher.length === 0 ? <p className="empty">Noch keine Fächer angelegt.</p> : null}
-      {daten.faecher.map((f) => (
-        <RowBtn key={f.id} titel={f.name} sub={f.sub} ziel={{ seite: "fach", params: { id: f.id } }} />
-      ))}
+      {/* eigener Behälter: die letzte Zeile bleibt :last-child, ohne Strich (Prototyp Z. 415) */}
+      <div>
+        {daten.faecher.map((f) => (
+          <RowBtn key={f.id} titel={f.name} sub={f.sub} ziel={{ seite: "fach", params: { id: f.id } }} />
+        ))}
+      </div>
       {daten.archiviert.length ? (
         <div className="group">
           <button

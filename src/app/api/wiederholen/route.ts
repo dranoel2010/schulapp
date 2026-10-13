@@ -34,11 +34,13 @@ import { istId } from "@/recall/ids";
 const HEADERS = { "Cache-Control": "private, no-store" };
 
 async function lauf(userId: string, heute: string, key: string): Promise<ThemaLauf> {
-  const [fragen, bericht, wiederDran] = await Promise.all([
-    fragenZumThema(userId, heute, key),
-    themaTagesbericht(userId, key, heute),
-    naechsterTerminThema(userId, key, heute),
-  ]);
+  const [fragen, bericht] = await Promise.all([fragenZumThema(userId, heute, key), themaTagesbericht(userId, key, heute)]);
+  const wiederDran = await naechsterTerminThema(
+    userId,
+    key,
+    heute,
+    fragen.map((f) => f.scheduleId),
+  );
   return {
     key,
     fragen: fragen.map((f) => ({

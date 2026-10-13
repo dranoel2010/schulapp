@@ -8,13 +8,7 @@ import { WiederholenBlock } from "@/components/kombi/home/wiederholen";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import { dm } from "@/lib/kombi/text";
-import {
-  eingangskorbText,
-  tagName,
-  type AufgabeT,
-  type BlattT,
-  type TagDaten,
-} from "@/lib/kombi/startseite";
+import { eingangskorbText, tagName, type AufgabeT, type BlattT, type TagDaten } from "@/lib/kombi/startseite";
 
 /**
  * Der Überblick (V2 Abschnitt 4, Prototyp `renderUeberblick`, Z. 1932):
@@ -78,30 +72,37 @@ export function Ueberblick({
       ) : null}
       {!d.ferien && d.klausurBlock ? <KlausurBlock daten={d.klausurBlock} heute={d.tag} /> : null}
       <WiederholenBlock stand={d.wiederholen} />
-      <div className="blk enter" id="ovBl">
-        <div className="lab">
-          <h2 style={{ font: "inherit" }}>Zuletzt abgelegt</h2>
-          <button
-            className="lab-r"
-            type="button"
-            onPointerDown={() => kombi.vorladen("ablage")}
-            onClick={() => kombi.openPage("ablage")}
-          >
-            Alle
-          </button>
+      {/* ohne ein einziges Blatt keine Überschrift über leerer Fläche (frisches Konto) */}
+      {d.blaetter.length || d.eingangskorb > 0 ? (
+        <div className="blk enter" id="ovBl">
+          {d.blaetter.length ? (
+            <>
+              <div className="lab">
+                <h2 style={{ font: "inherit" }}>Zuletzt abgelegt</h2>
+                <button
+                  className="lab-r"
+                  type="button"
+                  onPointerDown={() => kombi.vorladen("ablage")}
+                  onClick={() => kombi.openPage("ablage")}
+                >
+                  Alle
+                </button>
+              </div>
+              <div className="thumbs" id="ovThumbs">
+                {d.blaetter.map((b) => (
+                  <Miniatur key={b.id} b={b} heute={d.tag} />
+                ))}
+              </div>
+            </>
+          ) : null}
+          {d.eingangskorb > 0 ? (
+            <button className="textline more" type="button" onClick={() => router.push("/material/eingang")}>
+              {eingangskorbText(d.eingangskorb)}
+              <Icon name="chevron_right" />
+            </button>
+          ) : null}
         </div>
-        <div className="thumbs" id="ovThumbs">
-          {d.blaetter.map((b) => (
-            <Miniatur key={b.id} b={b} heute={d.tag} />
-          ))}
-        </div>
-        {d.eingangskorb > 0 ? (
-          <button className="textline more" type="button" onClick={() => router.push("/material/eingang")}>
-            {eingangskorbText(d.eingangskorb)}
-            <Icon name="chevron_right" />
-          </button>
-        ) : null}
-      </div>
+      ) : null}
     </>
   );
 }

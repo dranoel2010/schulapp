@@ -155,7 +155,10 @@ export function naechsterSchultagIn(k: Schulkalender, tag: string): string {
     d = addDays(d, 1);
     if (istSchultag(k, d)) return d;
   }
-  return addDays(tag, 1);
+  // Ohne Stundenplan gibt es keinen Schultag: dann der nächste Werktag, nie Sa oder So.
+  d = addDays(tag, 1);
+  while (weekdayOf(d) > 5) d = addDays(d, 1);
+  return d;
 }
 
 /** Ist Schulschluss des App-Tags vorbei? Nach Mitternacht (App-Tag ist gestern) immer. */

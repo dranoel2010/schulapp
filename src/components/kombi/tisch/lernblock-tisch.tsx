@@ -487,7 +487,8 @@ export function LernblockTisch() {
             <Icon name="close" />
           </button>
           <span className="t-of" />
-          {block ? <LernblockUhr block={block} jetzt={jetzt} onTipp={uhrTippen} /> : null}
+          {/* der leere Block kommt ohne Uhr aus (Korrektur Runde 4) */}
+          {block && !ende?.leer ? <LernblockUhr block={block} jetzt={jetzt} onTipp={uhrTippen} /> : null}
         </div>
         {sitzung ? (
           <>

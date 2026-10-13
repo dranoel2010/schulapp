@@ -65,6 +65,13 @@ describe("Schultag und Schulschluss", () => {
     assert.equal(naechsterSchultagIn(k, "2026-10-16"), "2026-10-19");
     assert.equal(naechsterSchultagIn(k, "2026-10-23"), "2026-11-02");
   });
+
+  it("ohne Stundenplan ist es der nächste Werktag, nie Samstag oder Sonntag", () => {
+    const leer: Schulkalender = { stunden: new Map(), raster: new Map(), frei: [] };
+    assert.equal(naechsterSchultagIn(leer, "2026-10-17"), "2026-10-19");
+    assert.equal(naechsterSchultagIn(leer, "2026-10-16"), "2026-10-19");
+    assert.equal(naechsterSchultagIn(leer, "2026-10-13"), "2026-10-14");
+  });
 });
 
 describe("ansicht (V2 3.2, Kriterien 1–8)", () => {

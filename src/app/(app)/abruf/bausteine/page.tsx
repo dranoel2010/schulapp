@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
 
 import { SeitenKopf } from "@/components/kombi/form";
 import { TermineNeuZeile } from "@/components/kombi/seiten/termine-neu";
@@ -61,7 +62,11 @@ export default async function BausteinePage({ searchParams }: PageProps<"/abruf/
           <div key={b.id} className="lrow plain" style={{ display: "block", opacity: still ? 0.6 : 1 }}>
             <span className="s">{[b.subjectName, ART_LABELS[b.materialKind] ?? b.materialKind, stand].join(" · ")}</span>
             <b style={{ marginTop: 2 }}>{b.promptFree}</b>
-            <ol style={{ margin: "6px 0 0 18px", listStyle: "decimal", fontSize: 15, color: "var(--ink-2)" }}>
+            {/* wie die Musterlösung auf dem Tisch (`.cb-sol`): Nummer in der Textschrift, innerhalb des Randes */}
+            <ol
+              className="cb-sol"
+              style={{ fontSize: 15, color: "var(--ink-2)", "--card-ink-2": "var(--ink-3)" } as CSSProperties}
+            >
               {b.solution
                 .split("\n")
                 .map((z) => z.trim())

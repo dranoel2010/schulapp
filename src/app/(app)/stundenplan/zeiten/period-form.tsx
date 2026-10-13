@@ -108,7 +108,7 @@ export function PeriodForm({ action, rows: saved }: PeriodFormProps) {
       ) : null}
 
       <ul className="divide-y divide-line">
-        <li className="grid grid-cols-[2rem_1fr_1fr] items-center gap-3 px-4 py-2 text-[15px] text-ink-3">
+        <li className="grid grid-cols-[2rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-3 px-4 py-2 text-[15px] text-ink-3">
           <span>Std</span>
           <span>Beginn</span>
           <span>Ende</span>
@@ -122,7 +122,7 @@ export function PeriodForm({ action, rows: saved }: PeriodFormProps) {
           // entfernt wird nur am Ende, wo der Index nicht verrutscht.
           return (
             <li key={number} className="px-4 py-3">
-              <div className="grid grid-cols-[2rem_1fr_1fr] items-center gap-3">
+              <div className="grid grid-cols-[2rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-3">
                 <span className="whitespace-nowrap text-[15px] tabular-nums text-ink-3">
                   <Tn s={`${number}.`} />
                 </span>
@@ -130,6 +130,7 @@ export function PeriodForm({ action, rows: saved }: PeriodFormProps) {
                 <Input
                   type="time"
                   name="startsAt"
+                  className="w-full min-w-0"
                   value={row.startsAt}
                   aria-label={`Beginn der ${number}. Stunde`}
                   aria-invalid={error ? true : undefined}
@@ -141,6 +142,7 @@ export function PeriodForm({ action, rows: saved }: PeriodFormProps) {
                 <Input
                   type="time"
                   name="endsAt"
+                  className="w-full min-w-0"
                   value={row.endsAt}
                   aria-label={`Ende der ${number}. Stunde`}
                   aria-invalid={error ? true : undefined}

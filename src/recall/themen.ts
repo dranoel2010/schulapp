@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, gte, inArray, isNull, lt, lte } from "drizzle-orm";
 
 import { db } from "@/db";
-import { arbeitsblaetter, subjectTopics, type ThemaArt } from "@/db/schema";
+import { arbeitsblaetter, subjectTopics, tagesprotokoll, type ThemaArt } from "@/db/schema";
 import { addDays, berlinDay } from "@/lib/dates";
 import { naechsteKlausur } from "@/recall/items";
 import { istId } from "@/recall/ids";
@@ -124,6 +124,7 @@ async function versucheDesTages(userId: string, heute: string) {
       id: recallAttempts.id,
       itemId: recallAttempts.itemId,
       correct: recallAttempts.correct,
+      createdAt: recallAttempts.createdAt,
     })
     .from(recallAttempts)
     .where(
@@ -135,6 +136,31 @@ async function versucheDesTages(userId: string, heute: string) {
       ),
     )
     .orderBy(asc(recallAttempts.createdAt));
+}
+
+/**
+ * Die heute (App-Tag) beendeten Themen: Schlüssel → Zeitpunkt des jüngsten
+ * Eintrags `thema_beendet`. Ein beendetes Thema ist für heute durch, auch
+ * wenn noch ein zweiter Termin bis heute offen ist (ein ausgelassener Tag,
+ * die tägliche letzte Woche vor der Klausur): `faelligHeute()` nimmt je
+ * Baustein nur den ältesten offenen Termin, „Saß“ schließt nur ihn, die
+ * übrigen bleiben stehen und kommen an den folgenden Tagen (Prototyp:
+ * ein überfälliges Thema ist **ein** Durchgang). Am Takt ändert das nichts.
+ */
+async function beendeteThemen(userId: string, heute: string): Promise<Map<string, Date>> {
+  const zeilen = await db
+    .select({ ref: tagesprotokoll.ref, createdAt: tagesprotokoll.createdAt })
+    .from(tagesprotokoll)
+    .where(
+      and(eq(tagesprotokoll.userId, userId), eq(tagesprotokoll.tag, heute), eq(tagesprotokoll.typ, "thema_beendet")),
+    );
+  const jeKey = new Map<string, Date>();
+  for (const z of zeilen) {
+    if (!z.ref) continue;
+    const alt = jeKey.get(z.ref);
+    if (!alt || z.createdAt > alt) jeKey.set(z.ref, z.createdAt);
+  }
+  return jeKey;
 }
 
 // ── Themen und Fragen eines Nutzers ──────────────────────────────────────────
@@ -269,12 +295,22 @@ type Gruppe = {
 
 /** `faelligHeute()` nach Thema gebündelt, samt Regeln für Arbeitsblätter. */
 async function gruppiert(userId: string, heute: string, subjectId?: string) {
-  const [faellig, aufloesen] = await Promise.all([faelligHeute(userId, heute), themenAufloeser(userId)]);
+  const [faellig, aufloesen, beendet, versuche] = await Promise.all([
+    faelligHeute(userId, heute),
+    themenAufloeser(userId),
+    beendeteThemen(userId, heute),
+    versucheDesTages(userId, heute),
+  ]);
+  // Heute schon „Saß“: der älteste Termin ist zu, ein weiterer offener bis
+  // heute wartet auf morgen und nicht auf eine zweite Runde am selben Abend.
+  const gesessen = new Set(versuche.flatMap((v) => (v.correct && v.itemId ? [v.itemId] : [])));
   const gruppen = new Map<string, Gruppe>();
   for (const f of faellig) {
     if (subjectId && f.subjectId !== subjectId) continue;
+    if (gesessen.has(f.itemId)) continue;
     const topic = aufloesen(f.subjectTopicId);
     const key = themaSchluessel(f.subjectId, topic?.id ?? null);
+    if (beendet.has(key)) continue;
     let g = gruppen.get(key);
     if (!g) {
       g = { key, subjectId: f.subjectId, fach: f.subjectName, topic, fragen: [] };
@@ -401,26 +437,36 @@ export async function fragenZumThema(
 }
 
 /**
- * „Wieder dran“: der kleinste offene Termin des Themas nach heute. Ohne
- * späteren Termin `null` — dann entfällt die Zeile (V2 6.5). Für ein
- * ausgewertetes Übungsthema gilt dieselbe Zahl: Termine nach heute liegen
- * immer auch nach dem Tag der Auswertung.
+ * „Wieder dran“: der früheste offene Termin des Themas, der nach diesem
+ * Durchgang noch offen ist (die Termine, die der Durchgang schließt, zählen
+ * nicht). Liegt er heute oder früher — ein ausgelassener Tag, die tägliche
+ * letzte Woche —, kommt er morgen: dann steht der morgige Tag da, nicht der
+ * Termin danach. Ohne weiteren Termin `null`, dann entfällt die Zeile
+ * (V2 6.5). Ein ausgewertetes Übungsthema übergeht Termine bis zum Tag der
+ * Auswertung, wie beim Lesen der fälligen Themen.
  */
 export async function naechsterTerminThema(
   userId: string,
   key: string,
   heute: string,
+  /** die Termine, die dieser Durchgang schließt (`scheduleId` aus `fragenZumThema()`) */
+  imDurchgang?: string[],
 ): Promise<string | null> {
   const aufloesen = await themenAufloeser(userId);
   const ids = await fragenIdsZumThema(userId, aufloesen, key);
   if (ids.length === 0) return null;
-  const [zeile] = await db
-    .select({ dueOn: recallSchedule.dueOn })
+  const zu = new Set(imDurchgang ?? (await fragenZumThema(userId, heute, key)).map((f) => f.scheduleId));
+  const zeilen = await db
+    .select({ id: recallSchedule.id, dueOn: recallSchedule.dueOn })
     .from(recallSchedule)
-    .where(and(inArray(recallSchedule.itemId, ids), isNull(recallSchedule.doneAt), gt(recallSchedule.dueOn, heute)))
-    .orderBy(asc(recallSchedule.dueOn))
-    .limit(1);
-  return zeile?.dueOn ?? null;
+    .where(and(inArray(recallSchedule.itemId, ids), isNull(recallSchedule.doneAt)))
+    .orderBy(asc(recallSchedule.dueOn));
+  // Ein ausgewertetes Übungsthema übergeht Termine bis zum Tag der Auswertung (wie `gruppiert()`).
+  const ausgewertet = key.startsWith("ohne:") ? null : (await blattStaende(userId, [key], heute)).get(key)?.ausgewertet;
+  const zeile = zeilen.find((z) => !zu.has(z.id) && !(ausgewertet && z.dueOn <= ausgewertet));
+  if (!zeile) return null;
+  // Ein noch offener Termin bis heute kommt morgen (`faelligHeute()` holt ihn dann).
+  return zeile.dueOn <= heute ? addDays(heute, 1) : zeile.dueOn;
 }
 
 /** „Nächstes Thema ⟨Tag⟩“: der kleinste offene Termin überhaupt nach heute. */
@@ -461,8 +507,14 @@ export async function themaTagesbericht(
   key: string,
   heute: string,
 ): Promise<ThemaBericht> {
-  const aufloesen = await themenAufloeser(userId);
-  const versuche = await versucheDesTages(userId, heute);
+  const [aufloesen, alle, beendet] = await Promise.all([
+    themenAufloeser(userId),
+    versucheDesTages(userId, heute),
+    beendeteThemen(userId, heute),
+  ]);
+  // Nur dieser Durchgang: was vor dem letzten Themenende von heute lag, gehört zum vorigen.
+  const seit = beendet.get(key);
+  const versuche = seit ? alle.filter((v) => v.createdAt > seit) : alle;
   const ids = [...new Set(versuche.flatMap((v) => (v.itemId ? [v.itemId] : [])))];
   const erste: Record<string, boolean> = {};
   if (ids.length) {

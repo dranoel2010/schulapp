@@ -37,36 +37,41 @@ export function NotenInhalt({ daten }: { daten: NotenDaten }) {
           </b>
         </p>
       ) : null}
-      {daten.faecher.map((f) => (
-        <RowBtn
-          key={f.id}
-          titel={f.name}
-          sub={f.reihe}
-          strong
-          ziel={{ seite: "notenfach", params: { id: f.id } }}
-          rechts={
-            <span className="avg">
-              <Tn s={f.schnitt === null ? "–" : avg(f.schnitt)} />
-            </span>
-          }
-        />
-      ))}
+      {/* eigener Behälter: die letzte Zeile bleibt :last-child, ohne Strich (Prototyp Z. 415) */}
+      <div>
+        {daten.faecher.map((f) => (
+          <RowBtn
+            key={f.id}
+            titel={f.name}
+            sub={f.reihe}
+            strong
+            ziel={{ seite: "notenfach", params: { id: f.id } }}
+            rechts={
+              <span className="avg">
+                <Tn s={f.schnitt === null ? "–" : avg(f.schnitt)} />
+              </span>
+            }
+          />
+        ))}
+      </div>
       {daten.abgewaehlt.length ? (
         <>
           <PLab>Abgewählt</PLab>
-          {daten.abgewaehlt.map((f) => (
-            <RowBtn
-              key={f.id}
-              titel={f.name}
-              sub={f.reihe}
-              ziel={{ seite: "notenfach", params: { id: f.id } }}
-              rechts={
-                <span className="avg">
-                  <Tn s={f.schnitt === null ? "–" : avg(f.schnitt)} />
-                </span>
-              }
-            />
-          ))}
+          <div>
+            {daten.abgewaehlt.map((f) => (
+              <RowBtn
+                key={f.id}
+                titel={f.name}
+                sub={f.reihe}
+                ziel={{ seite: "notenfach", params: { id: f.id } }}
+                rechts={
+                  <span className="avg">
+                    <Tn s={f.schnitt === null ? "–" : avg(f.schnitt)} />
+                  </span>
+                }
+              />
+            ))}
+          </div>
         </>
       ) : null}
       <div style={{ height: 16 }} />

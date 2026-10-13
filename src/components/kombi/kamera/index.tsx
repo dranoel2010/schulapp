@@ -232,16 +232,31 @@ export function KameraEbene() {
       if (b.target) {
         const t = b.target;
         dazu.push({ id: t.id, from });
-        const p = seitenDazu(t.id, b.pages).then(
-          (kurz) => {
-            if (kurz) blaetterStore.setzen(blaetterStore.get().find((x) => x.id === t.id)?.key ?? "", { kurz, seiten: kurz.seiten });
-            return true;
-          },
-          (e: unknown) => {
-            toast(e instanceof Error ? e.message : "Nicht gespeichert");
-            return false;
-          },
-        );
+        const pages = b.pages;
+        // Scheitert der Upload, bleiben die Seiten hier im Speicher: „Erneut“
+        // schickt dieselben Seiten noch einmal (wie beim Abhaken offline).
+        const senden = (): Promise<boolean> =>
+          seitenDazu(t.id, pages).then(
+            (kurz) => {
+              if (kurz) blaetterStore.setzen(blaetterStore.get().find((x) => x.id === t.id)?.key ?? "", { kurz, seiten: kurz.seiten });
+              return true;
+            },
+            () => {
+              toast(
+                "Nicht gespeichert",
+                () =>
+                  void senden().then((ok) => {
+                    if (!ok) return;
+                    void neuLaden();
+                    toast("Seite dazugelegt");
+                  }),
+                "Nicht gespeichert",
+                "Erneut",
+              );
+              return false;
+            },
+          );
+        const p = senden();
         uploads.push(p);
         dazuErgebnisse.push(p);
         return;

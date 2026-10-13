@@ -426,3 +426,48 @@ describe("eine ganze Runde", () => {
     assert.equal((await themaTagesbericht(nutzer, tFr, "2026-10-13")).fragen, 0);
   });
 });
+
+describe("ein Baustein mit zwei überfälligen Terminen", () => {
+  it("kommt an einem Tag nur einmal, „Wieder dran“ ist morgen, und das Ende zählt nur diesen Durchgang", async () => {
+    const n = await testNutzer("Zweimal");
+    const f = await fach(n, "Geschichte", "Ge");
+    const t = await thema(n, f, "Industrialisierung");
+    const item = await frage(n, f, t, ["2026-10-09", "2026-10-11", "2026-10-16"]);
+    const vorher = await testDb.select().from(recallSchedule).where(eq(recallSchedule.itemId, item)).orderBy(asc(recallSchedule.dueOn));
+
+    assert.equal((await faelligeThemen(n, MO)).length, 1);
+    const [erste] = await fragenZumThema(n, MO, t);
+    assert.equal(erste.dueOn, "2026-10-09");
+    // der Termin vom 11.10. bleibt offen und kommt morgen, nicht der vom 16.10.
+    assert.equal(await naechsterTerminThema(n, t, MO), "2026-10-13");
+
+    const v = await versuchFesthalten(n, { scheduleId: erste.scheduleId, itemId: item, answerText: "a" }, MO);
+    assert.ok(v.ok);
+    await urteilFesthalten(n, v.attemptId, true);
+    await versucheAufMontag();
+
+    // schon vor dem Themenende: keine zweite Runde mit derselben Frage
+    assert.deepEqual(await fragenZumThema(n, MO, t), []);
+    assert.deepEqual(await faelligeThemen(n, MO), []);
+    assert.deepEqual(await themaTagesbericht(n, t, MO).then((b) => [b.fragen, b.beimErstenMal]), [1, 1]);
+
+    await protokollieren(n, MO, "thema_beendet", t, { n: 1 });
+    assert.deepEqual(await faelligeThemen(n, MO), []);
+    assert.equal((await wiederholenStand(n, MO)).kind, "text");
+    // ein neuer Durchgang zählt die Versuche des vorigen nicht mit
+    assert.equal((await themaTagesbericht(n, t, MO)).fragen, 0);
+
+    // am nächsten Tag ist der Termin vom 11.10. dran, danach der 16.10.
+    const di = await faelligeThemen(n, "2026-10-13");
+    assert.equal(di.length, 1);
+    assert.equal(di[0].aeltester, "2026-10-11");
+    assert.equal(await naechsterTerminThema(n, t, "2026-10-13"), "2026-10-16");
+
+    // der Takt bleibt: nur done_at des ältesten Termins hat sich geändert
+    const nachher = await testDb.select().from(recallSchedule).where(eq(recallSchedule.itemId, item)).orderBy(asc(recallSchedule.dueOn));
+    assert.deepEqual(
+      nachher.map((z) => [z.id, z.dueOn, z.round, !!z.doneAt]),
+      vorher.map((z, k) => [z.id, z.dueOn, z.round, k === 0]),
+    );
+  });
+});
