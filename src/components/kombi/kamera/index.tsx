@@ -72,7 +72,7 @@ function underOf(): HTMLElement | null {
 
 export function KameraEbene() {
   const kombi = useKombi();
-  const { registriere, toast, hideToast, openPage } = kombi;
+  const { registriere, toast, hideToast, openPage, neuLaden } = kombi;
   const appTag = kombi.tagDaten?.tag ?? null;
 
   const camRef = useRef<HTMLElement>(null);
@@ -137,6 +137,9 @@ export function KameraEbene() {
     const s = st.current;
     if (!s.offen) return;
     s.offen = false;
+    // sofort, nicht erst nach dem Wegfahren: ein Toast direkt danach steht
+    // über der Zeile, nicht unter der wegfahrenden Kopfzeile (Prototyp ui.cam)
+    document.body.classList.remove("cam-offen");
     closeCamSheet(true);
     document.getElementById("zeile")?.classList.remove("hide");
     themeColor("paper");
@@ -223,17 +226,24 @@ export function KameraEbene() {
     const miniRect = (k: string) =>
       (csRowRef.current?.querySelector<HTMLElement>(`.cs-mini[data-k="${k}"]`) ?? finderRef.current)?.getBoundingClientRect() ?? null;
     const uploads: Promise<unknown>[] = [];
+    const dazuErgebnisse: Promise<boolean>[] = [];
     list.forEach((b, i) => {
       const from = miniRect(b.key);
       if (b.target) {
         const t = b.target;
         dazu.push({ id: t.id, from });
-        uploads.push(
-          seitenDazu(t.id, b.pages).then(
-            (kurz) => kurz && blaetterStore.setzen(blaetterStore.get().find((x) => x.id === t.id)?.key ?? "", { kurz, seiten: kurz.seiten }),
-            (e: unknown) => toast(e instanceof Error ? e.message : "Nicht gespeichert"),
-          ),
+        const p = seitenDazu(t.id, b.pages).then(
+          (kurz) => {
+            if (kurz) blaetterStore.setzen(blaetterStore.get().find((x) => x.id === t.id)?.key ?? "", { kurz, seiten: kurz.seiten });
+            return true;
+          },
+          (e: unknown) => {
+            toast(e instanceof Error ? e.message : "Nicht gespeichert");
+            return false;
+          },
         );
+        uploads.push(p);
+        dazuErgebnisse.push(p);
         return;
       }
       const eintrag = blaetterStore.neu({
@@ -254,15 +264,19 @@ export function KameraEbene() {
         }),
       );
     });
+    // „Seite dazugelegt“ erst, wenn der Server die Seiten angenommen hat;
+    // danach zeigt die Seite darunter (etwa die Blattseite) die neue Zahl.
+    const dazuOk = Promise.all(dazuErgebnisse).then((r) => r.every(Boolean));
+    if (dazu.length) void dazuOk.then((ok) => ok && void neuLaden());
     // Kommt die Kamera aus dem großen Sucher, wird er schon jetzt flach
     if (neu.length) vorLandungAusloesen(s.origin?.id === "blShoot");
     closeCam();
     window.setTimeout(
       () => {
         const z = s.ziel;
-        if (landen({ neu: neu.slice().reverse(), dazu, ziel: z })) return;
+        if (landen({ neu: neu.slice().reverse(), dazu, dazuOk, ziel: z })) return;
         if (!neu.length) {
-          if (dazu.length) toast("Seite dazugelegt");
+          if (dazu.length) void dazuOk.then((ok) => ok && toast("Seite dazugelegt"));
           return;
         }
         const n = neu.length;
@@ -275,7 +289,7 @@ export function KameraEbene() {
       },
       reduce() ? 170 : 300,
     );
-  }, [appTag, closeCam, openPage, toast]);
+  }, [appTag, closeCam, neuLaden, openPage, toast]);
 
   // ── Öffnen (Prototyp `openCam`, Z. 3387) ───────────────────────────────────
   const openCam = useCallback(
@@ -304,6 +318,7 @@ export function KameraEbene() {
         setBereit(false);
       });
       finder.classList.remove("frozen");
+      document.body.classList.add("cam-offen");
       closeCamSheet(true);
       document.getElementById("zeile")?.classList.add("hide");
       cam.classList.add("open");
@@ -532,7 +547,7 @@ export function KameraEbene() {
 
   // Toast in der Kamera: unter der Kopfzeile (Prototyp Z. 1604)
   useLayoutEffect(() => {
-    document.body.classList.toggle("cam-offen", offen);
+    document.body.classList.toggle("cam-offen", offen && st.current.offen);
   }, [offen]);
 
   const mitSeiten = blaetter.filter((b) => b.pages.length);

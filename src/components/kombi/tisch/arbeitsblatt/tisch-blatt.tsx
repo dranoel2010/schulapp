@@ -139,6 +139,7 @@ export function ArbeitsblattTisch() {
   const [material, setMaterial] = useState<MaterialDaten | null>(null);
   const [optionen, setOptionen] = useState<TischOptionen | null>(null);
   const [anfang, setAnfang] = useState<BlattAnfang | null>(null);
+  const [einblendenAb, setEinblendenAb] = useState<number | null>(null);
   /** Nach dem Auswerten beim Wiederholen: das nächste Übungsthema mit fertigem Blatt (Prototyp `endThema`) */
   const [naechstes, setNaechstes] = useState<BlattStand | null>(null);
   const tischRef = useRef<HTMLElement>(null);
@@ -203,6 +204,7 @@ export function ArbeitsblattTisch() {
       setOptionen(opt);
       setNaechstes(null);
       setAnfang({ stand: st, nr: zaehler.current });
+      setEinblendenAb(null);
       ebeneAuf("tisch", () => schliessenRef.current(false, true));
       // Die Uhr des Blocks läuft sofort; der Server bestätigt (wie der Tisch aus F)
       if (alsBlock && opt.block) {
@@ -382,6 +384,9 @@ export function ArbeitsblattTisch() {
     zaehler.current += 1;
     setAnfang({ stand: naechstes, nr: zaehler.current });
     setNaechstes(null);
+    // die Seiten blenden im selben Frame ein wie der Kopf
+    const ab = document.timeline.currentTime;
+    setEinblendenAb(typeof ab === "number" ? ab : null);
     const body = bodyRef.current;
     if (body && !reduce()) {
       body.animate([{ opacity: 0, transform: "translateX(24px)" }, { opacity: 1, transform: "none" }], { duration: 260, easing: E.out });
@@ -470,6 +475,7 @@ export function ArbeitsblattTisch() {
             lupeRef={lupe}
             seitenRef={seitenRef}
             einblenden={optionen?.origin ? 204 : 60}
+            einblendenAb={einblendenAb}
           />
         ) : null}
         {imBlock && material && !ended ? (

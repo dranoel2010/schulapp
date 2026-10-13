@@ -78,7 +78,13 @@ export async function wocheSeite(
           const k = erste === s ? klausuren.find((x) => x.date === d && x.subjectId === s.fachId) : undefined;
           return { ...s, klausur: k ? klausurThema(k, themen.get(k.id) ?? []) : null };
         }),
-        abgeben: [...(d === packTag ? ueberfaellig : []), ...aufgaben.filter((a) => a.dueDate === d)].map(aufgabeDaten),
+        // Je Tag genau die Aufgaben dieses Fälligkeitstags (Prototyp a.due === d).
+        // Eine überfällige Aufgabe aus einer früheren Woche steht einmal beim
+        // Packtag; liegt ihr Tag in dieser Woche, steht sie nur dort.
+        abgeben: [
+          ...(d === packTag ? ueberfaellig.filter((a) => a.dueDate < tage[0]) : []),
+          ...aufgaben.filter((a) => a.dueDate === d),
+        ].map(aufgabeDaten),
       };
     }),
   };

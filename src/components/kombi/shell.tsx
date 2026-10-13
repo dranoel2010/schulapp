@@ -291,6 +291,31 @@ export function KombiShell({ children }: { children: ReactNode }) {
     [],
   );
 
+  /**
+   * Eine Seite geht (Zurück-Taste, Randwisch, Pfeil): die Stapelseite, die
+   * danach oben liegt, holt still ihre Daten neu — eine Action auf der Seite
+   * darüber (etwa „Note eintragen“) kann sie verändert haben. Der Inhalt
+   * tauscht ohne eigene Animation (Plan 2.4, Punkt 6).
+   */
+  const freigelegtNachladen = useCallback(
+    (gehtKey: string) => {
+      const liste = ebenenRef.current;
+      const i = liste.findIndex((x) => x.key === gehtKey);
+      if (liste.slice(i + 1).some((x) => !x.geht)) return;
+      const unten = liste.slice(0, Math.max(0, i)).reverse().find((x) => !x.geht);
+      if (!unten || unten.typ !== "stapel") return;
+      const key = unten.key;
+      seiteHolen(unten.art, unten.params).then(
+        (a) =>
+          setzeEbenen((alt) =>
+            alt.map((x) => (x.key === key && x.typ === "stapel" ? { ...x, daten: a.daten, ausCache: a.ausCache } : x)),
+          ),
+        () => {},
+      );
+    },
+    [setzeEbenen],
+  );
+
   // Einfahren neuer Ebenen und Ausfahren gehender, nach dem Rendern
   useLayoutEffect(() => {
     const app = appRef.current;
@@ -329,6 +354,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
       } else if (e.geht && !animiert.current.has(`weg:${e.key}`)) {
         animiert.current.add(`weg:${e.key}`);
         const under = unterVon(e.key);
+        freigelegtNachladen(e.key);
         const fertig = () => {
           animiert.current.delete(e.key);
           animiert.current.delete(`weg:${e.key}`);
@@ -361,7 +387,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
         }
       }
     }
-  }, [ebenen, unterVon, setzeEbenen, obersteEbene]);
+  }, [ebenen, unterVon, setzeEbenen, obersteEbene, freigelegtNachladen]);
 
   // ── Stapel ──────────────────────────────────────────────────────────────────
 

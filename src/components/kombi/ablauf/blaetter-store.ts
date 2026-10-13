@@ -180,6 +180,8 @@ export async function seitenDazu(materialId: string, seiten: Aufnahme[]): Promis
 export type Landung = {
   neu: { key: string; from: DOMRect | null }[];
   dazu: { id: string; from: DOMRect | null }[];
+  /** Ob alle „Seite dazu“-Uploads angekommen sind (erst dann der Toast) */
+  dazuOk: Promise<boolean>;
   ziel: "liste" | "zeile";
 };
 type Empfaenger = (l: Landung) => boolean;

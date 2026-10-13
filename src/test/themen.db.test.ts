@@ -3,7 +3,7 @@ import { dbBereit, testDb, testNutzer } from "@/test/db-harness";
 import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
 
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, gte, inArray } from "drizzle-orm";
 
 import { arbeitsblaetter, exams, freePeriods, lessons, subjectTopics, subjects } from "@/db/schema";
 import { protokollieren } from "@/lib/protokoll";
@@ -34,6 +34,18 @@ import { whLeerText } from "@/lib/kombi/wiederholen-text";
  */
 
 const MO = "2026-10-12";
+
+/**
+ * Versuche tragen `created_at` der echten Uhr; „heute“ heißt in diesen Tests
+ * aber Mo 12.10. Was nach dessen App-Tag angelegt wurde, rückt auf 17 Uhr am
+ * Montag — sonst hingen die Tests am Kalender.
+ */
+async function versucheAufMontag() {
+  await testDb
+    .update(recallAttempts)
+    .set({ createdAt: berlinStunde(MO, 17) })
+    .where(gte(recallAttempts.createdAt, berlinStunde("2026-10-13", 4)));
+}
 
 async function fach(nutzer: string, name: string, short: string) {
   const [z] = await testDb.insert(subjects).values({ userId: nutzer, name, short }).returning({ id: subjects.id });
@@ -172,6 +184,7 @@ describe("faelligeThemen", () => {
     // ein Versuch heute (Kalendertag = App-Tag um 17 Uhr) an Englisch
     const v = await versuchFesthalten(n, { scheduleId: s[0].id, itemId: s[0].itemId, answerText: "x" }, MO);
     assert.ok(v.ok);
+    await versucheAufMontag();
     let t = await faelligeThemen(n, MO);
     assert.equal(t[0].titel, "Vokabeln");
     assert.equal(t[0].angefangen, true);
@@ -377,6 +390,7 @@ describe("eine ganze Runde", () => {
     assert.ok(v.ok);
     await urteilFesthalten(nutzer, v.attemptId, true);
     gesessen.add(nochmal[0].scheduleId);
+    await versucheAufMontag();
 
     const nachher = await testDb.select().from(recallSchedule).orderBy(asc(recallSchedule.id));
     assert.equal(nachher.length, vorher.length, "kein Termin dazu oder weg");

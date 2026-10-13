@@ -82,6 +82,13 @@ type KoerperProps = {
   seitenRef: RefObject<(HTMLDivElement | null)[]>;
   /** Einblenden beim Öffnen des Tisches: Verzögerung in ms, null = nicht */
   einblenden: number | null;
+  /**
+   * Zeitpunkt (document.timeline), zu dem der Tisch Kopf und Striche
+   * einblenden ließ: die Seiten zählen ihre Verzögerung von dort, nicht vom
+   * späteren Messen der Breite — alles startet im selben Frame (Prototyp
+   * staggerBlatt, Z. 4555).
+   */
+  einblendenAb?: number | null;
 };
 
 /** `.t-blatt` und `.t-bfoot` (Prototyp `renderBlatt`, `buildWertung`, `updateMain`). */
@@ -162,22 +169,40 @@ export function BlattKoerper(p: KoerperProps) {
     if (p.einblenden === null || eingeblendet.current || !w || reduce()) return;
     eingeblendet.current = true;
     const base = p.einblenden;
+    const ab = p.einblendenAb ?? null;
+    // Genau im Takt des Kopfes: dessen Startzeit, sobald sie feststeht
+    const kopf =
+      ab !== null ? document.getElementById("tHead")?.getAnimations().find((x) => x.playState === "running") : undefined;
+    const anheften = (a: Animation | undefined) => {
+      if (!a || ab === null) return;
+      a.startTime = ab;
+      kopf?.ready.then(
+        () => {
+          if (kopf.startTime !== null) a.startTime = kopf.startTime;
+        },
+        () => {},
+      );
+    };
     const els = bewerten ? [...(werRef.current?.children ?? [])] : [...(vorRef.current?.querySelectorAll(".tb-page") ?? [])];
     els.forEach((c, i) =>
-      c.animate([{ opacity: 0, transform: "translateY(60px) scale(.94)" }, { opacity: 1, transform: "none" }], {
-        duration: 340,
-        delay: base + i * 40,
+      anheften(
+        c.animate([{ opacity: 0, transform: "translateY(60px) scale(.94)" }, { opacity: 1, transform: "none" }], {
+          duration: 340,
+          delay: base + i * 40,
+          easing: E.out,
+          fill: "backwards",
+        }),
+      ),
+    );
+    anheften(
+      fussRef.current?.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], {
+        duration: 220,
+        delay: base + 80,
         easing: E.out,
         fill: "backwards",
       }),
     );
-    fussRef.current?.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], {
-      duration: 220,
-      delay: base + 80,
-      easing: E.out,
-      fill: "backwards",
-    });
-  }, [p.einblenden, w, bewerten]);
+  }, [p.einblenden, p.einblendenAb, w, bewerten]);
 
   // Die Zeile über dem Knopf: „Noch 2 von 6 offen“ / „Alle 6 bewertet“
   const zeileText = offen > 0 ? `Noch ${offen} von ${n} offen` : `Alle ${n} bewertet`;

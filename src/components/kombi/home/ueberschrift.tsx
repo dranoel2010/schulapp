@@ -41,10 +41,14 @@ export function Ueberschrift({ start, apiRef }: { start: string; apiRef: Ref<Ueb
       };
       if (sofort || !cur || reduce()) {
         if (cur && !sofort && reduce()) {
-          cur.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 100 }).onfinish = () => {
+          // auch bei Abbruch (Menü schließt, zweiter Wechsel) auf den Endtext
+          const fertig = () => {
             cur.textContent = text;
             cur.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160 });
           };
+          cur.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 100 }).finished.then(fertig, () => {
+            cur.textContent = text;
+          });
           return;
         }
         hEl.replaceChildren(neu());
@@ -55,15 +59,20 @@ export function Ueberschrift({ start, apiRef }: { start: string; apiRef: Ref<Ueb
       const n = neu();
       hEl.append(n);
       if (dir) {
-        cur.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: "ease-out", fill: "forwards" }).onfinish = () =>
-          cur.remove();
+        // abgebrochen oder fertig: die alte Fassung geht in jedem Fall
+        cur.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: "ease-out", fill: "forwards" }).finished.then(
+          () => cur.remove(),
+          () => cur.remove(),
+        );
         n.animate([{ opacity: 0, transform: `translateX(${dir * 24}px)` }, { opacity: 1, transform: "none" }], {
           duration: 260,
           easing: E.out,
         });
       } else {
-        cur.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 100, easing: "ease-out", fill: "forwards" }).onfinish = () =>
-          cur.remove();
+        cur.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 100, easing: "ease-out", fill: "forwards" }).finished.then(
+          () => cur.remove(),
+          () => cur.remove(),
+        );
         n.animate([{ opacity: 0 }, { opacity: 0, offset: 0.385 }, { opacity: 1 }], { duration: 260, easing: E.out });
       }
     },

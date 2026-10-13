@@ -97,7 +97,8 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
   const geplant = sicht.length;
   const erledigt = sicht.filter((b) => b.status === "done").length;
 
-  function schalten(b: BlockDaten) {
+  /** `still`: aus dem Rückgängig des Toasts — kein neuer Toast (Prototyp hideToast vor u()) */
+  function schalten(b: BlockDaten, still = false) {
     const status = b.status === "done" ? "open" : "done";
     ausfuehren(
       { id: b.id, status },
@@ -108,11 +109,13 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
         blockMerken(neu);
         // Rückgängig stellt den alten Stand ganz her: nach dem Wiederöffnen
         // auch die gelernten Minuten, den Uhrstand und die Einträge im Protokoll
-        kombi.toast(
-          status === "done" ? "Lernblock erledigt" : "Lernblock wieder offen",
-          vorher ? () => zurueck(neu, vorher) : () => schalten(neu),
-          b.titel,
-        );
+        if (!still) {
+          kombi.toast(
+            status === "done" ? "Lernblock erledigt" : "Lernblock wieder offen",
+            vorher ? () => zurueck(neu, vorher) : () => schalten(neu, true),
+            b.titel,
+          );
+        }
         void kombi.neuLaden();
       },
     );
@@ -435,7 +438,7 @@ function PlanZeile({
 
   return (
     <div
-      className={`prow${istHeute ? " today" : ""}`}
+      className={`prow${istHeute ? " today" : ""}${b.status === "done" ? " done" : ""}`}
       ref={rowRef}
       role="button"
       tabIndex={0}

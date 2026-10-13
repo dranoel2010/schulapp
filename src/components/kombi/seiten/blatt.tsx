@@ -189,7 +189,13 @@ export function BlattInhalt({ daten }: { daten: BlattDaten }) {
       <RowBtn
         titel="Seite dazu"
         sub="Noch eine Seite zu diesem Blatt fotografieren"
-        ziel={{ onClick: () => kombi.openCam({ ziel: { kind: "attach", materialId: daten.id }, attach: daten.id }) }}
+        ziel={{
+          onClick: () =>
+            kombi.openCam({
+              ziel: { kind: "attach", materialId: daten.id },
+              attach: { id: daten.id, seiten: daten.seiten.length, bild: daten.seiten[0] ? `/api/material/${daten.seiten[0].id}/vorschau` : null },
+            }),
+        }}
       />
       {daten.knopf && !laeuft ? (
         <RowBtn

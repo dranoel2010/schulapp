@@ -582,7 +582,7 @@ export function AblaufEbene() {
         });
         if (!l.neu.length) {
           zeigen();
-          if (l.dazu.length && !onBl) toast("Seite dazugelegt");
+          if (l.dazu.length && !onBl) void l.dazuOk.then((ok) => ok && toast("Seite dazugelegt"));
           return l.dazu.length > 0;
         }
         if (!onBl && l.ziel !== "liste") {

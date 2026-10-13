@@ -80,6 +80,8 @@ describe("Blätter ohne Fachwahl (Plan 3.8)", () => {
     await seiteAnhaengen(nutzer, now, r.id, SEITE);
     assert.equal((await protokollVomTag(nutzer, "2026-10-12")).filter((x) => x.typ === "seite_dazu").length, 1);
 
+    // created_at kommt von der echten Uhr: auf den Montag der Testuhr rücken
+    await testDb.update(materials).set({ createdAt: now }).where(eq(materials.id, r.id));
     const [kurz] = (await blaetterVomTag(nutzer, "2026-10-12")).filter((b) => b.id === r.id);
     assert.equal(kurz.fach, null, "ohne filed_at zeigt die Liste kein Fach");
     assert.equal(kurz.seiten, 3);

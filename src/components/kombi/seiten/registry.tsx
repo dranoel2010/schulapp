@@ -137,6 +137,8 @@ export const SEITEN: Record<string, SeitenArt | undefined> = {
 export const ROUTE_STATT_STAPEL: Record<string, (p: Record<string, string>) => string> = {
   eingang: () => "/material/eingang",
   bausteine: () => "/abruf/bausteine",
+  // „Stoff und Fragen“ einer Klausur (Rückfall im leeren Lernblock)
+  stoff: (p) => `/abruf/klausur?id=${encodeURIComponent(p.id ?? "")}`,
 };
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
@@ -116,12 +117,26 @@ export function Bestaetigung({
   onJa: () => void;
   onNein: () => void;
 }) {
-  return (
+  const { hideToast } = useKombi();
+  // Solange sie offen ist, geht die Zeile weg wie unter dem Tisch (.t-confirm),
+  // und ein Toast von vorher verdeckt die Knöpfe nicht.
+  useEffect(() => {
+    hideToast(true);
+    const zeile = document.querySelector(".zeile");
+    const war = zeile?.classList.contains("hide") ?? false;
+    zeile?.classList.add("hide");
+    return () => {
+      if (!war) zeile?.classList.remove("hide");
+    };
+  }, [hideToast]);
+  // Außerhalb von #pages (eigener Stapelkontext unter der Zeile): sonst lägen
+  // die Knöpfe hinter dem Dock. Über Zeile (40), unter Toast (66) und Sheet.
+  const karte = (
     <div
       className="t-confirm on"
       role="alertdialog"
       aria-label={titel}
-      style={{ position: "fixed", zIndex: 30, background: "var(--sheet)", color: "var(--ink)", boxShadow: "var(--pop-shadow)" }}
+      style={{ position: "fixed", zIndex: 64, background: "var(--sheet)", color: "var(--ink)", boxShadow: "var(--pop-shadow)" }}
     >
       <h2>{titel}</h2>
       {text ? <p style={{ color: "var(--ink-2)" }}>{text}</p> : null}
@@ -135,6 +150,7 @@ export function Bestaetigung({
       </div>
     </div>
   );
+  return typeof document === "undefined" ? karte : createPortal(karte, document.body);
 }
 
 /** Eine Textzeile mit Chevron (`.textline`), als Link oder Knopf. */

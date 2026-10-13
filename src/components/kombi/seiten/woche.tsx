@@ -103,7 +103,15 @@ export function WocheInhalt({ daten: vomServer }: { daten: WocheDaten }) {
           <>
             <h3 className="lab" style={{ marginTop: 16 }}>{`Abgeben am ${TAG[wd(t.tag)]}`}</h3>
             {abgeben.map((a) => (
-              <AufgabeZeile key={a.id} a={a} modus="woche" heute={daten.heute} onSchalten={schalten} onLoeschen={loeschen} />
+              <AufgabeZeile
+                key={a.id}
+                a={a}
+                modus="woche"
+                // am eigenen Fälligkeitstag kein „war fällig …“ — das sagt schon die Überschrift
+                heute={a.due === t.tag ? t.tag : daten.heute}
+                onSchalten={schalten}
+                onLoeschen={loeschen}
+              />
             ))}
           </>
         ) : null}

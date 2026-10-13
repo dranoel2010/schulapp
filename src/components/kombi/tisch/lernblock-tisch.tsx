@@ -61,7 +61,8 @@ type Sitzung = {
 
 type Frage = { titel: string; text: string; nein: string; ja: () => void };
 
-type Ende = { n: number; ok: number } | null;
+/** `leer`: der Block hat heute weder Fragen noch Material (die Uhr läuft dann nicht) */
+type Ende = { n: number; ok: number; leer?: boolean } | null;
 
 const clipVon = (r: DOMRect, tr: DOMRect): string => {
   const R = Math.min(r.height / 2, 26);
@@ -213,20 +214,42 @@ export function LernblockTisch() {
         blockMerken(neu);
         setStartBlock(neu);
       }
-      const starten = () =>
+      const starten = (): Promise<void> =>
         lernblockStartenAction(blockId).then(
           (r) => {
             if (r.ok) blockMerken(r.block);
           },
           () => kombi.fehlerToast("Nicht gespeichert", () => void starten(), "Erneut"),
         );
-      void starten();
+      const gestartetP = starten();
 
       lernblockTischAction(blockId).then(
         (r) => {
           if (!offenRef.current) return;
           if (!r.ok) {
             kombi.toast(r.fehler);
+            return;
+          }
+          if (r.daten.fragen.length === 0 && !r.daten.material) {
+            // Nichts zu lernen und kein Blatt: keine Uhr, keine leere
+            // Endkarte ohne Ausweg. Hat erst dieses Öffnen die Uhr gestartet,
+            // geht sie still zurück auf Ruhe (wie „Block beenden“ unter einer
+            // Minute); der Weg führt zu „Stoff und Fragen“ der Klausur.
+            if (!vorher || zustand(vorher) === "ruhe") {
+              const ruhe = vorher ?? { ...r.daten.block, laeuftSeit: null, pausiertSeit: null, pauseMs: 0 };
+              blockMerken(ruhe);
+              setStartBlock(ruhe);
+              setDaten({ ...r.daten, block: ruhe });
+              void gestartetP.then(() =>
+                lernblockBeendenAction(blockId).then(
+                  (b) => {
+                    if (b.ok) blockMerken(b.block);
+                  },
+                  () => {},
+                ),
+              );
+            } else setDaten(r.daten);
+            setEnde({ n: 0, ok: 0, leer: true });
             return;
           }
           setDaten(r.daten);
@@ -491,21 +514,42 @@ export function LernblockTisch() {
       <div className={`t-end${ende ? " on" : ""}`} ref={endRef}>
         {ende ? (
           <>
-            <h2 className="sans">Fragen für heute durch.</h2>
+            <h2 className="sans">{ende.leer ? "Heute nichts offen." : "Fragen für heute durch."}</h2>
             <p>
-              {ende.n
-                ? `${ende.n} ${ende.n === 1 ? "Frage" : "Fragen"}, ${ende.ok === ende.n ? "alle" : ende.ok} beim ersten Mal.`
-                : "Heute waren keine Fragen offen."}
+              {ende.leer
+                ? "Zu diesem Thema gibt es heute keine Fragen und kein Blatt."
+                : ende.n
+                  ? `${ende.n} ${ende.n === 1 ? "Frage" : "Fragen"}, ${ende.ok === ende.n ? "alle" : ende.ok} beim ersten Mal.`
+                  : "Heute waren keine Fragen offen."}
             </p>
             <div className="tnext">
+              {ende.leer && block ? (
+                <button
+                  className="tlink"
+                  type="button"
+                  onClick={() => {
+                    // Der Eintrag des Tisches wird zur Route (kein Zurück dazwischen)
+                    schliessen({ ausHistory: true });
+                    kombi.openPage("stoff", { id: block.examId });
+                  }}
+                >
+                  Stoff und Fragen
+                </button>
+              ) : null}
               {rest > 0 && material ? (
                 <button className="tlink" type="button" onClick={openMaterial}>
                   Weiter mit Material
                 </button>
               ) : null}
-              <button className="tlink known" type="button" onClick={blockBeenden}>
-                Block beenden
-              </button>
+              {ende.leer ? (
+                <button className="tlink known" type="button" onClick={() => schliessen()}>
+                  Schließen
+                </button>
+              ) : (
+                <button className="tlink known" type="button" onClick={blockBeenden}>
+                  Block beenden
+                </button>
+              )}
             </div>
           </>
         ) : null}

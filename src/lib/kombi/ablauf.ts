@@ -1,13 +1,14 @@
 import { addDays, berlinDay } from "@/lib/dates";
 import { freePeriodOn, listAllFreePeriods } from "@/lib/free-days";
 import { listHomework, type HomeworkItem } from "@/lib/homework";
+import { juengstesThema } from "@/lib/materials";
 import { appTagVon } from "@/lib/kombi/tag-daten";
 import { ablaufSchritt, ablaufStand, eingetragenHeute, protokollieren, type AblaufSchritt, type AblaufStand } from "@/lib/protokoll";
 import { listSubjects } from "@/lib/subjects";
 import { ensurePeriods, listLessons, weekdayOf, type LessonWithSubject } from "@/lib/timetable";
 import { db } from "@/db";
-import { materialTopics, materials, subjectTopics, tagesprotokoll } from "@/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { tagesprotokoll } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
 
 import { blaetterVomTag, berlinZeitpunkt, type BlattKurz } from "./blaetter";
 import { kurzName } from "./fach-kurz";
@@ -100,19 +101,6 @@ export function epochenFachId(lessons: Pick<LessonWithSubject, "period" | "subje
   return bestes;
 }
 
-/** Das jüngste Thema eines Fachs (Thema des jüngsten Blatts mit Thema). */
-async function juengstesThema(userId: string, subjectId: string): Promise<string | null> {
-  const [z] = await db
-    .select({ title: subjectTopics.title })
-    .from(materialTopics)
-    .innerJoin(materials, eq(materials.id, materialTopics.materialId))
-    .innerJoin(subjectTopics, eq(subjectTopics.id, materialTopics.subjectTopicId))
-    .where(and(eq(materials.userId, userId), eq(materials.subjectId, subjectId)))
-    .orderBy(desc(materials.capturedOn), desc(materials.createdAt))
-    .limit(1);
-  return z?.title ?? null;
-}
-
 function aufgabeKurz(h: HomeworkItem): AufgabeKurz {
   return {
     id: h.id,
@@ -172,7 +160,8 @@ export async function ladeAblauf(userId: string, now: Date): Promise<AblaufDaten
   };
 
   const epoche = epochenFachId(lessons);
-  const epochenThema = epoche ? await juengstesThema(userId, epoche) : null;
+  // dasselbe Thema wie in der Morgenansicht: ohne Ort, nur eingeordnete Blätter
+  const epochenThema = epoche ? await juengstesThema(userId, epoche) : "";
 
   const gesehen = new Set<string>();
   const faecher: FachZeile[] = [];

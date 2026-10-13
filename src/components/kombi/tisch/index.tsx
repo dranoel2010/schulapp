@@ -46,7 +46,7 @@ export function TischEbene() {
   const steuerung = useRef<Steuerung | null>(null);
 
   // ── Arbeitsblatt eines Übungsthemas ───────────────────────────────────────
-  const [blattThema, setBlattThema] = useState<{ t: ThemaKurz; einblenden: number; nr: number } | null>(null);
+  const [blattThema, setBlattThema] = useState<{ t: ThemaKurz; einblenden: number; ab: number | null; nr: number } | null>(null);
   const [anfang, setAnfang] = useState<BlattAnfang | null>(null);
   const zaehler = useRef(0);
   const lupe = useRef<LupeSteuerung | null>(null);
@@ -162,7 +162,9 @@ export function TischEbene() {
           setBlattThema(null);
           return;
         }
-        setBlattThema((alt) => ({ t, einblenden: beimOeffnen ? 204 : 60, nr: (alt?.nr ?? 0) + 1 }));
+        // im selben Frame wie Kopf und Striche (go() in der Steuerung)
+        const ab = document.timeline.currentTime;
+        setBlattThema((alt) => ({ t, einblenden: beimOeffnen ? 204 : 60, ab: typeof ab === "number" ? ab : null, nr: (alt?.nr ?? 0) + 1 }));
       },
       lupeOffen: () => !!lupe.current?.offen(),
       lupeSchliessen: () => lupe.current?.schliessen(),
@@ -241,6 +243,7 @@ export function TischEbene() {
             lupeRef={lupe}
             seitenRef={seitenRef}
             einblenden={blattThema.einblenden}
+            einblendenAb={blattThema.ab}
           />
         ) : (
           <>

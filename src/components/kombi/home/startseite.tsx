@@ -414,11 +414,14 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
       if (outEl) {
         outEl.classList.add("leaving");
         const a = outEl.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: "ease-out", fill: "forwards" });
-        a.onfinish = () => {
+        // Auch wenn das Ausblenden abbricht (das Menü der Zeile schließt,
+        // ein zweiter Wechsel): sonst bliebe die alte Ansicht stehen.
+        const fertig = () => {
           if (gen !== viewGen.current) return;
           outEl.classList.remove("leaving");
           a.cancel();
         };
+        a.finished.then(fertig, fertig);
       }
       let blocks: Element[] = [];
       if (toL === home) {
