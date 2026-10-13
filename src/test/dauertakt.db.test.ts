@@ -5,12 +5,12 @@ import { before, describe, it } from "node:test";
 
 import { and, eq, isNull } from "drizzle-orm";
 
-import { exams, freePeriods, lessons, studyBlocks, subjectTopics, subjects } from "@/db/schema";
+import { arbeitsblaetter, exams, freePeriods, lessons, studyBlocks, subjectTopics, subjects } from "@/db/schema";
 import { protokollieren } from "@/lib/protokoll";
 import { DAUERTAKT } from "@/recall/dauertakt";
 import { dauertaktNachlegen } from "@/recall/nachlegen";
 import { recallItems, recallSchedule } from "@/recall/schema";
-import { berlinStunde, faelligeThemen, naechsterTerminUeberhaupt, wiederholenStand } from "@/recall/themen";
+import { berlinStunde, faelligeThemen, naechsterTerminThema, naechsterTerminUeberhaupt, wiederholenStand } from "@/recall/themen";
 import { addDays } from "@/lib/dates";
 
 /**
@@ -98,16 +98,48 @@ describe("dauertaktNachlegen", () => {
     assert.equal((await offeneTermine(id)).length, 1);
   });
 
-  it("lässt Fächer mit Klausur, offene Termine, zurückgezogene und Messfragen in Ruhe", async () => {
-    const mitKlausur = await frage(n, ma, null, ["2026-09-04"]);
+  it("lässt offene Termine, Fächer mit Terminen vor der Klausur, zurückgezogene und Messfragen in Ruhe", async () => {
+    const mitKlausur = await frage(n, ma, null, ["2026-09-04"], ["2026-10-15"]);
     const nochOffen = await frage(n, fr, null, ["2026-09-04"], ["2026-10-14"]);
     const zurueck = await frage(n, fr, null, ["2026-09-04"], [], { retiredAt: new Date() });
     const messung = await frage(n, fr, null, [], [], { role: "messung" });
     await dauertaktNachlegen(n, MO);
-    assert.equal((await offeneTermine(mitKlausur)).length, 0);
+    assert.deepEqual((await offeneTermine(mitKlausur)).map((t) => t.dueOn), ["2026-10-15"]);
     assert.deepEqual((await offeneTermine(nochOffen)).map((t) => t.dueOn), ["2026-10-14"]);
     assert.equal((await offeneTermine(zurueck)).length, 0);
     assert.equal((await offeneTermine(messung)).length, 0);
+  });
+
+  it("eine Klausur kommt hinzu: der Baustein hat danach weiter offene Termine bis zur Klausur", async () => {
+    const k = await testNutzer("Klausur kommt");
+    const en = await fach(k, "Englisch", "E");
+    const id = await frage(k, en, await thema(k, en, "Vokabeln"), ["2026-09-20"]);
+    assert.equal(await dauertaktNachlegen(k, MO), 1);
+    // der Dauertakt-Termin wird erledigt, dann wird ein Test am 30.11. eingetragen
+    await testDb.update(recallSchedule).set({ doneAt: berlinStunde("2026-10-04", 18) }).where(eq(recallSchedule.itemId, id));
+    await testDb.insert(exams).values({ userId: k, subjectId: en, kind: "test", date: "2026-11-30", title: "Probe" });
+    assert.ok((await dauertaktNachlegen(k, MO)) > 0);
+    const offen = await offeneTermine(id);
+    const vor = offen.filter((t) => t.mode === "klausur").map((t) => t.dueOn).sort();
+    assert.ok(vor.length >= 4, "mindestens vier Termine vor dem Test");
+    assert.equal(vor[0], MO, "der erste Termin ist heute, der letzte Kontakt liegt länger zurück");
+    assert.ok(vor.every((d) => d < "2026-11-30"));
+    assert.ok(offen.some((t) => t.mode === "erhaltung" && t.dueOn > "2026-11-30"));
+    assert.equal(await dauertaktNachlegen(k, MO), 0, "ein zweiter Aufruf schreibt nichts");
+    assert.ok((await faelligeThemen(k, MO)).some((t) => t.titel === "Vokabeln"));
+  });
+
+  it("liegt der einzige offene Termin hinter der neuen Klausur, kommen Termine davor dazu", async () => {
+    const k = await testNutzer("Klausur davor");
+    const en = await fach(k, "Englisch", "E");
+    const id = await frage(k, en, null, ["2026-10-08"], ["2026-10-22"]);
+    await testDb.insert(exams).values({ userId: k, subjectId: en, kind: "test", date: "2026-10-19", title: "Probe" });
+    assert.ok((await dauertaktNachlegen(k, MO)) > 0);
+    const offen = await offeneTermine(id);
+    assert.ok(offen.some((t) => t.mode === "klausur" && t.dueOn < "2026-10-19"));
+    // keine zweite Erhaltung: der Termin am 22.10. bleibt der einzige danach
+    assert.deepEqual(offen.filter((t) => t.dueOn > "2026-10-19").map((t) => t.dueOn), ["2026-10-22"]);
+    assert.equal(await dauertaktNachlegen(k, MO), 0);
   });
 
   it("gleichzeitige Aufrufe legen keinen Termin doppelt an", async () => {
@@ -297,5 +329,66 @@ describe("„Nächstes Thema“ zählt zurückgehaltene Themen mit", () => {
     await frage(z, sp, await thema(z, sp, "Grammatik"), [], ["2026-10-22"]);
     await protokollieren(z, MO, "thema_beendet", tFr, { n: 1 });
     assert.equal(await naechsterTerminUeberhaupt(z, MO), "2026-10-22");
+  });
+});
+
+describe("das fälligste zuerst bei Übungsthemen mit Altlast", () => {
+  it("ein ausgewertetes Übungsthema zählt mit dem Termin nach der Auswertung, nicht mit dem alten", async () => {
+    const a = await testNutzer("Altlast");
+    const en = await fach(a, "Englisch", "E");
+    const fr = await fach(a, "Französisch", "F");
+    const [u] = await testDb
+      .insert(subjectTopics)
+      .values({ userId: a, subjectId: en, title: "Grammatik Tenses", matchKey: "grammatik tenses", origin: "blatt", lastSeenAt: MO, art: "ueben" })
+      .returning({ id: subjectTopics.id });
+    // alter offener Termin 05.09., Blatt am 20.09. ausgewertet: Dauertakt-Termin 04.10.
+    await frage(a, en, u.id, [], ["2026-09-05"]);
+    await testDb.insert(arbeitsblaetter).values({
+      userId: a,
+      subjectTopicId: u.id,
+      tag: "2026-09-20",
+      status: "fertig",
+      gedrucktAm: berlinStunde("2026-09-20", 16),
+      ausgewertetAm: berlinStunde("2026-09-20", 17),
+    });
+    // Französisch zuletzt am 10.09.: Dauertakt-Termin 24.09., also echt fälliger
+    await frage(a, fr, await thema(a, fr, "Vokabeln"), ["2026-09-10"]);
+    assert.equal(await dauertaktNachlegen(a, MO), 2);
+    const t = await faelligeThemen(a, MO);
+    assert.deepEqual(t.map((x) => [x.fach, x.aeltester]), [["Französisch", "2026-09-24"]]);
+    // das Übungsthema selbst steht mit dem Termin nach der Auswertung da
+    assert.deepEqual((await faelligeThemen(a, MO, { subjectId: en })).map((x) => x.aeltester), ["2026-10-04"]);
+  });
+});
+
+describe("„Wieder dran“ am Ende einer Runde ohne Klausur", () => {
+  const DI = "2026-10-13";
+
+  it("nennt den Tag des Dauertakts, auch wenn er noch nicht angelegt ist", async () => {
+    const w = await testNutzer("Wieder dran");
+    const en = await fach(w, "Englisch", "E");
+    const t = await thema(w, en, "Wortschatz");
+    await frage(w, en, t, [], [DI]);
+    // der heute fällige Termin ist der, den diese Runde schließt; danach ist keiner mehr offen
+    assert.equal(await naechsterTerminThema(w, t, DI), addDays(DI, DAUERTAKT));
+  });
+
+  it("fällt der Tag in Ferien, steht der erste Tag danach da", async () => {
+    const w = await testNutzer("Wieder dran Ferien");
+    const en = await fach(w, "Englisch", "E");
+    const t = await thema(w, en, "Wortschatz");
+    await frage(w, en, t, [], [DI]);
+    await testDb.insert(freePeriods).values({ userId: w, kind: "ferien", startsOn: "2026-10-19", endsOn: "2026-10-30" });
+    // 13.10. plus 14 Tage ist der 27.10., mitten in den Ferien
+    assert.equal(await naechsterTerminThema(w, t, DI), "2026-10-31");
+  });
+
+  it("mit Klausur im Fach: der erste Termin des Lernplans", async () => {
+    const w = await testNutzer("Wieder dran Klausur");
+    const ma = await fach(w, "Mathematik", "M");
+    await testDb.insert(exams).values({ userId: w, subjectId: ma, kind: "klausur", date: "2026-11-20", title: "Probe" });
+    const t = await thema(w, ma, "Brüche");
+    await frage(w, ma, t, [], [DI]);
+    assert.equal(await naechsterTerminThema(w, t, DI), "2026-10-16");
   });
 });

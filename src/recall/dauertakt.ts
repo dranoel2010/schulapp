@@ -1,4 +1,5 @@
 import { addDays } from "@/lib/dates";
+import { planeFaelligkeiten, type Betriebsart } from "@/recall/schedule";
 
 /**
  * Wiederholen ohne Klausur (Antwort 6 vom 13.10.2026, „ganz wichtig“):
@@ -17,7 +18,8 @@ import { addDays } from "@/lib/dates";
  *    einen neuen, `DAUERTAKT` Tage nach dem letzten Kontakt. So läuft die
  *    Wiederholung ohne Ende weiter, ohne dass ein Plan bis ans Ende der Zeit
  *    vorausgeschrieben wird. Geplante Termine (`createItem`, `neuPlanen`)
- *    bleiben, wie sie sind.
+ *    bleiben, wie sie sind. Steht in einem Fach mit Klausur vor der Klausur
+ *    nichts mehr offen, rechnet `nachlegenPlan` die Termine bis dahin nach.
  *
  * 2. **Maß halten** (`tagesauswahl`): Von den heute fälligen Themen ohne
  *    Klausur und außerhalb der Epoche kommt höchstens eins auf die
@@ -69,6 +71,48 @@ export function dauertaktTermin(b: BausteinStand): string | null {
   if (zaehlt) return null;
   const letzter = spaeter(spaeter(b.aufgenommen, b.zuletzt), b.ausgewertet);
   return addDays(letzter, DAUERTAKT);
+}
+
+/** Ein Termin, den `nachlegenPlan()` neu anlegen will. */
+export type NeuerTermin = { dueOn: string; mode: Betriebsart };
+
+/**
+ * Was ein Baustein ohne zählenden offenen Termin neu bekommt, damit er nie
+ * aus dem Abfragen fällt (Antwort 6). Zählend heißt: nach dem Tag einer
+ * Blattauswertung, wie in `dauertaktTermin()`.
+ *
+ * - **Ohne Klausur im Fach**: genau einen Termin im Dauertakt.
+ * - **Mit Klausur im Fach**: Die Termine bis zur Klausur rechnet
+ *   `planeFaelligkeiten()` wie in `neuPlanen()`, ab dem letzten Kontakt.
+ *   Gebraucht wird das, wenn die Klausur erst eingetragen wurde, nachdem der
+ *   Baustein seine Termine schon hinter sich hatte, oder sein einziger offener
+ *   Termin (aus dem Dauertakt) nach der Klausur liegt. Ohne diese Regel
+ *   schaltete ausgerechnet ein angekündigter Test das Abfragen ab.
+ *   Erhaltungstermine nach der Klausur kommen nur dazu, wenn gar kein
+ *   zählender Termin mehr offen ist; sonst stünden sie doppelt da.
+ *
+ * Steht vor der Klausur noch ein zählender Termin offen, plant weiter der
+ * Lernplan, und es kommt nichts dazu.
+ */
+export function nachlegenPlan(
+  b: Omit<BausteinStand, "klausur"> & { klausurtag: string | null; heute: string; sperrtage?: string[] },
+): NeuerTermin[] {
+  if (!b.klausurtag) {
+    const tag = dauertaktTermin({ ...b, klausur: false });
+    return tag ? [{ dueOn: tag, mode: "erhaltung" }] : [];
+  }
+  const klausurtag = b.klausurtag;
+  const zaehlend = b.offen.filter((d) => !b.ausgewertet || d > b.ausgewertet);
+  if (zaehlend.some((d) => d < klausurtag)) return [];
+  const plan = planeFaelligkeiten({
+    heute: b.heute,
+    aufgenommenAm: spaeter(spaeter(b.aufgenommen, b.zuletzt), b.ausgewertet),
+    klausurtag,
+    sperrtage: b.sperrtage ?? [],
+  });
+  return plan.faelligkeiten
+    .filter((f) => f.mode === "klausur" || zaehlend.length === 0)
+    .map((f) => ({ dueOn: f.dueOn, mode: f.mode }));
 }
 
 export type AuswahlThema = {

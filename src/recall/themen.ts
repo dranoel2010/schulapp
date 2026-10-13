@@ -2,7 +2,7 @@ import { and, asc, eq, gt, gte, inArray, isNull, lt, lte } from "drizzle-orm";
 
 import { db } from "@/db";
 import { arbeitsblaetter, exams, studyBlocks, subjectTopics, tagesprotokoll, type ThemaArt } from "@/db/schema";
-import { ersterSchultagAb, tagesauswahl, zaehltZurGrenze } from "@/recall/dauertakt";
+import { ersterSchultagAb, nachlegenPlan, tagesauswahl, zaehltZurGrenze } from "@/recall/dauertakt";
 import { addDays, berlinDay } from "@/lib/dates";
 import { naechsteKlausur } from "@/recall/items";
 import { istId } from "@/recall/ids";
@@ -13,6 +13,7 @@ import {
   freePeriodToday,
   listFreePeriods,
   protokollVomTag,
+  sperrtageAb,
   themaArt,
   weekdayOrDate,
   whText,
@@ -266,15 +267,27 @@ async function blattStaende(userId: string, topicIds: string[], heute: string): 
  * Fragen, die ein ausgewertetes Übungsthema heute noch fällig machen: nur
  * offene Termine **nach** dem App-Tag der Auswertung (Plan 3.4). Fällige
  * Termine davor werden beim Lesen übergangen, nicht geändert.
+ *
+ * Je Frage kommt der früheste solche Termin zurück. Er ersetzt beim Lesen den
+ * ältesten offenen aus `faelligHeute()`: Sonst zählte für „das fälligste
+ * zuerst“ ein übergangener Termin von vor der Auswertung, und ein Übungsthema
+ * mit Altlast stünde dauerhaft vor echt fälligeren Kartenthemen.
  */
 async function nachAuswertungFaellig(
   itemIds: string[],
   ausgewertet: string,
   heute: string,
-): Promise<Set<string>> {
-  if (itemIds.length === 0) return new Set();
+): Promise<Map<string, Pick<FaelligerBaustein, "scheduleId" | "dueOn" | "round" | "mode">>> {
+  const erster = new Map<string, Pick<FaelligerBaustein, "scheduleId" | "dueOn" | "round" | "mode">>();
+  if (itemIds.length === 0) return erster;
   const zeilen = await db
-    .select({ itemId: recallSchedule.itemId })
+    .select({
+      itemId: recallSchedule.itemId,
+      scheduleId: recallSchedule.id,
+      dueOn: recallSchedule.dueOn,
+      round: recallSchedule.round,
+      mode: recallSchedule.mode,
+    })
     .from(recallSchedule)
     .where(
       and(
@@ -283,8 +296,10 @@ async function nachAuswertungFaellig(
         gt(recallSchedule.dueOn, ausgewertet),
         lte(recallSchedule.dueOn, heute),
       ),
-    );
-  return new Set(zeilen.map((z) => z.itemId));
+    )
+    .orderBy(asc(recallSchedule.dueOn), asc(recallSchedule.sortOrder));
+  for (const { itemId, ...termin } of zeilen) if (!erster.has(itemId)) erster.set(itemId, termin);
+  return erster;
 }
 
 type Gruppe = {
@@ -332,7 +347,10 @@ async function gruppiert(userId: string, heute: string, subjectId?: string) {
       b.ausgewertet,
       heute,
     );
-    g.fragen = g.fragen.filter((f) => bleiben.has(f.itemId));
+    g.fragen = g.fragen.flatMap((f) => {
+      const termin = bleiben.get(f.itemId);
+      return termin ? [{ ...f, ...termin }] : [];
+    });
     if (g.fragen.length === 0) gruppen.delete(g.key);
   }
   return { gruppen, blaetter, aufloesen };
@@ -505,8 +523,9 @@ export async function fragenZumThema(
  * Durchgang noch offen ist (die Termine, die der Durchgang schließt, zählen
  * nicht). Liegt er heute oder früher — ein ausgelassener Tag, die tägliche
  * letzte Woche —, kommt er morgen: dann steht der morgige Tag da, nicht der
- * Termin danach. Ohne weiteren Termin `null`, dann entfällt die Zeile
- * (V2 6.5). Ein ausgewertetes Übungsthema übergeht Termine bis zum Tag der
+ * Termin danach. Ohne weiteren Termin gilt der Tag, den der Dauertakt oder
+ * der Lernplan danach anlegt (`naechsterNachgelegt()`); erst wenn auch der
+ * fehlt, `null`, dann entfällt die Zeile (V2 6.5). Ein ausgewertetes Übungsthema übergeht Termine bis zum Tag der
  * Auswertung, wie beim Lesen der fälligen Themen.
  */
 export async function naechsterTerminThema(
@@ -528,9 +547,42 @@ export async function naechsterTerminThema(
   // Ein ausgewertetes Übungsthema übergeht Termine bis zum Tag der Auswertung (wie `gruppiert()`).
   const ausgewertet = key.startsWith("ohne:") ? null : (await blattStaende(userId, [key], heute)).get(key)?.ausgewertet;
   const zeile = zeilen.find((z) => !zu.has(z.id) && !(ausgewertet && z.dueOn <= ausgewertet));
-  if (!zeile) return null;
+  if (!zeile) return naechsterNachgelegt(userId, key, heute, aufloesen);
   // Ein noch offener Termin bis heute kommt morgen (`faelligHeute()` holt ihn dann).
   return zeile.dueOn <= heute ? addDays(heute, 1) : zeile.dueOn;
+}
+
+/**
+ * „Wieder dran“, wenn nach diesem Durchgang kein Termin mehr offen ist: der
+ * Tag, den `dauertaktNachlegen()` beim nächsten Laden der Startseite anlegt,
+ * mit dem heutigen Durchgang als letztem Kontakt (`nachlegenPlan()`). Ohne
+ * Klausur ist das der Dauertakt, mit Klausur der erste Termin des Lernplans.
+ * Fällt der Tag in Ferien, rückt er auf den ersten Tag danach.
+ */
+async function naechsterNachgelegt(
+  userId: string,
+  key: string,
+  heute: string,
+  aufloesen: (id: string | null) => Thema | null,
+): Promise<string | null> {
+  const fach = key.startsWith("ohne:") ? key.slice(5) : aufloesen(key)?.subjectId;
+  if (!fach || !istId(fach)) return null;
+  const klausurtag = await naechsteKlausur(userId, fach, heute);
+  const [sperrtage, zeitraeume] = await Promise.all([
+    klausurtag ? sperrtageAb(userId, heute) : Promise.resolve([]),
+    listFreePeriods(userId, heute),
+  ]);
+  const plan = nachlegenPlan({
+    klausurtag,
+    heute,
+    sperrtage,
+    offen: [],
+    zuletzt: heute,
+    aufgenommen: heute,
+    ausgewertet: null,
+  });
+  const tag = plan.map((t) => t.dueOn).sort()[0];
+  return tag ? ersterSchultagAb(tag, zeitraeume) : null;
 }
 
 /**

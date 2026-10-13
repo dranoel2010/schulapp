@@ -2,9 +2,10 @@ import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { arbeitsblaetter } from "@/db/schema";
-import { dauertaktTermin } from "@/recall/dauertakt";
+import { nachlegenPlan } from "@/recall/dauertakt";
 import { naechsteKlausur } from "@/recall/items";
 import { recallItems, recallSchedule } from "@/recall/schema";
+import { sperrtageAb } from "@/recall/source";
 import { appTagVon, themenAufloeser } from "@/recall/themen";
 
 /**
@@ -28,8 +29,15 @@ import { appTagVon, themenAufloeser } from "@/recall/themen";
  * ansteht: Sonst verschwänden seine Themen nach dem Grundtakt ganz. Auf der
  * Startseite zählt es nicht zur Grenze „eins am Tag“ (`zaehltZurGrenze()`).
  *
+ * Fächer mit Klausur plant der Lernplan (`createItem()`/`neuPlanen()`). Steht
+ * dort aber vor der Klausur kein zählender Termin mehr offen (die Klausur kam
+ * erst, als der Baustein seine Termine schon hinter sich hatte, oder sein
+ * Dauertakt-Termin liegt hinter ihr), rechnet dieselbe Funktion die Termine
+ * bis zur Klausur ab dem letzten Kontakt nach (`nachlegenPlan()`). Sonst
+ * schaltete ausgerechnet ein angekündigter Test das Abfragen ab.
+ *
  * Bausteine des Messvorrats bekommen nie einen Termin (A12), zurückgezogene
- * auch nicht. Fächer mit Klausur plant weiter `createItem()`/`neuPlanen()`.
+ * auch nicht.
  *
  * @returns die Zahl der neu angelegten Termine
  */
@@ -49,14 +57,11 @@ export async function dauertaktNachlegen(userId: string, heute: string): Promise
   const klausuren = new Map(
     await Promise.all(faecher.map(async (id) => [id, await naechsteKlausur(userId, id, heute)] as const)),
   );
-  const ohneKlausur = bausteine.filter((b) => !klausuren.get(b.subjectId));
-  if (ohneKlausur.length === 0) return 0;
-
-  const ids = ohneKlausur.map((b) => b.id);
+  const ids = bausteine.map((b) => b.id);
   const aufloesen = await themenAufloeser(userId);
 
   // Jüngste Auswertung eines Arbeitsblatts je (aufgelöstem) Thema
-  const themaVon = new Map(ohneKlausur.map((b) => [b.id, aufloesen(b.subjectTopicId)?.id ?? null]));
+  const themaVon = new Map(bausteine.map((b) => [b.id, aufloesen(b.subjectTopicId)?.id ?? null]));
   const topicIds = [...new Set([...themaVon.values()].filter((t): t is string => !!t))];
   const ausgewertet = new Map<string, string>();
   if (topicIds.length) {
@@ -77,6 +82,9 @@ export async function dauertaktNachlegen(userId: string, heute: string): Promise
       if (!alt || tag > alt) ausgewertet.set(z.subjectTopicId, tag);
     }
   }
+
+  // Ferien sperren nur die Termine bis zur Klausur; der Dauertakt-Tag rückt beim Anzeigen
+  const sperrtage = [...klausuren.values()].some(Boolean) ? await sperrtageAb(userId, heute) : [];
 
   // Ab hier unter der Sperre je Nutzer: Termine lesen und schreiben (siehe Kopf).
   // In der Transaktion nur `tx`, nie `db`: PGlite hat eine einzige Verbindung.
@@ -100,21 +108,33 @@ export async function dauertaktNachlegen(userId: string, heute: string): Promise
     }
 
     let neu = 0;
-    for (const b of ohneKlausur) {
+    for (const b of bausteine) {
       const t = jeBaustein.get(b.id) ?? [];
       const thema = themaVon.get(b.id);
       const ausg = thema ? (ausgewertet.get(thema) ?? null) : null;
       const erledigt = t.flatMap((x) => (x.doneAt ? [appTagVon(x.doneAt)] : [])).sort();
-      const tag = dauertaktTermin({
-        klausur: false,
+      const klausurtag = klausuren.get(b.subjectId) ?? null;
+      const plan = nachlegenPlan({
+        klausurtag,
+        heute,
+        sperrtage,
         offen: t.filter((x) => !x.doneAt).map((x) => x.dueOn),
         zuletzt: erledigt.at(-1) ?? null,
         aufgenommen: appTagVon(b.createdAt),
         ausgewertet: ausg,
       });
-      if (!tag) continue;
+      if (plan.length === 0) continue;
       const runde = t.reduce((m, x) => Math.max(m, x.round), 0) + 1;
       const sortierung = t.reduce((m, x) => Math.max(m, x.sortOrder), -1) + 1;
+      if (klausurtag) {
+        // Unter der Sperre gelesen und geschrieben: kein zweiter Aufruf sieht diesen Stand
+        await tx.insert(recallSchedule).values(
+          plan.map((f, k) => ({ itemId: b.id, dueOn: f.dueOn, round: runde + k, mode: f.mode, sortOrder: sortierung + k })),
+        );
+        neu += plan.length;
+        continue;
+      }
+      const tag = plan[0].dueOn;
       // Zweite Sicherung neben der Sperre: geschrieben wird nur, solange kein zählender offener Termin da ist
       const ergebnis: unknown = await tx.execute(sql`
         insert into recall_schedule (item_id, due_on, round, mode, sort_order)

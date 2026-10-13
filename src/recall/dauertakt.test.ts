@@ -5,6 +5,7 @@ import {
   DAUERTAKT,
   dauertaktTermin,
   ersterSchultagAb,
+  nachlegenPlan,
   tagesauswahl,
   zaehltZurGrenze,
   type BausteinStand,
@@ -45,6 +46,44 @@ describe("dauertaktTermin", () => {
 
   it("darf in der Vergangenheit liegen (überfällig)", () => {
     assert.equal(dauertaktTermin(stand({ aufgenommen: "2026-05-01", zuletzt: "2026-06-01" })), "2026-06-15");
+  });
+});
+
+describe("nachlegenPlan", () => {
+  const b = (x: Partial<Parameters<typeof nachlegenPlan>[0]> = {}) =>
+    nachlegenPlan({ ...stand(), klausurtag: null, heute: "2026-10-12", ...x });
+
+  it("ohne Klausur: genau ein Termin im Dauertakt", () => {
+    assert.deepEqual(b({ zuletzt: "2026-10-01" }), [{ dueOn: "2026-10-15", mode: "erhaltung" }]);
+    assert.deepEqual(b({ zuletzt: "2026-10-01", offen: ["2026-10-20"] }), []);
+  });
+
+  it("mit Klausur und ohne offenen Termin: Termine bis zur Klausur ab heute, dazu die Erhaltung", () => {
+    const p = b({ zuletzt: "2026-10-04", klausurtag: "2026-11-30" });
+    const vor = p.filter((t) => t.mode === "klausur");
+    assert.equal(vor[0].dueOn, "2026-10-12");
+    assert.ok(vor.length >= 4 && vor.every((t) => t.dueOn < "2026-11-30"));
+    assert.ok(p.some((t) => t.mode === "erhaltung"));
+  });
+
+  it("mit Klausur und offenem Termin davor: nichts", () => {
+    assert.deepEqual(b({ klausurtag: "2026-11-30", offen: ["2026-11-02"] }), []);
+  });
+
+  it("mit Klausur und offenem Termin nur dahinter: Termine davor, keine zweite Erhaltung", () => {
+    const p = b({ zuletzt: "2026-10-08", klausurtag: "2026-10-19", offen: ["2026-10-22"] });
+    assert.ok(p.length > 0);
+    assert.ok(p.every((t) => t.mode === "klausur" && t.dueOn < "2026-10-19"));
+  });
+
+  it("ein offener Termin bis zur Blattauswertung zählt auch mit Klausur nicht", () => {
+    const p = b({ klausurtag: "2026-11-30", offen: ["2026-09-05"], ausgewertet: "2026-09-20" });
+    assert.ok(p.some((t) => t.mode === "klausur"));
+  });
+
+  it("Ferien sperren die Tage vor der Klausur", () => {
+    const p = b({ zuletzt: "2026-10-10", klausurtag: "2026-11-30", sperrtage: ["2026-10-13"] });
+    assert.ok(!p.some((t) => t.dueOn === "2026-10-13"));
   });
 });
 
