@@ -12,6 +12,7 @@ import { lessonRoom } from "@/lib/home";
 import { listHomework } from "@/lib/homework";
 import { fachEintraege } from "@/lib/kombi/fach-alias";
 import { grammatikThemen } from "@/lib/kombi/grammatik-themen";
+import { klausurImArchiv } from "@/lib/kombi/archiv";
 import { appTagVon } from "@/lib/kombi/tag-daten";
 import { diffDays } from "@/lib/kombi/text";
 import {
@@ -144,8 +145,11 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
         min: r.block.minutes,
         erledigt: r.block.status === "done",
       }));
+  // Was im Archiv steht (ab Tag 15 nach dem Klausurtag), findet die Zeile nicht
+  // mehr, wie die Liste „Klausuren“ und die Seite eines Fachs (klausurListe);
+  // dorthin führt „archiv“
   const klausuren: VorratKlausur[] = klausurenRoh
-    .filter((k) => aktiv.has(k.subjectId))
+    .filter((k) => aktiv.has(k.subjectId) && !klausurImArchiv(k.date, heute))
     .map((k) => ({ id: k.id, fachId: k.subjectId, datum: k.date, thema: k.title?.trim() || "Klausur", plan: planVon(k.id) }));
 
   // ── Noten je Fach, älteste zuerst ─────────────────────────────────────────

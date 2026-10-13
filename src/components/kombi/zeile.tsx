@@ -132,9 +132,6 @@ function ueberlagerungNach(l: Ueberlagerung, start: number): Ueberlagerung {
   return { done, neu, weg };
 }
 
-/** Der Toast, wenn eine Aktion scheitert: ohne Netz „Keine Verbindung“ (UMSETZUNG 2.4, Punkt 7). */
-const nichtGespeichert = () => (typeof navigator !== "undefined" && navigator.onLine === false ? "Keine Verbindung" : "Nicht gespeichert");
-
 /** Gilt der Vorrat noch für den App-Tag von jetzt (Wechsel 04:00)? */
 function vorratVomTag(vv: { v: ZeilenVorrat; versatz: number }): boolean {
   return appTagVon(new Date(Date.now() + vv.versatz)) === vv.v.heute;
@@ -609,7 +606,7 @@ export function Zeile({
       },
     );
     protokoll.catch(() => {
-      kombi.fehlerToast(nichtGespeichert(), () => setDone({ ...a, done: vorher }), "Erneut");
+      kombi.fehlerToast("Nicht gespeichert", () => setDone({ ...a, done: vorher }), "Erneut");
       // auf dem Server hat sich nichts geändert: die Überlagerung fällt weg
       setTimeout(() => ueberEntfernen("done", a.id, tok), 320);
     });
@@ -712,9 +709,9 @@ export function Zeile({
       );
     // Rückgängig schreibt den alten Stand zurück; scheitert es, bietet der Toast „Erneut“
     const zuruecknehmen = (): void =>
-      void ausfuehren(alt, () => {}).catch(() => kombi.fehlerToast(nichtGespeichert(), zuruecknehmen, "Erneut"));
+      void ausfuehren(alt, () => {}).catch(() => kombi.fehlerToast("Nicht gespeichert", zuruecknehmen, "Erneut"));
     ausfuehren(neuWert, () => kombi.toast("Geändert", zuruecknehmen, p.taskText)).catch(() =>
-      kombi.fehlerToast(nichtGespeichert(), () => doAendern(p, editId), "Erneut"),
+      kombi.fehlerToast("Nicht gespeichert", () => doAendern(p, editId), "Erneut"),
     );
   };
 
@@ -787,7 +784,7 @@ export function Zeile({
         void vorratLaden();
       },
       () => {
-        kombi.fehlerToast(nichtGespeichert(), () => doEintragen(p), "Erneut");
+        kombi.fehlerToast("Nicht gespeichert", () => doEintragen(p), "Erneut");
         setTimeout(weg, 320);
       },
     );

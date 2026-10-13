@@ -22,6 +22,9 @@ before(async () => {
   await testDb.insert(homework).values({ userId: nutzer, subjectId: ma.id, title: "S. 84", dueDate: "2026-10-13" });
   await testDb.insert(homework).values({ userId: nutzer, subjectId: ma.id, title: "alt", dueDate: "2026-09-01", doneAt: new Date("2026-09-01T10:00:00Z") });
   await testDb.insert(exams).values({ userId: nutzer, subjectId: ma.id, date: "2026-10-16", title: "Quadratische Funktionen" });
+  // Tag 14 nach dem Klausurtag steht noch in der Liste, Tag 15 im Archiv
+  await testDb.insert(exams).values({ userId: nutzer, subjectId: ge.id, date: "2026-09-28", title: "Tag vierzehn" });
+  await testDb.insert(exams).values({ userId: nutzer, subjectId: ge.id, date: "2026-09-27", title: "Tag fuenfzehn" });
   await testDb.insert(grades).values({ userId: nutzer, subjectId: ma.id, value: 20, date: "2026-09-17", title: "Klausur" });
 
   // Grammatik (Antwort 5): zwei Englisch-Themen mit Blatt, eins ohne, eine Vokabelliste, ein Alias
@@ -61,11 +64,21 @@ describe("zeilenVorrat", () => {
   it("nimmt alte erledigte Aufgaben nicht mit, Klausur und Noten schon", async () => {
     const v = await zeilenVorrat(nutzer, JETZT);
     assert.deepEqual(v.aufgaben.map((a) => a.text), ["S. 84"]);
-    assert.equal(v.klausuren[0].thema, "Quadratische Funktionen");
+    assert.ok(v.klausuren.some((k) => k.thema === "Quadratische Funktionen"));
     const ma = v.faecher.find((f) => f.name === "Mathematik")!.id;
     assert.deepEqual(v.noten[ma], [{ label: "2", titel: "Klausur", datum: "2026-09-17" }]);
     // Montag nach Schulschluss, Ablauf noch offen
     assert.equal(v.ansicht, "ablauf");
+  });
+
+  it("findet vergangene Klausuren bis Tag 14, ab Tag 15 nur noch im Archiv", async () => {
+    const v = await zeilenVorrat(nutzer, JETZT);
+    const themen = v.klausuren.map((k) => k.thema);
+    assert.ok(themen.includes("Tag vierzehn"));
+    assert.ok(!themen.includes("Tag fuenfzehn"));
+    // einen Tag später ist auch Tag 14 im Archiv
+    const morgen = await zeilenVorrat(nutzer, new Date(JETZT.getTime() + 864e5));
+    assert.ok(!morgen.klausuren.some((k) => k.thema === "Tag vierzehn"));
   });
 
   it("liefert die Grammatikthemen mit Blatt, fälligstes zuerst, Aliase beim Ziel", async () => {
