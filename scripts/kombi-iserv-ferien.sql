@@ -44,9 +44,11 @@
 -- Diese Zeilen bleiben, wie sie sind — der Abgleich fasst sie nie an, und
 -- Lernplan und Abruf nehmen die Tage beider Zeilen zusammen. Im Google
 -- Kalender steht trotzdem jeder Zeitraum nur einmal: Eine Hand-Zeile, deren
--- Tage eine IServ-Zeile ganz abdeckt, fällt dort weg, ebenso eine IServ-Zeile,
--- die eine Hand-Zeile ganz abdeckt (`fuerKalender()` in src/lib/free-days.ts).
--- Nur was sich teilweise überschneidet, steht zweimal da. Nach dem ersten
+-- Tage eine IServ-Zeile abdeckt (Samstag und Sonntag am Rand zählen nicht),
+-- fällt dort weg, ebenso eine IServ-Zeile, die eine Hand-Zeile abdeckt
+-- (`fuerKalender()` in src/lib/free-days.ts). Nur was sich an Werktagen
+-- teilweise überschneidet, steht zweimal da — der Löschbefehl dafür steht in
+-- EINBAU Schritt 7 (die Ferienseite gibt es nicht mehr). Nach dem ersten
 -- Abruf zeigt dieselbe Abfrage mit `AND quelle IS NULL` die Hand-Zeilen; die
 -- mit IServ-Ferien überlappen, zählt:
 --

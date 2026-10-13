@@ -75,7 +75,24 @@ Ablauf im Ganzen:
    SELECT kind, title, starts_on, ends_on FROM free_periods
     WHERE kind IN ('ferien', 'frei') AND ends_on >= current_date ORDER BY starts_on;
    ```
-   Diese Zeilen bleiben stehen; der Abgleich fasst sie nie an. Nach dem nächsten Abruf bei IServ (der Kalender-Lauf fragt höchstens alle drei Stunden, zwischen 6 und 21 Uhr) stehen die Ferien unter Einstellungen › IServ › „Freie Tage“, mit „aus IServ“, die alten Zeilen daneben mit „von Hand eingetragen“. In „Schule“ stehen die Herbstferien trotzdem genau einmal: Eine Hand-Zeile, deren Tage die IServ-Ferien ganz abdecken, fällt in Google weg (und umgekehrt). Nur eine Hand-Zeile, die über die IServ-Ferien hinausragt, bliebe als zweiter Balken — dann ist sie wohl falsch eingetragen; löschen lässt sie sich nur per SQL (`DELETE FROM free_periods WHERE id = '…' AND quelle IS NULL`, vorher `npm run db:backup` bzw. Sicherung). Die Zählzeilen dazu stehen im Kopf von `kombi-iserv-ferien.sql`. Wer nicht warten will: `UPDATE iserv_state SET last_attempt_at = NULL` und dann `kalender.sh`.
+   Diese Zeilen bleiben stehen; der Abgleich fasst sie nie an. Nach dem nächsten Abruf bei IServ (der Kalender-Lauf fragt höchstens alle drei Stunden, zwischen 6 und 21 Uhr) stehen die Ferien unter Einstellungen › IServ › „Freie Tage“, mit „aus IServ“, die alten Zeilen daneben mit „von Hand eingetragen“. In „Schule“ stehen die Herbstferien trotzdem genau einmal: Eine Hand-Zeile, deren Tage die IServ-Ferien abdecken, fällt in Google weg (und umgekehrt); Samstag und Sonntag am Rand zählen dabei nicht mit (von Hand Mo–So, aus IServ Sa–Sa: ein Balken). Nur eine Hand-Zeile, die sich an Werktagen bloß teilweise mit den IServ-Ferien überschneidet, bliebe als zweiter Balken. Die Ferienseite gibt es nicht mehr, gelöscht wird sie deshalb per SQL — **nach** dem ersten Abruf bei IServ und nach einer Sicherung (`npm run db:backup` bzw. Sicherung auf dem NAS). Erst ansehen:
+   ```sql
+   SELECT h.id, h.kind, h.title, h.starts_on, h.ends_on,
+          i.title AS aus_iserv, i.starts_on AS iserv_von, i.ends_on AS iserv_bis
+     FROM free_periods h
+     JOIN free_periods i ON i.user_id = h.user_id AND i.quelle = 'iserv'
+                        AND i.starts_on <= h.ends_on AND h.starts_on <= i.ends_on
+    WHERE h.quelle IS NULL AND h.kind IN ('ferien', 'frei') AND h.ends_on >= current_date
+    ORDER BY h.starts_on;
+   ```
+   Sind das dieselben Ferien (und kein Tag der Hand-Zeile ein eigener freier Tag, den IServ nicht kennt), alle diese Hand-Zeilen auf einmal löschen — eine Klassenfahrt und vergangene Zeilen bleiben:
+   ```sql
+   DELETE FROM free_periods h USING free_periods i
+    WHERE h.quelle IS NULL AND h.kind IN ('ferien', 'frei') AND h.ends_on >= current_date
+      AND i.user_id = h.user_id AND i.quelle = 'iserv'
+      AND i.starts_on <= h.ends_on AND h.starts_on <= i.ends_on;
+   ```
+   Einzelne Zeilen: `DELETE FROM free_periods WHERE id = '…' AND quelle IS NULL`. Danach `kalender.sh` (oder den nächsten stündlichen Lauf) abwarten; der doppelte Balken verschwindet aus Google. Die Zählzeilen dazu stehen im Kopf von `kombi-iserv-ferien.sql`. Wer nicht warten will: `UPDATE iserv_state SET last_attempt_at = NULL` und dann `kalender.sh`.
 
 ## Was offen ist
 

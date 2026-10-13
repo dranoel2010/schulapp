@@ -149,6 +149,21 @@ describe("fuerKalender — dieselben Ferien genau einmal in Google", () => {
     assert.deepEqual(fuerKalender([hand, iserv]).map((p) => p.id), ["h"]);
   });
 
+  it("Wochenenden am Rand zählen nicht: von Hand Mo–So, aus IServ Sa–Sa — nur der IServ-Balken bleibt", () => {
+    const hand = z("h", null, "ferien", "2026-10-26", "2026-11-08");
+    const iserv = z("i", "iserv", "ferien", "2026-10-24", "2026-11-07");
+    assert.deepEqual(fuerKalender([hand, iserv]).map((p) => p.id), ["i"]);
+    // Ein Werktag mehr von Hand: dann deckt die Hand-Zeile die IServ-Zeile
+    // (bis auf deren Wochenenden) — auch das ist nur EIN Balken, ohne dass ein
+    // Werktag fehlt
+    const laenger = z("h", null, "ferien", "2026-10-26", "2026-11-09");
+    assert.deepEqual(fuerKalender([laenger, iserv]).map((p) => p.id), ["h"]);
+    // Ein Werktag mehr auf BEIDEN Seiten: beide bleiben, sonst fehlte einer
+    const verschoben = z("h", null, "ferien", "2026-10-27", "2026-11-09");
+    const frueher = z("i", "iserv", "ferien", "2026-10-23", "2026-11-07");
+    assert.deepEqual(fuerKalender([verschoben, frueher]).map((p) => p.id), ["h", "i"]);
+  });
+
   it("lässt beide stehen, wenn sie sich nur teilweise überschneiden — und die Klassenfahrt immer", () => {
     const hand = z("h", null, "ferien", "2026-10-20", "2026-10-30");
     const iserv = z("i", "iserv", "ferien", "2026-10-24", "2026-11-07");

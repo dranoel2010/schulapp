@@ -12,6 +12,7 @@ import { freeDatesFrom } from "@/lib/free-days";
 import { runIservFetch, type AbrufDeps } from "@/lib/iserv/abruf";
 import { neuerSitzungsSpeicher } from "@/lib/iserv/client";
 import { IservZugang } from "@/lib/iserv/config";
+import type { FerienWunsch } from "@/lib/iserv/ferien";
 import { fakeIserv, json, ORIGIN } from "@/lib/iserv/fixtures";
 import { iservStore } from "@/lib/iserv/store";
 import { sperrtageAb } from "@/recall/source";
@@ -176,5 +177,99 @@ describe("Ferienabgleich mit IServ in der Datenbank", () => {
         quelle: "iserv",
       }),
     );
+  });
+});
+
+// ── Ein Schlüssel wandert: der Index darf nie kurz zwei Zeilen sehen ─────────
+
+/**
+ * IServ vergibt einen Schlüssel ein Jahr später wieder, und die laufende
+ * Zeile der neuen Ferien trägt einen anderen. Postgres prüft
+ * `free_periods_iserv_key_idx` bei jeder Anweisung — die alte Zeile muss
+ * ihren Schlüssel abgeben, BEVOR die neue ihn bekommt. Sonst scheitert die
+ * ganze Transaktion von `saveRun` (auch Snapshots und Zustand), bei jedem
+ * Abruf wieder.
+ */
+describe("saveRun: ein Schlüssel wandert zu den neuen Ferien", () => {
+  async function fall(
+    name: string,
+    alt: { key: string; von: string; bis: string },
+    laufend: { key: string; von: string; bis: string },
+    wunsch: FerienWunsch,
+    heute: string,
+  ) {
+    const userId = await testNutzer(name);
+    const zeile = (z: { key: string; von: string; bis: string }) => ({
+      userId,
+      quelle: "iserv",
+      iservKey: z.key,
+      kind: "ferien",
+      title: "Herbstferien",
+      startsOn: z.von,
+      endsOn: z.bis,
+    });
+    await testDb.insert(freePeriods).values([zeile(alt), zeile(laufend)]);
+
+    const lauf = () =>
+      iservStore.saveRun(userId, {
+        attemptAt: new Date(`${heute}T10:00:00Z`),
+        success: true,
+        snapshots: [],
+        error: null,
+        warning: null,
+        ferien: { wuensche: [wunsch], heute },
+      });
+
+    assert.deepEqual(await lauf(), { ferienGeaendert: true });
+    const danach = await testDb
+      .select()
+      .from(freePeriods)
+      .where(eq(freePeriods.userId, userId))
+      .orderBy(freePeriods.startsOn);
+    // Und der nächste Lauf hat nichts mehr zu tun
+    assert.deepEqual(await lauf(), { ferienGeaendert: false });
+    return danach.map((z) => [z.iservKey, z.startsOn, z.endsOn]);
+  }
+
+  it("Plugin-Schlüssel von den Vorjahresferien, die laufende Zeile hat einen Schlüssel, den IServ nicht mehr meldet", async () => {
+    const zeilen = await fall(
+      "Wandert-1",
+      { key: "ferien|1", von: "2025-10-25", bis: "2025-11-08" },
+      { key: "oeff|alt", von: "2026-10-24", bis: "2026-11-07" },
+      {
+        schluessel: "ferien|1",
+        alleSchluessel: ["ferien|1", "oeff|neu"],
+        kind: "ferien",
+        title: "Herbstferien",
+        startsOn: "2026-10-24",
+        endsOn: "2026-11-07",
+      },
+      "2026-10-20",
+    );
+    assert.deepEqual(zeilen, [
+      ["ferien|1@2025-10-25", "2025-10-25", "2025-11-08"],
+      ["ferien|1", "2026-10-24", "2026-11-07"],
+    ]);
+  });
+
+  it("derselbe Schlüssel ein Jahr später, die laufende Zeile hat ihren gewechselt", async () => {
+    const zeilen = await fall(
+      "Wandert-2",
+      { key: "K", von: "2025-10-20", bis: "2025-11-01" },
+      { key: "P", von: "2026-10-24", bis: "2026-11-07" },
+      {
+        schluessel: "K",
+        alleSchluessel: ["K"],
+        kind: "ferien",
+        title: "Herbstferien",
+        startsOn: "2026-10-24",
+        endsOn: "2026-11-07",
+      },
+      "2026-10-05",
+    );
+    assert.deepEqual(zeilen, [
+      ["K@2025-10-20", "2025-10-20", "2025-11-01"],
+      ["K", "2026-10-24", "2026-11-07"],
+    ]);
   });
 });

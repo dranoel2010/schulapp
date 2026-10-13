@@ -291,23 +291,60 @@ const FREI = new RegExp(
 );
 
 /**
- * Ist dieser Titel eine Ferien- oder Frei-Meldung — Ferien (nur ganztägig),
- * unterrichtsfrei, schulfrei, „Schule geschlossen“? Für @/lib/iserv/auswahl:
- * Nur solche Termine entfallen, wenn die App die Tage schon als frei kennt.
+ * Ferien als Zeitraum: Der Titel BEGINNT mit dem Namen der Ferien
+ * („Herbstferien_Sa. 24. 10. – …“, „Ferien“, „Beweglicher Ferientag“). Ein
+ * Bindestrich danach ist ein anderes Wort („Ferien-AG“).
  */
-export function istFreiTitel(eingabe: { titel: string; ganztaegig: boolean }): boolean {
-  const t = normalisiere(eingabe.titel);
-  return FREI.test(t) || (eingabe.ganztaegig && FERIEN.test(t));
+const FERIEN_ANFANG = new RegExp(`^(?:beweglicher |beweglichen )?[${BUCHSTABE}]*ferien(?:tage?)?(?![${BUCHSTABE}-])`);
+
+/**
+ * Was einen Schultag meldet, auch wenn „Ferien“ oder „frei“ darin steht:
+ * „Letzter Schultag vor den Herbstferien“, „Zeugnisausgabe …, danach
+ * Sommerferien“, „unterrichtsfrei ab der 4. Stunde“. Gilt nur, wenn der Titel
+ * NICHT mit dem Namen der Ferien beginnt — „Weihnachtsferien_…_letzter
+ * Schultag Do. 17.12. bis 11:30 Uhr“ sind die Ferien, der Rest ist ein Hinweis
+ * auf den Tag davor.
+ */
+const SCHULTAG_HINWEIS = new RegExp(
+  ["schultag", "schulsamstag", "unterrichtsende", "unterricht endet", "zeugnis", "stunde"].join("|"),
+);
+
+/** Ein Angebot, keine freien Tage — nie: eine AG, ein Kurs, eine Betreuung. */
+const ANGEBOT = new RegExp([`${B}ags?${E}`, `${B}kurs`, "betreuung"].join("|"));
+
+/**
+ * Ist dieser ganztägige Termin des öffentlichen Kalenders ein freier
+ * Zeitraum, den die App als ganz frei übernimmt (@/lib/iserv/ferien)?
+ * Streng, denn daraus entstehen ganze freie Tage: Das bloße Wort „Ferien“
+ * irgendwo im Titel reicht nicht. Deshalb
+ *
+ *   - Ferien nur, wenn der Titel mit ihrem Namen BEGINNT („Herbstferien…“),
+ *   - frei nur bei unterrichtsfrei, schulfrei, kein Unterricht, „Schule
+ *     geschlossen“ — und nicht, wenn der Titel einen Schultag, ein
+ *     Unterrichtsende, Zeugnisse oder eine Stunde nennt,
+ *   - nie, wenn der Titel eine AG, einen Kurs oder eine Betreuung nennt.
+ *
+ * `null`: kein freier Zeitraum. Für Termine mit Uhrzeit nie fragen — die
+ * sind nie ein freier Zeitraum.
+ */
+export function freiZeitraumArt(titel: string): "ferien" | "frei" | null {
+  const t = normalisiere(titel);
+  if (ANGEBOT.test(t)) return null;
+  if (FERIEN_ANFANG.test(t)) return "ferien";
+  if (SCHULTAG_HINWEIS.test(t)) return null;
+  if (FREI.test(t)) return "frei";
+  return null;
 }
 
 /**
- * Nennt der Titel Ferien („Herbstferien“, „Ferientag“)? Nur für ganztägige
- * Einträge sinnvoll — @/lib/iserv/ferien unterscheidet damit die Art eines
- * freien Zeitraums („ferien“ oder „frei“). „Ferienbetreuung“ sind keine
- * Ferien.
+ * Ist dieser Titel eine Ferien- oder Frei-Meldung, die freie Tage meint —
+ * ganztägig und nach `freiZeitraumArt()`? Für @/lib/iserv/auswahl: Nur
+ * solche Termine entfallen, wenn die App die Tage schon als frei kennt, und
+ * es sind genau die, aus denen @/lib/iserv/ferien freie Tage macht. „Letzter
+ * Schultag vor den Ferien“ bleibt also im Kalender stehen.
  */
-export function istFerienTitel(titel: string): boolean {
-  return FERIEN.test(normalisiere(titel));
+export function istFreiTitel(eingabe: { titel: string; ganztaegig: boolean }): boolean {
+  return eingabe.ganztaegig && freiZeitraumArt(eingabe.titel) !== null;
 }
 
 /** Ein Titelteil aus ISERV_AUCH/ISERV_NIE trifft nur als ganzes Wort — „msa" trifft nicht „gemsa". */

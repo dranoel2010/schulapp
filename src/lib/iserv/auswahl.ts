@@ -40,8 +40,11 @@ import type { IservItem, IservQuelle } from "@/lib/iserv/types";
  * IServ-Termin da — lieber doppelt als gar nicht.
  *
  * Entfallen darf nur, was SELBST sagt, dass frei ist (`istFreiTitel()`:
- * Ferien, unterrichtsfrei, schulfrei, „Schule geschlossen“) und aus dem
- * öffentlichen Kalender kommt — denn nur das ist ein Doppel der freien Tage.
+ * beginnt mit „…ferien“, unterrichtsfrei, schulfrei, „Schule geschlossen“ —
+ * dieselbe strenge Prüfung, mit der @/lib/iserv/ferien freie Tage anlegt)
+ * und aus dem öffentlichen Kalender kommt — denn nur das ist ein Doppel der
+ * freien Tage. „Letzter Schultag vor den Herbstferien“ oder eine „Ferien-AG“
+ * bleiben stehen.
  * Eine Abgabe im Klassenkalender am letzten Ferientag, eine Fahrt der eigenen
  * Klasse während einer Klassenfahrt-Zeit der App, ein Schulsamstag: Das sind
  * Termine, keine Ferien, und sie bleiben stehen, auch wenn ihre Tage frei sind.

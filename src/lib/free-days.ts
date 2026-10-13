@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { db } from "@/db";
 import { freePeriods, type FreePeriod } from "@/db/schema";
-import { addDays, daysBetween, isCalendarDate } from "@/lib/dates";
+import { addDays, daysBetween, isCalendarDate, weekdayIndex } from "@/lib/dates";
 
 /**
  * Freie Tage — Ferien, Klassenfahrt und was sonst ohne Schule ist.
@@ -70,21 +70,29 @@ export function freiQuelleText(period: { quelle?: string | null }): string {
  * eine:
  *
  *   1. Eine von Hand eingetragene Ferien- oder Frei-Zeile, deren Tage eine
- *      IServ-Zeile ganz abdeckt, fällt weg — IServ hat den lesbaren Namen und
- *      die richtigen Tage. Bei gleichen Tagen gewinnt IServ.
+ *      IServ-Zeile abdeckt, fällt weg — IServ hat den lesbaren Namen und die
+ *      richtigen Tage. Bei gleichen Tagen gewinnt IServ.
  *   2. Eine IServ-Zeile, deren Tage eine (übrig gebliebene) von Hand
- *      eingetragene Ferien- oder Frei-Zeile ganz abdeckt, fällt weg.
+ *      eingetragene Ferien- oder Frei-Zeile abdeckt, fällt weg.
+ *
+ * „Abdecken“ zählt Samstag und Sonntag am Rand nicht mit: Von Hand standen
+ * Herbstferien oft Montag bis Sonntag da, IServ meldet Samstag bis Samstag —
+ * das sind dieselben Ferien, und die Seite, auf der man die alte Hand-Zeile
+ * löschen könnte, gibt es seit Modell 23 nicht mehr. Ein Wochenende am Rand
+ * ist ohnehin schulfrei; es fehlt im Kalender also kein Schultag.
  *
  * Eine Klassenfahrt bleibt immer stehen und verdeckt nichts. Überschneiden
- * sich zwei Zeilen nur teilweise, bleiben beide: Sonst fehlten Tage im
- * Kalender.
+ * sich zwei Zeilen an Werktagen nur teilweise, bleiben beide: Sonst fehlten
+ * Tage im Kalender.
  */
 export function fuerKalender<
   T extends Pick<FreePeriod, "id" | "kind" | "startsOn" | "endsOn"> & { quelle?: string | null },
 >(periods: readonly T[]): T[] {
   const ferienArtig = (p: T) => p.kind === "ferien" || p.kind === "frei";
-  const deckt = (aussen: T, innen: T) =>
-    aussen.startsOn <= innen.startsOn && innen.endsOn <= aussen.endsOn;
+  const deckt = (aussen: T, innen: T) => {
+    const kern = ohneWochenendeAmRand(innen.startsOn, innen.endsOn);
+    return aussen.startsOn <= kern.startsOn && kern.endsOn <= aussen.endsOn;
+  };
 
   const iserv = periods.filter((p) => p.quelle === "iserv");
   const hand = periods.filter(
@@ -97,6 +105,18 @@ export function fuerKalender<
   const handBleibt = new Set(hand.map((h) => h.id));
 
   return periods.filter((p) => (p.quelle === "iserv" ? iservBleibt.has(p.id) : handBleibt.has(p.id)));
+}
+
+/**
+ * Der Zeitraum ohne Samstage und Sonntage am Anfang und am Ende. Liegt er
+ * ganz am Wochenende, bleibt er, wie er ist.
+ */
+function ohneWochenendeAmRand(startsOn: string, endsOn: string): { startsOn: string; endsOn: string } {
+  let von = startsOn;
+  let bis = endsOn;
+  while (von <= bis && weekdayIndex(von) >= 5) von = addDays(von, 1);
+  while (bis >= von && weekdayIndex(bis) >= 5) bis = addDays(bis, -1);
+  return von <= bis ? { startsOn: von, endsOn: bis } : { startsOn, endsOn };
 }
 
 /** Der Zeitraum, in den der Tag fällt — beide Enden zählen mit. */

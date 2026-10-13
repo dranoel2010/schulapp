@@ -2160,11 +2160,24 @@ sind.
 die Ferienseite; solche Zeilen (`quelle` leer) bleiben stehen, der Abgleich
 fasst sie nie an. In Google stehen dieselben Ferien trotzdem nur einmal
 (`fuerKalender()` in `src/lib/free-days.ts`): Eine Hand-Zeile für Ferien oder
-freie Tage, deren Tage eine IServ-Zeile ganz abdeckt, fällt dort weg (bei
+freie Tage, deren Tage eine IServ-Zeile abdeckt, fällt dort weg (bei
 gleichen Tagen gewinnt IServ), ebenso eine IServ-Zeile, die eine Hand-Zeile
-ganz abdeckt. Was sich nur teilweise überschneidet, bleibt doppelt — sonst
-fehlten Tage. Eine Klassenfahrt bleibt immer. Gezählt wird das mit den
-Zeilen im Kopf von `scripts/kombi-iserv-ferien.sql`.
+abdeckt. Samstag und Sonntag am Rand zählen dabei nicht mit: Von Hand Mo
+26.10.–So 8.11. und aus IServ Sa 24.10.–Sa 7.11. sind dieselben Ferien, in
+Google steht nur „Herbstferien“ aus IServ. Was sich an Werktagen nur
+teilweise überschneidet, bleibt doppelt — sonst fehlten Tage; weil es die
+Ferienseite nicht mehr gibt, nennt EINBAU Schritt 7 den Befehl, solche
+Hand-Zeilen zu löschen. Eine Klassenfahrt bleibt immer. Gezählt wird das mit
+den Zeilen im Kopf von `scripts/kombi-iserv-ferien.sql`.
+
+**Was aus dem öffentlichen Kalender freie Tage wird** (`freiZeitraumArt()` in
+`src/lib/iserv/klasse.ts`), streng, weil daraus ganz freie Tage entstehen:
+Ferien nur, wenn der Titel mit ihrem Namen beginnt („Herbstferien_…“), frei
+nur bei „unterrichtsfrei“, „schulfrei“, „kein Unterricht“, „Schule
+geschlossen“. Nie: „Letzter Schultag vor den Herbstferien“, „Erster Schultag
+nach den Ferien“, „Zeugnisausgabe …, danach Sommerferien“, ein
+Unterrichtsende, eine Stunde, eine „Ferien-AG“, ein Kurs, eine Betreuung.
+Solche Termine bleiben auch in Google stehen.
 
 ### Takt, Anmeldung, Sperre
 

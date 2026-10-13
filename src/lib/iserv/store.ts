@@ -110,7 +110,10 @@ export type RunErgebnis = {
  * Die freien Tage: Gelesen und geschrieben werden NUR Zeilen mit
  * `quelle = 'iserv'` — von Hand eingetragene fasst diese Funktion nie an.
  * Erst wird gelöscht, dann geändert, dann angelegt, damit kein Schlüssel kurz
- * zweimal dasteht (Index `free_periods_iserv_key_idx`).
+ * zweimal dasteht (Index `free_periods_iserv_key_idx`, geprüft bei jeder
+ * Anweisung). Die Änderungen kommen dafür schon in der richtigen
+ * Reihenfolge aus `ferienPlan()`: Eine Zeile, die ihren Schlüssel abgibt,
+ * wird umbenannt, bevor eine andere ihn übernimmt.
  */
 export async function saveRun(userId: string, input: RunInput): Promise<RunErgebnis> {
   return db.transaction(async (tx) => {

@@ -1,6 +1,6 @@
 import { addDays, daysBetween } from "@/lib/dates";
 import { MAX_FREE_DAYS, type FreeKind } from "@/lib/free-days";
-import { istFerienTitel, istFreiTitel, urteil, type FilterConfig } from "@/lib/iserv/klasse";
+import { freiZeitraumArt, urteil, type FilterConfig } from "@/lib/iserv/klasse";
 import { sprechName } from "@/lib/iserv/sprechtitel";
 import type { IservItem } from "@/lib/iserv/types";
 
@@ -28,8 +28,9 @@ import type { IservItem } from "@/lib/iserv/types";
  *   a) jeder ganztägige Eintrag des Plugins „holiday“ (Ferien und
  *      gesetzliche Feiertage);
  *   b) eine ganztägige Ferien- oder Frei-Meldung des öffentlichen Kalenders
- *      (`istFreiTitel()`: Ferien, unterrichtsfrei, schulfrei, „Schule
- *      geschlossen“), die der Klassenfilter (@/lib/iserv/klasse) für die
+ *      (`freiZeitraumArt()`: der Titel BEGINNT mit dem Namen der Ferien, oder
+ *      er sagt unterrichtsfrei, schulfrei, „Schule geschlossen“ — und nennt
+ *      keinen Schultag, kein Unterrichtsende, keine Zeugnisse, keine AG), die der Klassenfilter (@/lib/iserv/klasse) für die
  *      eigene Klasse gelten lässt — für alle (Regel c, „alle-unterricht“, auch
  *      „knapp“ trotz Hort-Erwähnung, wenn die SCHULE zu ist) oder ausdrücklich
  *      für sie („eigene-klasse“, „bereich“).
@@ -104,17 +105,21 @@ function kandidat(item: IservItem, filter: FilterConfig): Kandidat | null {
   if (item.fest || !item.ganztaegig) return null;
   if (daysBetween(item.ersterTag, item.letzterTag) >= MAX_FREE_DAYS) return null;
 
+  let art: FerienWunsch["kind"] | null = null;
   if (item.quelle === "oeffentlich") {
-    const eingabe = { titel: item.titel, ganztaegig: true };
-    if (!istFreiTitel(eingabe)) return null;
-    const u = urteil(eingabe, filter);
+    // Streng: „Letzter Schultag vor den Herbstferien“ oder eine „Ferien-AG“
+    // sind Schultage, keine freien (`freiZeitraumArt()` in @/lib/iserv/klasse).
+    art = freiZeitraumArt(item.titel);
+    if (!art) return null;
+    const u = urteil({ titel: item.titel, ganztaegig: true }, filter);
     if (!u.nehmen || !NIMMT.has(u.regel)) return null;
   } else if (item.quelle !== "ferien") {
     return null;
   }
 
   const name = sprechName(item, filter.klasse);
-  const kind = name.ferien || istFerienTitel(item.titel) ? "ferien" : "frei";
+  // Das Plugin meldet nur Ferien und Feiertage: Ferien, wenn der Name so beginnt.
+  const kind = art ?? (name.ferien || freiZeitraumArt(item.titel) === "ferien" ? "ferien" : "frei");
 
   return {
     schluessel: item.fremdId,
@@ -313,7 +318,8 @@ export function ferienPlan(
 
   // 3. Was IServ nicht mehr meldet. Eine Zeile, die ihren Schlüssel abgibt,
   //    bekommt einen eigenen (Schlüssel@Anfang) — der Index lässt jeden
-  //    Schlüssel nur einmal zu, und geändert wird vor dem Anlegen.
+  //    Schlüssel nur einmal zu. Die Reihenfolge, in der das geschrieben wird,
+  //    richtet `ohneDoppelteSchluessel()`: Die Abgabe kommt vor der Übernahme.
   const loeschen: string[] = [];
   for (const zeile of bestehend) {
     if (!frei.has(zeile.id)) continue;
@@ -327,7 +333,69 @@ export function ferienPlan(
     }
   }
 
-  return { neu, aendern, loeschen };
+  return { neu, aendern: ohneDoppelteSchluessel(bestehend, loeschen, aendern), loeschen };
+}
+
+/**
+ * Bringt die Änderungen in eine Reihenfolge, in der nach JEDER einzelnen
+ * kein Schlüssel zweimal dasteht — Postgres prüft den Index
+ * `free_periods_iserv_key_idx` bei jeder Anweisung, nicht erst am Ende der
+ * Transaktion (@/lib/iserv/store, `saveRun`: erst löschen, dann diese
+ * Änderungen der Reihe nach, dann anlegen).
+ *
+ * Der Fall dahinter: IServ vergibt den Schlüssel K ein Jahr später wieder.
+ * Die vergangene Zeile gibt K ab (`K@Anfang`), und die laufende Zeile der
+ * neuen Ferien, an der Überschneidung wiedergefunden, bekommt K. Stünde ihre
+ * Änderung vorn, trügen kurz zwei Zeilen K — und der ganze Lauf scheiterte,
+ * bei jedem Abruf wieder.
+ *
+ * Also kommt eine Änderung erst dran, wenn ihr neuer Schlüssel frei ist. Bei
+ * einem Kreis (zwei Zeilen tauschen ihre Schlüssel) geht eine von ihnen erst
+ * über einen Zwischenschlüssel.
+ */
+function ohneDoppelteSchluessel(
+  bestehend: readonly IservFreiZeile[],
+  loeschen: readonly string[],
+  aendern: readonly FerienAenderung[],
+): FerienAenderung[] {
+  const weg = new Set(loeschen);
+  /** Schlüssel → id der Zeile, die ihn gerade trägt */
+  const traeger = new Map<string, string>();
+  /** id → Schlüssel, den die Zeile gerade trägt */
+  const jetzt = new Map<string, string>();
+  for (const z of bestehend) {
+    if (weg.has(z.id)) continue;
+    traeger.set(z.iservKey, z.id);
+    jetzt.set(z.id, z.iservKey);
+  }
+
+  const schreibe = (a: FerienAenderung) => {
+    const alt = jetzt.get(a.id);
+    if (alt !== undefined && traeger.get(alt) === a.id) traeger.delete(alt);
+    traeger.set(a.iservKey, a.id);
+    jetzt.set(a.id, a.iservKey);
+    ergebnis.push(a);
+  };
+
+  const ergebnis: FerienAenderung[] = [];
+  const offen = [...aendern];
+  while (offen.length > 0) {
+    const i = offen.findIndex((a) => {
+      const t = traeger.get(a.iservKey);
+      return t === undefined || t === a.id;
+    });
+    if (i >= 0) {
+      schreibe(offen.splice(i, 1)[0]);
+      continue;
+    }
+    // Ein Kreis: Die erste wartende Änderung räumt ihren alten Schlüssel über
+    // einen Zwischenschlüssel, den sonst niemand trägt.
+    const a = offen[0];
+    let zwischen = `${jetzt.get(a.id) ?? a.iservKey}@tausch`;
+    while (traeger.has(zwischen)) zwischen += "~";
+    schreibe({ ...a, iservKey: zwischen });
+  }
+  return ergebnis;
 }
 
 /** Hat der Plan etwas zu tun? */

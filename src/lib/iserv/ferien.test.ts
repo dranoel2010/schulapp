@@ -102,6 +102,65 @@ describe("ferienAusIserv", () => {
     );
   });
 
+  it("macht aus Schultagen, Zeugnissen und AGs keine freien Tage, auch wenn „Ferien“ darin steht", () => {
+    const titel = [
+      "Letzter Schultag vor den Herbstferien – Unterrichtsende 11:30",
+      "Zeugnisausgabe, Unterrichtsende nach der 3. Stunde, danach Sommerferien",
+      "Erster Schultag nach den Ferien",
+      "Ferien-AG Schach",
+      "Letzter Schultag vor den Ferien",
+      "Ende der Herbstferien",
+      "unterrichtsfrei ab der 4. Stunde",
+    ];
+    const items = parseKalenderFeed(
+      titel.map((title, i) =>
+        iservTermin({
+          uid: `n-${i}`,
+          title,
+          start: `2026-10-${String(12 + i).padStart(2, "0")}T00:00:00+02:00`,
+          end: `2026-10-${String(13 + i).padStart(2, "0")}T00:00:00+02:00`,
+          allDay: true,
+        }),
+      ),
+      "oeffentlich",
+      "Ö",
+    ).items;
+    assert.equal(items.length, titel.length);
+
+    assert.deepEqual(ferienAusIserv({ items, filter: K10, heute: HEUTE }), []);
+
+    // … und weil sie keine freien Tage sind, bleiben sie auch in Google stehen,
+    // selbst wenn die App ihre Tage aus einem anderen Grund als frei kennt.
+    const iserv = iservAuswahl({
+      items,
+      filter: K10,
+      freieZeiten: [
+        { startsOn: "2026-10-12", endsOn: "2026-10-20" },
+      ],
+      iservOrigin: "https://iserv.example.test",
+      appOrigin: "https://app.example.test",
+    });
+    assert.deepEqual(iserv.ausgelassenFrei, []);
+  });
+
+  it("nimmt Ferien, wenn der Titel mit ihrem Namen beginnt", () => {
+    const items = parseKalenderFeed(
+      [
+        iservTermin({ uid: "p-1", title: "Herbstferien_Sa. 24. 10. – Sa. 7. 11. 2026", start: "2026-10-24T00:00:00+02:00", end: "2026-11-08T00:00:00+01:00", allDay: true }),
+        iservTermin({ uid: "p-2", title: "Beweglicher Ferientag", start: "2026-11-20T00:00:00+01:00", end: "2026-11-21T00:00:00+01:00", allDay: true }),
+      ],
+      "oeffentlich",
+      "Ö",
+    ).items;
+    assert.deepEqual(
+      ferienAusIserv({ items, filter: K10, heute: HEUTE }).map((w) => [w.kind, w.startsOn, w.endsOn]),
+      [
+        ["ferien", "2026-10-24", "2026-11-07"],
+        ["ferien", "2026-11-20", "2026-11-20"],
+      ],
+    );
+  });
+
   it("hält laufende Ferien, aber nicht die schon vorbei sind", () => {
     const mitten = ferienAusIserv({ items: alleItems(), filter: K10, heute: "2026-10-30" });
     assert.deepEqual(mitten[0].title, "Herbstferien");
@@ -122,6 +181,27 @@ const HERBST: FerienWunsch = {
 
 function zeile(teil: Partial<IservFreiZeile> & Pick<IservFreiZeile, "id" | "iservKey">): IservFreiZeile {
   return { kind: "ferien", title: "Herbstferien", startsOn: "2026-10-24", endsOn: "2026-11-07", ...teil };
+}
+
+/**
+ * Spielt den Plan so ab, wie @/lib/iserv/store ihn schreibt — erst löschen,
+ * dann jede Änderung einzeln, dann anlegen — und prüft nach JEDEM Schritt,
+ * dass kein Schlüssel zweimal dasteht (wie der Index in Postgres).
+ */
+function schluesselNachJedemSchritt(bestehend: readonly IservFreiZeile[], plan: ReturnType<typeof ferienPlan>) {
+  const zeilen = new Map(bestehend.map((z) => [z.id, z.iservKey]));
+  const pruefe = (schritt: string) => {
+    const schluessel = [...zeilen.values()];
+    assert.equal(new Set(schluessel).size, schluessel.length, `doppelter Schlüssel nach ${schritt}: ${schluessel.join(", ")}`);
+  };
+  for (const id of plan.loeschen) zeilen.delete(id);
+  pruefe("dem Löschen");
+  for (const a of plan.aendern) {
+    zeilen.set(a.id, a.iservKey);
+    pruefe(`${a.id} → ${a.iservKey}`);
+  }
+  plan.neu.forEach((w, i) => zeilen.set(`neu-${i}`, w.schluessel));
+  pruefe("dem Anlegen");
 }
 
 describe("ferienPlan", () => {
@@ -225,6 +305,41 @@ describe("ferienPlan", () => {
     const plan = ferienPlan([laufend], [spaeter], "2026-10-28");
     assert.deepEqual(plan.neu, [spaeter]);
     assert.deepEqual(plan.aendern, [{ ...laufend, iservKey: "ferien|h@2026-10-24", endsOn: "2026-10-27" }]);
+  });
+
+  it("Schlüssel wandert zu den neuen Ferien, deren Zeile einen anderen hatte: erst abgeben, dann übernehmen", () => {
+    const vorjahr = zeile({ id: "a", iservKey: "ferien|1", startsOn: "2025-10-25", endsOn: "2025-11-08" });
+    const laufend = zeile({ id: "b", iservKey: "oeff|alt" });
+    const wunsch: FerienWunsch = { ...HERBST, schluessel: "ferien|1", alleSchluessel: ["ferien|1", "oeff|neu"] };
+    const plan = ferienPlan([vorjahr, laufend], [wunsch], "2026-10-20");
+
+    assert.deepEqual(plan.neu, []);
+    assert.deepEqual(plan.loeschen, []);
+    assert.deepEqual(plan.aendern.map((a) => [a.id, a.iservKey]), [
+      ["a", "ferien|1@2025-10-25"],
+      ["b", "ferien|1"],
+    ]);
+    schluesselNachJedemSchritt([vorjahr, laufend], plan);
+  });
+
+  it("derselbe Schlüssel ein Jahr später, die laufende Zeile hat einen anderen: kein Schritt trägt K zweimal", () => {
+    const vorjahr = zeile({ id: "a", iservKey: "K", startsOn: "2025-10-20", endsOn: "2025-11-01" });
+    const laufend = zeile({ id: "b", iservKey: "P" });
+    const wunsch: FerienWunsch = { ...HERBST, schluessel: "K", alleSchluessel: ["K"] };
+    const plan = ferienPlan([vorjahr, laufend], [wunsch], HEUTE);
+
+    assert.deepEqual(plan.aendern.map((a) => [a.id, a.iservKey]), [
+      ["a", "K@2025-10-20"],
+      ["b", "K"],
+    ]);
+    schluesselNachJedemSchritt([vorjahr, laufend], plan);
+    // Beim nächsten Lauf ist Ruhe
+    const danach = ferienPlan(
+      [{ ...vorjahr, iservKey: "K@2025-10-20" }, { ...laufend, iservKey: "K" }],
+      [wunsch],
+      HEUTE,
+    );
+    assert.equal(planTutEtwas(danach), false);
   });
 
   it("legt nichts an, was MAX_FREE_DAYS lang oder länger wäre", () => {
