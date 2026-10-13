@@ -85,6 +85,25 @@ describe("Antworten beim Tippen (Wortlaut wie im Prototyp)", () => {
     assert.equal(a.l2, "Industrialisierung in England");
   });
 
+  it("»wiederholen ⟨Fach⟩«: alles Fällige im Fach, auch was „eins am Tag“ heute zurückhält", () => {
+    // Englisch und Französisch ohne Klausur sind fällig, die Grenze lässt nur Englisch zu
+    const en = { key: "en-v", fachId: "en", name: "Vocabulary Unit 2", umfang: "6 Fragen" };
+    const fr = { key: "fr-v", fachId: "fr", name: "Vocabulaire Unité 2", umfang: "5 Fragen" };
+    const vv = { ...v, themen: [en], themenAlle: [en, fr] };
+    const am = (s: string) => answerFor(p(s), { ...u, v: vv });
+    const franz = am("wiederholen französisch");
+    assert.equal(franz?.l1, "Wiederholen · nur Französisch · Vocabulaire Unité 2");
+    assert.equal(franz?.l2, "5 Fragen");
+    assert.ok(franz?.kind === "nav");
+    assert.deepEqual(franz.ziel, { typ: "tisch", mode: "wh", fach: "fr" });
+    assert.equal(am("wiederholen englisch")?.l1, "Wiederholen · nur Englisch · Vocabulary Unit 2");
+    // ohne Fach bleibt es bei der Auswahl des Tages
+    assert.equal(am("wiederholen")?.l1, "Wiederholen · 1 Thema, zuerst Englisch");
+    // ein Fach ohne Fälliges bleibt ohne Ziel
+    const ma = am("wiederholen mathe");
+    assert.equal(ma?.l1, "In Mathematik ist heute nichts fällig.");
+  });
+
   it("»epoche«: Hauptunterricht seit …", () => {
     const a = antwort("epoche");
     assert.equal(a.l1, "Epoche Geschichte");

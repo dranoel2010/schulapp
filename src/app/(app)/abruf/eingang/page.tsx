@@ -91,9 +91,8 @@ export default async function EingangPage({
               </p>
               {ergebnis.wenigsteAbrufe < 4 ? (
                 <p className="text-[15px] text-ink-2">
-                  Vier Begegnungen sind die Dosis, ab der Abrufen messbar mehr
-                  bringt als Wiederlesen. Dafür ist es diesmal zu spät — die
-                  Fragen bleiben trotzdem im Bestand und laufen weiter.
+                  Erst ab vier Abrufen bringt das mehr als Wiederlesen. Für diese
+                  Klausur ist es zu spät. Die Fragen bleiben und laufen weiter.
                 </p>
               ) : null}
             </CardContent>
@@ -115,9 +114,8 @@ export default async function EingangPage({
                 ))}
               </ul>
               <p className="text-[15px] text-ink-2">
-                Dieselbe Prüfung gilt für eine von Hand angelegte Frage — die KI
-                bekommt hier keinen kürzeren Weg. Das Zitat muss wörtlich in der
-                Abschrift stehen.
+                Für eine von Hand angelegte Frage gilt dieselbe Prüfung. Das
+                Zitat muss wörtlich in der Abschrift stehen.
               </p>
             </CardContent>
           </Card>
@@ -149,7 +147,7 @@ export default async function EingangPage({
       {vorschlaege.length === 0 ? (
         <EmptyState
           title="Kein Vorschlag im Eingang"
-          description="Hier liegen die Fragen, die ein Lauf über die Blätter einer Klausur gebaut hat — bis du sie durchgesehen hast. Solange keiner gelaufen ist, ist es hier leer."
+          description="Hier liegen neue Fragen, bis du sie durchgesehen hast."
           action={
             <ButtonLink href="/abruf/klausur" variant="secondary">
               Stoff einer Klausur ansehen

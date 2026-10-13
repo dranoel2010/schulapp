@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { appTag, berlinZeitpunkt } from "@/lib/tag";
 
-import { aufgabeImArchiv, klausurImArchiv, klausurListe, klausurPlanAnsicht, klausurVorbei } from "./archiv";
+import { planBrauchtDatum, aufgabeImArchiv, klausurImArchiv, klausurListe, klausurPlanAnsicht, klausurVorbei } from "./archiv";
 
 /**
  * Antwort 11: die Grenzen des Archivs. Klausuren zählen in App-Tagen
@@ -99,5 +99,18 @@ describe("Archiv: erledigte Hausaufgaben", () => {
 
   it("erledigt ohne Zeitpunkt (alte Daten) steht im Archiv statt nirgends", () => {
     assert.equal(aufgabeImArchiv({ done: true, doneAt: null }, jetzt), true);
+  });
+});
+
+describe("Lernplan: Datum in der Tagesspalte nur, wenn ein Kürzel doppelt vorkommt", () => {
+  it("eine Woche bis zur Klausur: nur Kürzel wie im Prototyp", () => {
+    // Mo 12.10. bis Do 15.10., Klausur Fr 16.10.
+    assert.equal(planBrauchtDatum(["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16"]), false);
+  });
+  it("ein Tag kommt mehrfach vor (Blöcke am selben Tag): kein Datum", () => {
+    assert.equal(planBrauchtDatum(["2026-10-14", "2026-10-14", "2026-10-16"]), false);
+  });
+  it("verpasster Freitag und Klausurfreitag: Datum in allen Zeilen", () => {
+    assert.equal(planBrauchtDatum(["2026-10-09", "2026-10-12", "2026-10-16"]), true);
   });
 });

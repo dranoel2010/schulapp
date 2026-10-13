@@ -133,6 +133,8 @@ export type ZeilenVorrat = {
   klausuren: VorratKlausur[];
   noten: Record<string, VorratNote[]>;
   themen: VorratThema[];
+  /** Alles Fällige, ungekürzt (ohne „eins am Tag“): für „wiederholen ⟨Fach⟩“ */
+  themenAlle: VorratThema[];
   wh: VorratWh;
   lernblock: VorratLernblock | null;
   epoche: { fachId: string; seit: string | null } | null;

@@ -1,4 +1,5 @@
 import { daysBetween } from "@/lib/dates";
+import { wd } from "@/lib/kombi/text";
 import { ERLEDIGT_LISTE_TAGE } from "@/lib/kombi/vorrat";
 
 /**
@@ -44,6 +45,23 @@ export function klausurPlanAnsicht(k: { datum: string; heute: string; themen: nu
 } {
   if (!klausurPlanVorbei(k.datum, k.heute)) return { lernplan: true, termineNeu: true };
   return { lernplan: k.themen > 0 && k.bloecke > 0, termineNeu: false };
+}
+
+/**
+ * Braucht die Tagesspalte des Lernplans das Datum? Nur wenn zwei verschiedene
+ * Tage des Plans (Klausurtag eingeschlossen) denselben Wochentag haben, etwa
+ * ein verpasster Freitag und der Klausurfreitag. Sonst steht dort wie im
+ * Prototyp (`planRows`) nur das Kürzel oder „Heute“.
+ */
+export function planBrauchtDatum(tage: readonly string[]): boolean {
+  const je = new Map<number, string>();
+  for (const t of tage) {
+    const w = wd(t);
+    const da = je.get(w);
+    if (da !== undefined && da !== t) return true;
+    je.set(w, t);
+  }
+  return false;
 }
 
 /** Gehört die Klausur ins Archiv? Ab Tag 15 nach dem Klausurtag. */

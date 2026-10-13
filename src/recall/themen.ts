@@ -392,14 +392,16 @@ export async function faelligeThemen(
 /**
  * Wie `faelligeThemen()`, dazu die Zahl der Themen, die heute fällig sind,
  * aber nur wegen der Grenze „eins am Tag“ fehlen. Sie kommen morgen (oder am
- * ersten Tag nach den Ferien); „Nächstes Thema …“ braucht das.
+ * ersten Tag nach den Ferien); „Nächstes Thema …“ braucht das. `alle` ist die
+ * ungekürzte Liste in derselben Folge: daraus liest, wer ein Fach selbst
+ * öffnet (die Zeile mit „wiederholen ⟨Fach⟩“), ohne je Fach neu zu fragen.
  */
 export async function themenAuswahl(
   userId: string,
   heute: string,
   optionen: { subjectId?: string } = {},
-): Promise<{ themen: FaelligesThema[]; zurueckgehalten: number }> {
-  const nichts = { themen: [], zurueckgehalten: 0 };
+): Promise<{ themen: FaelligesThema[]; zurueckgehalten: number; alle: FaelligesThema[] }> {
+  const nichts = { themen: [], zurueckgehalten: 0, alle: [] };
   if (await freePeriodToday(userId, heute)) return nichts;
 
   const { gruppen, blaetter, aufloesen } = await gruppiert(userId, heute, optionen.subjectId);
@@ -462,14 +464,14 @@ export async function themenAuswahl(
       `${a.fach} ${a.titel}`.localeCompare(`${b.fach} ${b.titel}`, "de"),
   );
   // Ein Fach ausdrücklich geöffnet: alles, was dort fällig ist
-  if (optionen.subjectId) return { themen: sortiert, zurueckgehalten: 0 };
+  if (optionen.subjectId) return { themen: sortiert, zurueckgehalten: 0, alle: sortiert };
   // Startseite, Tisch und Zeile: Maß halten bei Themen ohne Klausur (Antwort 6)
   const [ohneKlausurBeendet, lernblockOffen] = await Promise.all([
     beendetOhneKlausur(userId, heute, aufloesen, klausurJeFach, epoche),
     offenerLernblock(userId, heute),
   ]);
   const themenHeute = tagesauswahl(sortiert, { ferien: false, ohneKlausurBeendet, lernblockOffen });
-  return { themen: themenHeute, zurueckgehalten: sortiert.length - themenHeute.length };
+  return { themen: themenHeute, zurueckgehalten: sortiert.length - themenHeute.length, alle: sortiert };
 }
 
 /**

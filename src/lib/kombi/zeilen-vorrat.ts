@@ -31,7 +31,7 @@ import { blockRest, blockZustand } from "@/lib/lernblock";
 import { ablaufSchritt, ablaufStand, protokollVomTag } from "@/lib/protokoll";
 import { listSubjects } from "@/lib/subjects";
 import { DEFAULT_PERIODS, listLessons, listPeriods, periodTimes } from "@/lib/timetable";
-import { faelligeThemen, wiederholenStand } from "@/recall/themen";
+import { themenAuswahl, wiederholenStand, type FaelligesThema } from "@/recall/themen";
 
 /**
  * `zeilenVorrat(userId, now)` — der Vorrat der Zeile (Plan 3.2, D). Alles,
@@ -161,9 +161,13 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
   const inFerienHeute = frei.some((f) => heute >= f.von && heute <= f.bis);
   // Dieselbe Folge und Art wie Überblick und Tisch (Abschnitt E, src/recall/themen.ts):
   // ein Übungsthema heißt „Arbeitsblatt“, ein ausgewertetes fehlt bis zum nächsten Termin
-  const themen: VorratThema[] = inFerienHeute
-    ? []
-    : (await faelligeThemen(userId, heute)).map((t) => ({ key: t.key, fachId: t.subjectId, name: t.titel, umfang: t.umfang }));
+  // `themen` hält Maß (eins am Tag ohne Klausur); `themenAlle` ist ungekürzt für
+  // „wiederholen ⟨Fach⟩“: wer ein Fach selbst öffnet, sieht dort alles Fällige
+  // (wie GET /api/wiederholen?fach=…, Prototyp Z. 2405)
+  const auswahl = inFerienHeute ? { themen: [], alle: [] } : await themenAuswahl(userId, heute);
+  const alsVorrat = (t: FaelligesThema): VorratThema => ({ key: t.key, fachId: t.subjectId, name: t.titel, umfang: t.umfang });
+  const themen: VorratThema[] = auswahl.themen.map(alsVorrat);
+  const themenAlle: VorratThema[] = auswahl.alle.map(alsVorrat);
   const whE = await wiederholenStand(userId, heute);
   const wh: VorratWh = whE.kind === "text" ? { kind: "text", text: whE.text } : whE;
 
@@ -239,6 +243,7 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
     klausuren,
     noten,
     themen,
+    themenAlle,
     wh,
     lernblock,
     epoche,

@@ -8,7 +8,7 @@
  *    (mit der Marke für „Ohne Verbindung · Stand …“), sonst die Offline-Seite. Für „/“ und die Stapelseiten ohne Netz die Shell
  *    mit den Daten aus dem Daten-Cache, wenn die neuer sind (siehe networkFirst)
  *  - Daten der Shell (Modell 23, Plan 2.4 Punkt 8): /api/seite/*, /api/tag/daten,
- *    /api/tag/stand und /api/ablauf → network-first in den eigenen Cache
+ *    /api/tag/stand, /api/ablauf und /api/zeile/vorrat → network-first in den eigenen Cache
  *    `schulapp-v3-daten`
  *  - alles andere              → unangetastet ans Netz
  */
@@ -28,7 +28,10 @@ function istShellDaten(pathname) {
     pathname.startsWith("/api/seite/") ||
     pathname === "/api/tag/daten" ||
     pathname === "/api/tag/stand" ||
-    pathname === "/api/ablauf"
+    pathname === "/api/ablauf" ||
+    // der Vorrat der Zeile: ohne ihn sucht und trägt die Zeile nach einem
+    // Neuladen ohne Netz nichts (Abnahme 12)
+    pathname === "/api/zeile/vorrat"
   );
 }
 

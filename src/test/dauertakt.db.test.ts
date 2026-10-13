@@ -10,7 +10,7 @@ import { protokollieren } from "@/lib/protokoll";
 import { DAUERTAKT } from "@/recall/dauertakt";
 import { dauertaktNachlegen } from "@/recall/nachlegen";
 import { recallItems, recallSchedule } from "@/recall/schema";
-import { berlinStunde, faelligeThemen, naechsterTerminThema, naechsterTerminUeberhaupt, wiederholenStand } from "@/recall/themen";
+import { berlinStunde, faelligeThemen, naechsterTerminThema, themenAuswahl, naechsterTerminUeberhaupt, wiederholenStand } from "@/recall/themen";
 import { addDays } from "@/lib/dates";
 
 /**
@@ -196,6 +196,16 @@ describe("Themen ohne Klausur auf der Startseite", () => {
 
   it("ein Fach ausdrücklich geöffnet: alles, was dort fällig ist", async () => {
     assert.deepEqual((await faelligeThemen(n, MO, { subjectId: en })).map((x) => x.titel), ["Irregular verbs"]);
+  });
+
+  it("die ungekürzte Liste (für „wiederholen ⟨Fach⟩“ in der Zeile) hat das zurückgehaltene Thema", async () => {
+    const a = await themenAuswahl(n, MO);
+    assert.deepEqual(a.themen.map((x) => x.titel), ["Passé composé", "Brüche"]);
+    assert.deepEqual(a.alle.map((x) => x.titel), ["Passé composé", "Irregular verbs", "Brüche"]);
+    assert.deepEqual(
+      a.alle.filter((x) => x.subjectId === en).map((x) => x.key),
+      (await faelligeThemen(n, MO, { subjectId: en })).map((x) => x.key),
+    );
   });
 
   it("mit offenem Lernblock heute rutscht das Thema ohne Klausur hinter die Klausur", async () => {

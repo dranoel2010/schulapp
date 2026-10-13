@@ -132,6 +132,9 @@ function ueberlagerungNach(l: Ueberlagerung, start: number): Ueberlagerung {
   return { done, neu, weg };
 }
 
+/** Der Toast, wenn eine Aktion scheitert: ohne Netz „Keine Verbindung“ (UMSETZUNG 2.4, Punkt 7). */
+const nichtGespeichert = () => (typeof navigator !== "undefined" && navigator.onLine === false ? "Keine Verbindung" : "Nicht gespeichert");
+
 /** Gilt der Vorrat noch für den App-Tag von jetzt (Wechsel 04:00)? */
 function vorratVomTag(vv: { v: ZeilenVorrat; versatz: number }): boolean {
   return appTagVon(new Date(Date.now() + vv.versatz)) === vv.v.heute;
@@ -235,15 +238,24 @@ export function Zeile({
   // der Action geholt wurde.
   const vorratLaden = useCallback((): Promise<boolean> => {
     const start = messzeit();
+    let ausCache = false;
     const p: Promise<boolean> = fetch("/api/zeile/vorrat", { headers: { accept: "application/json" } })
-      .then((r) => (r.ok ? (r.json() as Promise<{ ok: boolean; vorrat?: ZeilenVorrat }>) : null))
+      .then((r) => {
+        // ohne Netz liefert der Service Worker den zuletzt geladenen Vorrat
+        ausCache = r.headers.get("x-schulapp-aus-cache") === "1";
+        return r.ok ? (r.json() as Promise<{ ok: boolean; vorrat?: ZeilenVorrat }>) : null;
+      })
       .then((j) => {
         if (!j?.ok || !j.vorrat) return false;
+        // Ein Vorrat aus dem Cache ist alt: dort rechnet die Uhr des Geräts
+        // (Versatz 0), sonst gälte sein App-Tag immer als heute. Eintragen holt
+        // dann erst einen frischen und sagt ohne Netz „Keine Verbindung“.
+        if (ausCache && vorratRef.current) return vorratVomTag(vorratRef.current);
         if (start < vorratStand.current) return true;
         vorratStand.current = start;
         // die erste Liste nach einem Menü ohne Daten darf Auswahl und Scroll setzen
         if (!vorratRef.current) Z.current.scrollNeu = true;
-        const neuV = { v: j.vorrat, versatz: j.vorrat.jetzt - Date.now() };
+        const neuV = { v: j.vorrat, versatz: ausCache ? 0 : j.vorrat.jetzt - Date.now() };
         vorratRef.current = neuV;
         setVorrat(neuV);
         setLokal((l) => ueberlagerungNach(l, start));
@@ -597,7 +609,7 @@ export function Zeile({
       },
     );
     protokoll.catch(() => {
-      kombi.fehlerToast("Nicht gespeichert", () => setDone({ ...a, done: vorher }), "Erneut");
+      kombi.fehlerToast(nichtGespeichert(), () => setDone({ ...a, done: vorher }), "Erneut");
       // auf dem Server hat sich nichts geändert: die Überlagerung fällt weg
       setTimeout(() => ueberEntfernen("done", a.id, tok), 320);
     });
@@ -700,9 +712,9 @@ export function Zeile({
       );
     // Rückgängig schreibt den alten Stand zurück; scheitert es, bietet der Toast „Erneut“
     const zuruecknehmen = (): void =>
-      void ausfuehren(alt, () => {}).catch(() => kombi.fehlerToast("Nicht gespeichert", zuruecknehmen, "Erneut"));
+      void ausfuehren(alt, () => {}).catch(() => kombi.fehlerToast(nichtGespeichert(), zuruecknehmen, "Erneut"));
     ausfuehren(neuWert, () => kombi.toast("Geändert", zuruecknehmen, p.taskText)).catch(() =>
-      kombi.fehlerToast("Nicht gespeichert", () => doAendern(p, editId), "Erneut"),
+      kombi.fehlerToast(nichtGespeichert(), () => doAendern(p, editId), "Erneut"),
     );
   };
 
@@ -775,7 +787,7 @@ export function Zeile({
         void vorratLaden();
       },
       () => {
-        kombi.fehlerToast("Nicht gespeichert", () => doEintragen(p), "Erneut");
+        kombi.fehlerToast(nichtGespeichert(), () => doEintragen(p), "Erneut");
         setTimeout(weg, 320);
       },
     );
@@ -1414,6 +1426,17 @@ export function Zeile({
           onSubmit={(e) => {
             e.preventDefault();
             const zz = Z.current;
+            // Ohne Vorrat (Neuladen ohne Netz, nichts im Cache) zerlegt die Zeile
+            // nichts: erst holen, sonst „Keine Verbindung“ statt still nichts
+            if (!vorratRef.current && feldRef.current?.value.trim()) {
+              const nochmal = () =>
+                void vorratLaden().then((ok) => {
+                  if (ok) neu();
+                  else kombi.fehlerToast("Keine Verbindung", nochmal, "Erneut");
+                });
+              nochmal();
+              return;
+            }
             if (p && p.held) {
               zz.settled = true;
               zz.sel = 0;

@@ -292,6 +292,7 @@ h1.q{font-family:var(--sans);font-size:32px;line-height:1.08;font-weight:650;let
 .prow.exday{border-top:1px solid var(--line);margin-top:4px;padding-top:14px}
 .pday{font-size:15px;line-height:1.35;font-weight:450;color:var(--ink-2);padding-top:1px}
 .prow.today .pday{color:var(--ink);font-weight:650}
+.pday .pdat{display:block;white-space:nowrap;font-weight:450;color:var(--ink-3)}
 .pbody b{display:block;font-size:17px;line-height:1.3;font-weight:560}
 .pbody > span{display:block;font-size:15px;line-height:1.35;color:var(--ink-2)}
 .prow .lbbtn{margin-top:-6px}

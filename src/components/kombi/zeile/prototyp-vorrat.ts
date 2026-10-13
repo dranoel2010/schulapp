@@ -71,6 +71,11 @@ export function prototypVorrat(jetzt = Date.UTC(2026, 9, 12, 14, 40)): ZeilenVor
       { key: "ma-qf", fachId: "ma", name: "Quadratische Funktionen", umfang: "12 Fragen" },
       { key: "fr-pc", fachId: "fr", name: "Passé composé mit être", umfang: "8 Fragen" },
     ],
+    themenAlle: [
+      { key: "ge-en", fachId: "ge", name: "Industrialisierung in England", umfang: "10 Fragen" },
+      { key: "ma-qf", fachId: "ma", name: "Quadratische Funktionen", umfang: "12 Fragen" },
+      { key: "fr-pc", fachId: "fr", name: "Passé composé mit être", umfang: "8 Fragen" },
+    ],
     wh: { kind: "knopf", n: 3, sub: "Zuerst Geschichte · Industrialisierung in England" },
     lernblock: { key: "b1", examId: "k1", label: "Scheitelpunktform", minuten: 25, zustand: "ruhe", restMs: 25 * 60000 },
     epoche: { fachId: "ge", seit: "2026-09-28" },

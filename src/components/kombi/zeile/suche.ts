@@ -209,7 +209,8 @@ export function lernblockOpt(v: ZeilenVorrat): { l1: string; l2: string; ziel: Z
 
 function whAnswer(v: ZeilenVorrat, fach: FachEintrag | null): Antwort {
   if (inFerien(v, v.heute)) return { kind: "nav", l1: "In den Ferien wird nicht wiederholt.", ziel: null };
-  const th = fach ? v.themen.filter((t) => t.fachId === fach.id) : v.themen;
+  // Mit Fach alles Fällige dort (ungekürzt), ohne Fach die Auswahl des Tages
+  const th = fach ? (v.themenAlle ?? v.themen).filter((t) => t.fachId === fach.id) : v.themen;
   if (fach) {
     if (!th.length) return { kind: "nav", l1: `In ${fach.name} ist heute nichts fällig.`, ziel: null };
     return { kind: "nav", l1: `Wiederholen · nur ${fach.name} · ${th[0].name}`, l2: th[0].umfang, ziel: { typ: "tisch", mode: "wh", fach: fach.id } };

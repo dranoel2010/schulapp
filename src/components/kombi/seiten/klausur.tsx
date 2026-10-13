@@ -16,7 +16,7 @@ import { useKombi } from "@/components/kombi/kontext";
 import { TextLine } from "@/components/kombi/seiten/zeilen";
 import { blockMerken, useBlock, zustand } from "@/components/kombi/lernblock/uhr";
 import { useOptimistischeAktion } from "@/lib/kombi/aktion";
-import { klausurPlanAnsicht } from "@/lib/kombi/archiv";
+import { klausurPlanAnsicht, planBrauchtDatum } from "@/lib/kombi/archiv";
 import type { BlockVorher } from "@/app/(app)/lernblock-actions";
 import type { BlockDaten } from "@/lib/kombi/lernblock-daten";
 import { E, moveTo, reduce, rubber } from "@/lib/kombi/motion";
@@ -58,14 +58,18 @@ export const klausurUntertitel = (_p: Record<string, string>, d: unknown): strin
 };
 
 /**
- * Der Tag links in der Planzeile (Prototyp `planRows`: „Mo“, „Heute“). In der
- * laufenden Woche das Kürzel wie im Prototyp; vergangene Tage und Tage ab
- * einer Woche Abstand tragen das Datum dazu („Fr 9.10.“), sonst stünden ein
- * verpasster Freitag und der Klausurfreitag beide als „Fr“ da.
+ * Der Tag links in der Planzeile, wie im Prototyp (`planRows`): nur das
+ * Kürzel oder „Heute“; die Blässe sagt, dass ein Tag vorbei ist. Hat der Plan
+ * zwei Tage mit demselben Kürzel (`planBrauchtDatum`), steht in allen Zeilen
+ * darunter das Datum, auf einer festen zweiten Zeile.
  */
-function planTag(tag: string, heute: string): string {
-  const n = diffDays(heute, tag);
-  return n < 0 || n > 6 ? `${TK[wd(tag)]} ${dm(tag)}` : TK[wd(tag)];
+function PlanTag({ tag, heute, mitDatum }: { tag: string; heute: string; mitDatum: boolean }) {
+  return (
+    <>
+      {tag === heute ? "Heute" : TK[wd(tag)]}
+      {mitDatum ? <span className="pdat">{dm(tag)}</span> : null}
+    </>
+  );
 }
 
 /** Unterzeile einer Planzeile (Prototyp `planRows`). */
@@ -162,6 +166,7 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
       ersteJeTag.add(b.id);
     }
   }
+  const mitDatum = planBrauchtDatum([...tageGesehen, daten.datum]);
 
   return (
     <>
@@ -241,6 +246,7 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
                 geschaltet={b.status !== bloecke.find((x) => x.id === b.id)?.status}
                 heute={heute}
                 zeigeTag={ersteJeTag.has(b.id)}
+                mitDatum={mitDatum}
                 fach={daten.fach}
                 klausurDatum={daten.datum}
                 onSchalten={() => schalten(b)}
@@ -248,7 +254,7 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
             ))}
             <div className="prow exday">
               <span className="pday" aria-label={TAG[wd(daten.datum)]}>
-                {daten.datum === heute ? "Heute" : planTag(daten.datum, heute)}
+                <PlanTag tag={daten.datum} heute={heute} mitDatum={mitDatum} />
               </span>
               <div className="pbody">
                 <b>{daten.art}</b>
@@ -370,6 +376,7 @@ function PlanZeile({
   geschaltet,
   heute,
   zeigeTag,
+  mitDatum,
   fach,
   klausurDatum,
   onSchalten,
@@ -379,6 +386,8 @@ function PlanZeile({
   geschaltet: boolean;
   heute: string;
   zeigeTag: boolean;
+  /** Alle Zeilen tragen das Datum unter dem Kürzel (`planBrauchtDatum`) */
+  mitDatum: boolean;
   fach: string;
   klausurDatum: string;
   onSchalten: () => void;
@@ -467,7 +476,7 @@ function PlanZeile({
       onPointerCancel={los}
     >
       <span className="pday" aria-label={TAG[wd(b.tag)]}>
-        {zeigeTag ? (istHeute ? "Heute" : planTag(b.tag, heute)) : ""}
+        {zeigeTag ? <PlanTag tag={b.tag} heute={heute} mitDatum={mitDatum} /> : ""}
       </span>
       <div className="pbody">
         <b>{b.titel}</b>
