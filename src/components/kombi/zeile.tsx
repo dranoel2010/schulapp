@@ -1346,7 +1346,8 @@ export function Zeile({
           />
           <div className="m-scroll" id="mScroll" ref={scrollRef}>
             <div className={`m-layer${showLeer ? "" : " off"}`} id="mLeer" role="listbox" aria-label="Wohin?" ref={leerRef}>
-              {leerGruppen
+              {/* mit Kontext bleibt die leere Ebene leer wie im Prototyp (dort nie befüllt), sonst vergrößert sie die Scrollhöhe */}
+              {(z.ctx && !showLeer ? [] : leerGruppen)
                     .filter((g) => g.items.length)
                     .map((g) => (
                       <div key={g.label} className="m-group" role="group" aria-label={g.label} data-k={"lg:" + g.label}>

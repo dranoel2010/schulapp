@@ -23,8 +23,11 @@ import { Bestaetigung, BlattRow, PLab, RowBtn, TextLine } from "./zeilen";
  * in den Eingangskorb, Vorschlag anlegen, Blatt löschen (Plan 2.2).
  */
 
+/** Solange das Blatt nicht eingeordnet ist, steht statt des Fachs sein Stand (Plan 3.8). */
+const WARTE = { einordnen: "Wird eingeordnet …", im_korb: "Liegt im Eingangskorb" } as const;
+
 export const blattSub = (d: BlattDaten) =>
-  `${d.fach}, ${dm(d.datum)}, ${d.seiten.length} ${d.seiten.length === 1 ? "Seite" : "Seiten"}`;
+  `${d.warte ? WARTE[d.warte] : d.fach}, ${dm(d.datum)}, ${d.seiten.length} ${d.seiten.length === 1 ? "Seite" : "Seiten"}`;
 
 /**
  * Eine Abschrift als Absätze (Prototyp `abschriftEl`): Leerzeilen trennen;
@@ -59,13 +62,14 @@ function Abschrift({ text }: { text: string }) {
 export function BlattInhalt({ daten }: { daten: BlattDaten }) {
   const kombi = useKombi();
   const [original, setOriginal] = useState(false);
-  const [fach, setFach] = useState(daten.fachId);
+  // Nicht eingeordnet: das vorläufige Fach ist keins, keine Pille ist gedrückt (Plan 3.8)
+  const [fach, setFach] = useState<string | null>(daten.warte ? null : daten.fachId);
   const [vorher, setVorher] = useState(daten);
   const [loeschen, setLoeschen] = useState(false);
   const [laeuft, setLaeuft] = useState(false);
   if (vorher !== daten) {
     setVorher(daten);
-    setFach(daten.fachId);
+    setFach(daten.warte ? null : daten.fachId);
     setLaeuft(false);
   }
 
@@ -99,7 +103,8 @@ export function BlattInhalt({ daten }: { daten: BlattDaten }) {
   };
 
   // Solange Claude liest, fragt die Seite nach, bis die Abschrift da ist.
-  const liest = laeuft || daten.liestGerade || (daten.eingeplant && daten.fuerClaude > 0);
+  // Ebenso, solange Jev einordnet: danach steht das Fach da.
+  const liest = laeuft || daten.liestGerade || (daten.eingeplant && daten.fuerClaude > 0) || daten.warte === "einordnen";
   useEffect(() => {
     if (!liest) return;
     const t = setInterval(() => void kombi.neuLaden(), 4000);

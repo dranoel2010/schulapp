@@ -602,7 +602,12 @@ export function AblaufEbene() {
         }
         const scroll = blScrollRef.current;
         z.current.animNext = true;
-        if (scroll) flip(scroll, () => flushSync(zeigen));
+        // die neuen Zeilen stehen sofort da, nur die Miniatur fliegt ein (Prototyp Z. 3721 `_noFade`)
+        const neuKeys = new Set(l.neu.map(({ key }) => key));
+        if (scroll)
+          flip(scroll, () => flushSync(zeigen), {
+            ohneEinblenden: (x) => x.classList.contains("sheet-item") && neuKeys.has(x.dataset.k ?? ""),
+          });
         else flushSync(zeigen);
         const els = l.neu.map(({ key }) => listRef.current?.querySelector<HTMLElement>(`.sheet-item[data-k="${key}"]`) ?? null);
         if (!reduce()) {
@@ -928,7 +933,12 @@ export function AblaufEbene() {
               const sc = haScrollRef.current;
               const aufHA = z.current.sichtbar && z.current.schritt === "ha" && !document.querySelector("#pages > .page");
               // die Zeilen darunter rücken per FLIP (13.3 Nr. 24); die neue steht unsichtbar, bis der Satz landet
-              if (sc && aufHA && !reduce()) flip(sc, () => flushSync(() => uebernehmen(d)), { duration: 280, easing: E.out });
+              if (sc && aufHA && !reduce()) flip(sc, () => flushSync(() => uebernehmen(d)), {
+                  duration: 280,
+                  easing: E.out,
+                  // Ziel des Geistflugs: steht verborgen, bis der Satz landet (Prototyp Z. 2951 `_noFade`)
+                  ohneEinblenden: (x) => x.classList.contains("task") && x.dataset.id === neu,
+                });
               else flushSync(() => uebernehmen(d));
               void geistflug(neu, e.text, aufHA ? e.from : null);
             }

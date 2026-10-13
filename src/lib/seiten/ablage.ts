@@ -1,6 +1,7 @@
 import { claudeConfigured } from "@/lib/claude/client";
 import { berlinDay } from "@/lib/dates";
 import { countInbox } from "@/lib/inbox";
+import { blattStatusVon } from "@/lib/kombi/blaetter";
 import { kostenSatz, laufAnzeige } from "@/lib/leser/claude-ablauf";
 import { claudeEingeplant, claudeLiestGerade } from "@/lib/leser/claude-zustand";
 import { blattKosten, letzterLauf, vorschlagStand } from "@/lib/leser/laeufe";
@@ -122,6 +123,12 @@ export type BlattDaten = {
   letzterLaufId: string | null;
   /** Durchgesehen am (Berliner Tag) oder null: liegt im Eingangskorb */
   durchgesehen: string | null;
+  /**
+   * Solange `filed_at` leer ist, steht hier, was die Oberfläche statt des
+   * Fachs zeigt (Plan 3.8): Jev ordnet gerade ein, oder das Blatt liegt im
+   * Eingangskorb. Null, sobald es eingeordnet ist.
+   */
+  warte: "einordnen" | "im_korb" | null;
 };
 
 export async function blattSeite(
@@ -131,12 +138,13 @@ export async function blattSeite(
   const item = await getMaterial(userId, params.id ?? "");
   if (!item) return null;
 
-  const [wortlaut, faecher, letzter, vorschlaege, kosten] = await Promise.all([
+  const [wortlaut, faecher, letzter, vorschlaege, kosten, status] = await Promise.all([
     listMaterialTranscripts(userId, item.id),
     listSubjects(userId),
     letzterLauf(userId, item.id),
     vorschlagStand(userId, item.id),
     blattKosten(userId, item.id),
+    item.filedAt ? null : blattStatusVon(userId, [item.id]),
   ]);
   const text = new Map(wortlaut.map((w) => [w.pageId, w] as const));
 
@@ -180,5 +188,6 @@ export async function blattSeite(
     konfiguriert,
     letzterLaufId: letzter?.id ?? null,
     durchgesehen: item.filedAt ? berlinDay(item.filedAt) : null,
+    warte: item.filedAt ? null : status?.get(item.id) === "einordnen" ? "einordnen" : "im_korb",
   };
 }

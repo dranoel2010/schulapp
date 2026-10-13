@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { lang } from "@/lib/kombi/text";
 import type { EinstellungenDaten } from "@/lib/seiten/einstellungen";
 
 import { PLab, RowBtn } from "./zeilen";
@@ -30,7 +31,7 @@ export function EinstellungenInhalt({ daten }: { daten: EinstellungenDaten }) {
         ziel={{ seite: "woche" }}
       />
       {daten.epoche ? (
-        <RowBtn titel="Epoche" sub={`${daten.epoche.name} im Hauptunterricht`} ziel={{ seite: "fach", params: { id: daten.epoche.id } }} />
+        <RowBtn titel="Epoche" sub={daten.epoche.seit ? `${daten.epoche.name} im Hauptunterricht seit ${lang(daten.epoche.seit)}` : `${daten.epoche.name} im Hauptunterricht`} ziel={{ seite: "fach", params: { id: daten.epoche.id } }} />
       ) : (
         <RowBtn titel="Epoche" sub="Den Hauptunterricht auf ein anderes Fach umtragen" ziel={{ href: "/stundenplan/epoche" }} />
       )}

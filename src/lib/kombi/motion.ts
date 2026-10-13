@@ -118,11 +118,19 @@ type FlipKnoten = HTMLElement & { _noFade?: boolean };
  * FLIP: was sich verschoben hat, gleitet aus der alten Lage an die neue.
  * Verschachtelte Teile rechnen relativ zum Elternteil. `mutate` ändert den
  * DOM synchron (in React: `flushSync`).
+ *
+ * `ohneEinblenden` ersetzt das `_noFade` des Prototyps (Z. 2951, 3721) für
+ * Knoten, die React erst in `mutate` anlegt: neue Knoten, für die es `true`
+ * sagt, stehen sofort da, weil ihr Inhalt einfliegt.
  */
 export function flip(
   scope: HTMLElement,
   mutate: () => void,
-  { duration = 280, easing = E.out }: { duration?: number; easing?: string } = {},
+  {
+    duration = 280,
+    easing = E.out,
+    ohneEinblenden,
+  }: { duration?: number; easing?: string; ohneEinblenden?: (el: HTMLElement) => boolean } = {},
 ): void {
   const pick = () =>
     [...scope.querySelectorAll<FlipKnoten>(FLIPSEL)].filter((x) => x.offsetParent);
@@ -137,7 +145,7 @@ export function flip(
   after.forEach((x) => {
     if (!before.has(x)) {
       const pa = x.parentElement?.closest(FLIPSEL) as FlipKnoten | null | undefined;
-      if (!x._noFade && !(pa && scope.contains(pa) && !before.has(pa))) {
+      if (!x._noFade && !ohneEinblenden?.(x) && !(pa && scope.contains(pa) && !before.has(pa))) {
         x.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "ease" });
       }
       return;

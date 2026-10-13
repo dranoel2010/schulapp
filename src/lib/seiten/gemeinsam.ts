@@ -1,4 +1,4 @@
-import { addDays } from "@/lib/dates";
+import { addDays, berlinDay } from "@/lib/dates";
 import { freePeriodOn, listFreePeriods } from "@/lib/free-days";
 import type { HomeworkItem } from "@/lib/homework";
 import { appTagVon } from "@/lib/kombi/tag-daten";
@@ -100,6 +100,9 @@ export function epocheAusWoche(week: WeekPlan): string | null {
 export type SchulKalender = {
   week: WeekPlan;
   epoche: string | null;
+  /** Seit wann die Epoche läuft: der Tag, an dem ihre erste Stunde eingetragen
+   *  wurde (wie `epoche.seit` im Zeilenvorrat). Null ohne Epoche. */
+  epocheSeit: string | null;
   frei: (tag: string) => string | null;
   stundenAm: (tag: string) => StundeDaten[];
   schultag: (tag: string) => boolean;
@@ -116,6 +119,14 @@ export async function schulKalender(userId: string, heute: string): Promise<Schu
   ]);
   const zeiten = periodTimes(week.periods);
   const epoche = epocheAusWoche(week);
+  const seitMs = epoche
+    ? week.days
+        .flatMap((d) => d.lessons)
+        .filter((l) => l.period === 1 && l.subjectId === epoche)
+        .map((l) => l.createdAt.getTime())
+        .sort((a, b) => a - b)[0]
+    : undefined;
+  const epocheSeit = seitMs ? berlinDay(new Date(seitMs)) : null;
 
   const frei = (tag: string) => {
     const p = freePeriodOn(freie, tag);
@@ -162,5 +173,5 @@ export async function schulKalender(userId: string, heute: string): Promise<Schu
     return null;
   };
 
-  return { week, epoche, frei, stundenAm, schultag, naechsterSchultag, naechsteStunde };
+  return { week, epoche, epocheSeit, frei, stundenAm, schultag, naechsterSchultag, naechsteStunde };
 }

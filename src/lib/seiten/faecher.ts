@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { arbeitsblaetter } from "@/db/schema";
 import { listExams, examTopicTitles } from "@/lib/exams";
 import { listHomework } from "@/lib/homework";
-import { weekdayOrDate, lang } from "@/lib/kombi/text";
+import { dm, weekdayOrDate, lang } from "@/lib/kombi/text";
 import { listMaterials } from "@/lib/materials";
 import { listTopics } from "@/lib/subject-topics";
 import { getSubject, listSubjects } from "@/lib/subjects";
@@ -28,7 +28,10 @@ export type FachZeile = { id: string; name: string; sub: string };
 export type FaecherDaten = { faecher: FachZeile[]; archiviert: FachZeile[] };
 
 function fachSub(kal: SchulKalender, heute: string, id: string, voll: boolean): string {
-  if (id === kal.epoche) return "Hauptunterricht";
+  if (id === kal.epoche) {
+    if (!kal.epocheSeit) return "Hauptunterricht";
+    return voll ? `Hauptunterricht · Epoche seit ${lang(kal.epocheSeit)}` : `Hauptunterricht, Epoche seit ${dm(kal.epocheSeit)}`;
+  }
   const nl = kal.naechsteStunde(id, heute);
   if (!nl) return "Gerade nicht im Stundenplan";
   return `Nächste Stunde ${voll ? lang(nl) : weekdayOrDate(nl, heute)}`;

@@ -20,7 +20,7 @@ import { heuteApp, schulKalender } from "./gemeinsam";
  */
 export type EinstellungenDaten = {
   stunden: number;
-  epoche: { id: string; name: string } | null;
+  epoche: { id: string; name: string; seit: string | null } | null;
   erinnerung: string;
   abschrift: string;
   kalender: string;
@@ -50,7 +50,7 @@ export async function einstellungenSeite(userId: string): Promise<EinstellungenD
 
   return {
     stunden: kal.week.days.reduce((s, d) => s + d.lessons.length, 0),
-    epoche: epochenFach ? { id: epochenFach.id, name: epochenFach.name } : null,
+    epoche: epochenFach ? { id: epochenFach.id, name: epochenFach.name, seit: kal.epocheSeit } : null,
     erinnerung: `Lernerinnerung um ${nutzer[0]?.reminderHour ?? 17} Uhr`,
     abschrift: claudeConfigured() ? "Claude ist eingerichtet" : "Claude ist nicht eingerichtet",
     kalender: KALENDER[kalender.state.kind] ?? "",
