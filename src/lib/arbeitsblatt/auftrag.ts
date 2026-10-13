@@ -66,7 +66,8 @@ export type BlattVorab = {
    */
   sprache?: BlattSprache | null;
   /**
-   * Ein Grammatikthema (Stichwort im Titel, @/lib/themen-art `grammatikBlatt`):
+   * Ein Grammatikthema (Stichwort im Titel und geltende Art „üben“,
+   * @/lib/themen-art `istGrammatikThema`, dieselbe Regel wie in der Zeile):
    * nur dann heißt das Blatt im Sprach-Absatz „Grammatikblatt“. Bei einer
    * Probeklausur gilt es nie, dort legt der Absatz nur die Sprache fest.
    */

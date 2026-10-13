@@ -67,8 +67,9 @@ export function TischEbene() {
           if (ab) return;
           if (!r.ok) throw new Error(r.fehler);
           if (!r.daten) {
-            // Kein Blatt (ohne Schlüssel und ohne fertiges Blatt): für heute Karten
-            steuerung.current?.lieberAbfragen();
+            // Kein Blatt (ohne Schlüssel und ohne fertiges Blatt): über Wiederholen für heute
+            // Karten, einzeln geöffnet zu und ein Toast (./steuerung ohneBlatt)
+            steuerung.current?.ohneBlatt();
             return;
           }
           zaehler.current += 1;

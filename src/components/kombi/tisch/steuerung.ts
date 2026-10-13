@@ -8,7 +8,7 @@ import { whSetzen, whZuruecksetzen } from "@/components/kombi/tisch/wh-stand";
 import { E, buzz, moveTo, reduce, rubber, springOpts, swapText, vvStable } from "@/lib/kombi/motion";
 import { TAG, dm, fxTeile, tn, wd } from "@/lib/kombi/text";
 import { themeColor } from "@/lib/kombi/theme-color";
-import { endeHinweis, knopfNachSchliessen } from "@/lib/kombi/tisch-ende";
+import { endeHinweis, kartenEnde, knopfNachSchliessen, ohneBlatt } from "@/lib/kombi/tisch-ende";
 import {
   fragenText,
   whLeerText,
@@ -1097,9 +1097,12 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     const ok = Object.values(T.first).filter(Boolean).length;
     const end = $("tEnd");
     T.fertig.add(t.key);
-    beenden(t.key, T.kind === "blatt" && blattErgebnis ? blattErgebnis.n : n);
-    const rest = T.themen.slice(T.ti + 1).filter((x) => !T.fertig.has(x.key));
     const be = T.kind === "blatt" ? blattErgebnis : null;
+    const karten = be ? null : kartenEnde(t.titel, n, ok);
+    /* ohne eine einzige Frage sitzt nichts: kein „sitzt“, kein thema_beendet */
+    if (be) beenden(t.key, be.n);
+    else if (karten?.beenden) beenden(t.key, n);
+    const rest = T.themen.slice(T.ti + 1).filter((x) => !T.fertig.has(x.key));
     const und = (l: number[]) => (l.length < 2 ? l.join("") : `${l.slice(0, -1).join(", ")} und ${l[l.length - 1]}`);
     /* beim Blatt zählt die eigene Wertung je Aufgabe; falsche Aufgaben kommen aufs nächste Blatt */
     const kids: HTMLElement[] = be
@@ -1116,11 +1119,8 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
               ]
             : []),
         ]
-      : [
-          h("h2", null, `${t.titel} sitzt.`),
-          h("p", null, `${fragenText(n)}, ${ok === n ? "alle" : ok} beim ersten Mal.`),
-        ];
-    const nt = be ? be.wiederDran : T.wiederDran;
+      : [h("h2", null, karten?.kopf ?? ""), h("p", null, karten?.zeile ?? "")];
+    const nt = be ? be.wiederDran : karten?.beenden ? T.wiederDran : null;
     if (nt) kids.push(h("p", null, `Wieder dran: ${TAG[wd(nt)]}, ${dm(nt)}`));
     const rows: HTMLElement[] = [];
     if (rest.length) {
@@ -1238,6 +1238,23 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
       end.getAnimations().forEach((a) => a.cancel());
       end.classList.remove("on");
     }, 130);
+  }
+
+  /**
+   * Kein Blatt für das Thema (ohne Schlüssel, oder das von heute ist schon
+   * ausgewertet). Über „Wiederholen“: für heute Karten. Einzeln geöffnet
+   * („Blatt Grammatik …“): der Tisch schließt, ein Toast sagt es.
+   */
+  function ohneBlattWeiter() {
+    const t = thema();
+    if (!t || T.kind !== "blatt" || !T.offen) return;
+    const weg = ohneBlatt(T.einzeln, t.titel);
+    if (weg.art === "karten") {
+      void lieberAbfragen();
+      return;
+    }
+    closeTisch();
+    deps.toast(weg.toast);
   }
 
   /** Für heute auf Karten umschalten, ohne `art` zu speichern (Plan H). */
@@ -1573,6 +1590,8 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     istOffen: () => T.offen,
     /** „Dieses Thema lieber abfragen“ aus dem Blatt: für heute Karten */
     lieberAbfragen: () => void lieberAbfragen(),
+    /** Kein Blatt für das Thema: über Wiederholen Karten, einzeln geöffnet zu und ein Toast */
+    ohneBlatt: () => ohneBlattWeiter(),
     /** Das Zählwort unter dem Kopf, sobald der Stand des Blatts da ist („Arbeitsblatt · 6 Aufgaben, etwa 25 Minuten“) */
     blattZaehler(text: string) {
       if (!T.offen || T.kind !== "blatt" || T.ended) return;

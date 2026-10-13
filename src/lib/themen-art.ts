@@ -83,12 +83,34 @@ export function hatGrammatikStichwort(titel: string): boolean {
 }
 
 /**
- * Ein Arbeitsblatt übt Grammatik, wenn sein Thema ein Grammatik-Stichwort
- * trägt und es keine Probeklausur ist (die prüft den ganzen Stoff der Klausur).
- * Ein von Hand auf „üben“ gestelltes Thema ohne Stichwort ist kein Grammatikblatt.
+ * Ist dieses Thema ein Grammatikthema? Die eine Regel für die Zeile
+ * („Blatt Grammatik …“, @/lib/kombi/grammatik-themen) und den Auftrag an Opus
+ * (`grammatikBlatt`): ein Thema in Deutsch, Englisch oder Französisch mit
+ * Grammatik-Stichwort im Titel, dessen geltende Art `ueben` ist.
+ *
+ * Von Hand umstellbar heißt: ein Stichwort-Thema, das auf „abfragen“ gestellt
+ * wurde, ist keins mehr. Ein Thema ohne Stichwort, das auf „üben“ gestellt
+ * wurde (etwa Wortschatz), bekommt ein Blatt in der Sprache des Fachs, ist
+ * aber kein Grammatikthema.
  */
-export function grammatikBlatt(thema: string, probe: boolean | undefined): boolean {
-  return !probe && hatGrammatikStichwort(thema);
+export function istGrammatikThema(
+  thema: { title: string; art: ThemaArt | null },
+  fach: { name: string },
+): boolean {
+  return (
+    fachArt(fach.name) === "sprache" &&
+    hatGrammatikStichwort(thema.title) &&
+    themaArt(thema, fach) === "ueben"
+  );
+}
+
+/**
+ * Ein Arbeitsblatt übt Grammatik, wenn sein Thema ein Grammatikthema ist
+ * (`istGrammatikThema`, in der Quelle schon entschieden) und es keine
+ * Probeklausur ist (die prüft den ganzen Stoff der Klausur).
+ */
+export function grammatikBlatt(quelle: { grammatik?: boolean }, probe: boolean | undefined): boolean {
+  return !probe && quelle.grammatik === true;
 }
 
 type FachArt = "rechnen" | "sprache" | "wissen";

@@ -11,7 +11,7 @@ import {
   subjectTopics,
   subjects,
 } from "@/db/schema";
-import { themaArt } from "@/lib/themen-art";
+import { istGrammatikThema, themaArt } from "@/lib/themen-art";
 
 /**
  * Woraus ein Arbeitsblatt gebaut wird (Modell 23, Plan 3.6 und H): die
@@ -41,6 +41,12 @@ export type Quelle = {
   /** Titel des Themas; beim Block ohne Fach-Thema „Gesamtwiederholung“ */
   thema: string;
   blaetter: QuellBlatt[];
+  /**
+   * Ein Grammatikthema (@/lib/themen-art `istGrammatikThema`): dieselbe Regel
+   * wie „Blatt Grammatik …“ in der Zeile. Ohne eigenes Fach-Thema nie;
+   * fehlt es, ist es keins.
+   */
+  grammatik?: boolean;
 };
 
 /** Die Themen-ids, deren Blätter zu `topicId` gehören: das Thema und seine Aliase. */
@@ -104,13 +110,18 @@ async function blaetterZu(userId: string, topicIds: string[]): Promise<QuellBlat
 /** Die Quelle eines Themas — oder null, wenn es das Thema nicht gibt. */
 export async function quelleFuerThema(userId: string, topicId: string): Promise<Quelle | null> {
   const [thema] = await db
-    .select({ title: subjectTopics.title, fach: subjects.name })
+    .select({ title: subjectTopics.title, art: subjectTopics.art, fach: subjects.name })
     .from(subjectTopics)
     .innerJoin(subjects, eq(subjects.id, subjectTopics.subjectId))
     .where(and(eq(subjectTopics.userId, userId), eq(subjectTopics.id, topicId)));
   if (!thema) return null;
   const ids = await themenMitAliasen(userId, topicId);
-  return { fach: thema.fach, thema: thema.title, blaetter: await blaetterZu(userId, ids) };
+  return {
+    fach: thema.fach,
+    thema: thema.title,
+    blaetter: await blaetterZu(userId, ids),
+    grammatik: istGrammatikThema(thema, { name: thema.fach }),
+  };
 }
 
 export type BlockZiel = {
@@ -230,6 +241,7 @@ export async function quelleFuerBlock(userId: string, ziel: BlockZiel): Promise<
     fach: ziel.fach,
     thema: blattThema(ziel),
     blaetter: await blaetterZu(userId, [...ids]),
+    grammatik: false,
   };
 }
 

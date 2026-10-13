@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { blattAuftrag, type BlattVorab } from "@/lib/arbeitsblatt/auftrag";
 import { fachSprache, spracheAbsatz, spracheAusWort } from "@/lib/arbeitsblatt/sprache";
-import { artAbgeleitet, grammatikBlatt } from "@/lib/themen-art";
+import { artAbgeleitet, grammatikBlatt, istGrammatikThema } from "@/lib/themen-art";
 
 /** Antwort 5 vom 13.10.2026: das Grammatikblatt richtet sich nach der Sprache des Fachs. */
 
@@ -101,17 +101,29 @@ describe("Auftrag an Opus mit Sprache", () => {
 });
 
 describe("Sprache ohne Grammatik (Probeklausur, Texte, Wortschatz)", () => {
-  it("grammatikBlatt: nur Stichwort im Titel und keine Probe", () => {
-    assert.equal(grammatikBlatt("Simple past", false), true);
-    assert.equal(grammatikBlatt("Simple past", true), false);
-    assert.equal(grammatikBlatt("Vokabeln Unit 3", false), false);
-    assert.equal(grammatikBlatt("Kurzgeschichte", false), false);
-    assert.equal(grammatikBlatt("Kommasetzung", undefined), true);
+  it("istGrammatikThema: Sprachfach, Stichwort im Titel und geltende Art üben", () => {
+    const en = { name: "Englisch" };
+    assert.equal(istGrammatikThema({ title: "Simple past", art: null }, en), true);
+    assert.equal(istGrammatikThema({ title: "Kommasetzung", art: null }, { name: "Deutsch" }), true);
+    assert.equal(istGrammatikThema({ title: "Vokabeln Unit 3", art: null }, en), false);
+    // von Hand auf üben gestellt, ohne Stichwort: Blatt ja, Grammatik nein
+    assert.equal(istGrammatikThema({ title: "Unit 3 if-sentences", art: "ueben" }, en), false);
+    // Stichwort, aber von Hand auf abfragen gestellt: keins mehr
+    assert.equal(istGrammatikThema({ title: "Simple past", art: "abfragen" }, en), false);
+    // Stichwort in einem Fach ohne Sprache
+    assert.equal(istGrammatikThema({ title: "Zeitform", art: "ueben" }, { name: "Geschichte" }), false);
+  });
+
+  it("grammatikBlatt: Grammatikthema und keine Probe", () => {
+    assert.equal(grammatikBlatt({ grammatik: true }, false), true);
+    assert.equal(grammatikBlatt({ grammatik: true }, true), false);
+    assert.equal(grammatikBlatt({ grammatik: false }, false), false);
+    assert.equal(grammatikBlatt({}, undefined), false);
   });
 
   it("Probeklausur in Englisch zu Vokabeln: Sprache ja, Grammatik nein", () => {
     const t = blattAuftrag(
-      vorab({ thema: "Vokabeln Unit 3", probe: true, sprache: "en", grammatik: grammatikBlatt("Vokabeln Unit 3", true) }),
+      vorab({ thema: "Vokabeln Unit 3", probe: true, sprache: "en", grammatik: grammatikBlatt({ grammatik: false }, true) }),
     );
     assert.match(t, /Sprache des Blatts: Englisch\./);
     assert.match(t, /Aufgabenstellung \(q\) schreibst du auf Englisch/);
@@ -128,7 +140,7 @@ describe("Sprache ohne Grammatik (Probeklausur, Texte, Wortschatz)", () => {
 
   it("Deutsch, von Hand auf Üben gestellt ohne Stichwort: keine Regel, keine Satzglieder", () => {
     const t = blattAuftrag(
-      vorab({ fach: "Deutsch", thema: "Kurzgeschichte", sprache: "de", grammatik: grammatikBlatt("Kurzgeschichte", false) }),
+      vorab({ fach: "Deutsch", thema: "Kurzgeschichte", sprache: "de", grammatik: grammatikBlatt({ grammatik: istGrammatikThema({ title: "Kurzgeschichte", art: "ueben" }, { name: "Deutsch" }) }, false) }),
     );
     assert.match(t, /Sprache des Blatts: Deutsch\./);
     assert.match(t, /fr bleibt weg/);

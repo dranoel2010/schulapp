@@ -5,12 +5,13 @@ import { before, describe, it } from "node:test";
 
 import { eq } from "drizzle-orm";
 
-import { arbeitsblaetter, leserLaeufe } from "@/db/schema";
+import { arbeitsblaetter, leserLaeufe, subjectTopics } from "@/db/schema";
 import { blattFuerBlock } from "@/lib/arbeitsblatt/ablauf";
 import { blattBauen } from "@/lib/arbeitsblatt/bauen";
 import { ABSCHRIFT_MATHE, UEBUNG_MATHE } from "@/lib/arbeitsblatt/beispiel";
 import { inhaltSchema } from "@/lib/arbeitsblatt/schema";
 import { arbeitsblattFuer } from "@/lib/arbeitsblatt/stand";
+import { grammatikThemen } from "@/lib/kombi/grammatik-themen";
 import {
   blattMitAbschrift,
   fachMitThema,
@@ -153,6 +154,41 @@ describe("Arbeitsblatt bauen (gemockter Claude-Aufruf)", () => {
     await blattBauen(nutzer, ma.id, { senden: mitschreiben, jetzt: () => T0 });
     assert.equal(anfragen.length, 2);
     assert.ok(!anfragen[1].includes("Sprache des Blatts"));
+  });
+
+  it("Zeile und Auftrag folgen einer Regel: von Hand auf üben ohne Stichwort ist kein Grammatikthema", async () => {
+    const en = await fachMitThema(nutzer, "Englisch", "Unit 3 if-sentences", TAG);
+    await testDb.update(subjectTopics).set({ art: "ueben" }).where(eq(subjectTopics.id, en.topicId));
+    await blattMitAbschrift(nutzer, en.subjectId, en.topicId, "Unit 3", "2026-10-08", "If it rains, we stay at home.");
+    const [gr] = await testDb
+      .insert(subjectTopics)
+      .values({ userId: nutzer, subjectId: en.subjectId, title: "Present perfect", matchKey: "present perfect", lastSeenAt: TAG })
+      .returning({ id: subjectTopics.id });
+    await blattMitAbschrift(nutzer, en.subjectId, gr.id, "Present perfect", "2026-10-08", "have + past participle");
+
+    // Zeile: nur das Stichwort-Thema steht unter „Blatt Grammatik“
+    const zeile = await grammatikThemen(nutzer, [{ id: en.subjectId, name: "Englisch" }]);
+    assert.deepEqual(zeile.map((t) => t.name), ["Present perfect"]);
+
+    // Auftrag: dasselbe Urteil
+    const anfragen: string[] = [];
+    const { senden } = senderMit({ teil: "", minuten: 20, aufgaben: [], grund: "Test" });
+    const mitschreiben: typeof senden = (anfrage, signal, begonnen) => {
+      anfragen.push(JSON.stringify(anfrage));
+      return senden(anfrage, signal, begonnen);
+    };
+    const hand = await arbeitsblattFuer(nutzer, { subjectTopicId: en.topicId }, TAG);
+    await blattBauen(nutzer, hand.id, { senden: mitschreiben, jetzt: () => T0 });
+    const stich = await arbeitsblattFuer(nutzer, { subjectTopicId: gr.id }, TAG);
+    await blattBauen(nutzer, stich.id, { senden: mitschreiben, jetzt: () => T0 });
+    assert.equal(anfragen.length, 2);
+    assert.ok(anfragen[0].includes("Sprache des Blatts: Englisch"));
+    assert.ok(!anfragen[0].includes("Grammatikblatt"), "von Hand umgestellt: kein Grammatikblatt");
+    assert.ok(anfragen[1].includes("Grammatikblatt"), "Stichwort: Grammatikblatt");
+
+    // Stichwort, aber von Hand auf abfragen: weder in der Zeile noch Grammatikblatt
+    await testDb.update(subjectTopics).set({ art: "abfragen" }).where(eq(subjectTopics.id, gr.id));
+    assert.deepEqual(await grammatikThemen(nutzer, [{ id: en.subjectId, name: "Englisch" }]), []);
   });
 
   it("ein Block vor einer Klausur aus Wissensthemen ist kein Arbeitsblatt", async () => {

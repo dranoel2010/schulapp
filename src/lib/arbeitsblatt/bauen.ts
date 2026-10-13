@@ -147,7 +147,7 @@ export async function blattBauen(
     zuletztFalsch: await zuletztFalsch(userId, zeile),
     probe,
     sprache: fachSprache(quelle.fach),
-    grammatik: grammatikBlatt(quelle.thema, probe),
+    grammatik: grammatikBlatt(quelle, probe),
   };
 
   const gerufen = await claudeRufen(

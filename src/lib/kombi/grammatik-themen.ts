@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { materialPages, materialTopics, materials, subjectTopics } from "@/db/schema";
 import { fachSprache } from "@/lib/arbeitsblatt/sprache";
 import { grammatikFolge, type VorratGrammatik } from "@/lib/kombi/vorrat";
-import { themaArt } from "@/lib/themen-art";
+import { istGrammatikThema } from "@/lib/themen-art";
 import { recallItems, recallSchedule } from "@/recall/schema";
 
 /**
@@ -12,10 +12,11 @@ import { recallItems, recallSchedule } from "@/recall/schema";
  * 13.10.2026). Nur lesen.
  *
  * Ein Grammatikthema ist ein Fach-Thema in Deutsch, Englisch oder
- * Französisch, dessen geltende Art `ueben` ist — erkannt am Stichwort im
- * Titel oder von Hand umgestellt (`themaArt`). Mit dabei ist es nur, wenn es
- * mindestens ein Blatt mit Abschrift hat, denn ohne Abschrift gibt es kein
- * Arbeitsblatt. Zusammengelegte Themen zählen zu ihrem Ziel.
+ * Französisch mit Grammatik-Stichwort im Titel, dessen geltende Art `ueben`
+ * ist (`istGrammatikThema`, dieselbe Regel wie im Auftrag an Opus). Ein von
+ * Hand auf „üben“ gestelltes Thema ohne Stichwort gehört nicht dazu. Mit
+ * dabei ist es nur, wenn es mindestens ein Blatt mit Abschrift hat, denn ohne
+ * Abschrift gibt es kein Arbeitsblatt. Zusammengelegte Themen zählen zu ihrem Ziel.
  *
  * Fällig heißt: der älteste offene Termin einer Frage des Themas oder seiner
  * Aliase; die Folge regelt `grammatikFolge`.
@@ -83,7 +84,7 @@ export async function grammatikThemen(
   for (const t of themen) {
     if (t.mergedInto || !belegt.has(t.id)) continue;
     const fach = sprachFaecher.get(t.subjectId);
-    if (!fach || themaArt(t, { name: fach.name }) !== "ueben") continue;
+    if (!fach || !istGrammatikThema(t, { name: fach.name })) continue;
     liste.push({
       id: t.id,
       fachId: t.subjectId,
