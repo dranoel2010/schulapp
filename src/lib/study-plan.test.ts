@@ -899,6 +899,23 @@ describe("Probeklausur (Antwort 4 vom 13.10.2026, Regel vom 14.10.2026)", () => 
       assert.ok(result.blocks.every((b) => !frei.includes(b.date)), "nichts im Freien");
     });
 
+    it("Ferien bis Samstag vor der Montagsklausur: die Probe am Sonntag, einem Lerntag", () => {
+      const bisSamstag = range("2026-10-24", "2026-10-31");
+      const tage = [...range("2026-10-19", "2026-10-23"), "2026-11-01"];
+      assert.equal(probeTagFuer("2026-11-02", tage, bisSamstag), "2026-11-01");
+    });
+
+    it("einzelner freier Tag direkt vor der Klausur bei kurzem Vorlauf: die Probe liegt dort", () => {
+      // Klausur Do 5.11., Vorlauf 3, Mi 4.11. frei
+      const result = buildPlan({
+        ...plan({ examDate: "2026-11-05", today: "2026-11-01", topics: topics(2) }),
+        leadDays: 3,
+        excludedDates: ["2026-11-04"],
+        probe: true,
+      });
+      assert.deepEqual(result.blocks.filter((b) => b.kind === "probe").map((b) => b.date), ["2026-11-04"]);
+    });
+
     it("replanOpen: Nachholen zieht eine alte Probe vor den Ferien auf den letzten Ferientag", () => {
       const open = [
         { id: "l1", topicId: "t1", kind: "learn" as const },

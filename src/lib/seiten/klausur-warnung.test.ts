@@ -53,3 +53,18 @@ test("„no-days“, aber ab heute steht noch ein offener Lernblock: kein Hinwei
   const bloecke = [lern("2026-11-02", "a"), probe("2026-11-02")];
   assert.deepEqual(planWarnungen(["no-days"], bloecke, "2026-10-28", "2026-11-03", 1), []);
 });
+
+test("alles durchgearbeitet und wiederholt, nur die Probe offen: kein Hinweis", () => {
+  // Bild a: 6 von 7 Blöcken erledigt, die Probe am letzten Ferientag steht noch.
+  const bloecke = [
+    lern("2026-10-19", "a", "done"), lern("2026-10-20", "b", "done"), lern("2026-10-21", "c", "done"),
+    wdh("2026-10-22", "a", "done"), wdh("2026-10-22", "b", "done"), wdh("2026-10-23", "c", "done"),
+    probe("2026-11-01"),
+  ];
+  assert.deepEqual(planWarnungen(["no-days"], bloecke, "2026-10-28", "2026-11-02", 3), []);
+});
+
+test("verpasster Lernblock vor den Ferien, sonst alles erledigt: der Hinweis bleibt", () => {
+  const bloecke = [lern("2026-10-21", "a"), wdh("2026-10-23", "a", "done"), probe("2026-11-01")];
+  assert.deepEqual(planWarnungen(["no-days"], bloecke, "2026-10-28", "2026-11-02", 1), ["no-days"]);
+});

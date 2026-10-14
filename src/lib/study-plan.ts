@@ -147,7 +147,7 @@ function splitDays(days: string[]): {
  * der nächstfrühere Lerntag.
  *
  * Sonst, ist der Tag nicht erlaubt, gilt der nächstfrühere Lerntag, nie ein
- * späterer. Nur ein Tag, der schon vorbei ist (eine verpasste Probe beim
+ * späterer (außer der Zieltag ist frei, siehe oben). Nur ein Tag, der schon vorbei ist (eine verpasste Probe beim
  * Nachholen), rückt auf den Tag vor der Klausur. Nie der Prüfungstag, nie vor
  * heute.
  *
@@ -186,7 +186,8 @@ function probeTagMitAbstand(
   }
   // Geht der Tag nicht, gilt der nächstfrühere erlaubte, nie ein späterer:
   // bei einem Tag Abstand also zuerst der Tag zwei vorher, bei zwei Tagen
-  // Abstand nie der Tag direkt vor der Klausur.
+  // Abstand nie der Tag direkt vor der Klausur, außer der Zieltag ist frei,
+  // dann gilt zuerst der Tag vor der Klausur (siehe oben).
   const frueher = studyDays.filter((day) => day < ziel);
   return frueher[frueher.length - 1] ?? null;
 }

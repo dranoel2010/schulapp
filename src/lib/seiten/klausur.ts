@@ -107,7 +107,8 @@ export type PlanBlockStand = {
  * jedes Thema unter. Liegt dort eine Wiederholung oder Probeklausur, ist ein
  * Block erledigt, oder ist ab heute gar nichts mehr geplant (gestrichen oder
  * schon gelernt), entfällt die Warnung. „Kein Tag zum Durcharbeiten“ steht
- * nur, wenn ab heute kein offener Lern- oder Wiederholungsblock mehr kommt.
+ * nur, wenn ab heute kein offener Lern- oder Wiederholungsblock mehr kommt,
+ * aber noch etwas durchzuarbeiten ist. Ist alles erledigt, entfällt er.
  */
 export function planWarnungen(
   warnings: PlanWarning[],
@@ -118,9 +119,15 @@ export function planWarnungen(
 ): PlanWarning[] {
   const ab = bloecke.filter((b) => b.status !== "skipped" && b.date >= heute && b.date < klausurTag);
   // „Kein Tag zum Durcharbeiten“ gilt nur, wenn ab heute kein offener Lern-
-  // oder Wiederholungsblock mehr steht (etwa nach dem Nachholen vor der Probe).
+  // oder Wiederholungsblock mehr steht (etwa nach dem Nachholen vor der Probe)
+  // und trotzdem noch etwas durchzuarbeiten ist: ein offener Block vor heute
+  // (verpasst) oder ein Plan ganz ohne Lern- und Wiederholungsblöcke. Ist alles
+  // erledigt und nur die Probe offen, wäre der Hinweis ein Fehlalarm.
+  const lernen = bloecke.filter((b) => b.kind !== "probe" && b.status !== "skipped" && b.date < klausurTag);
+  const offenAbHeute = ab.some((b) => b.kind !== "probe" && b.status === "open");
+  const allesErledigt = lernen.length > 0 && lernen.every((b) => b.status !== "open");
   const gemeldet =
-    warnings.includes("no-days") && ab.some((b) => b.kind !== "probe" && b.status === "open")
+    warnings.includes("no-days") && (offenAbHeute || allesErledigt)
       ? warnings.filter((w) => w !== "no-days")
       : warnings;
   if (!gemeldet.includes("tight")) return gemeldet;
