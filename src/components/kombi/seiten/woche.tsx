@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 
+import { useDesktop } from "@/components/kombi/desktop/use-desktop";
+import { Wochenraster } from "@/components/kombi/desktop/wochenraster";
 import { Tn } from "@/components/kombi/tn";
 import { E, moveTo, reduce } from "@/lib/kombi/motion";
 import { dm, lang, TAG, TK, wd } from "@/lib/kombi/text";
@@ -15,12 +17,19 @@ import { TextLine } from "./zeilen";
  * dem gewählten, darunter die Stunden des Tages. Beim Wechsel schiebt die
  * Liste 20px zur Seite und blendet über. Am Ende die Zeile „Stundenplan
  * bearbeiten“ (Plan 2.2).
+ *
+ * Am Rechner (ab 1024 px) steht statt der Tagesansicht das Wochenraster
+ * (desktop/wochenraster.tsx); am Handy bleibt alles wie hier.
  */
 
 export const wocheTitel = () => "Woche";
 export const wocheSub = (d: WocheDaten) => `${dm(d.tage[0].tag)} bis ${dm(d.tage[4].tag)}`;
 
-export function WocheInhalt({ daten: vomServer }: { daten: WocheDaten }) {
+export function WocheInhalt({ daten }: { daten: WocheDaten }) {
+  return useDesktop() ? <Wochenraster daten={daten} /> : <WocheTage daten={daten} />;
+}
+
+function WocheTage({ daten: vomServer }: { daten: WocheDaten }) {
   // gezeigt wird der Stand, den der FLIP-Lauf übernommen hat (useAufgaben)
   const { stand: daten, anwenden, schalten, loeschen, ankerRef } = useAufgaben(vomServer);
   const start = Math.max(0, daten.tage.findIndex((t) => t.tag === daten.tag));

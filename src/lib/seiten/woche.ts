@@ -1,3 +1,8 @@
+import { and, asc, eq, gte, lte, ne } from "drizzle-orm";
+
+import { db } from "@/db";
+import { examTopics, exams, studyBlocks, subjects } from "@/db/schema";
+import { blockDatenLaden, type BlockDaten } from "@/lib/kombi/lernblock-daten";
 import { istSchultag, jetzt, ladeKalender, nachSchulschluss } from "@/lib/tag";
 import { addDays, isCalendarDate } from "@/lib/dates";
 import { examTopicTitles, listExams } from "@/lib/exams";
@@ -7,6 +12,7 @@ import { weekdayOf } from "@/lib/timetable";
 import {
   aufgabeDaten,
   heuteApp,
+  kurzVon,
   schulKalender,
   type AufgabeDaten,
   type StundeDaten,
@@ -25,15 +31,40 @@ export type WocheTag = {
   freiHerkunft: string | null;
   stunden: (StundeDaten & { klausur: string | null })[];
   abgeben: AufgabeDaten[];
+  /**
+   * Der Lernplan aller Klausuren an diesem Tag, ohne Uhrzeit (Lernblöcke
+   * haben keine). Am Rechner die Zeile „Lernen“ im Raster; die Tagesansicht
+   * am Handy zeigt ihn nicht.
+   */
+  lernen: LernEintrag[];
+};
+
+/** Ein Planeintrag in der Woche: der Block und die Klausur, zu der er gehört. */
+export type LernEintrag = {
+  block: BlockDaten;
+  /** Fachname („Mathematik“), wie ihn der Tisch im Kopf trägt */
+  fach: string;
+  /** Anzeigename („Mathe“) */
+  kurz: string;
+  /** Tag der Klausur, 'YYYY-MM-DD' */
+  klausurDatum: string;
 };
 
 export type WocheDaten = {
   heute: string;
   /** Der gewählte Tag */
   tag: string;
+  /** Montag der Woche, die ohne `?tag=` käme (am Rechner: „Diese Woche“) */
+  dieseWoche: string;
   tage: WocheTag[];
   /** Fürs Bearbeiten: gibt es überhaupt Stunden? */
   hatStunden: boolean;
+  /**
+   * Die Stunden des Rasters mit Beginn und Ende, von der ersten bis zur
+   * letzten, in der diese Woche Unterricht steht. Am Rechner die Zeitspalte
+   * der Woche; leer, wenn die Woche keine Stunde hat (Ferien).
+   */
+  zeiten: { nr: number; von: string | null; bis: string | null }[];
 };
 
 export async function wocheSeite(
@@ -44,17 +75,21 @@ export async function wocheSeite(
   const heute = heuteApp(now);
   const [kal, kalender] = await Promise.all([schulKalender(userId, heute), ladeKalender(userId)]);
 
-  let tag = params.tag && isCalendarDate(params.tag) ? params.tag : kal.naechsterSchultag(heute);
-  const wdTag = weekdayOf(tag);
-  if (wdTag === 6 || wdTag === 7) tag = kal.naechsterSchultag(tag);
-  const montag = addDays(tag, 1 - weekdayOf(tag));
+  const montagVon = (t: string) => {
+    const w = weekdayOf(t);
+    const t2 = w === 6 || w === 7 ? kal.naechsterSchultag(t) : t;
+    return { tag: t2, montag: addDays(t2, 1 - weekdayOf(t2)) };
+  };
+  const standard = montagVon(kal.naechsterSchultag(heute));
+  const { tag, montag } = params.tag && isCalendarDate(params.tag) ? montagVon(params.tag) : standard;
   const tage = [0, 1, 2, 3, 4].map((i) => addDays(montag, i));
 
-  const [aufgaben, offen, klausuren, themen] = await Promise.all([
+  const [aufgaben, offen, klausuren, themen, lernplan] = await Promise.all([
     homeworkForRange(userId, tage[0], tage[4]),
     listHomework(userId),
     listExams(userId, { includePast: true }),
     examTopicTitles(userId),
+    lernplanDerWoche(userId, tage[0], tage[4]),
   ]);
 
   // Überfällige offene Aufgaben stehen am Tag, für den man packt: heute bis
@@ -65,12 +100,23 @@ export async function wocheSeite(
     .filter((a) => a.dueDate < packTag && a.dueDate <= heute && !(a.dueDate === heute && heuteSchule))
     .sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0));
 
+  const stundenJeTag = tage.map((d) => kal.stundenAm(d));
+  const letzte = Math.max(0, ...stundenJeTag.flat().map((s) => s.bisNr));
+  const raster = new Map(kal.week.periods.map((p) => [p.number, p]));
+  const zeiten = Array.from({ length: letzte }, (_, i) => ({
+    nr: i + 1,
+    von: raster.get(i + 1)?.startsAt ?? null,
+    bis: raster.get(i + 1)?.endsAt ?? null,
+  }));
+
   return {
     heute,
     tag,
+    dieseWoche: standard.montag,
     hatStunden: kal.week.days.some((d) => d.lessons.length > 0),
-    tage: tage.map((d) => {
-      const stunden = kal.stundenAm(d);
+    zeiten,
+    tage: tage.map((d, i) => {
+      const stunden = stundenJeTag[i];
       return {
         tag: d,
         frei: kal.frei(d),
@@ -88,7 +134,30 @@ export async function wocheSeite(
           ...(d === packTag ? ueberfaellig.filter((a) => a.dueDate < tage[0]) : []),
           ...aufgaben.filter((a) => a.dueDate === d),
         ].map(aufgabeDaten),
+        lernen: lernplan.filter((e) => e.block.tag === d),
       };
     }),
   };
+}
+
+/**
+ * Die Planeinträge aller Klausuren von `von` bis `bis`, ohne gestrichene:
+ * je Tag nach der Klausur, die zuerst kommt, dann in der Reihenfolge des
+ * Plans. Ein Block nach seiner Klausur kommt nicht vor (der Plan endet am
+ * Tag davor); falls doch, steht er trotzdem da, wo er liegt.
+ */
+export async function lernplanDerWoche(userId: string, von: string, bis: string): Promise<LernEintrag[]> {
+  const zeilen = await db
+    .select({ block: studyBlocks, topic: examTopics, fach: subjects.name, klausurDatum: exams.date })
+    .from(studyBlocks)
+    .innerJoin(exams, and(eq(exams.id, studyBlocks.examId), eq(exams.userId, userId)))
+    .innerJoin(subjects, eq(subjects.id, exams.subjectId))
+    .leftJoin(examTopics, eq(examTopics.id, studyBlocks.topicId))
+    .where(and(gte(studyBlocks.date, von), lte(studyBlocks.date, bis), ne(studyBlocks.status, "skipped")))
+    .orderBy(asc(studyBlocks.date), asc(exams.date), asc(exams.createdAt), asc(studyBlocks.sortOrder));
+  const bloecke = await blockDatenLaden(
+    userId,
+    zeilen.map((z) => ({ ...z.block, topic: z.topic ?? null })),
+  );
+  return zeilen.map((z, i) => ({ block: bloecke[i], fach: z.fach, kurz: kurzVon(z.fach), klausurDatum: z.klausurDatum }));
 }

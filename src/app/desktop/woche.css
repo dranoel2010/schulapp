@@ -2,4 +2,67 @@
    Vorbild: desktop.html, Abschnitt „Woche“. Trennstriche nur in den engen Rasterzellen.
    Alles ab 1024 px, Hover nur mit feiner Maus. Gemeinsames steht in grund.css. */
 @media (min-width:1024px){
+/* Titel und Unterzeile stehen im Kopf des Rasters, neben den Pfeilen (.d-head); die der Seite treten zurück */
+.p-title:has(~ .wkd),.p-sub:has(+ .wkd){display:none}
+
+.wk-nav{display:flex;align-items:center;gap:4px}
+.wk-nav .textbtn{height:40px;padding:0 10px;margin-right:4px;font-size:15px;border-radius:10px}
+.wk-nav .textbtn[aria-hidden="true"]{visibility:hidden}
+.wk{display:grid;grid-template-columns:76px repeat(5,minmax(0,1fr));margin-top:20px;border-top:1px solid var(--line-strong)}
+.wk > *{border-bottom:1px solid var(--line);min-width:0}
+.wk-h{display:flex;flex-direction:column;justify-content:center;gap:2px;height:60px;padding:0 14px;border-left:1px solid var(--line);color:var(--ink-2)}
+.wk-h b{display:flex;align-items:center;gap:7px;font-size:15px;line-height:1.2;font-weight:650;color:var(--ink)}
+.wk-h span{font-size:13px;line-height:1.2;color:var(--ink-3)}
+.wk-h.td b::after{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.wk-h.td span{color:var(--ink-2)}
+.wk-corner{border-left:0}
+.wk-t{padding:12px 0 10px;font-size:15px;line-height:1.35;font-weight:560}
+.wk-t .end{display:block;color:var(--ink-3);font-weight:450}
+.wk-c{position:relative;padding:10px 14px 12px;border-left:1px solid var(--line);min-height:76px}
+.wk-c b{display:block;font-size:17px;line-height:1.3;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wk-c em{display:block;font-style:normal;font-size:15px;line-height:1.35;color:var(--ink-2)}
+.wk-c .tag{display:block;margin-top:6px;font-size:15px;line-height:1.3;font-weight:650;color:var(--ink)}
+.wk-c.td,.wk-h.td{background:var(--quiet)}
+.wk-lab{padding:14px 0 12px;font-size:15px;line-height:1.3;font-weight:650;color:var(--ink-2)}
+.wk-x{padding:6px 10px 8px;border-left:1px solid var(--line);min-height:64px}
+.wk-x.td{background:var(--quiet)}
+.wk-free{grid-column:2 / -1;padding:28px 14px;border-left:1px solid var(--line);font-size:17px;color:var(--ink-2)}
+
+/* Aufgabe im Raster: Ring zum Abhaken, Fach fett vor dem Text */
+.mt{display:grid;grid-template-columns:28px minmax(0,1fr);column-gap:4px;align-items:start;padding:5px 0}
+.mt .check{width:28px;height:28px;margin:0}
+.mt .ring{width:20px;height:20px;border-width:1.75px}
+.mt .cfill .ic{width:12px;height:12px}
+.mt p{font-size:15px;line-height:1.35;padding-top:4px;min-width:0}
+.mt p b{font-weight:650;margin-right:.35em}
+.mt.done p{color:var(--ink-3)}
+.mt.done .ring{border-color:transparent}
+.mt.done .cfill{transform:none;opacity:1}
+.mt.done .cfill .ic{opacity:1;transform:none}
+.mt .check:active .ring{transform:scale(.88)}
+.mt.done p span{text-decoration:line-through;text-decoration-thickness:1px;text-decoration-color:var(--ink-3)}
+
+/* Lernen im Raster: ohne Uhrzeit, „Starten“ steht unter dem Text, nie daneben */
+.ml{display:grid;grid-template-columns:minmax(0,1fr);align-items:center;column-gap:6px;padding:6px 4px}
+.ml p{font-size:15px;line-height:1.35;font-weight:560;min-width:0}
+.ml p span{display:block;font-weight:450;color:var(--ink-2)}
+.ml .lbbtn{justify-self:start;padding:0;height:36px;font-size:15px}
+
+/* Lange Wörter (Scheitelpunktform, Gedichtanalyse) brechen in engen Spalten mit Trennstrich, statt in die Nachbarspalte zu laufen */
+.wk-c em,.wk-c .tag,.wk-x,.mt p,.ml p{overflow-wrap:anywhere;hyphens:auto;-webkit-hyphens:auto}
+
+.wk-edit{max-width:420px;margin-top:20px}
+/* ab 1680 ist der Inhalt bis 1320 breit; grund.css setzt .d-wide danach wieder auf 1180, hier gilt es für die Woche */
+@media (min-width:1680px){.d-wide:has(.wkd){max-width:1320px}}
+
+/* knapp (1024 bis 1279): steht nach den Grundregeln, damit es sie überschreibt */
+@media (max-width:1279px){
+  .wk{grid-template-columns:72px repeat(5,minmax(0,1fr))}
+  .wk-h,.wk-c{padding-left:10px;padding-right:10px}
+  .wk-x{padding-left:6px;padding-right:6px}
+  .wk-c b{font-size:15px}
+  .mt p b{display:block;hyphens:manual;-webkit-hyphens:manual;overflow-wrap:normal}
+  .mt{grid-template-columns:26px minmax(0,1fr);column-gap:2px}
+  .mt .check{width:26px}
+}
 } /* Ende ab 1024 px */
