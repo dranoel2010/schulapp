@@ -1,0 +1,2194 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" id="themeColor" content="#F7F7F5">
+<meta name="color-scheme" content="light dark">
+<title>Schulapp am Rechner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:ital,wght@0,400..800;1,400..800&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..600&display=swap">
+<style>
+/* ==========================================================================
+   Modell 23, Desktop. Tokens, Grundwerte und alle Komponentenklassen stehen
+   wörtlich wie im Handy-Prototyp index.html (Z. 13 bis 839). Darunter nur, was
+   am Rechner dazukommt: Seitenleiste, Bühne, Liste und Detail, Wochenraster,
+   Tisch in Fensterbreite. Kein neues Token, keine neue Farbe.
+   ========================================================================== */
+:root{
+  --bg:#F7F7F5; --raise:#EEEEEB; --raise-2:#E4E4E0; --sheet:#FFFFFF;
+  --line:rgba(20,20,24,.10); --line-strong:rgba(20,20,24,.20);
+  --ink:#18181B; --ink-2:#52525B; --ink-3:#6B6B72; --mark:rgba(24,24,27,.06);
+  --accent:#2A44C0; --on-accent:#FFFFFF; --accent-fill:#2A44C0; --on-accent-fill:#FFFFFF;
+  --dock:#18181B; --dock-edge:transparent; --dock-text:#F7F7F5; --dock-muted:#A1A1AA; --dock-line:#3F3F46;
+  --quiet:rgba(24,24,27,.06); --error:#B3261E; --scrim:rgba(24,24,27,.32); --camera:#0B0B0C;
+  --table:#2A44C0; --t-on:#F4F6FF; --t-fill:rgba(244,246,255,.10); --t-fill-2:rgba(244,246,255,.18); --t-sheet:#FFFFFF;
+  --t-wrong:rgba(8,12,44,.34);
+  --card:#FFFFFF; --card-ink:#12183A; --card-ink-2:#5A6185; --card-field:#F1F3FA; --card-line:rgba(18,24,58,.12);
+  --known:#FFFFFF; --known-ink:#12183A; --known-ink-2:#5A6185;
+  --menu-shadow:0 -1px 0 rgba(24,24,27,.05),0 24px 60px -12px rgba(24,24,27,.26);
+  --pop-shadow:0 0 0 1px var(--line),0 18px 40px -14px rgba(24,24,27,.32);
+  --toast-shadow:0 0 0 1px var(--line-strong),0 12px 30px -12px rgba(24,24,27,.30);
+  --dock-shadow:0 1px 2px rgba(24,24,27,.06),0 10px 26px -14px rgba(24,24,27,.28);
+  --thumb-edge:var(--line);
+  --card-shadow:0 18px 40px -12px rgba(0,0,0,.42);
+  --card-edge:transparent;
+  /* Papier des Arbeitsblatts: bleibt in beiden Schemata hell, weil es gedruckt wird */
+  --a4-paper:#FFFFFF; --a4-ink:#16181E; --a4-ink-2:#4B505E; --a4-ink-3:#676C7A; --a4-line:#C3C7D1; --a4-accent:#2A44C0;
+  --a4-grid:#C6CBD6; --a4-grid-edge:#9FA4B2; --a4-rule:#B5BAC6;
+  --ease-out:cubic-bezier(0.23,1,0.32,1);
+  --ease-drawer:cubic-bezier(0.32,0.72,0,1);
+  --ease-io:cubic-bezier(0.77,0,0.175,1);
+  --ease-grow:cubic-bezier(0.6,0,0.2,1);
+  --ease-flip:cubic-bezier(0.2,0.8,0.2,1);
+  --pad:22px;
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-b:max(16px,env(safe-area-inset-bottom,0px));
+  --top:max(var(--safe-t),10px);
+  --foot-space:calc(52px + var(--safe-b) + 10px);
+  --sans:"Schibsted Grotesk",system-ui,sans-serif;
+  --serif:"Newsreader",serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141416; --raise:#202023; --raise-2:#2A2A2E; --sheet:#1C1C1F;
+    --line:rgba(244,244,245,.10); --line-strong:rgba(244,244,245,.20);
+    --ink:#EDEDEF; --ink-2:#B4B4BB; --ink-3:#92929A; --mark:rgba(255,255,255,.06);
+    --accent:#8D9CFF; --on-accent:#0E1120; --accent-fill:#3B54D6; --on-accent-fill:#F4F6FF;
+    --dock:#0B0B0C; --dock-edge:rgba(244,244,245,.14); --dock-text:#EDEDEF; --dock-muted:#8E8E96; --dock-line:#2A2A2E;
+    --error:#F2B8B5; --scrim:rgba(0,0,0,.5); --quiet:rgba(244,244,245,.07);
+    --table:#121A4E; --t-sheet:#1B2147; --t-wrong:rgba(0,0,0,.42);
+    --card:#232A52; --card-ink:#F4F6FF; --card-ink-2:#AAB1C9; --card-field:#2D355F; --card-line:rgba(244,246,255,.14);
+    --known:#EEF0F7; --known-ink:#12183A;
+    --menu-shadow:0 0 0 1px var(--line-strong);
+    --pop-shadow:0 0 0 1px var(--line-strong);
+    --toast-shadow:0 0 0 1px var(--line-strong),0 12px 30px -12px rgba(0,0,0,.6);
+    --dock-shadow:0 0 0 1px var(--dock-edge);
+    --thumb-edge:var(--line-strong);
+    --card-shadow:0 18px 40px -12px rgba(0,0,0,.55);
+    --card-edge:rgba(244,246,255,.10);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141416; --raise:#202023; --raise-2:#2A2A2E; --sheet:#1C1C1F;
+  --line:rgba(244,244,245,.10); --line-strong:rgba(244,244,245,.20);
+  --ink:#EDEDEF; --ink-2:#B4B4BB; --ink-3:#92929A; --mark:rgba(255,255,255,.06);
+  --accent:#8D9CFF; --on-accent:#0E1120; --accent-fill:#3B54D6; --on-accent-fill:#F4F6FF;
+  --dock:#0B0B0C; --dock-edge:rgba(244,244,245,.14); --dock-text:#EDEDEF; --dock-muted:#8E8E96; --dock-line:#2A2A2E;
+  --error:#F2B8B5; --scrim:rgba(0,0,0,.5); --quiet:rgba(244,244,245,.07);
+  --table:#121A4E; --t-sheet:#1B2147; --t-wrong:rgba(0,0,0,.42);
+  --card:#232A52; --card-ink:#F4F6FF; --card-ink-2:#AAB1C9; --card-field:#2D355F; --card-line:rgba(244,246,255,.14);
+  --known:#EEF0F7; --known-ink:#12183A;
+  --menu-shadow:0 0 0 1px var(--line-strong);
+  --pop-shadow:0 0 0 1px var(--line-strong);
+  --toast-shadow:0 0 0 1px var(--line-strong),0 12px 30px -12px rgba(0,0,0,.6);
+  --dock-shadow:0 0 0 1px var(--dock-edge);
+  --thumb-edge:var(--line-strong);
+  --card-shadow:0 18px 40px -12px rgba(0,0,0,.55);
+  --card-edge:rgba(244,246,255,.10);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;overscroll-behavior:none;background:var(--bg)}
+body{height:100dvh;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.4;font-weight:450;
+  font-synthesis:none;-webkit-font-smoothing:antialiased;overscroll-behavior:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:inherit;
+  touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ic{display:inline-grid;place-items:center;width:22px;height:22px;flex:none;line-height:0}
+.ic svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;overflow:visible}
+.ic.s20{width:20px;height:20px}
+.ic.s18{width:18px;height:18px}
+.c{font-variant-numeric:proportional-nums}
+time,.tn,.t-count,.t-clock,.lbbtn,.whbtn .n,.avg,.total,.grade-row b,.pstack .n,.t-of,.split{font-variant-numeric:tabular-nums}
+[hidden]{display:none !important}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+#app{position:fixed;inset:0;margin:0 auto;max-width:100%;overflow:hidden;isolation:isolate;background:var(--bg)}
+@media (min-width:600px){#app{max-width:390px;box-shadow:0 0 0 1px var(--line)}}
+.pre .enter{opacity:0}
+
+/* ---------- Ebenen: Tag (Morgens, Überblick) und Ablauf ---------- */
+.layer{position:absolute;inset:0;background:var(--bg);display:none;transform-origin:50% 40%}
+.layer.on,.layer.leaving{display:block}
+.layer.leaving{pointer-events:none;z-index:2}
+.scroll{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:none;
+  padding:calc(var(--top) + 6px) var(--pad) var(--foot-space)}
+.scroll::-webkit-scrollbar{display:none}
+.step .scroll,.page .scroll{padding-bottom:calc(var(--foot-space) + 28px)}
+#homeScroll{padding-bottom:calc(var(--foot-space) + 8px)}
+/* Ausblenden vor der Zeile nur, solange wirklich Inhalt unter ihr liegt: am Scrollende steht der Primärknopf ganz frei */
+.scroll{--fz-t0:0px;--fz-t1:0px;--fz-b1:0px;--fz-b0:0px}
+.scroll.fade{--fz-b1:calc(var(--foot-space) + 28px);--fz-b0:var(--foot-space)}
+/* oben dieselbe Ausblendung, nur solange gescrollt ist: unter dem Schrittband wird nichts hart abgeschnitten */
+.step .scroll.fade-t{--fz-t0:calc(var(--top) + 52px);--fz-t1:calc(var(--top) + 80px)}
+.page .scroll.fade-t{--fz-t0:calc(var(--top) + 44px);--fz-t1:calc(var(--top) + 72px)}
+.scroll.fade,.scroll.fade-t{-webkit-mask-image:linear-gradient(to bottom,transparent var(--fz-t0),#000 var(--fz-t1),#000 calc(100% - var(--fz-b1)),transparent calc(100% - var(--fz-b0)));
+  mask-image:linear-gradient(to bottom,transparent var(--fz-t0),#000 var(--fz-t1),#000 calc(100% - var(--fz-b1)),transparent calc(100% - var(--fz-b0)))}
+body.toast-on .step .scroll,body.toast-on .page .scroll{padding-bottom:calc(var(--foot-space) + 82px)}
+
+/* Datumszeile (17 Z. 76 bis 98) */
+.whenrow{position:relative;display:flex;align-items:center;justify-content:space-between;height:44px;z-index:5}
+.when{display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 6px 0 10px;margin-left:-10px;border-radius:12px;
+  font-size:15px;line-height:1.3;font-weight:450;color:var(--ink-2);white-space:nowrap;transition:transform 140ms var(--ease-out)}
+.when .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}
+.when .md{color:var(--ink);font-weight:560}
+.when.preview .md{color:var(--ink-3);font-weight:450}
+.when.preview .dot{background:var(--ink-3)}
+.when .ic{width:18px;height:18px;color:var(--ink-3);margin-left:-2px;transition:transform 200ms var(--ease-out)}
+.when[aria-expanded="true"] .ic{transform:rotate(180deg)}
+/* Einstellungen immer erreichbar, rechts in der Datumszeile: leise, bis man es braucht */
+.gear{display:grid;place-items:center;width:44px;height:44px;margin-right:-10px;border-radius:12px;color:var(--ink-2);transition:transform 140ms var(--ease-out),color 140ms ease}
+.gear .ic{width:22px;height:22px}
+.gear:active{transform:scale(.92)}
+@media (hover:hover){.gear:hover{color:var(--ink)}}
+.now-pill{height:44px;padding:0 0 0 12px;font-size:15px;font-weight:650;color:var(--ink);
+  opacity:0;transform:translateX(6px);pointer-events:none;transition:opacity 180ms var(--ease-out),transform 180ms var(--ease-out)}
+.now-pill span{display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:16px;background:var(--raise);transition:transform 140ms var(--ease-out)}
+.now-pill.on{opacity:1;transform:none;pointer-events:auto}
+.now-pill:active span{transform:scale(.96)}
+.wmenu{position:absolute;top:0;left:calc(var(--pad) - 8px);z-index:6;width:300px;padding:6px;border-radius:14px;background:var(--sheet);
+  box-shadow:var(--pop-shadow);transform-origin:18px 0;
+  opacity:0;transform:scale(.96) translateY(-4px);pointer-events:none;visibility:hidden;
+  transition:opacity 150ms ease-out,transform 180ms var(--ease-out),visibility 0s linear 180ms}
+.wmenu.on{opacity:1;transform:none;pointer-events:auto;visibility:visible;transition:opacity 150ms ease-out,transform 180ms var(--ease-out),visibility 0s}
+.wmenu button{display:grid;grid-template-columns:max-content minmax(0,1fr) 22px;align-items:baseline;column-gap:10px;width:100%;min-height:44px;padding:11px 8px 11px 12px;border-radius:9px;font-size:17px;line-height:1.3;font-weight:450;white-space:nowrap}
+.wmenu button:active{background:var(--raise-2)}
+.wmenu button .r{justify-self:end;font-size:15px;color:var(--ink-2);font-weight:450}
+.wmenu button .ic{align-self:center;width:18px;height:18px;color:var(--ink);visibility:hidden}
+.wmenu button[aria-checked="true"]{font-weight:560}
+.wmenu button[aria-checked="true"] .ic{visibility:visible}
+
+h1.hl{display:grid;margin:0 0 2px;min-height:40px}
+h1.hl .swap{grid-area:1/1;font-family:var(--sans);font-size:28px;line-height:1.12;font-weight:650;letter-spacing:-.03em;text-wrap:balance}
+.modes{display:grid}
+.mode{grid-area:1/1;display:none;min-width:0}
+.mode.on,.mode.leaving{display:block}
+.mode.leaving{pointer-events:none}
+.blk{margin-top:2px}
+.blk + .blk{margin-top:8px}
+.lab{display:flex;align-items:flex-end;justify-content:space-between;height:30px;padding-bottom:6px;font-size:15px;line-height:1.3;font-weight:650;color:var(--ink-2)}
+.lab .lab-r{height:44px;margin:0 -10px -6px 0;padding:0 10px;display:inline-flex;align-items:flex-end;padding-bottom:6px;font-size:15px;font-weight:650;color:var(--ink);transition:transform 140ms var(--ease-out)}
+.lab .lab-r:active{transform:scale(.96)}
+.textline{display:flex;align-items:center;min-height:44px;width:100%;font-size:15px;line-height:1.3;font-weight:450;color:var(--ink-2);transition:opacity 140ms ease}
+.textline:active{opacity:.6}
+.textline.big{min-height:44px;font-size:17px;font-weight:560;color:var(--ink)}
+.textline .ic{width:18px;height:18px;color:var(--ink-3);margin-left:4px}
+.textline.more{color:var(--ink-2)}
+.empty{font-size:17px;color:var(--ink-2);padding:10px 0}
+
+/* Morgens */
+/* Die Unterzeile läuft unter dem Raum durch: so bekommt "Hauptunterricht · Industrialisierung" die freie Breite */
+.lesson-row{display:grid;grid-template-columns:58px minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:10px;align-items:baseline;align-content:center;min-height:48px;padding:5px 0;border-top:1px solid var(--line)}
+.lesson-row:first-child{border-top:0}
+.lesson-row > div{display:contents}
+.lesson-row time{grid-column:1;grid-row:1;font-size:15px;font-weight:560;color:var(--ink)}
+.lesson-row b{grid-column:2;grid-row:1;min-width:0;font-size:17px;line-height:1.3;font-weight:650}
+.lesson-row em{grid-column:2 / 4;grid-row:2;min-width:0;font-style:normal;font-size:15px;line-height:1.3;color:var(--ink-2)}
+.lesson-row .room{grid-column:3;grid-row:1;font-size:15px;color:var(--ink-2)}
+.examtoday{padding:6px 0;font-size:17px;line-height:1.35;font-weight:650}
+.examtoday span{display:block;font-size:15px;font-weight:450;color:var(--ink-2)}
+
+/* Aufgabenzeile (V1 4.3) */
+.task{position:relative;overflow:hidden;margin:0 -10px;isolation:isolate}
+.task + .task::after{content:"";position:absolute;left:10px;right:10px;top:0;height:1px;background:var(--line);z-index:3}
+.t-under{position:absolute;inset:0;background:var(--raise-2);color:var(--ink);display:flex;align-items:center;padding-left:22px;opacity:0;transition:opacity 200ms ease}
+.t-under .ic{width:24px;height:24px;transform:scale(.6);transition:transform 200ms var(--ease-out)}
+.task.drag-r .t-under{opacity:1}
+.task.past .t-under .ic{transform:scale(1)}
+/* die Aktionen enden genau an der Spaltenkante, wie die Haarlinie */
+.t-acts{position:absolute;top:0;bottom:0;right:10px;display:flex;opacity:0}
+.task.drag-l .t-acts,.task.open-l .t-acts{opacity:1}
+.t-acts button{width:88px;display:grid;place-items:center;font-size:15px;font-weight:650}
+.t-acts .edit{background:var(--raise-2);color:var(--ink)}
+.t-acts .del{background:var(--error);color:var(--bg)}
+.t-front{position:relative;z-index:2;display:grid;grid-template-columns:37px minmax(0,1fr) auto;column-gap:8px;align-items:center;min-height:60px;
+  padding:4px 10px;background:var(--bg);touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.t-front::before{content:"";position:absolute;inset:0 10px;background:var(--ink);opacity:0;pointer-events:none;z-index:-1}
+.check{width:48px;height:48px;display:grid;place-items:center;margin-left:-11px;position:relative}
+.ring{width:26px;height:26px;border-radius:50%;border:2px solid var(--ink-3);display:grid;place-items:center;position:relative;transition:transform 160ms var(--ease-out)}
+.check:active .ring{transform:scale(.88)}
+.cfill{position:absolute;inset:-2px;border-radius:50%;background:var(--ink-3);transform:scale(.4);opacity:0;display:grid;place-items:center;
+  transition:transform 240ms var(--ease-out),opacity 140ms ease}
+.cfill .ic{width:16px;height:16px;color:var(--bg);opacity:0;transform:scale(.5) rotate(-12deg);
+  transition:opacity 140ms ease 80ms,transform 240ms var(--ease-out) 80ms}
+.task.done .ring{border-color:transparent}
+.task.done .cfill{transform:none;opacity:1}
+.task.done .cfill .ic{opacity:1;transform:none}
+.cfill .ic svg{stroke-width:2.4}
+.t-text{min-width:0;padding:6px 0;position:relative}
+.t-title{font-size:17px;line-height:1.4;font-weight:450;position:relative}
+.t-title b{font-weight:650;margin-right:.4em}
+/* unter einer Fachzeile steht das Fach schon darüber */
+.task[data-mode="subj"] .t-title b{display:none}
+.task.done .t-title{color:var(--ink-3)}
+.task.done .t-title b{font-weight:560}
+.t-sub{font-size:15px;line-height:1.3;color:var(--ink-2);margin-top:1px}
+.strike{position:absolute;height:1px;background:currentColor;transform-origin:left center;pointer-events:none;color:var(--ink-3)}
+
+/* Überblick */
+.exam-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:10px;width:100%;min-height:56px;transition:opacity 140ms ease}
+.exam-row:active{opacity:.6}
+.exam-row b{display:block;font-size:17px;line-height:1.3;font-weight:650}
+.exam-row b + span{display:block;font-size:15px;line-height:1.3;color:var(--ink-2)}
+.exam-row .ic{color:var(--ink-3)}
+.lb-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:10px;min-height:56px;border-top:1px solid var(--line)}
+.lb-row p{font-size:17px;line-height:1.3;font-weight:560;min-width:0}
+.lb-row p > span{display:block;font-size:15px;font-weight:450;color:var(--ink-2)}
+.lb-row p > .lbk{display:inline;font:inherit;color:inherit}
+.lb-row .lbk2{display:none}
+/* schmale Geräte: "Scheitelpunktform" als Titel, "Lernblock" in der Unterzeile, kein Mittelpunkt am Zeilenende */
+@media (max-width:380px){.lb-row p > .lbk{display:none}.lb-row .lbk2{display:inline}}
+.lb-act{display:grid;justify-items:end}
+.lb-act > *{grid-area:1/1}
+.lbbtn{height:44px;min-width:44px;padding:0 0 0 12px;display:inline-flex;align-items:center;justify-content:flex-end;
+  font-size:17px;font-weight:650;color:var(--accent);transition:transform 140ms var(--ease-out),opacity 140ms ease}
+.lbbtn:active{transform:scale(.96);opacity:.7}
+.lbdone{display:inline-flex;align-items:center;gap:6px;height:44px;font-size:15px;font-weight:560;color:var(--ink-2);visibility:hidden}
+.lbdone .ic{color:var(--ink-3)}
+.lb-row.erledigt .lbbtn{visibility:hidden}
+.lb-row.erledigt .lbdone{visibility:visible}
+.wh{margin-top:16px}
+.whbtn{display:flex;align-items:center;justify-content:space-between;width:100%;height:52px;border-radius:999px;padding:0 22px;
+  background:var(--accent-fill);color:var(--on-accent-fill);font-size:17px;line-height:1;font-weight:650;transition:transform 140ms var(--ease-out)}
+.whbtn:active{transform:scale(.97)}
+.whbtn .n{font-weight:450}
+.wh-sub{font-size:15px;line-height:1.3;color:var(--ink-2);margin-top:4px;min-height:18px;text-wrap:pretty}
+.wh-ok{display:flex;align-items:center;gap:8px;min-height:52px;font-size:15px;line-height:1.35;color:var(--ink-2)}
+.wh-ok .ic{width:18px;height:18px;color:var(--ink-3)}
+.wh-slot{display:grid}
+.wh-slot > *{grid-area:1/1}
+.wh + .blk{margin-top:12px}
+/* Streifen bis an den Bildschirmrand: die Zellen sind breit genug für ganze Wörter wie "Scheitelpunktform" */
+.thumbs{position:relative;display:flex;gap:12px;margin-right:calc(-1 * var(--pad));padding-right:var(--pad);overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scroll-padding-left:0}
+.thumbs::-webkit-scrollbar{display:none}
+/* alle drei Zellen oben bündig: der Knopf zentriert seinen Inhalt sonst senkrecht */
+.tcell{flex:0 0 132px;scroll-snap-align:start;display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;min-width:0;text-align:left;transition:transform 140ms var(--ease-out)}
+.tcell:active{transform:scale(.97)}
+.tmini{display:block;flex:none;height:76px;border-radius:4px;background:#E9E8E3 center top/cover no-repeat;box-shadow:0 0 0 1px var(--thumb-edge)}
+.tcell b{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;margin-top:7px;font-size:13px;line-height:1.3;font-weight:560;overflow:hidden;overflow-wrap:normal;hyphens:none;-webkit-hyphens:none;text-wrap:balance}
+.tcell span{display:block;margin-top:1px;font-size:13px;line-height:1.3;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* knapp: nur die Miniaturen, ohne Titel. Die Miniatur ist selbst ein span, sie bleibt */
+.short .tcell .tc-t,.short .tcell .tc-s{display:none}
+
+/* ---------- Ablauf ---------- */
+.plate{position:absolute;z-index:5;left:0;right:0;top:0;height:calc(var(--top) + 52px);background:var(--bg);pointer-events:none}
+.band{position:absolute;z-index:6;left:var(--pad);right:var(--pad);top:var(--top);height:52px;display:grid;grid-template-columns:1fr 1fr auto;column-gap:4px;align-items:start}
+.seg{display:flex;flex-direction:column;justify-content:flex-start;padding-top:8px;min-height:44px;height:48px}
+.seg-track{display:block;height:2px;border-radius:1px;background:var(--line-strong);overflow:hidden}
+.seg-fill{display:block;height:100%;background:var(--ink-3);transform:scaleX(0);transform-origin:left}
+.seg-label{display:block;margin-top:8px;font-size:15px;line-height:1.2;font-weight:560;color:var(--ink-3)}
+.seg.cur .seg-fill{transform:scaleX(1);background:var(--ink)}
+.seg.cur .seg-label{color:var(--ink)}
+.seg.done .seg-fill{transform:scaleX(1)}
+.seg.done .seg-label{color:var(--ink-2)}
+.skip{height:44px;padding:0 10px;margin:5px -10px 0 0;font-size:15px;line-height:1;font-weight:560;color:var(--ink-2);display:inline-flex;align-items:center;transition:transform 140ms var(--ease-out)}
+.skip:active{transform:scale(.96)}
+.steps{position:absolute;inset:0}
+.step{position:absolute;inset:0;background:var(--bg);visibility:hidden}
+.step.vis{visibility:visible}
+.step .scroll{padding-top:calc(var(--top) + 52px + 18px)}
+h1.q{font-family:var(--sans);font-size:32px;line-height:1.08;font-weight:650;letter-spacing:-.03em;text-wrap:balance;margin-bottom:18px}
+.q-sub{font-size:17px;line-height:1.4;color:var(--ink-2);margin:-8px 0 20px}
+.group{margin-top:24px}
+.foot{display:flex;gap:10px;align-items:center;margin-top:28px}
+.btn{height:52px;border-radius:999px;padding:0 22px;display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  font-size:17px;line-height:1;font-weight:650;white-space:nowrap;transition:transform 140ms var(--ease-out)}
+.btn:active{transform:scale(.97)}
+.btn.primary{flex:1;background:var(--ink);color:var(--bg)}
+.btn.quiet{flex:1;background:var(--raise);color:var(--ink)}
+.btn .ic{width:22px;height:22px}
+/* Schritt 1: der Sucher ist der Einstieg. Ein Tipp öffnet die Kamera, die aus genau dieser Fläche wächst */
+.sucher{position:relative;display:grid;place-items:center;width:100%;height:clamp(200px,34dvh,296px);border-radius:22px;background:var(--camera);color:#F2F0EA;
+  box-shadow:0 0 0 1px var(--line-strong);overflow:hidden;text-align:center;transition:transform 140ms var(--ease-out)}
+.sucher:active{transform:scale(.985)}
+.sucher .corner{border-color:rgba(251,249,244,.86)}
+.sucher .corner.tl{left:16px;top:16px}.sucher .corner.tr{right:16px;top:16px}.sucher .corner.bl{left:16px;bottom:16px}.sucher .corner.br{right:16px;bottom:16px}
+.su-mid{display:flex;flex-direction:column;align-items:center;gap:14px}
+.su-ring{width:64px;height:64px;border-radius:50%;border:2px solid #F2F0EA;display:grid;place-items:center}
+.su-ring i{width:52px;height:52px;border-radius:50%;background:#F2F0EA;transition:transform 140ms var(--ease-out)}
+.sucher:active .su-ring i{transform:scale(.92)}
+.su-label{font-size:17px;line-height:1.2;font-weight:560;color:#E4E2DC}
+/* mit Blättern in der Liste wird der Sucher flach, damit die Liste ins Bild rückt */
+/* Flach ist er nur noch ein leiser Zweitknopf: die nächste Handlung ist "Weiter", nicht noch ein Blatt */
+.sucher.compact{height:64px;background:var(--raise);color:var(--ink);box-shadow:none;transition:transform 140ms var(--ease-out),background-color 240ms ease}
+.sucher.compact .su-mid{flex-direction:row;gap:12px}
+/* flach: ein Kamerazeichen statt des Auslöserrings, der sonst wie ein Auswahlknopf aussieht */
+.su-cam{display:none;width:22px;height:22px;color:var(--ink)}
+.sucher.compact .su-ring{display:none}
+.sucher.compact .su-cam{display:block}
+.sucher.compact .su-label{color:var(--ink);font-size:16px}
+.sucher.compact .corner{display:none}
+.sucher.compact .corner.tl{left:12px;top:12px}.sucher.compact .corner.tr{right:12px;top:12px}.sucher.compact .corner.bl{left:12px;bottom:12px}.sucher.compact .corner.br{right:12px;bottom:12px}
+/* Weiter: erst ein leiser Textknopf, nach dem ersten Blatt der Primärknopf. Beide in einer Zelle, sie blenden über statt Farbe zu mischen */
+.bl-next{display:grid;flex:1}
+.bl-next > *{grid-area:1/1;transition:opacity 140ms ease,transform 200ms var(--ease-out),visibility 0s linear 140ms}
+.bl-next .skipnext{height:52px;width:100%;justify-content:center;font-size:17px;font-weight:560;color:var(--ink-2)}
+.bl-next .btn{width:100%;opacity:0;visibility:hidden;transform:translateY(6px)}
+.bl-next.has .skipnext{opacity:0;visibility:hidden}
+/* während abgelegte Blätter noch fliegen: weder "Keine Blätter, weiter" noch schon "Weiter" */
+.bl-next.wait > *{opacity:0;visibility:hidden;transition:none}
+.bl-next.has .btn{opacity:1;visibility:visible;transform:none;transition:opacity 200ms ease 100ms,transform 260ms var(--ease-out) 100ms,visibility 0s}
+.round{width:52px;height:52px;border-radius:999px;display:grid;place-items:center;flex:none;background:var(--raise);transition:transform 140ms var(--ease-out)}
+.round:active{transform:scale(.92)}
+.btn-label{display:inline-block;transition:opacity 160ms ease,transform 200ms var(--ease-out)}
+.btn-label.swap{opacity:0;transform:translateY(6px)}
+.bl-list{margin-top:18px}
+.bl-list:empty{display:none}
+.subj{border-bottom:1px solid var(--line)}
+.subj:last-child{border-bottom:0}
+.subj-head{display:grid;grid-template-columns:minmax(0,1fr) 44px;align-items:center;column-gap:10px;width:100%;min-height:64px;padding:6px 0;transition:opacity 140ms ease}
+.subj-head:active{opacity:.6}
+.subj-head > .ic{justify-self:end;color:var(--ink-2)}
+.subj-name{min-width:0}
+.subj-name b{display:block;font-size:17px;line-height:1.3;font-weight:650}
+.subj-name span{display:block;font-size:15px;line-height:1.35;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.items:empty{display:none}
+.items{padding-bottom:8px}
+.item{display:grid;grid-template-columns:20px 1fr;column-gap:8px;align-items:center;padding:6px 0;position:relative;isolation:isolate}
+.item::before{content:"";position:absolute;inset:0;border-radius:8px;background:var(--mark);opacity:0;z-index:-1;pointer-events:none}
+.item.sheet-item{grid-template-columns:56px minmax(0,1fr);column-gap:14px;align-items:start;padding:10px 0;border-top:1px solid var(--line)}
+.item.sheet-item:first-child{border-top:0}
+.thumb{width:56px;aspect-ratio:1/1.414;display:block;position:relative}
+.thumb .pg{position:absolute;inset:0;border-radius:4px;background:#E9E8E3 center/cover no-repeat;box-shadow:0 0 0 1px var(--thumb-edge)}
+.thumb .pg.under{transform:translate(4px,-4px);background:var(--raise-2)}
+.sheet-st{padding-top:1px;min-width:0}
+.st-t{font-size:17px;line-height:1.35;font-weight:560;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* die Zeile ist von Anfang an so hoch wie eingeordnet: nichts darunter rutscht nach */
+.st-th{font-size:15px;line-height:1.35;color:var(--ink);margin-top:1px;min-height:1.35em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-s{font-size:15px;line-height:1.35;color:var(--ink-2);min-height:1.35em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-s.err{color:var(--error)}
+.st-acts{display:flex;gap:18px;height:44px}
+.st-acts.wait{visibility:hidden}
+.retry,.refile-btn,.add-page{height:44px;display:inline-flex;align-items:center;font-size:15px;font-weight:560;color:var(--ink-2);transition:opacity 140ms ease}
+.retry{color:var(--error);font-weight:650}
+.refile-btn:active,.add-page:active{opacity:.6}
+.add-page{display:none}
+#blTop .sheet-item:first-child .add-page{display:inline-flex}
+.refile{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 4px}
+.fp{flex:none;height:44px;padding:0 14px;border-radius:999px;background:var(--raise);font-size:15px;font-weight:560;transition:transform 140ms var(--ease-out)}
+.fp:active{transform:scale(.96)}
+.fp[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+
+/* ---------- Nachschlagen ---------- */
+.page{position:absolute;inset:0;background:var(--bg);z-index:10;touch-action:pan-y}
+.page .scroll{padding-top:calc(var(--top) + 56px)}
+.p-top{position:absolute;z-index:3;left:7px;right:var(--pad);top:var(--top);height:52px;display:flex;align-items:center;gap:8px}
+.pback{width:44px;height:44px;border-radius:999px;display:grid;place-items:center;color:var(--ink);transition:transform 140ms var(--ease-out),opacity 140ms ease}
+.pback .ic{width:22px;height:22px}
+.pback:active{transform:scale(.92);opacity:.6}
+.p-title{font-size:22px;line-height:1.2;font-weight:650;letter-spacing:-.02em;margin-bottom:4px}
+.p-sub{font-size:15px;color:var(--ink-2);margin-bottom:8px}
+.p-lab{font-size:15px;font-weight:650;color:var(--ink-2);margin:24px 0 4px}
+.days{position:relative;display:grid;grid-template-columns:repeat(5,1fr);margin-top:14px;border-bottom:1px solid var(--line)}
+.day{height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--ink-3)}
+.day b{font-size:15px;font-weight:650}
+.day span{font-size:13px}
+.day[aria-pressed="true"]{color:var(--ink)}
+.day-ind{position:absolute;left:0;bottom:-1px;width:20%;height:2px;background:var(--ink);transition:transform 300ms var(--ease-io)}
+.lessons{margin-top:4px}
+.lesson{display:grid;grid-template-columns:58px 1fr;column-gap:12px;padding:14px 0;border-bottom:1px solid var(--line)}
+.lesson:last-child{border-bottom:0}
+.lesson time{font-size:15px;font-weight:560;line-height:1.35}
+.lesson time .end{display:block;color:var(--ink-3);font-weight:450}
+.lesson b{display:block;font-size:17px;font-weight:650;line-height:1.3}
+.lesson em{display:block;font-style:normal;font-size:15px;color:var(--ink-2);margin-top:2px}
+.lesson .tag{display:block;font-size:15px;font-weight:650;color:var(--ink);margin-top:4px}
+.free{font-size:15px;color:var(--ink-2);padding:14px 0}
+.plan{margin-top:2px}
+.prow{display:grid;grid-template-columns:58px minmax(0,1fr) auto;column-gap:10px;align-items:start;padding:10px 0}
+.prow.exday{border-top:1px solid var(--line);margin-top:4px;padding-top:14px}
+.pday{font-size:15px;line-height:1.35;font-weight:450;color:var(--ink-2);padding-top:1px}
+.prow.today .pday{color:var(--ink);font-weight:650}
+.pbody b{display:block;font-size:17px;line-height:1.3;font-weight:560}
+.pbody > span{display:block;font-size:15px;line-height:1.35;color:var(--ink-2)}
+.prow .lbbtn{margin-top:-6px}
+.abschrift{font-size:17px;line-height:1.55}
+.abschrift p + p{margin-top:12px}
+.abschrift h3{font-size:17px;font-weight:650;margin:18px 0 6px}
+.abschrift h3:first-child{margin-top:4px}
+.formel,.f-in{font-variant-numeric:lining-nums;font-feature-settings:"lnum" 1}
+.formel{font-family:var(--serif);font-style:italic;font-size:23px;line-height:1.3;font-weight:400;font-variation-settings:"opsz" 24;display:block;margin:10px 0}
+.f-in{font-family:var(--serif);font-style:italic;font-weight:400;font-variation-settings:"opsz" 24;font-size:1.08em;line-height:0}
+.f-in.lead{margin-left:.06em}
+.seg2{display:inline-grid;grid-auto-flow:column;gap:4px;background:var(--raise);border-radius:999px;padding:3px;margin:8px 0 16px}
+.seg2 button{height:44px;padding:0 16px;border-radius:999px;font-size:15px;font-weight:560;color:var(--ink-2)}
+.seg2 button[aria-pressed="true"]{background:var(--sheet);color:var(--ink)}
+.original{border-radius:4px;background:#E9E8E3 center/cover no-repeat;aspect-ratio:1/1.414;width:100%;box-shadow:0 0 0 1px var(--thumb-edge)}
+.lrow{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;column-gap:12px;width:100%;min-height:64px;padding:10px 0;border-bottom:1px solid var(--line);transition:opacity 140ms ease}
+.lrow:last-child{border-bottom:0}
+.lrow.plain{grid-template-columns:minmax(0,1fr) auto}
+.lrow:active{opacity:.6}
+.lrow .mini{width:34px;aspect-ratio:1/1.414;border-radius:3px;background:#E9E8E3 center/cover no-repeat;box-shadow:0 0 0 1px var(--thumb-edge)}
+.lrow b{display:block;font-size:17px;font-weight:560;line-height:1.3}
+.lrow span.s{display:block;font-size:15px;color:var(--ink-2)}
+.lrow > .ic{color:var(--ink-3)}
+.lrow .avg{font-size:17px;line-height:1;font-weight:650}
+.grade-row{display:grid;grid-template-columns:56px minmax(0,1fr);align-items:baseline;padding:12px 0;border-bottom:1px solid var(--line)}
+.grade-row:last-child{border-bottom:0}
+.grade-row b{font-size:22px;font-weight:650}
+.grade-row span{font-size:15px;color:var(--ink-2)}
+.total{display:flex;justify-content:space-between;align-items:center;min-height:52px;font-size:17px;font-weight:650;border-bottom:1px solid var(--line-strong)}
+.total b{font-weight:650}
+.total span{color:var(--ink-2);font-weight:450}
+.split{font-size:15px;color:var(--ink-2);margin-top:12px}
+.textbtn{height:44px;display:inline-flex;align-items:center;font-size:17px;font-weight:650;color:var(--ink);transition:transform 140ms var(--ease-out)}
+.textbtn:active{transform:scale(.96)}
+.set-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:60px;border-bottom:1px solid var(--line);font-size:17px}
+.set-row span{color:var(--ink-2);font-size:15px}
+
+/* ---------- Zeile ---------- */
+.zeile{position:fixed;z-index:40;left:0;right:0;bottom:var(--safe-b);margin:0 auto;max-width:100%;pointer-events:none}
+.zeile::before{content:"";position:absolute;left:0;right:0;bottom:calc(-1 * var(--safe-b));height:calc(52px + var(--safe-b) + 10px);background:var(--bg);pointer-events:auto}
+.zeile.hide::before,.zeile.menu-on::before{visibility:hidden}
+@media (min-width:600px){.zeile{max-width:390px}}
+.dock{pointer-events:auto;position:relative;z-index:3;margin:0 var(--pad);height:52px;border-radius:26px;background:var(--dock);color:var(--dock-text);
+  display:flex;align-items:center;padding:4px;box-shadow:var(--dock-shadow)}
+.dock .lupe{width:40px;display:grid;place-items:center;color:var(--dock-muted);flex:none}
+.dock.ctx .lupe{color:var(--dock-text)}
+.dock input{flex:1;min-width:0;height:44px;border:0;outline:none;background:transparent;color:var(--dock-text);font-size:17px;line-height:1.3;font-weight:450;caret-color:var(--dock-text)}
+.dock input::placeholder{color:var(--dock-muted)}
+.send{position:relative;isolation:isolate;width:44px;height:44px;display:grid;place-items:center;color:var(--dock-text);flex:none;margin-right:4px;
+  opacity:0;transform:scale(.9);pointer-events:none;transition:opacity 160ms ease,transform 200ms var(--ease-out)}
+.send::before{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--dock-line);z-index:-1}
+.send .ic{width:20px;height:20px}
+.send:not(.on){width:0;margin:0;overflow:hidden}
+.send.on{opacity:1;transform:none;pointer-events:auto}
+.send:active{transform:scale(.96)}
+.dsep{width:1px;height:28px;background:var(--dock-line);flex:none}
+.camb{width:44px;height:44px;border-radius:999px;display:grid;place-items:center;color:var(--dock-text);flex:none;transition:transform 140ms var(--ease-out)}
+.camb:active{transform:scale(.92)}
+.zeile.hide .dock{visibility:hidden}
+.scrim{position:fixed;inset:0;z-index:30;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity 200ms ease}
+.scrim.on{opacity:1;pointer-events:auto}
+.menu{pointer-events:auto;position:absolute;z-index:2;left:0;right:0;bottom:calc(-1 * var(--safe-b));border-radius:24px 24px 0 0;background:var(--sheet);color:var(--ink);
+  box-shadow:var(--menu-shadow);display:flex;flex-direction:column;padding:0 0 calc(52px + var(--safe-b) + 8px);visibility:hidden}
+.menu.open{visibility:visible}
+.m-grab{height:22px;touch-action:none;flex:none;cursor:grab}
+.m-scroll{position:relative;flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;padding:6px 6px 0;display:flex;flex-direction:column}
+.m-scroll::-webkit-scrollbar{display:none}
+/* Wenn die Tastatur Platz nimmt und unten noch etwas kommt: ein kurzer Verlauf statt einer abgeschnittenen Zeile */
+.m-scroll.more{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 32px),transparent)}
+.m-layer:not(.off){margin-top:auto}
+.m-layer{transition:opacity 180ms var(--ease-out),transform 180ms var(--ease-out)}
+.m-layer.off{position:absolute;left:6px;right:6px;bottom:0;opacity:0;transform:translateY(6px);pointer-events:none;visibility:hidden}
+.m-hits{display:flex;flex-direction:column-reverse}
+.m-group{padding-bottom:4px}
+.m-gl{font-size:15px;font-weight:650;color:var(--ink-2);padding:12px 16px 4px}
+/* eine linke Kante: Markierung 6px eingerückt, Text bei 22px wie die Seite darüber */
+.opt{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px;align-items:center;min-height:52px;padding:6px 10px 6px 16px;border-radius:12px;cursor:pointer}
+.opt.has-ic{grid-template-columns:30px minmax(0,1fr) auto}
+.opt > div{min-width:0}
+.opt .mini{width:22px;height:31px;border-radius:2px;background:#E9E8E3 center/cover no-repeat;box-shadow:0 0 0 1px var(--line-strong);justify-self:center}
+.opt .mcheck{width:44px;height:44px;margin:-7px;display:grid;place-items:center}
+.opt .mcheck .ring{width:22px;height:22px}
+.mcheck.on .ring{border-color:transparent}
+.mcheck.on .cfill{transform:none;opacity:1}
+.mcheck.on .cfill .ic{opacity:1;transform:none}
+.opt:not(.first) .o1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:0 0 6px}
+.opt.cell{min-height:44px;padding:0 10px 0 16px}
+.opt.cell .o1{font-size:17px;font-weight:560}
+.opt[aria-selected="true"]{background:var(--line)}
+.o1{font-size:17px;line-height:1.3;font-weight:560;color:var(--ink)}
+.o2{font-size:15px;line-height:1.35;color:var(--ink-2);margin-top:1px;overflow:hidden;text-overflow:ellipsis}
+.opt .hl{color:var(--ink);font-weight:650}
+.opt .dim{color:var(--ink-2)}
+.opt.first .o1{font-weight:650}
+.o-end{display:flex;align-items:center}
+.ans{padding:2px 16px 6px}
+.menu .t-front{background:var(--sheet)}
+.ans .lesson{padding:10px 0;grid-template-columns:52px 1fr}
+.ans .lesson time{font-size:15px}
+.ans .lesson b{font-size:17px}
+.ans .grade-row{padding:8px 0}
+.ans .alab{font-size:15px;font-weight:650;color:var(--ink-2);padding:10px 0 2px}
+.kuerzel{font-size:15px;color:var(--ink-2);padding:10px 16px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m-fach{display:flex;flex-wrap:wrap;gap:8px;padding:6px 16px 2px 22px;flex:none}
+.m-fach .fp{height:44px}
+.m-fach:empty{display:none}
+.m-tokens{display:flex;column-gap:6px;row-gap:0;flex-wrap:wrap;padding:2px 16px 0 10px;min-height:46px;flex:none;align-items:center}
+.m-tokens::-webkit-scrollbar{display:none}
+.m-tokens:empty{min-height:8px;padding:0}
+.tok{position:relative;isolation:isolate;flex:none;height:44px;padding:0 12px;display:inline-flex;align-items:center;gap:4px;font-size:15px;line-height:1;font-weight:560;
+  color:var(--ink);transition:transform 140ms var(--ease-out)}
+.tok::before{content:"";position:absolute;inset:6px 0;border-radius:999px;background:var(--line);z-index:-1}
+.tok .ic{width:16px;height:16px}
+.tok.int{color:var(--bg)}
+.tok.int::before{background:var(--ink)}
+/* "Suchen" ist kein Rahmenknopf, sondern eine Textzeile wie "Stattdessen suchen" */
+.tok.int.suchen{color:var(--ink-2);font-weight:560}
+.tok.int.suchen::before{background:transparent}
+.tok.want::before{background:transparent;box-shadow:inset 0 0 0 1.5px var(--line-strong)}
+.tok.want{color:var(--ink-2)}
+.tok:active{transform:scale(.96)}
+
+.toast{position:fixed;z-index:66;left:calc(50% - min(50vw,195px) + var(--pad));bottom:80px;max-width:calc(min(100vw,390px) - 44px);height:44px;border-radius:22px;
+  background:var(--sheet);color:var(--ink);box-shadow:var(--toast-shadow);display:flex;align-items:center;gap:2px;padding:0 4px 0 18px;
+  font-size:15px;font-weight:560;opacity:0;transform:translateY(14px);pointer-events:none;transition:transform 260ms var(--ease-out),opacity 200ms var(--ease-out)}
+.toast.on{opacity:1;transform:none;pointer-events:auto}
+body.toast-on .scroll{padding-bottom:calc(var(--foot-space) + 54px)}
+.toast span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toast button{flex:none;height:44px;padding:0 14px 0 10px;border-radius:999px;font-weight:650;color:var(--accent)}
+
+/* ---------- Sheet ---------- */
+.sheet{position:fixed;z-index:72;left:0;right:0;bottom:0;margin:0 auto;max-width:390px;max-height:86dvh;display:flex;flex-direction:column;
+  background:var(--sheet);color:var(--ink);border-radius:28px 28px 0 0;transform:translateY(105%);visibility:hidden;box-shadow:var(--menu-shadow)}
+.sheet.open{visibility:visible}
+.sheet .grab{height:28px;display:grid;place-items:center;touch-action:none;flex:none;cursor:grab}
+.sheet .grab i{width:38px;height:5px;border-radius:3px;background:var(--line-strong)}
+.sheet .sh-body{overflow-y:auto;overscroll-behavior:contain;padding:4px var(--pad) calc(var(--safe-b) + 16px)}
+.sheet-scrim{z-index:71}
+
+/* ---------- Kamera ---------- */
+.cam{position:fixed;inset:0;z-index:60;margin:0 auto;max-width:390px;background:var(--camera);color:#F2F0EA;display:none;flex-direction:column}
+.cam.open{display:flex}
+.cam-top{height:calc(var(--top) + 52px);padding:var(--top) 12px 0;display:grid;grid-template-columns:44px 1fr 44px;align-items:center;flex:none;position:relative;z-index:3}
+.cbtn{width:44px;height:44px;border-radius:999px;display:grid;place-items:center;background:rgba(255,255,255,.12);transition:transform 140ms var(--ease-out)}
+.cbtn:active{transform:scale(.92)}
+.cam-chip{justify-self:center;height:36px;padding:0 14px;border-radius:999px;background:rgba(255,255,255,.12);display:inline-flex;align-items:center;font-size:15px;font-weight:560;color:#E4E2DC}
+.finder{position:relative;flex:1;min-height:0;margin:8px 23px 0;border-radius:3px;overflow:hidden;background:#151513}
+.finder video,.finder canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.finder canvas{visibility:hidden}
+.finder.frozen canvas{visibility:visible}
+.f-msg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;font-size:17px;color:#C9C5BB;padding:24px}
+.f-msg .btn{background:#F2F0EA;color:#0B0B0C;height:48px;font-size:15px}
+.corner{position:absolute;width:23px;height:23px;border:0 solid #FBF9F4;pointer-events:none}
+.corner.tl{left:0;top:0;border-top-width:2px;border-left-width:2px}
+.corner.tr{right:0;top:0;border-top-width:2px;border-right-width:2px}
+.corner.bl{left:0;bottom:0;border-bottom-width:2px;border-left-width:2px}
+.corner.br{right:0;bottom:0;border-bottom-width:2px;border-right-width:2px}
+.cflash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.cam-bottom{flex:none;height:112px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 22px}
+.shutter{width:78px;height:78px;border-radius:50%;border:2px solid #F2F0EA;display:grid;place-items:center}
+.shutter i{width:64px;height:64px;border-radius:50%;background:#F2F0EA;transition:transform 140ms var(--ease-out)}
+.shutter:active i{transform:scale(.92)}
+.shutter.off{opacity:.35}
+.cam-n{justify-self:start;font-size:15px;font-weight:560;color:#C9C5BB;font-variant-numeric:tabular-nums}
+/* Streifen unter dem Sucher: jedes Foto ein Blatt, "Seite dazu" an der letzten Miniatur */
+.cam-strip{flex:none;position:relative;height:84px;margin:0 0 0;display:flex;align-items:center}
+.cs-row{display:flex;align-items:center;gap:10px;height:100%;padding:0 23px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;flex:1;min-width:0}
+.cs-row::-webkit-scrollbar{display:none}
+.cs-empty{position:absolute;left:0;right:0;top:0;bottom:0;display:grid;place-items:center;font-size:15px;color:#9B978E;pointer-events:none;transition:opacity 160ms ease}
+.cam-strip.has .cs-empty{opacity:0}
+.cs-mini{position:relative;flex:none;width:44px;height:62px;border-radius:3px;background:#E6E2D7 center/cover no-repeat;transition:transform 140ms var(--ease-out)}
+.cs-mini:active{transform:scale(.94)}
+.cs-mini .n{position:absolute;right:-8px;top:-8px;min-width:22px;height:22px;border-radius:11px;padding:0 6px;background:#F2F0EA;color:#0B0B0C;font-size:13px;font-weight:650;line-height:22px;text-align:center}
+.cs-add{flex:none;height:44px;padding:0 14px 0 10px;border-radius:999px;display:inline-flex;align-items:center;gap:4px;font-size:15px;font-weight:560;color:#E4E2DC;background:rgba(255,255,255,.12);transition:transform 140ms var(--ease-out),background-color 160ms ease,color 160ms ease}
+.cs-add .ic{width:18px;height:18px}
+.cs-add:active{transform:scale(.96)}
+.cs-add[aria-pressed="true"]{background:#F2F0EA;color:#0B0B0C}
+.ablegen{justify-self:end;height:48px;padding:0 20px;border-radius:999px;background:#F2F0EA;color:#0B0B0C;font-size:15px;font-weight:650;visibility:hidden;transition:transform 140ms var(--ease-out)}
+.ablegen.on{visibility:visible}
+.ablegen:active{transform:scale(.96)}
+.fotos{flex:none;align-self:center;height:44px;padding:0 14px;margin-bottom:calc(var(--safe-b) + 4px);font-size:15px;font-weight:560;color:#C9C5BB}
+.cam-sheet{position:absolute;z-index:6;left:0;right:0;bottom:0;max-height:80%;overflow-y:auto;background:#1F1E1B;border-radius:28px 28px 0 0;padding:8px 16px calc(var(--safe-b) + 12px);transform:translateY(105%);visibility:hidden}
+.cam-sheet.open{visibility:visible}
+.cs-head{display:flex;align-items:center;justify-content:space-between;min-height:52px;font-size:17px;font-weight:650}
+.cs-head button{height:44px;padding:0 16px;border-radius:999px;background:rgba(255,255,255,.12);font-size:15px;font-weight:650}
+.cs-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+.cs-grid figure{display:flex;flex-direction:column;align-items:center;gap:4px}
+.cs-grid .pg{width:100%;aspect-ratio:1/1.414;border-radius:3px;background:#E6E2D7 center/cover no-repeat}
+.cs-grid button{height:44px;font-size:15px;font-weight:560;color:#F2B8B5}
+.cs-grid figcaption{font-size:13px;color:#C9C5BB}
+.fly-t{position:fixed;z-index:80;pointer-events:none;transform-origin:0 0}
+.fly{position:fixed;z-index:80;pointer-events:none;border-radius:4px;background:#E9E8E3 center/cover no-repeat;transform-origin:0 0}
+
+/* ---------- Tisch: Wiederholen und Lernblock ---------- */
+.tisch{position:fixed;left:0;right:0;top:0;height:100dvh;z-index:65;margin:0 auto;max-width:390px;display:none;color:var(--t-on)}
+.tisch.open{display:block}
+.t-surface{position:absolute;inset:0;background:var(--table);overflow:hidden}
+.t-tint{position:absolute;inset:0;background:var(--accent-fill);opacity:0}
+.t-ghost{position:absolute;display:flex;align-items:center;justify-content:space-between;padding:0 22px;color:var(--on-accent-fill);font-size:17px;line-height:1;font-weight:650;pointer-events:none;opacity:0;white-space:nowrap}
+.t-body{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;padding-bottom:calc(var(--safe-b) + 2px)}
+.t-top{width:100%;height:calc(var(--top) + 50px);padding:var(--top) var(--pad) 0 6px;display:flex;align-items:center;justify-content:space-between;flex:none}
+.tbtn{width:44px;height:44px;display:grid;place-items:center;transition:transform 140ms var(--ease-out),opacity 140ms ease}
+.tbtn:active{transform:scale(.92);opacity:.7}
+.t-of{font-size:13px;line-height:1;font-weight:560;opacity:.76}
+.t-clock{height:44px;min-width:44px;padding:0 14px;margin-right:-14px;border-radius:999px;display:inline-flex;align-items:center;gap:6px;font-size:15px;line-height:1;font-weight:560;transition:transform 140ms var(--ease-out),opacity 140ms ease}
+.t-clock:active{transform:scale(.96)}
+.t-clock.paused{opacity:.7}
+.t-clock .ic{width:16px;height:16px}
+.t-head{width:calc(100% - 44px);flex:none;margin-top:6px;position:relative}
+.t-fach{font-size:13px;line-height:1.2;font-weight:560;opacity:.86}
+.t-thema{font-size:22px;line-height:1.2;font-weight:650;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.t-ticks{width:calc(100% - 44px);display:flex;gap:4px;margin-top:14px;flex:none}
+.tick{flex:1;height:3px;border-radius:2px;background:var(--t-fill-2);overflow:hidden}
+.tick i{display:block;height:100%;background:var(--t-on);transform:scaleX(0);transform-origin:left}
+.tick.past i{transform:scaleX(1)}
+.t-meta{width:calc(100% - 44px);display:grid;margin:8px 0 16px;flex:none}
+.t-meta > *{grid-area:1/1}
+.t-count{font-size:15px;line-height:1.3;font-weight:560;transition:opacity 200ms ease}
+.t-hint{font-size:15px;line-height:1.3;font-weight:650;opacity:0;transition:opacity 200ms ease}
+.t-meta.hint .t-hint{opacity:1}
+.t-meta.hint .t-count{opacity:0}
+.t-stack{position:relative;flex:0 0 auto;height:320px;width:min(346px,calc(100% - 44px));margin:0 0 auto}
+.sc{position:absolute;inset:0;z-index:3;transform-origin:50% 100%;touch-action:none;transition:transform 320ms var(--ease-out),opacity 200ms ease}
+.sc[data-pos="out"]{z-index:5;pointer-events:none}
+.sc[data-pos="1"]{z-index:2;transform:translateY(14px) scale(.95);pointer-events:none}
+.sc[data-pos="2"]{z-index:1;transform:translateY(28px) scale(.9);opacity:.7;pointer-events:none}
+.sc[data-pos="3"]{z-index:0;transform:translateY(36px) scale(.86);opacity:0;pointer-events:none}
+.sc[data-pos="1"] .face > *,.sc[data-pos="2"] .face > *,.sc[data-pos="3"] .face > *{opacity:0}
+.tisch.typing .sc[data-pos="1"],.tisch.typing .sc[data-pos="2"]{opacity:0}
+.sc-lift{position:absolute;inset:0;perspective:1400px}
+.sc-flip{position:absolute;inset:0;transform-style:preserve-3d;transition:transform 320ms var(--ease-flip)}
+.sc.flipped .sc-flip{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;border-radius:22px;background:var(--card);color:var(--card-ink);display:flex;flex-direction:column;
+  backface-visibility:hidden;-webkit-backface-visibility:hidden;box-shadow:0 0 0 1px var(--card-edge),var(--card-shadow);overflow:hidden}
+.face.back{transform:rotateY(180deg)}
+/* Frage oben, das Feld 24px darunter; die Karte ist so hoch wie das (Vorderseite) */
+.c-q{flex:0 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;justify-content:flex-start;padding:22px 20px 24px;scrollbar-width:none;touch-action:pan-y}
+.c-q::-webkit-scrollbar{display:none}
+.c-q p{font-family:var(--serif);font-size:27px;line-height:1.2;font-weight:500;font-variation-settings:"opsz" 72;letter-spacing:-.01em;text-wrap:balance;overflow-wrap:break-word;hyphens:auto}
+.c-q .f-in{font-size:1em;font-weight:500}
+.c-field{flex:none;margin:auto 12px 12px;border-radius:14px;background:var(--card-field);cursor:text}
+.c-field textarea{display:block;width:100%;min-height:48px;height:48px;max-height:120px;padding:12px 14px;border:0;outline:none;background:transparent;resize:none;font-size:17px;line-height:1.4;font-weight:450;color:var(--card-ink);caret-color:var(--card-ink);
+  overflow-y:auto;scrollbar-width:none}
+.c-field textarea::placeholder{color:var(--card-ink-2)}
+.c-back{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:20px 20px 14px;scrollbar-width:none;touch-action:pan-y}
+.c-back::-webkit-scrollbar{display:none}
+/* Rückseite länger als die Karte: kurzer Verlauf an der Unterkante als Hinweis, dass sie scrollt */
+.c-back.more{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 36px),transparent)}
+.cb-lab{font-size:13px;line-height:1.2;font-weight:560;color:var(--card-ink-2);margin-top:16px}
+.cb-lab:first-child{margin-top:0}
+.cb-mine{font-size:17px;line-height:1.45;margin-top:4px;white-space:pre-wrap;overflow-wrap:break-word}
+.cb-mine.none{color:var(--card-ink-2)}
+.cb-sol{list-style:none;counter-reset:n;margin:6px 0 0;padding:0;font-size:17px;line-height:1.45;font-weight:450}
+.cb-sol li{display:grid;grid-template-columns:22px minmax(0,1fr);counter-increment:n}
+.cb-sol li::before{content:counter(n) ".";color:var(--card-ink-2);font-variant-numeric:proportional-nums}
+.cb-sol li + li{margin-top:4px}
+.cb-verw{font-size:15px;line-height:1.45;color:var(--card-ink-2);margin-top:14px;padding-top:12px;border-top:1px solid var(--card-line)}
+.cb-heft{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:44px;margin-top:8px;font-size:15px;font-weight:560;color:var(--card-ink);border-top:1px solid var(--card-line)}
+.cb-heft .ic{width:18px;height:18px;color:var(--card-ink-2);transition:transform 200ms var(--ease-out)}
+.cb-heft[aria-expanded="true"] .ic{transform:rotate(180deg)}
+.cb-quote{font-size:15px;line-height:1.45;color:var(--card-ink)}
+.cb-quote p{padding-left:12px;box-shadow:inset 2px 0 0 var(--card-line)}
+.cb-quote button{height:44px;font-size:15px;font-weight:650;color:var(--card-ink)}
+.cb-retire{height:44px;margin-top:10px;font-size:15px;font-weight:450;color:var(--card-ink-2)}
+.cb-ask{margin-top:8px;padding:12px 14px;border-radius:14px;background:var(--card-field)}
+.cb-ask p{font-size:15px;font-weight:650}
+.cb-ask div{display:flex;gap:8px;margin-top:8px}
+.cb-ask button{flex:1;display:inline-flex;align-items:center;justify-content:center;text-align:center;padding:0 12px;height:44px;border-radius:12px;font-size:15px;font-weight:650;background:var(--card);color:var(--card-ink);box-shadow:inset 0 0 0 1px var(--card-line)}
+.cb-ask button.yes{background:var(--card-ink);color:var(--card)}
+.stamp{position:absolute;top:18px;z-index:2;padding:6px 12px;border-radius:999px;font-size:15px;font-weight:650;opacity:0;pointer-events:none}
+.stamp.l{right:18px;background:var(--card-ink);color:var(--card)}
+.stamp.r{left:18px;background:var(--table);color:var(--t-on)}
+.tisch.kb .t-mat{display:none}
+.t-foot{position:relative;width:calc(100% - 44px);height:64px;margin-top:16px;flex:none}
+.t-foot > div{position:absolute;inset:0;display:flex;gap:10px}
+.rb{flex:1;text-align:center;height:64px;border-radius:22px;font-size:17px;font-weight:650;background:var(--t-fill-2);color:var(--t-on);transition:transform 140ms var(--ease-out)}
+.rb:active{transform:scale(.97)}
+.rb.known{background:var(--known);color:var(--known-ink)}
+.t-rate{visibility:hidden}
+/* so breit wie die Knöpfe darüber: eine Breite statt drei */
+.t-mat{margin-top:8px;width:calc(100% - 44px);height:44px;padding:0 16px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-size:15px;font-weight:560;background:var(--t-fill);flex:none;transition:transform 140ms var(--ease-out)}
+.t-mat:active{transform:scale(.96)}
+/* Satz und Zahlen oben, die Knöpfe am Fuß des Tisches, wo vorher "Daneben" und "Saß" lagen */
+.t-end{position:absolute;left:0;right:0;top:calc(var(--top) + 50px + 9vh);bottom:calc(var(--safe-b) + 2px);padding:0 var(--pad);display:flex;flex-direction:column;visibility:hidden}
+.t-end.on{visibility:visible}
+.t-end h2{margin-left:-.04em;font-family:var(--serif);font-size:32px;line-height:1.1;font-weight:500;font-variation-settings:"opsz" 72;letter-spacing:-.015em;text-wrap:balance}
+.t-end h2.sans{margin-left:0;font-family:var(--sans);font-size:28px;line-height:1.15;font-weight:650;letter-spacing:-.03em}
+.t-end p{font-size:17px;line-height:1.4;margin-top:12px}
+.t-end p + p{margin-top:2px}
+.t-end .tnext{margin-top:auto;padding-top:24px;display:flex;flex-direction:column;gap:10px}
+.t-end .tnote{font-size:15px;margin:0 0 2px}
+.tlink{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;min-height:64px;padding:8px 18px;border-radius:22px;background:var(--t-fill-2);color:var(--t-on);font-size:17px;line-height:1.25;font-weight:650;transition:transform 140ms var(--ease-out)}
+.tlink:active{transform:scale(.97)}
+.tlink.known{background:var(--known);color:var(--known-ink)}
+.tlink span.s{font-size:15px;font-weight:450;color:var(--known-ink-2)}
+.t-confirm{position:absolute;z-index:4;left:12px;right:12px;bottom:calc(var(--safe-b) + 8px);border-radius:28px;background:var(--card);color:var(--card-ink);padding:22px 20px 18px;visibility:hidden;box-shadow:0 0 0 1px var(--card-edge)}
+.t-confirm.on{visibility:visible}
+.t-confirm h2{font-size:22px;font-weight:650;line-height:1.25}
+.t-confirm p{font-size:17px;color:var(--card-ink-2);margin-top:4px}
+.t-confirm .row{display:flex;gap:10px;margin-top:18px}
+.t-confirm .btn{flex:1}
+.t-confirm .btn.ja{background:var(--card-ink);color:var(--card)}
+.t-confirm .btn.nein{background:var(--card-field);color:var(--card-ink)}
+.sheet.on-table{background:var(--t-sheet)}
+
+/* ---------- Arbeitsblatt auf dem Tisch (Zusatz Arbeitsblätter) ---------- */
+.t-blatt{position:relative;width:100%;flex:1 1 auto;min-height:0;display:none}
+.t-bfoot{position:relative;width:calc(100% - 44px);flex:none;display:none;margin-top:12px}
+.tisch.blatt .t-blatt{display:block}
+.tisch.blatt .t-bfoot{display:block}
+.tisch.blatt .t-stack,.tisch.blatt .t-foot,.tisch.blatt .t-ticks{display:none}
+.tisch.blatt .t-meta{margin-bottom:0}
+/* oben und unten dieselbe kurze Ausblendung: nichts wird unter dem Kopf hart abgeschnitten */
+.tb-view{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:none;padding:14px var(--pad) 28px;
+  -webkit-mask-image:linear-gradient(to bottom,transparent,#000 14px,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to bottom,transparent,#000 14px,#000 calc(100% - 28px),transparent)}
+.tb-view::-webkit-scrollbar{display:none}
+.tb-pages{display:flex;flex-direction:column;align-items:center;gap:20px}
+.tb-page{display:flex;flex-direction:column;gap:8px}
+.tb-cap{display:flex;justify-content:space-between;font-size:13px;line-height:1.2;font-weight:560;color:var(--t-on);opacity:.8}
+.tb-paper{position:relative;display:block;overflow:hidden;border-radius:2px;background:var(--a4-paper);box-shadow:var(--card-shadow);cursor:zoom-in;transition:transform 140ms var(--ease-out)}
+.tb-paper:active{transform:scale(.985)}
+.tb-paper .a4{position:absolute;left:0;top:0;transform-origin:0 0;pointer-events:none}
+.tb-art{display:block;height:44px;margin:14px auto 0;padding:0 14px;font-size:15px;font-weight:560;color:var(--t-on);opacity:.8;transition:opacity 140ms ease}
+.tb-art:active{opacity:.5}
+.tb-wert h2{font-size:28px;line-height:1.15;font-weight:650;letter-spacing:-.03em}
+.tb-wert > p{font-size:17px;line-height:1.4;margin-top:8px;opacity:.86;text-wrap:pretty}
+.tb-rows{margin-top:16px;list-style:none;padding:0}
+.tb-row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;column-gap:10px;min-height:52px;padding:4px 0;border-top:1px solid var(--t-fill-2)}
+.tb-row:last-child{border-bottom:1px solid var(--t-fill-2)}
+.tb-row .nr{font-size:17px;font-weight:650}
+.tb-row .k{font-size:15px;line-height:1.3;font-weight:450}
+.tb-row .k .m{font-family:var(--serif);font-style:italic;font-size:1.1em;font-variation-settings:"opsz" 24;white-space:nowrap}
+.tb-seg{display:flex;gap:6px}
+.tb-seg button{height:44px;padding:0 13px;border-radius:999px;background:var(--t-fill);color:var(--t-on);font-size:15px;font-weight:600;
+  transition:transform 140ms var(--ease-out),background-color 180ms ease,color 180ms ease}
+.tb-seg button:active{transform:scale(.96)}
+.tb-seg button[aria-pressed="true"]{background:var(--known);color:var(--known-ink)}
+/* Falsch gewählt sieht anders aus als Richtig gewählt: dunkle Fläche mit Kreuz statt heller mit Haken.
+   Die nicht gewählte Hälfte tritt zurück, damit man die Reihe auf einen Blick liest */
+.tb-seg button[data-v="false"][aria-pressed="true"]{background:rgba(0,0,0,.32);color:#fff;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.55)}
+.tb-seg button[aria-pressed="true"]::before{display:inline-block;margin-right:6px;font-weight:700}
+.tb-seg button[data-v="true"][aria-pressed="true"]::before{content:"✓"}
+.tb-seg button[data-v="false"][aria-pressed="true"]::before{content:"✕"}
+.tb-seg:has([aria-pressed="true"]) button[aria-pressed="false"]{opacity:.5}
+.tb-alt{display:flex;flex-direction:column;margin-top:18px}
+.tb-bald{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;column-gap:10px;width:100%;min-height:48px;color:var(--t-on);cursor:default}
+.tb-bald .ic{width:20px;height:20px;opacity:.8}
+.tb-bald span.l{font-size:17px;font-weight:560;opacity:.8}
+.tb-bald span.s{display:block;font-size:13px;font-weight:450;opacity:.8;margin-top:1px}
+.tb-bald i{font-style:normal;font-size:13px;font-weight:600;padding:4px 10px;border-radius:999px;box-shadow:inset 0 0 0 1px var(--t-fill-2)}
+.tb-links{display:flex;gap:4px;margin-top:2px}
+.tb-links button{height:44px;padding:0 12px 0 0;font-size:15px;font-weight:600;color:var(--t-on);transition:opacity 140ms ease}
+.tb-links button:active{opacity:.5}
+.tb-main{width:100%;height:64px;text-align:center;border-radius:22px;font-size:17px;font-weight:650;background:var(--known);color:var(--known-ink);
+  transition:transform 140ms var(--ease-out),background-color 220ms ease,color 220ms ease}
+.tb-main:active{transform:scale(.97)}
+.tb-main[aria-disabled="true"]{background:var(--t-fill-2);color:var(--t-on);cursor:default}
+/* der Stand steht über dem Knopf, der Knopf heißt immer "Fertig" */
+.tb-state{height:30px;display:flex;align-items:flex-start;justify-content:center;font-size:15px;line-height:1.3;font-weight:560;opacity:.86}
+.tb-state[hidden]{display:none}
+.tb-main[aria-disabled="true"]:active{transform:none}
+.tb-lupe{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column}
+.tb-lupe[hidden]{display:none}
+.tb-lbg{position:absolute;inset:0;background:var(--table)}
+.tb-lupe .t-top{position:relative;z-index:2}
+/* Lesegröße: dieselbe Seite, auf die Bildschirmbreite umbrochen. Seite 2 schließt direkt an. Druck und Vorschau bleiben A4 */
+.tb-lscroll{position:relative;flex:1;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;padding:6px 16px calc(var(--safe-b) + 16px)}
+.tb-lpages{display:flex;flex-direction:column;gap:16px}
+.tb-lscroll::-webkit-scrollbar{display:none}
+.tb-lpage{position:relative;overflow:hidden;border-radius:3px;background:var(--a4-paper);box-shadow:var(--card-shadow);transform-origin:0 0}
+.a4.flow{width:auto;height:auto;padding:18px 16px 14px;overflow:visible;zoom:1.08}
+.a4.flow .a4-top{padding-bottom:12px}
+.a4.flow .a4-pad{display:none}
+.a4.flow .m{white-space:nowrap}
+.a4.flow .a4-foot b{white-space:nowrap;margin-left:12px}
+.a4.flow .a4-foot{margin-top:18px}
+
+/* ---------- Das A4-Blatt: dieselbe Gestaltung in Vorschau, Lupe und Druck. Papier bleibt hell ---------- */
+.a4{width:210mm;height:297mm;padding:14mm 17mm 11mm 18mm;background:var(--a4-paper);color:var(--a4-ink);display:flex;flex-direction:column;
+  font-family:var(--sans);font-size:10.5pt;line-height:1.45;font-weight:450;letter-spacing:0;font-synthesis:none;-webkit-font-smoothing:antialiased;overflow:hidden;text-align:left}
+.a4-top{display:flex;justify-content:space-between;align-items:baseline;font-size:8.5pt;line-height:1.3;font-weight:560;color:var(--a4-ink-2);padding-bottom:6mm}
+.a4-top b{font-weight:650;color:var(--a4-accent)}
+.a4 h1{font-size:21pt;line-height:1.08;font-weight:650;letter-spacing:-.025em;color:var(--a4-ink)}
+.a4-sub{font-size:10.5pt;line-height:1.35;color:var(--a4-ink-2);margin-top:1.6mm}
+.a4-src{font-size:8.5pt;line-height:1.35;color:var(--a4-ink-2);margin-top:3.2mm;padding-top:2.6mm;border-top:.25mm solid var(--a4-ink)}
+.a4-src b{font-weight:560;color:var(--a4-ink)}
+.a4-list{display:flex;flex-direction:column;gap:4.6mm;margin-top:5.4mm}
+.a4-task{display:grid;grid-template-columns:8mm minmax(0,1fr);align-items:baseline}
+.a4-nr{font-size:12pt;line-height:1.22;font-weight:650;color:var(--a4-accent);font-variant-numeric:tabular-nums}
+.a4-q{font-size:10.5pt;line-height:1.45;text-wrap:pretty}
+.a4-parts{display:flex;flex-wrap:wrap;column-gap:7mm;row-gap:.8mm;margin-top:1mm}
+.a4-parts span.p{white-space:nowrap}
+.a4-parts .lb{font-weight:560;color:var(--a4-ink-2);margin-right:1.2mm}
+.a4 .m{font-family:var(--serif);font-style:italic;font-weight:400;font-size:1.13em;line-height:1;font-variation-settings:"opsz" 24;font-feature-settings:"lnum" 1;letter-spacing:.005em}
+.a4 .fr{font-style:italic}
+.a4-pad{display:block;width:100%;margin-top:2.4mm}
+.a4-luecke p,.a4-luecke .a4-parts{line-height:2.05}
+.a4-luecke .a4-parts{row-gap:0;margin-top:0}
+.a4 .gap{display:inline-block;width:22mm;height:.95em;border-bottom:.22mm solid var(--a4-ink-2);margin:0 1.2mm;vertical-align:-.15em}
+.a4-foot{display:flex;justify-content:space-between;align-items:baseline;margin-top:auto;padding-top:2.6mm;border-top:.2mm solid var(--a4-line);font-size:8pt;line-height:1.3;color:var(--a4-ink-3)}
+.a4-foot b{font-weight:560;color:var(--a4-ink-2);font-variant-numeric:tabular-nums}
+.a4-note{font-size:9pt;line-height:1.4;color:var(--a4-ink-2);margin-top:2.4mm}
+.a4-sol{display:flex;flex-direction:column;gap:4.4mm;margin-top:5.4mm}
+.a4-s p{line-height:1.5}
+.a4-s p + p,.a4-s p + .a4-eqs,.a4-eqs + p{margin-top:.8mm}
+.a4 .tl{font-weight:560;color:var(--a4-ink-2);margin-right:1.4mm}
+.a4-eqs{display:grid;grid-template-columns:max-content max-content minmax(0,1fr);column-gap:1.8mm;row-gap:.9mm;align-items:baseline;margin:1.4mm 0 0 0}
+.a4-eqs .eq{text-align:center}
+.a4-erg{margin-top:1.2mm;font-weight:600}
+.a4-erg .m{font-weight:600}
+.a4-hint{margin-top:1.2mm;font-size:9pt;line-height:1.4;color:var(--a4-ink-2)}
+.a4-hint b{font-weight:650;color:var(--a4-ink)}
+#druck{display:none}
+@media print{
+  @page{size:A4;margin:0}
+  html,body{height:auto !important;overflow:visible !important;background:#fff !important}
+  body > *:not(#druck){display:none !important}
+  #druck{display:block}
+  #druck .a4{break-after:page;page-break-after:always;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #druck .a4:last-child{break-after:auto;page-break-after:auto}
+}
+.rm .sc{transition:opacity 160ms ease}
+.rm .sc-flip{transition:none}
+.rm .sc.flipped .sc-flip{transform:none}
+.rm .face{transition:opacity 200ms ease}
+.rm .sc.flipped .face.front{opacity:0;pointer-events:none}
+.rm .face.back{transform:none;opacity:0;pointer-events:none}
+.rm .sc.flipped .face.back{opacity:1;pointer-events:auto}
+@media (prefers-reduced-motion: reduce){
+  .btn-label,.toast,.send,.day-ind,.t-hint,.t-count,.sc,.wmenu,.now-pill,.when .ic{transition-duration:160ms}
+  .cfill,.cfill .ic{transition-duration:120ms;transition-delay:0ms}
+  .btn-label.swap,.toast,.wmenu,.now-pill{transform:none}
+}
+@media (hover:hover) and (pointer:fine){
+  .pill:hover{background:var(--raise)}
+  .when:hover{background:var(--raise)}
+  .pback:hover{opacity:.7}
+  .opt:hover{background:var(--line)}
+  .lrow:hover,.textline:hover,.exam-row:hover{opacity:.8}
+}
+
+/* ======================= Desktop ab 1024 px ======================= */
+/* Drei Stufen: 1024 bis 1279 knapp, ab 1280 normal, ab 1440 breit (Blatt: Abschrift und Original nebeneinander) */
+:root{--rail:224px;--list:328px;--dpad:40px;--dtop:28px}
+@media (min-width:1280px){:root{--rail:244px;--list:360px;--dpad:48px}}
+@media (min-width:1680px){:root{--list:392px;--dpad:64px;--dtop:36px}}
+
+.d-narrow{display:none}
+@media (max-width:1023px){
+  #desk,.d-tisch{display:none !important}
+  .d-narrow{display:grid;place-items:center;position:fixed;inset:0;padding:24px;text-align:center}
+  .d-narrow p{max-width:340px;font-size:17px;line-height:1.4;color:var(--ink-2)}
+  .d-narrow a{color:var(--accent);font-weight:650;text-decoration:none}
+}
+
+#desk{position:fixed;inset:0;display:grid;grid-template-columns:var(--rail) minmax(0,1fr);background:var(--bg)}
+button{-webkit-user-select:none;user-select:none}
+.d-scroll,.d-list,.d-detail{scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+
+/* ---------- Seitenleiste ---------- */
+.rail{position:relative;display:flex;flex-direction:column;min-height:0;padding:var(--dtop) 12px 14px;border-right:1px solid var(--line)}
+.r-when{display:flex;align-items:center;gap:7px;height:44px;padding:0 10px;font-size:15px;line-height:1.3;color:var(--ink-2);white-space:nowrap}
+.r-when .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}
+.r-when b{color:var(--ink);font-weight:560}
+.r-nav{display:flex;flex-direction:column;gap:2px;margin-top:12px}
+.r-item{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:8px;width:100%;height:40px;padding:0 10px;border-radius:10px;
+  font-size:15px;line-height:1;font-weight:560;color:var(--ink-2);transition:background-color 120ms ease,color 120ms ease,transform 140ms var(--ease-out)}
+.r-item .n{font-size:13px;font-weight:560;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.r-item[aria-current="page"]{background:var(--raise);color:var(--ink);font-weight:650}
+.r-item[aria-current="page"] .n{color:var(--ink-2)}
+.r-item:active{transform:scale(.98)}
+@media (hover:hover){.r-item:not([aria-current="page"]):hover{background:var(--quiet);color:var(--ink)}}
+.r-sep{height:1px;background:var(--line);margin:10px 10px}
+.r-foot{margin-top:auto;display:flex;flex-direction:column;gap:2px}
+.r-item .ic{width:18px;height:18px;color:var(--ink-3)}
+
+/* ---------- Bühne ---------- */
+.stage{position:relative;min-width:0;min-height:0;overflow:hidden}
+.view{position:absolute;inset:0;display:none}
+.view.on{display:block}
+.d-scroll{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;padding:var(--dtop) var(--dpad) 128px}
+.d-split{position:absolute;inset:0;display:grid;grid-template-columns:var(--list) minmax(0,1fr)}
+.d-list{position:relative;min-height:0;overflow-y:auto;overflow-x:hidden;border-right:1px solid var(--line);padding:var(--dtop) 22px 128px 24px}
+.d-detail{position:relative;min-height:0;overflow-y:auto;overflow-x:hidden;padding:var(--dtop) var(--dpad) 128px}
+.d-in{max-width:760px}
+.d-wide{max-width:1180px}
+.d-head{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:44px}
+.d-h1{font-size:28px;line-height:1.12;font-weight:650;letter-spacing:-.03em;text-wrap:balance}
+.d-sub{font-size:15px;line-height:1.35;color:var(--ink-2);margin-top:4px}
+.d-list .p-title{min-height:44px;display:flex;align-items:center;margin:0}
+.d-lede{font-size:17px;line-height:1.4;margin-top:14px}
+.d-foot{display:flex;gap:10px;margin-top:28px}
+.d-foot .btn{flex:none;min-width:168px}
+/* Liste am Rechner: dieselbe Zeile wie am Handy, die Auswahl als leise Fläche */
+.d-list .lrow{position:relative;margin:0 -12px;width:calc(100% + 24px);padding:10px 12px;border-radius:10px;border-bottom:0;min-height:60px;transition:background-color 120ms ease}
+.d-list .lrow + .lrow::before{content:"";position:absolute;left:12px;right:12px;top:0;height:1px;background:var(--line)}
+.d-list .lrow.sel{background:var(--raise)}
+.d-list .lrow.sel::before,.d-list .lrow.sel + .lrow::before{opacity:0}
+.d-list .lrow:active{opacity:1}
+@media (hover:hover){.d-list .lrow:not(.sel):hover{background:var(--quiet);opacity:1}.d-list .lrow:hover::before,.d-list .lrow:hover + .lrow::before{opacity:0}}
+.d-list .lrow .mini{width:30px}
+.d-list .p-lab:first-of-type{margin-top:16px}
+/* Aufgabenzeile in der Liste: Text wählt aus, der Ring hakt ab */
+.task .t-front{cursor:default}
+.d-list .task .t-text{cursor:pointer}
+.d-list .task.sel .t-front{background:var(--raise);border-radius:10px;margin:0 0}
+.d-list .task.sel::after,.d-list .task.sel + .task::after{opacity:0}
+.d-list .task .t-front::before{inset:0}
+@media (hover:hover){.d-list .task:not(.sel) .t-front:hover{background:var(--quiet);border-radius:10px}}
+.ring{cursor:pointer}
+@media (hover:hover){.check:hover .ring{border-color:var(--ink-2)}}
+
+/* Detail: Angaben als Haarlinienzeilen */
+.d-facts{margin-top:22px;border-top:1px solid var(--line)}
+.d-fact{display:grid;grid-template-columns:132px minmax(0,1fr);column-gap:16px;align-items:baseline;min-height:48px;padding:12px 0;border-bottom:1px solid var(--line);font-size:17px;line-height:1.35}
+.d-fact > span:first-child{font-size:15px;color:var(--ink-2)}
+.d-fact em{font-style:normal;color:var(--ink-2);font-size:15px}
+.d-pane{animation:none}
+
+/* ---------- Heute ---------- */
+.h-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);column-gap:64px;align-items:start;margin-top:14px}
+@media (max-width:1279px){.h-grid{column-gap:40px}}
+@media (min-width:1680px){.h-grid{column-gap:96px}}
+.h-col{min-width:0}
+.h-col .blk + .blk{margin-top:24px}
+.h-col .wh{margin-top:28px}
+.h-col .wh + .blk{margin-top:28px}
+.h-side .blk:first-child{margin-top:0}
+.h-side .lab{height:30px}
+.d-thumbs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px 16px}
+.d-thumbs .tcell{flex:none;width:100%}
+.d-thumbs .tmini{height:auto;aspect-ratio:1/.74}
+.d-thumbs .tcell b{font-size:15px}
+.d-thumbs .tcell span{font-size:13px}
+@media (max-width:1439px){.d-thumbs .tcell:nth-child(n+4){display:none}}
+@media (min-width:1680px){.d-wide{max-width:1320px}}
+@media (hover:hover){.tcell:hover .tmini{box-shadow:0 0 0 1px var(--line-strong)}}
+.h-pack .lesson-row{min-height:52px}
+.h-note{font-size:15px;line-height:1.35;color:var(--ink-2);margin-top:6px}
+
+/* ---------- Woche: echtes Raster, Stunden mit Zeit, Lernen ohne Uhrzeit ---------- */
+.wk-nav{display:flex;align-items:center;gap:4px}
+.icb{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--ink-2);transition:background-color 120ms ease,transform 140ms var(--ease-out)}
+.icb .ic{width:20px;height:20px}
+.icb:active{transform:scale(.94)}
+@media (hover:hover){.icb:hover{background:var(--quiet);color:var(--ink)}}
+.chip{height:36px;padding:0 14px;border-radius:999px;background:var(--raise);font-size:15px;font-weight:560;color:var(--ink);transition:transform 140ms var(--ease-out)}
+.chip:active{transform:scale(.96)}
+.chip[aria-disabled="true"]{visibility:hidden}
+.wk{display:grid;grid-template-columns:76px repeat(5,minmax(0,1fr));margin-top:20px;border-top:1px solid var(--line-strong)}
+.wk > *{border-bottom:1px solid var(--line);min-width:0}
+.wk-h{display:flex;flex-direction:column;justify-content:center;gap:2px;height:60px;padding:0 14px;border-left:1px solid var(--line);color:var(--ink-2)}
+.wk-h b{display:flex;align-items:center;gap:7px;font-size:15px;line-height:1.2;font-weight:650;color:var(--ink)}
+.wk-h span{font-size:13px;line-height:1.2;color:var(--ink-3)}
+.wk-h.td b::after{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.wk-h.td span{color:var(--ink-2)}
+.wk-corner{border-left:0}
+.wk-t{padding:12px 0 10px;font-size:15px;line-height:1.35;font-weight:560}
+.wk-t .end{display:block;color:var(--ink-3);font-weight:450}
+.wk-c{position:relative;padding:10px 14px 12px;border-left:1px solid var(--line);min-height:76px}
+.wk-c b{display:block;font-size:17px;line-height:1.3;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wk-c em{display:block;font-style:normal;font-size:15px;line-height:1.35;color:var(--ink-2)}
+.wk-c .tag{display:block;margin-top:6px;font-size:15px;line-height:1.3;font-weight:650;color:var(--ink)}
+.wk-c.td,.wk-h.td{background:var(--quiet)}
+.wk-lab{padding:14px 0 12px;font-size:15px;line-height:1.3;font-weight:650;color:var(--ink-2)}
+.wk-x{padding:6px 10px 8px;border-left:1px solid var(--line);min-height:64px}
+.wk-x.td{background:var(--quiet)}
+.wk-free{grid-column:2 / -1;padding:28px 14px;border-left:1px solid var(--line);font-size:17px;color:var(--ink-2)}
+.mt{display:grid;grid-template-columns:28px minmax(0,1fr);column-gap:4px;align-items:start;padding:5px 0}
+.mt .check{width:28px;height:28px;margin:0}
+.mt .ring{width:20px;height:20px;border-width:1.75px}
+.mt .cfill .ic{width:12px;height:12px}
+.mt p{font-size:15px;line-height:1.35;padding-top:4px;min-width:0}
+.mt p b{font-weight:650;margin-right:.35em}
+.mt.done p{color:var(--ink-3)}
+.mt.done .ring{border-color:transparent}
+.mt.done .cfill{transform:none;opacity:1}
+.mt.done .cfill .ic{opacity:1;transform:none}
+.mt .check:active .ring{transform:scale(.88)}
+.h-col .task .t-text{cursor:pointer}
+.mt.done p span{text-decoration:line-through;text-decoration-thickness:1px;text-decoration-color:var(--ink-3)}
+.ml{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:6px;padding:6px 4px}
+.ml p{font-size:15px;line-height:1.35;font-weight:560;min-width:0}
+.ml p span{display:block;font-weight:450;color:var(--ink-2)}
+.ml .lbbtn{height:36px;font-size:15px}
+.wk-legend{margin-top:14px;font-size:15px;color:var(--ink-2)}
+
+/* ---------- Klausur: Lernplan als Wochenstreifen ---------- */
+.lp{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin-top:8px;border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line)}
+.lp-d{display:flex;flex-direction:column;gap:4px;min-height:132px;padding:12px 14px 14px;border-left:1px solid var(--line);min-width:0}
+.lp-d:first-child{border-left:0;padding-left:0}
+.lp-d .pday{font-size:15px;color:var(--ink-2)}
+.lp-d.today .pday{color:var(--ink);font-weight:650}
+.lp-d b{display:block;font-size:17px;line-height:1.3;font-weight:560;margin-top:8px}
+.lp-d b + span{display:block;font-size:15px;line-height:1.35;color:var(--ink-2)}
+.lp-d .lbbtn{margin-top:auto;justify-content:flex-start;padding:0;height:40px}
+.lp-d.exday b{font-weight:650}
+.lp-d .none{margin-top:8px;font-size:15px;color:var(--ink-3)}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:48px;margin-top:8px}
+.two > div{min-width:0}
+
+/* ---------- Ablage und Blatt ---------- */
+.d-fil{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+.d-fil .fp{height:36px;padding:0 13px}
+.bl-two{display:block}
+.bl-orig{display:none}
+.bl-orig .original{margin-bottom:14px}
+@media (min-width:1440px){
+  .bl-two{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,340px);column-gap:48px;align-items:start}
+  .bl-orig{display:block;position:sticky;top:0}
+  .bl-seg{display:none}
+  .bl-two .d-in{max-width:none}
+}
+.bl-cap{font-size:13px;font-weight:560;color:var(--ink-2);margin-bottom:8px}
+.d-detail .abschrift{max-width:640px}
+.refile .fp{height:36px}
+
+/* ---------- Noten ---------- */
+.d-list .total{margin-top:8px}
+.lrow .avg{min-width:32px;text-align:right}
+
+/* ---------- Einstellungen ---------- */
+.keys{margin-top:18px;border-top:1px solid var(--line)}
+.key-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;min-height:48px;border-bottom:1px solid var(--line);font-size:17px}
+.kbd{display:inline-grid;place-items:center;min-width:28px;height:26px;padding:0 8px;border-radius:7px;font-size:13px;line-height:1;font-weight:600;color:var(--ink-2);
+  box-shadow:inset 0 0 0 1px var(--line-strong);font-variant-numeric:tabular-nums}
+.kbd + .kbd{margin-left:4px}
+
+/* ---------- Zeile am Rechner: dieselbe dunkle Pille, unten in der Bühne ---------- */
+.d-zeile{position:absolute;z-index:40;left:50%;bottom:20px;width:min(600px,calc(100% - 48px));translate:-50% 0}
+.d-zeile .dock{margin:0}
+.dock .dkbd{display:inline-grid;place-items:center;min-width:26px;height:26px;padding:0 7px;margin-right:8px;border-radius:7px;font-size:13px;font-weight:600;color:var(--dock-muted);box-shadow:inset 0 0 0 1px var(--dock-line);flex:none}
+.dock.typing .dkbd{display:none}
+.camb{color:var(--dock-text)}
+.d-menu{position:absolute;left:0;right:0;bottom:62px;max-height:min(62vh,540px);overflow-y:auto;padding:6px;border-radius:16px;background:var(--sheet);color:var(--ink);box-shadow:var(--pop-shadow);
+  transform-origin:50% 100%;opacity:0;transform:translateY(6px) scale(.98);pointer-events:none;visibility:hidden;
+  transition:opacity 150ms ease-out,transform 180ms var(--ease-out),visibility 0s linear 180ms}
+.d-menu.on{opacity:1;transform:none;pointer-events:auto;visibility:visible;transition:opacity 150ms ease-out,transform 180ms var(--ease-out),visibility 0s}
+.d-menu .opt{min-height:48px}
+.d-menu .opt .o-end{font-size:13px;color:var(--ink-3)}
+.d-menu .m-gl{padding:10px 16px 4px}
+
+/* Toast in der Bühne über der Zeile */
+#desk .toast{position:absolute;left:50%;bottom:84px;max-width:min(520px,calc(100% - 48px));translate:-50% 0}
+
+/* Ablegen: ein Blatt aus dem Ordner ins Fenster ziehen */
+.d-drop{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity 160ms ease}
+.d-drop.on{opacity:1;pointer-events:auto}
+.d-drop-in{width:min(420px,calc(100% - 48px));padding:28px 28px 26px;border-radius:22px;background:var(--sheet);box-shadow:var(--pop-shadow);transform:scale(.97);transition:transform 200ms var(--ease-out)}
+.d-drop.on .d-drop-in{transform:none}
+.d-drop-in b{display:block;font-size:22px;line-height:1.2;font-weight:650;letter-spacing:-.02em}
+.d-drop-in p{font-size:15px;line-height:1.4;color:var(--ink-2);margin-top:6px}
+
+/* ---------- Tisch in Fensterbreite ---------- */
+.d-tisch{position:fixed;inset:0;z-index:65;display:none;color:var(--t-on)}
+.d-tisch.open{display:block}
+.d-tsurf{position:absolute;inset:0;background:var(--table);transform-origin:0 0}
+.d-tbody{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0}
+.d-ttop{position:relative;z-index:3;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:12px;height:76px;padding:0 32px 0 20px;flex:none}
+.d-ttop .tbtn{border-radius:12px}
+@media (hover:hover){.d-ttop .tbtn:hover,.t-clock:hover{background:var(--t-fill)}}
+.d-ttop .t-of{justify-self:end}
+.d-ttop .t-clock{margin-right:-14px}
+.d-tk{position:relative;flex:1;min-height:0}
+/* Karten: eine Spalte von 600 px in der Mitte, Tasten neben der Beschriftung */
+.d-cards{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;overflow-y:auto;padding:4px 24px 32px}
+.d-cards > *{width:min(600px,100%)}
+.d-cards .t-head,.d-cards .t-ticks,.d-cards .t-meta{width:min(600px,100%)}
+.d-cards .t-stack{height:260px;width:min(600px,100%);margin:0}
+.d-cards .c-q p{font-size:30px}
+.d-cards .t-foot{width:min(600px,100%);margin-top:56px}
+.rb .k,.tb-main .k{display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 6px;margin-left:10px;border-radius:6px;font-size:13px;font-weight:600;vertical-align:1px;box-shadow:inset 0 0 0 1px currentColor;opacity:.5}
+.d-cards .t-end{position:static;visibility:visible;padding:0;margin-top:9vh}
+.d-cards .t-end .tnext{margin-top:40px;flex-direction:row}
+.d-cards .t-end .tlink{flex:1}
+/* Arbeitsblatt: Seiten links in Lesegröße, Steuerung rechts in einer festen Spalte */
+.d-blatt{position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,1fr) 400px}
+@media (min-width:1680px){.d-blatt{grid-template-columns:minmax(0,1fr) 440px}}
+.d-pages{min-height:0;overflow-y:auto;padding:0 40px 40px;display:flex;flex-direction:column;align-items:center;gap:28px;scrollbar-width:thin;scrollbar-color:var(--t-fill-2) transparent}
+.d-pages .tb-page{gap:10px}
+.d-pages.two{flex-direction:row;align-items:flex-start;justify-content:center}
+.d-pages .tb-paper{cursor:default}
+.d-pages .tb-paper:active{transform:none}
+.d-side{min-height:0;overflow-y:auto;padding:0 40px 32px 8px;display:flex;flex-direction:column}
+.d-side .t-thema{white-space:normal;font-size:28px;line-height:1.15;letter-spacing:-.03em}
+.d-side .d-lead{font-size:17px;line-height:1.4;margin-top:8px;opacity:.86}
+.d-side .tb-wert{position:static;padding:0;-webkit-mask-image:none;mask-image:none;overflow:visible;margin-top:28px}
+.d-side .tb-row .k{font-size:15px}
+.d-side .t-bfoot{display:block;width:100%;margin-top:auto;padding-top:24px}
+.d-side .tb-art{margin:12px 0 0;padding:0}
+.d-side .t-end{position:static;visibility:visible;padding:0;margin-top:28px}
+.d-side .t-end .tnext{margin-top:32px}
+
+@media (prefers-reduced-motion: reduce){
+  .d-menu,.d-drop,.d-drop-in{transition-duration:120ms}
+  .d-menu,.d-drop-in{transform:none}
+}
+@media print{body > *:not(#druck){display:none !important}}
+</style>
+</head>
+<body>
+<div class="d-narrow"><p>Schmaler als 1024 px zeigt die App die Handyansicht. <a href="index.html">Zum Handy-Entwurf</a></p></div>
+
+<div id="desk">
+  <aside class="rail" aria-label="Navigation">
+    <div class="r-when"><span class="dot" aria-hidden="true"></span><span id="rWhen"></span></div>
+    <nav class="r-nav" id="rNav">
+      <button class="r-item" type="button" data-v="heute"><span>Heute</span><span class="n"></span></button>
+      <button class="r-item" type="button" data-v="hausaufgaben"><span>Hausaufgaben</span><span class="n" id="nHa"></span></button>
+      <button class="r-item" type="button" data-v="klausuren"><span>Klausuren</span><span class="n" id="nKl"></span></button>
+      <button class="r-item" type="button" data-v="woche"><span>Woche</span><span class="n"></span></button>
+      <button class="r-item" type="button" data-v="ablage"><span>Ablage</span><span class="n"></span></button>
+      <span class="r-sep" aria-hidden="true"></span>
+      <button class="r-item" type="button" data-v="faecher"><span>Fächer</span><span class="n"></span></button>
+      <button class="r-item" type="button" data-v="noten"><span>Noten</span><span class="n"></span></button>
+    </nav>
+    <div class="r-foot">
+      <button class="r-item" type="button" data-v="einstellungen"><span>Einstellungen</span><span class="ic" data-i="settings"></span></button>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <section class="view" data-v="heute" aria-label="Heute"></section>
+    <section class="view" data-v="hausaufgaben" aria-label="Hausaufgaben"></section>
+    <section class="view" data-v="klausuren" aria-label="Klausuren"></section>
+    <section class="view" data-v="woche" aria-label="Woche"></section>
+    <section class="view" data-v="ablage" aria-label="Ablage"></section>
+    <section class="view" data-v="faecher" aria-label="Fächer"></section>
+    <section class="view" data-v="noten" aria-label="Noten"></section>
+    <section class="view" data-v="einstellungen" aria-label="Einstellungen"></section>
+
+    <div class="d-zeile" id="zeile">
+      <div class="d-menu" id="menu" role="listbox" aria-label="Eintragen oder suchen"></div>
+      <form class="dock" id="dock" autocomplete="off">
+        <span class="lupe" aria-hidden="true"><span class="ic" data-i="search"></span></span>
+        <input id="field" type="text" placeholder="Eintragen oder suchen" role="combobox" aria-controls="menu" aria-expanded="false" aria-autocomplete="list" spellcheck="false" aria-label="Eintragen oder suchen">
+        <span class="dkbd" aria-hidden="true">/</span>
+        <button class="send" id="send" type="submit" aria-label="Zeigen"><span class="ic" data-i="arrow_forward"></span></button>
+        <span class="dsep" aria-hidden="true"></span>
+        <button class="camb" id="upBtn" type="button" aria-label="Blatt hochladen" title="Blatt hochladen"><span class="ic" data-i="upload"></span></button>
+      </form>
+      <input type="file" id="fileUp" accept="image/*,application/pdf" multiple hidden>
+    </div>
+    <div class="toast" id="toast" role="status"><span id="toastText"></span><button type="button" id="toastAct">Rückgängig</button></div>
+  </main>
+</div>
+
+<div class="d-drop" id="drop" aria-hidden="true"><div class="d-drop-in"><b>Loslassen zum Ablegen</b><p>Ein Bild je Blatt. Fach und Thema erkennt die App.</p></div></div>
+
+<section class="d-tisch" id="tisch" role="dialog" aria-label="Tisch">
+  <div class="d-tsurf" id="tSurf"></div>
+  <div class="d-tbody" id="tBody">
+    <div class="d-ttop">
+      <button class="tbtn" id="tClose" type="button" aria-label="Schließen (Esc)"><span class="ic" data-i="close"></span></button>
+      <span></span>
+      <span id="tRight"></span>
+    </div>
+    <div class="d-tk" id="tK"></div>
+  </div>
+</section>
+<div id="druck" aria-hidden="true"></div>
+
+<script>
+'use strict';
+(() => {
+/* ================= Werkzeuge (wie im Handy-Prototyp) ================= */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const RMQ = matchMedia('(prefers-reduced-motion: reduce)');
+const reduce = () => RMQ.matches;
+const E = { out: 'cubic-bezier(0.23,1,0.32,1)', drawer: 'cubic-bezier(0.32,0.72,0,1)', io: 'cubic-bezier(0.77,0,0.175,1)', grow: 'cubic-bezier(0.6,0,0.2,1)' };
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const fx = s => esc(s).replace(/\{([^}]+)\}/g, (m, f, i) => `<span class="f-in${i === 0 ? ' lead' : ''}">${f}</span>`);
+const tn = s => esc(s).replace(/[:.,]/g, m => `<span class="c">${m}</span>`);
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === 'html') el.innerHTML = v;
+    else if (k === 'class') el.className = v;
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else if (k === 'dataset') Object.assign(el.dataset, v);
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(kid));
+  return el;
+}
+const ICON = {
+  settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  search: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l4.5 4.5"/>',
+  arrow_forward: '<path d="M4.5 12h15M13.5 6l6 6-6 6"/>',
+  chevron_right: '<path d="M9.5 6l6 6-6 6"/>',
+  chevron_left: '<path d="M14.5 6l-6 6 6 6"/>',
+  pause: '<path d="M9 6.5v11M15 6.5v11"/>',
+  /* Hochladen statt Kamera: am Rechner liegt das Blatt als Datei vor */
+  upload: '<path d="M12 15.5V4.5M7.5 9L12 4.5 16.5 9"/><path d="M4.5 14.5v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3"/>',
+};
+function setIc(el, name) { el.dataset.i = name; el.innerHTML = `<svg viewBox="0 0 24 24">${ICON[name]}</svg>`; }
+function ic(name, cls) { const s = h('span', { class: `ic${cls ? ' ' + cls : ''}`, 'aria-hidden': 'true' }); setIc(s, name); return s; }
+$$('.ic[data-i]').forEach(e => setIc(e, e.dataset.i));
+const norm = s => String(s).toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').normalize('NFD').replace(/\p{M}/gu, '');
+const ZAHL = ['null', 'eins', 'zwei', 'drei', 'vier', 'fünf', 'sechs', 'sieben', 'acht', 'neun', 'zehn', 'elf', 'zwölf'];
+const zahl = (n, g) => n === 1 ? (g === 'n' ? 'ein' : 'eine') : n <= 12 ? ZAHL[n] : String(n);
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const QS = new URLSearchParams(location.search);
+
+/* ================= Zeit: Montag, 12.10.2026, 16:40, zu Hause ================= */
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const D = s => new Date(s + 'T12:00:00');
+const HEUTE = '2026-10-12';
+const heute = () => HEUTE;
+const addDays = (s, n) => { const d = D(s); d.setDate(d.getDate() + n); return iso(d); };
+const diffDays = (a, b) => Math.round((D(b) - D(a)) / 864e5);
+const TAG = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+const TK = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+const MONAT = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+const wd = s => D(s).getDay();
+const dm = s => { const d = D(s); return `${d.getDate()}.${d.getMonth() + 1}.`; };
+const kurz = s => `${TK[wd(s)]} ${dm(s)}`;
+const lang = s => `${TAG[wd(s)]}, ${dm(s)}`;
+const voll = s => { const d = D(s); return `${TAG[wd(s)]}, ${d.getDate()}. ${MONAT[d.getMonth()]}`; };
+const relTage = s => { const n = diffDays(heute(), s); return n === 0 ? 'heute' : n === 1 ? 'morgen' : `in ${n} Tagen`; };
+
+/* ================= Daten: dieselben wie im Handy-Prototyp ================= */
+const FAECHER = [
+  { id: 'ge', name: 'Geschichte', kurz: 'Geschichte', alias: ['geschichte', 'ge'] },
+  { id: 'ma', name: 'Mathematik', kurz: 'Mathe', alias: ['mathe', 'mathematik', 'ma'] },
+  { id: 'bi', name: 'Biologie', kurz: 'Bio', alias: ['bio', 'biologie'] },
+  { id: 'de', name: 'Deutsch', kurz: 'Deutsch', alias: ['deutsch', 'de'] },
+  { id: 'fr', name: 'Französisch', kurz: 'Französisch', alias: ['franzoesisch', 'frz', 'franz'] },
+  { id: 'en', name: 'Englisch', kurz: 'Englisch', alias: ['englisch', 'english', 'en'] },
+];
+const F = id => FAECHER.find(f => f.id === id);
+const PERIODS = { 1: ['08:00', '09:30'], 2: ['09:50', '11:20'], 3: ['11:40', '13:10'], 4: ['13:30', '14:15'] };
+const PLAN = {
+  1: [[1, 'ge', 'R. 104'], [2, 'ma', 'R. 208'], [3, 'bi', 'Bio 1']],
+  2: [[1, 'ge', 'R. 104'], [2, 'de', 'R. 104'], [3, 'ma', 'R. 208'], [4, 'en', 'R. 112']],
+  3: [[1, 'ge', 'R. 104'], [2, 'fr', 'R. 110'], [3, 'en', 'R. 112']],
+  4: [[1, 'ge', 'R. 104'], [2, 'bi', 'Bio 1'], [3, 'ma', 'R. 208']],
+  5: [[1, 'ge', 'R. 104'], [2, 'ma', 'R. 208'], [3, 'fr', 'R. 110']],
+};
+const EPOCHE = { fach: 'ge', seit: '2026-09-28' };
+const FERIEN = [{ von: '2026-10-26', bis: '2026-10-30' }];
+const inFerien = s => FERIEN.find(f => s >= f.von && s <= f.bis) || null;
+const isSchool = s => wd(s) >= 1 && wd(s) <= 5 && !inFerien(s) && (PLAN[wd(s)] || []).length > 0;
+const lessonsOn = s => isSchool(s) ? PLAN[wd(s)].map(([nr, fach, raum]) => ({ nr, fach, raum, von: PERIODS[nr][0], bis: PERIODS[nr][1], hu: nr === 1 })) : [];
+function nextSchool(s) { let d = s; for (let i = 0; i < 60; i++) { d = addDays(d, 1); if (isSchool(d)) return d; } return addDays(s, 1); }
+function nextLesson(fid, s) { let d = s; for (let i = 0; i < 60; i++) { d = addDays(d, 1); if (lessonsOn(d).some(l => l.fach === fid)) return d; } return null; }
+const tagName = s => s === addDays(heute(), 1) ? TAG[wd(s)] : lang(s);
+
+const KLAUSUREN = [{
+  id: 'k1', fach: 'ma', datum: '2026-10-16', stunde: 2, thema: 'Quadratische Funktionen', plan: [
+    { tag: '2026-10-12', art: 'Lernblock', thema: 'Scheitelpunktform', min: 25, blatt: 'b7' },
+    { tag: '2026-10-14', art: 'Wiederholung', thema: 'Alles bis Scheitelpunktform', min: 25, blatt: 'b7' },
+    { tag: '2026-10-15', art: 'Probeklausur', thema: 'ohne Hilfsmittel', min: 45, blatt: 'b7' },
+  ]
+}];
+const NOTEN = {
+  ma: { anteil: 50, list: [{ v: 20, t: 'Klausur', art: 's', d: '2026-09-17' }, { v: 27, t: 'Test', art: 's', d: '2026-09-29' }, { v: 23, t: 'Mitarbeit', art: 'm', d: '2026-10-07' }] },
+  ge: { anteil: 50, list: [{ v: 17, t: 'Referat', art: 'm', d: '2026-10-02' }] },
+  fr: { anteil: 50, list: [{ v: 30, t: 'Klausur', art: 's', d: '2026-09-24' }, { v: 23, t: 'Mitarbeit', art: 'm', d: '2026-10-06' }] },
+};
+const wAvg = l => l.length ? l.reduce((s, x) => s + x.v, 0) / l.length / 10 : null;
+function schnitt(fid) {
+  const n = NOTEN[fid]; if (!n) return null;
+  const w = wAvg(n.list.filter(x => x.art === 's')), o = wAvg(n.list.filter(x => x.art === 'm'));
+  return { avg: w == null ? o : o == null ? w : w * n.anteil / 100 + o * (1 - n.anteil / 100), w, o };
+}
+const fmtAvg = x => (Math.round(Number(x.toPrecision(12)) * 10 + 1e-9) / 10).toFixed(1).replace('.', ',');
+const noteLabel = v => v % 10 === 7 ? `${(v + 3) / 10}+` : v % 10 === 3 ? `${(v - 3) / 10}−` : String(v / 10);
+const noteLine = fid => (NOTEN[fid] ? NOTEN[fid].list.map(n => noteLabel(n.v)).join(' · ') : '');
+
+const ABSCHRIFT = {
+  b1: [['h', 'Die Dampfmaschine'], ['p', 'Die Industrialisierung begann um 1760 in England.'],
+    ['p', 'Gründe: Kohle und Eisenerz im eigenen Land, Kapital aus Handel und Kolonien und eine wachsende Bevölkerung.'],
+    ['p', 'Thomas Newcomen baute 1712 die erste brauchbare Dampfmaschine. Newcomens Maschine pumpte Wasser aus Bergwerken.'],
+    ['p', 'James Watt verbesserte sie 1769. Er baute einen eigenen Kondensator, getrennt vom Zylinder. Die Maschine brauchte dadurch viel weniger Kohle.']],
+  b2: [['h', 'Passé composé avec être'], ['p', 'Mit être: aller, venir, partir, arriver, entrer, sortir, monter, descendre, naître, mourir, rester, tomber und alle reflexiven Verben.'],
+    ['p', 'Das Partizip richtet sich nach dem Subjekt: il est allé, elle est allée, ils sont allés, elles sont allées.'], ['p', 'Partizipien: naître → né, mourir → mort, venir → venu.']],
+  b3: [['h', 'Spinnmaschine und Fabrik'], ['p', '1764 baute James Hargreaves die Spinning Jenny. Eine Person spann damit an mehreren Spindeln zugleich.'],
+    ['p', 'In der Manufaktur arbeiteten viele Menschen von Hand, jeder an einem Arbeitsschritt. In der Fabrik trieben Dampf oder Wasser die Maschinen an.']],
+  b4: [['h', 'Exercices 3 et 4'], ['p', '1. Elle ___ (aller) au cinéma.'], ['p', '2. Ils ___ (arriver) hier.'], ['p', '3. Nous ___ (partir) à huit heures.'],
+    ['p', '4. Je me ___ (lever) tôt.'], ['p', '5. Marie et Paul ___ (rester) à la maison.'], ['p', '6. Elles sont venues hier.']],
+  b5: [['h', 'Arbeit in der Fabrik'], ['p', 'Ein Arbeitstag dauerte 12 bis 16 Stunden, sechs Tage in der Woche.'],
+    ['p', 'Auf dem Land gab es nicht genug Arbeit für die wachsende Bevölkerung. Viele zogen deshalb in die Städte zu den Fabriken.'],
+    ['h', 'Kinderarbeit'], ['p', 'Der Factory Act von 1833 verbot Kinderarbeit unter 9 Jahren in Textilfabriken. Kinder von 9 bis 13 Jahren durften höchstens 9 Stunden am Tag arbeiten. Fabrikinspektoren kontrollierten das.'],
+    ['p', 'Die Not der Arbeiter nannte man die soziale Frage: enge Wohnungen, lange Arbeitszeit, niedriger Lohn und keine Absicherung bei Krankheit, Unfall und Alter.']],
+  b6: [['h', 'Die erste Eisenbahn in Deutschland'], ['p', '1835 fuhr die erste Eisenbahn in Deutschland von Nürnberg nach Fürth. Die Lokomotive hieß Adler und kam aus England.'],
+    ['p', 'Mit der Eisenbahn wuchs der Bedarf an Kohle und Stahl. Das Ruhrgebiet wurde zum Zentrum der Industrie.']],
+  b7: [['h', 'Die Scheitelpunktform'], ['f', 'f(x) = a(x − d)² + e'], ['p', 'Der Scheitelpunkt ist S(d | e). Ist a negativ, ist die Parabel nach unten geöffnet. Ist |a| größer als 1, ist die Parabel gestreckt.'],
+    ['p', '{f(x) = (x − 3)²} ist die Normalparabel, um 3 nach rechts verschoben. Die Symmetrieachse ist die senkrechte Gerade durch den Scheitelpunkt.'],
+    ['h', 'Nullstellen'], ['f', 'x = −p/2 ± √((p/2)² − q)'], ['p', 'Ist {(p/2)² − q} kleiner als 0, gibt es keine Lösung. Eine quadratische Funktion hat keine, eine oder zwei Nullstellen.'],
+    ['h', 'Aufgaben'], ['p', '4. Bestimme die Nullstellen von {x² − 6x + 8}.'], ['p', '6. Bring {f(x) = x² + 4x + 1} in Scheitelpunktform.']],
+};
+const BLAETTER0 = [
+  { id: 'b7', fach: 'ma', titel: 'Scheitelpunktform, Übungen', thema: 'Quadratische Funktionen', datum: '2026-10-08', seiten: 2 },
+  { id: 'b6', fach: 'ge', titel: 'Die erste Eisenbahn in Deutschland', thema: 'Industrialisierung in Deutschland', datum: '2026-10-08', seiten: 1 },
+  { id: 'b5', fach: 'ge', titel: 'Arbeit in der Fabrik, Kinderarbeit', thema: 'Industrialisierung in England', datum: '2026-10-06', seiten: 3 },
+  { id: 'b4', fach: 'fr', titel: 'Exercices 3 et 4', thema: 'Passé composé mit être', datum: '2026-10-05', seiten: 1 },
+  { id: 'b3', fach: 'ge', titel: 'Spinnmaschine und Fabrik', thema: 'Industrialisierung in England', datum: '2026-10-02', seiten: 2 },
+  { id: 'b2', fach: 'fr', titel: 'Passé composé avec être', thema: 'Passé composé mit être', datum: '2026-10-01', seiten: 1 },
+  { id: 'b1', fach: 'ge', titel: 'Die Dampfmaschine', thema: 'Industrialisierung in England', datum: '2026-09-30', seiten: 2 },
+].map(b => ({ ...b, abschrift: ABSCHRIFT[b.id] }));
+
+const THEMEN = [
+  { id: 'ge-en', fach: 'ge', name: 'Industrialisierung in England', next: ['2026-10-13', '2026-10-16'] },
+  { id: 'ma-qf', fach: 'ma', name: 'Quadratische Funktionen', next: ['2026-10-13', '2026-10-14', '2026-10-15'], klausur: 'k1' },
+  { id: 'fr-pc', fach: 'fr', name: 'Passé composé mit être', next: ['2026-10-15'], grammatik: true },
+];
+const TH = id => THEMEN.find(t => t.id === id);
+const artAbgeleitet = t => t.fach === 'ma' || (['de', 'fr', 'en'].includes(t.fach) && t.grammatik) ? 'ueben' : 'abfragen';
+
+const Q = (id, thema, b, q, l, v, z) => ({ id, thema, b, q, l, v, z });
+const FRAGEN = [
+  Q('g1', 'ge-en', 'b1', 'In welchem Land begann die Industrialisierung, und ungefähr wann?', ['England', 'um 1760'], 'In Deutschland setzte sie erst um 1835 mit der Eisenbahn richtig ein.', 'Die Industrialisierung begann um 1760 in England.'),
+  Q('g2', 'ge-en', 'b1', 'Was verbesserte James Watt 1769 an der Dampfmaschine?', ['eigener Kondensator, getrennt vom Zylinder', 'braucht viel weniger Kohle'], 'Watt hat die Dampfmaschine nicht erfunden. Die erste brauchbare baute Thomas Newcomen 1712, Watt machte sie sparsamer.', 'James Watt verbesserte sie 1769.'),
+  Q('g3', 'ge-en', 'b1', 'Nenne zwei Gründe, warum die Industrialisierung in England begann.', ['Kohle und Eisenerz im Land', 'Kapital aus Handel und Kolonien', 'mehr Menschen durch Bevölkerungswachstum'], 'Eine Erfindung allein ist kein Grund. Gefragt sind die Bedingungen im Land.', 'Gründe: Kohle und Eisenerz im eigenen Land, Kapital aus Handel und Kolonien und eine wachsende Bevölkerung.'),
+  Q('g4', 'ge-en', 'b3', 'Was war die Spinning Jenny, und wer erfand sie?', ['Spinnmaschine mit mehreren Spindeln zugleich', 'James Hargreaves, 1764'], 'Die Spinning Jenny lief noch mit Handkraft. Mit Wasserkraft spann erst die Waterframe von Arkwright.', '1764 baute James Hargreaves die Spinning Jenny.'),
+  Q('g5', 'ge-en', 'b3', 'Was unterscheidet eine Fabrik von einer Manufaktur?', ['Fabrik: Maschinen mit Antrieb, etwa Dampf', 'Manufaktur: Handarbeit, aufgeteilt in Arbeitsschritte'], 'In der Manufaktur ist die Arbeit schon aufgeteilt. Der Unterschied ist die Maschine mit Antrieb, nicht die Arbeitsteilung.', 'In der Fabrik trieben Dampf oder Wasser die Maschinen an.'),
+  Q('g6', 'ge-en', 'b5', 'Wie lang war ein Arbeitstag in einer englischen Textilfabrik um 1830?', ['12 bis 16 Stunden', 'sechs Tage in der Woche'], 'Frei war nur der Sonntag. Die langen Tage galten an allen sechs anderen.', 'Ein Arbeitstag dauerte 12 bis 16 Stunden, sechs Tage in der Woche.'),
+  Q('g7', 'ge-en', 'b5', 'Was regelte der Factory Act von 1833?', ['keine Kinder unter 9 Jahren in Textilfabriken', '9 bis 13 Jahre höchstens 9 Stunden am Tag', 'Fabrikinspektoren kontrollieren'], 'Der Factory Act verbot Kinderarbeit nicht ganz. Er setzte ein Mindestalter und begrenzte die Stunden.', 'Der Factory Act von 1833 verbot Kinderarbeit unter 9 Jahren in Textilfabriken.'),
+  Q('g8', 'ge-en', 'b5', 'Warum zogen viele Menschen vom Land in die Städte?', ['Arbeit in den Fabriken', 'auf dem Land gab es zu wenig Arbeit für die wachsende Bevölkerung'], 'Wohnen war in den Städten schlechter als auf dem Land. Die Menschen zogen der Arbeit nach.', 'Viele zogen deshalb in die Städte zu den Fabriken.'),
+  Q('g9', 'ge-en', 'b5', 'Was meint der Begriff "soziale Frage"?', ['die Not der Arbeiter im 19. Jahrhundert', 'enge Wohnungen, lange Arbeitszeit, niedriger Lohn', 'keine Absicherung bei Krankheit, Unfall und Alter'], 'Gemeint ist die ganze Lage der Arbeiter. Lohn allein reicht als Antwort nicht.', 'Die Not der Arbeiter nannte man die soziale Frage.'),
+  Q('g10', 'ge-en', 'b1', 'Wofür brauchte man Dampfmaschinen zuerst?', ['zum Abpumpen von Wasser aus Bergwerken'], 'Webstühle und Lokomotiven trieb die Dampfmaschine erst später an.', 'Newcomens Maschine pumpte Wasser aus Bergwerken.'),
+];
+
+const UEBUNG = {
+  'ma-qf': {
+    teil: 'Scheitelpunktform', minuten: 20, papier: 'kaestchen', quellen: ['b7'],
+    aufgaben: [
+      { kurz: 'Scheitelpunkt ablesen', q: 'Lies den Scheitelpunkt ab. Ist die Parabel nach oben oder nach unten geöffnet?',
+        teile: ['{f(x) = (x − 4)² + 1}', '{g(x) = −(x + 3)² + 2}', '{h(x) = 2(x − 1)² − 5}'], platz: 15,
+        l: [['teile', ['{S(4 | 1)}, nach oben geöffnet', '{S(−3 | 2)}, nach unten geöffnet, weil {a = −1}', '{S(1 | −5)}, nach oben geöffnet und gestreckt, weil {a = 2}']],
+          ['hint', 'Das Vorzeichen in der Klammer dreht sich um: {(x + 3)} heißt {d = −3}.']] },
+      { kurz: 'Gleichung aufstellen', q: 'Die Normalparabel wird um 2 nach links und um 3 nach unten verschoben. Gib die Funktionsgleichung in Scheitelpunktform und den Scheitelpunkt an.', platz: 15,
+        l: [['p', 'Nach links heißt {d = −2}, nach unten heißt {e = −3}.'], ['erg', '{f(x) = (x + 2)² − 3}, Scheitelpunkt {S(−2 | −3)}'], ['hint', 'Nach links steht in der Klammer ein Plus.']] },
+      { kurz: 'Symmetrieachse und Form', q: 'Gib die Symmetrieachse von {f(x) = −½(x − 5)² + 4} an. Ist die Parabel nach oben oder nach unten geöffnet, gestreckt oder gestaucht?', platz: 15,
+        l: [['p', 'Der Scheitelpunkt ist {S(5 | 4)}. Die Symmetrieachse ist die senkrechte Gerade durch ihn.'], ['erg', 'Symmetrieachse {x = 5}'], ['p', 'Nach unten geöffnet, weil {a = −½} negativ ist. Gestaucht, weil {|a|} kleiner als 1 ist.']] },
+      { kurz: 'Ergänzen: {x² − 6x + 11}', q: 'Bring {f(x) = x² − 6x + 11} in Scheitelpunktform und gib den Scheitelpunkt an.', platz: 25,
+        l: [['eq', [['{f(x)}', '{x² − 6x + 3² − 3² + 11}'], ['', '{(x − 3)² − 9 + 11}'], ['', '{(x − 3)² + 2}']]], ['erg', 'Scheitelpunkt {S(3 | 2)}'], ['hint', 'Die Ergänzung ist {(6/2)² = 9}. Sie wird gleich wieder abgezogen.']] },
+      { kurz: 'Ergänzen: {x² + 8x + 10}', q: 'Bring {f(x) = x² + 8x + 10} in Scheitelpunktform und gib den Scheitelpunkt an.', platz: 25,
+        l: [['eq', [['{f(x)}', '{x² + 8x + 4² − 4² + 10}'], ['', '{(x + 4)² − 16 + 10}'], ['', '{(x + 4)² − 6}']]], ['erg', 'Scheitelpunkt {S(−4 | −6)}']] },
+      { kurz: 'Scheitelpunkt und Nullstellen', q: 'Bring {f(x) = x² − 2x − 8} in Scheitelpunktform. Bestimme dann die Nullstellen mit der pq-Formel.', platz: 40,
+        l: [['eq', [['{f(x)}', '{x² − 2x + 1² − 1² − 8}'], ['', '{(x − 1)² − 9}']]], ['p', 'Scheitelpunkt {S(1 | −9)}.'], ['p', 'pq-Formel mit {p = −2} und {q = −8}:'],
+          ['eq', [['{x}', '{1 ± √(1² + 8)}'], ['', '{1 ± √9 = 1 ± 3}']]], ['erg', 'Nullstellen {x₁ = −2} und {x₂ = 4}'], ['hint', 'Hier ist {p = −2}, also {−p/2 = 1} und nicht {−1}.']] },
+    ],
+  },
+};
+
+const db = {
+  aufgaben: [
+    { id: 'a1', fach: 'ma', text: 'S. 84, Nr. 3–5', due: '2026-10-13', done: null, am: '2026-10-08' },
+    { id: 'a2', fach: 'de', text: 'Gedichtanalyse beenden', due: '2026-10-13', done: null, am: '2026-10-09' },
+    { id: 'a3', fach: 'en', text: 'Vokabeln Unit 3', due: '2026-10-12', done: '2026-10-11', am: '2026-10-07' },
+    { id: 'a4', fach: 'ge', text: 'Fragen zur Dampfmaschine', due: '2026-10-12', done: '2026-10-12', am: '2026-10-08' },
+  ],
+  blaetter: BLAETTER0.slice(),
+  art: {},
+  block: 'idle',          /* idle, laeuft, erledigt */
+  blatt: { phase: 'vorschau', wertung: {} },
+  fragen: {},
+};
+let nextId = 100;
+const artVon = t => db.art[t.id] || artAbgeleitet(t);
+const offeneFuer = d => db.aufgaben.filter(a => a.due === d && !a.done);
+
+/* Blattfoto im Entwurf: wörtlich aus dem Handy-Prototyp */
+const paperCache = new Map();
+function paperImg(id, page = 0) {
+  const key = id + ':' + page; if (paperCache.has(key)) return paperCache.get(key);
+  const b = db.blaetter.find(x => x.id === id);
+  const W = 300, H = 424, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  let seed = 0; for (const ch of key) seed = (seed * 31 + ch.charCodeAt(0)) % 9973;
+  const rnd = () => (seed = (seed * 137 + 71) % 9973) / 9973;
+  x.fillStyle = '#E7E6E1'; x.fillRect(0, 0, W, H);
+  const lg = x.createLinearGradient(0, 0, W, H); lg.addColorStop(0, 'rgba(255,255,255,.35)'); lg.addColorStop(1, 'rgba(0,0,0,.06)');
+  x.fillStyle = lg; x.fillRect(0, 0, W, H);
+  x.save(); x.translate(W / 2, H / 2); x.rotate((rnd() - .5) * .018); x.translate(-W / 2, -H / 2);
+  x.filter = 'blur(.35px)';
+  const parts = (b && b.abschrift) || [['h', b ? b.titel || 'Blatt' : 'Blatt'], ['p', '']];
+  const per = Math.ceil(parts.length / Math.max(1, b ? b.seiten : 1));
+  const mine = page === 0 ? parts : parts.slice(page * per).length ? parts.slice(page * per) : parts.slice(1);
+  let y = 40; const L = 26, R0 = W - 26;
+  x.fillStyle = '#56565A'; x.font = '600 9px Helvetica, Arial, sans-serif';
+  x.fillText(`${b && b.fach ? F(b.fach).name : ''}   Klasse 10   ${b ? dm(b.datum) : ''}`, L, 22);
+  for (const [t, txt] of mine) {
+    if (y > H - 24) break;
+    const head = t === 'h', form = t === 'f';
+    x.font = head ? '700 15px Helvetica, Arial, sans-serif' : form ? 'italic 13px Georgia, serif' : '400 10.5px Helvetica, Arial, sans-serif';
+    x.fillStyle = head ? '#232326' : '#3A3A3E';
+    const words = String(txt).replace(/[{}]/g, '').split(' '); let line = '';
+    const lh = head ? 20 : form ? 19 : 14.5;
+    if (head && y > 40) y += 8;
+    for (const w of words) {
+      const test = line ? line + ' ' + w : w;
+      if (x.measureText(test).width > R0 - L && line) { x.fillText(line, L, y); y += lh; line = w; if (y > H - 24) break; }
+      else line = test;
+    }
+    if (line && y <= H - 24) { x.fillText(line, L, y); y += lh; }
+    y += head ? 2 : 5;
+  }
+  x.restore();
+  const url = c.toDataURL('image/jpeg', .8);
+  paperCache.set(key, url); return url;
+}
+const bildVon = b => b.bild || paperImg(b.id, 0);
+const blattSort = () => db.blaetter.slice().sort((a, b) => a.datum < b.datum ? 1 : a.datum > b.datum ? -1 : 0);
+
+/* ================= Zustand der Oberfläche ================= */
+const VIEWS = ['heute', 'hausaufgaben', 'klausuren', 'woche', 'ablage', 'faecher', 'noten', 'einstellungen'];
+const ui = {
+  view: VIEWS.includes(QS.get('v')) ? QS.get('v') : 'heute',
+  sel: { hausaufgaben: 'a1', klausuren: 'k1', ablage: QS.get('blatt') || 'b7', faecher: 'ma', noten: 'ma', einstellungen: 'darstellung' },
+  woche: addDays(nextSchool(heute()), 1 - wd(nextSchool(heute()))),
+  filter: 'alle',
+  blattOrig: false,
+  theme: QS.get('theme') || (() => { try { return localStorage.getItem('d-theme'); } catch (e) { return null; } })() || 'system',
+};
+
+/* Hell und dunkel: wie das System, oder fest */
+function applyTheme() {
+  const r = document.documentElement;
+  if (ui.theme === 'system') delete r.dataset.theme; else r.dataset.theme = ui.theme;
+  const dark = ui.theme === 'dark' || (ui.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  $('#themeColor').setAttribute('content', dark ? '#141416' : '#F7F7F5');
+}
+applyTheme();
+
+/* ================= Gemeinsame Bausteine ================= */
+const lab = (t, right) => h('div', { class: 'lab' }, h('h2', { style: 'font:inherit' }, t), right || null);
+const plab = t => h('h3', { class: 'p-lab' }, t);
+function rowBtn(title, sub, onClick, right, extra, id) {
+  const r = h('button', { class: `lrow plain${extra ? ' ' + extra : ''}`, type: 'button', dataset: id ? { id } : null },
+    h('span', null, h('b', null, title), sub ? h('span', { class: 's' }, sub) : null), right === undefined ? ic('chevron_right') : right || h('span'));
+  r.addEventListener('click', onClick); return r;
+}
+function blattRow(b, onClick, sel) {
+  const r = h('button', { class: `lrow${sel ? ' sel' : ''}`, type: 'button', dataset: { id: b.id } }, h('span', { class: 'mini', style: `background-image:url("${bildVon(b)}")` }),
+    h('span', null, h('b', null, b.titel || 'Blatt von heute'), h('span', { class: 's' }, b.status === 'neu' ? 'Wird eingeordnet' : `${dm(b.datum)}, ${b.thema || (b.fach ? F(b.fach).name : '')}`)), onClick ? h('span') : ic('chevron_right'));
+  r.addEventListener('click', onClick || (() => go('ablage', { blatt: b.id })));
+  return r;
+}
+function abschriftEl(b) {
+  const box = h('div', { class: 'abschrift' });
+  if (!b.abschrift) { box.append(h('p', { class: 'p-sub' }, 'Abschrift folgt')); return box; }
+  b.abschrift.forEach(([t, s]) => box.append(t === 'h' ? h('h3', null, s) : t === 'f' ? h('span', { class: 'formel' }, s) : h('p', { html: fx(s) })));
+  return box;
+}
+
+/* Aufgabenzeile wie am Handy: Ring, Fach fett, Text. In der Liste wählt der Text aus */
+function taskRow(a, opts = {}) {
+  const f = F(a.fach);
+  const sub = opts.sub ? opts.sub(a) : null;
+  const check = h('button', { class: 'check', type: 'button', 'aria-pressed': String(!!a.done), 'aria-label': `${f.kurz}, ${a.text}, ${a.done ? 'wieder öffnen' : 'abhaken'}` },
+    h('span', { class: 'ring' }, h('span', { class: 'cfill' }, ic('check'))));
+  const text = h('div', { class: 't-text' }, h('p', { class: 't-title' }, h('b', null, f.kurz), h('span', { class: 't-txt' }, a.text)), sub ? h('p', { class: 't-sub' }, sub) : null);
+  const row = h('div', { class: `task${a.done ? ' done' : ''}${opts.sel ? ' sel' : ''}`, dataset: { id: a.id } }, h('div', { class: 't-front' }, check, text, h('span')));
+  check.addEventListener('click', e => { e.stopPropagation(); toggleTask(a, row); });
+  if (opts.onSelect) text.addEventListener('click', () => opts.onSelect(a));
+  return row;
+}
+function drawStrikes(row, animate) {
+  row.querySelectorAll('.strike').forEach(s => s.remove());
+  const title = row.querySelector('.t-txt'), host = row.querySelector('.t-text');
+  if (!title || !title.offsetParent) return;
+  const rg = document.createRange(); rg.selectNodeContents(title);
+  const lines = [];
+  [...rg.getClientRects()].forEach(r => {
+    if (r.width < 1) return;
+    const l = lines.find(x => Math.abs(x.top - r.top) < 4);
+    if (l) { l.left = Math.min(l.left, r.left); l.right = Math.max(l.right, r.right); l.bottom = Math.max(l.bottom, r.bottom); }
+    else lines.push({ left: r.left, right: r.right, top: r.top, bottom: r.bottom });
+  });
+  const hb = host.getBoundingClientRect();
+  lines.forEach((r, i) => {
+    const s = h('i', { class: 'strike', 'aria-hidden': 'true' });
+    s.style.left = `${r.left - hb.left}px`; s.style.width = `${r.right - r.left}px`;
+    s.style.top = `${r.top - hb.top + (r.bottom - r.top) * .55}px`;
+    host.append(s);
+    if (animate) s.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: reduce() ? 120 : 260, delay: reduce() ? 0 : 60 + i * 60, easing: E.out, fill: 'backwards' });
+  });
+}
+const strikesIn = (root, animate) => requestAnimationFrame(() => $$('.task.done', root).forEach(r => drawStrikes(r, animate)));
+function toggleTask(a, row) {
+  const was = a.done;
+  a.done = was ? null : heute();
+  if (row) {
+    row.classList.toggle('done', !!a.done);
+    row.querySelector('.check').setAttribute('aria-pressed', String(!!a.done));
+    if (a.done) drawStrikes(row, true); else row.querySelectorAll('.strike').forEach(s => s.remove());
+  }
+  updateCounts();
+  toast(a.done ? `${F(a.fach).kurz} erledigt` : `${F(a.fach).kurz} wieder offen`, () => { a.done = was; render(true); updateCounts(); });
+  /* die anderen Ansichten bauen sich beim nächsten Öffnen neu; die eigene bleibt stehen, bis man wechselt */
+  setTimeout(() => { if (ui.view === 'heute') renderHeuteHead(); }, 0);
+}
+
+/* ================= Navigation ================= */
+function updateCounts() {
+  const ns = nextSchool(heute());
+  const n = offeneFuer(ns).length;
+  $('#nHa').textContent = n ? String(n) : '';
+  $('#nKl').textContent = KLAUSUREN.filter(k => k.datum >= heute()).length || '';
+}
+function go(v, p = {}, how = {}) {
+  if (p.blatt) ui.sel.ablage = p.blatt;
+  if (p.id && v === 'klausuren') ui.sel.klausuren = p.id;
+  if (p.aufgabe) ui.sel.hausaufgaben = p.aufgabe;
+  if (p.fach && v === 'faecher') ui.sel.faecher = p.fach;
+  if (p.fach && v === 'noten') ui.sel.noten = p.fach;
+  if (p.woche) ui.woche = p.woche;
+  const same = ui.view === v;
+  ui.view = v;
+  $$('.r-item').forEach(b => b.toggleAttribute('aria-current', false) || (b.dataset.v === v && b.setAttribute('aria-current', 'page')));
+  $$('.view').forEach(s => s.classList.toggle('on', s.dataset.v === v));
+  render(false);
+  const el = $(`.view[data-v="${v}"]`);
+  /* Mit der Maus ein kurzes Einblenden, mit der Tastatur keins: was man hundertmal am Tag tut, bewegt sich nicht */
+  if (!same && !how.key && !reduce()) el.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 180, easing: E.out });
+  try { const u = new URL(location.href); u.searchParams.set('v', v); history.replaceState(null, '', u); } catch (e) { }
+}
+$$('.r-item').forEach(b => b.addEventListener('click', () => go(b.dataset.v)));
+
+function render() {
+  const el = $(`.view[data-v="${ui.view}"]`);
+  const keep = $$('.d-list,.d-detail,.d-scroll', el).map(x => x.scrollTop);
+  el.replaceChildren(RENDER[ui.view]());
+  $$('.d-list,.d-detail,.d-scroll', el).forEach((x, i) => { if (keep[i]) x.scrollTop = keep[i]; });
+  strikesIn(el, false);
+}
+/* Liste und Detail: nur das Detail wechselt, mit einem kurzen Überblenden */
+function split(listEl, detailEl) {
+  return h('div', { class: 'd-split' }, h('div', { class: 'd-list' }, listEl), h('div', { class: 'd-detail' }, detailEl));
+}
+function selectIn(key, id, how = {}) {
+  ui.sel[key] = id;
+  render();
+  const det = $(`.view[data-v="${ui.view}"] .d-detail`);
+  if (det && !how.key && !reduce()) det.firstChild.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: 'ease-out' });
+  if (det) det.scrollTop = 0;
+}
+
+/* ================= Heute ================= */
+function headline() {
+  const ns = nextSchool(heute()); const off = offeneFuer(ns).length;
+  return off ? `${cap(zahl(off, 'f'))} ${off === 1 ? 'Aufgabe' : 'Aufgaben'} für ${tagName(ns)}` : `Für ${tagName(ns)} ist alles erledigt`;
+}
+function renderHeuteHead() { const h1 = $('.view[data-v="heute"] .d-h1'); if (h1) h1.textContent = headline(); }
+function lbRow() {
+  const k = KLAUSUREN[0], pl = k.plan.find(p => p.tag === heute());
+  if (!pl) return null;
+  const done = db.block === 'erledigt';
+  const btn = h('button', { class: 'lbbtn', type: 'button', id: 'lbBtn' }, db.block === 'laeuft' ? 'Weiter' : 'Starten');
+  btn.addEventListener('click', () => openTisch('blatt', btn));
+  return h('div', { class: `lb-row${done ? ' erledigt' : ''}` },
+    h('p', null, h('span', { class: 'lbk', style: 'display:inline' }, 'Lernblock · '), pl.thema, h('span', null, `${pl.min} Minuten mit Arbeitsblatt`)),
+    h('div', { class: 'lb-act' }, btn, h('span', { class: 'lbdone' }, ic('check'), 'Erledigt')));
+}
+const RENDER = {};
+function RENDER_heute() {
+  const ns = nextSchool(heute());
+  const ha = offeneFuer(ns);
+  const erl = db.aufgaben.filter(a => a.due === ns && a.done);
+  const k = KLAUSUREN[0];
+  const left = h('div', { class: 'h-col' });
+  const tl = h('div', { class: 'blk' });
+  [...ha, ...erl].forEach(a => tl.append(taskRow(a, { onSelect: x => go('hausaufgaben', { aufgabe: x.id }) })));
+  if (!ha.length && !erl.length) tl.append(h('p', { class: 'empty' }, `Für ${tagName(ns)} ist nichts offen.`));
+  const more = db.aufgaben.filter(a => !a.done && a.due > ns).length;
+  if (more) { const m = h('button', { class: 'textline more', type: 'button' }, `${cap(zahl(more, 'f'))} weitere später`, ic('chevron_right')); m.addEventListener('click', () => go('hausaufgaben')); tl.append(m); }
+  const exam = h('button', { class: 'exam-row', type: 'button' }, h('span', null, h('b', null, F(k.fach).kurz), h('span', { html: tn(`${kurz(k.datum)} · ${relTage(k.datum)}`) })), ic('chevron_right'));
+  exam.addEventListener('click', () => go('klausuren', { id: k.id }));
+  const kl = h('div', { class: 'blk' }, lab('Klausur'), exam, lbRow());
+  const whb = h('button', { class: 'whbtn', type: 'button', id: 'whBtn' }, h('span', null, 'Wiederholen'), h('span', { class: 'n' }, '3 Themen'));
+  whb.addEventListener('click', () => openTisch('karten', whb));
+  const wh = h('div', { class: 'wh' }, whb, h('p', { class: 'wh-sub' }, 'Zuerst Geschichte · Industrialisierung in England'));
+  left.append(tl, kl, wh);
+
+  /* rechts: was er morgen braucht (Packhilfe) und die zuletzt abgelegten Blätter */
+  const right = h('div', { class: 'h-col h-side' });
+  const ls = lessonsOn(ns);
+  const wk = h('button', { class: 'lab-r', type: 'button' }, 'Woche');
+  wk.addEventListener('click', () => go('woche'));
+  right.append(h('div', { class: 'blk h-pack' }, lab(`${TAG[wd(ns)]}, ${dm(ns)}`, wk),
+    h('div', null, ls.map(l => h('div', { class: 'lesson-row' }, h('time', { html: tn(l.von) }), h('b', null, F(l.fach).name), h('span', { class: 'room' }, l.raum), l.hu ? h('em', null, 'Hauptunterricht · Industrialisierung') : null)))));
+  const alle = h('button', { class: 'lab-r', type: 'button' }, 'Alle');
+  alle.addEventListener('click', () => go('ablage'));
+  const th = h('div', { class: 'd-thumbs' }, blattSort().slice(0, 6).map(b => {
+    const c = h('button', { class: 'tcell', type: 'button' }, h('span', { class: 'tmini', style: `background-image:url("${bildVon(b)}")` }), h('b', { class: 'tc-t' }, b.titel), h('span', { class: 'tc-s' }, b.fach ? F(b.fach).name : 'Wird eingeordnet'));
+    c.addEventListener('click', () => go('ablage', { blatt: b.id })); return c;
+  }));
+  right.append(h('div', { class: 'blk', style: 'margin-top:32px' }, lab('Zuletzt abgelegt', alle), th));
+
+  return h('div', { class: 'd-scroll' }, h('div', { class: 'd-wide' },
+    h('div', { class: 'd-head' }, h('h1', { class: 'd-h1' }, headline())),
+    h('div', { class: 'h-grid' }, left, right)));
+}
+
+/* ================= Hausaufgaben: Liste und Detail ================= */
+function RENDER_hausaufgaben() {
+  const ns = nextSchool(heute());
+  const groups = [
+    [`Für ${tagName(ns)}`, offeneFuer(ns)],
+    ['Später', db.aufgaben.filter(a => !a.done && a.due > ns).sort((a, b) => a.due < b.due ? -1 : 1)],
+    ['Erledigt', db.aufgaben.filter(a => a.done).sort((a, b) => a.done < b.done ? 1 : -1)],
+  ];
+  const list = h('div', null, h('h2', { class: 'p-title' }, 'Hausaufgaben'));
+  const all = groups.flatMap(g => g[1]);
+  if (!all.find(a => a.id === ui.sel.hausaufgaben) && all[0]) ui.sel.hausaufgaben = all[0].id;
+  groups.forEach(([l, arr], i) => {
+    if (!arr.length && i > 0) return;
+    const g = h('div', { class: 'group', style: i === 0 ? 'margin-top:14px' : null }, h('h3', { class: 'lab' }, l));
+    if (!arr.length) g.append(h('p', { class: 'empty' }, `Für ${tagName(ns)} ist nichts offen.`));
+    arr.forEach(a => g.append(taskRow(a, { sel: a.id === ui.sel.hausaufgaben, onSelect: x => selectIn('hausaufgaben', x.id), sub: x => x.due !== ns && !x.done ? kurz(x.due) : null })));
+    list.append(g);
+  });
+  const a = db.aufgaben.find(x => x.id === ui.sel.hausaufgaben);
+  return split(list, a ? aufgabeDetail(a) : h('p', { class: 'empty' }, 'Keine Aufgabe gewählt.'));
+}
+function aufgabeDetail(a) {
+  const f = F(a.fach);
+  const stunde = lessonsOn(a.due).find(l => l.fach === a.fach);
+  const bl = blattSort().filter(b => b.fach === a.fach).slice(0, 3);
+  const done = h('button', { class: 'btn primary', type: 'button' }, a.done ? 'Wieder öffnen' : 'Erledigt');
+  done.addEventListener('click', () => { const row = $(`.d-list .task[data-id="${a.id}"]`); toggleTask(a, row); render(); });
+  const edit = h('button', { class: 'btn quiet', type: 'button' }, 'Bearbeiten');
+  edit.addEventListener('click', () => toast('Im Entwurf nicht eingebaut'));
+  return h('div', { class: 'd-in' },
+    h('p', { class: 'd-sub', style: 'margin-top:0;min-height:44px;display:flex;align-items:center' }, f.name),
+    h('h1', { class: 'd-h1' }, a.text),
+    h('div', { class: 'd-facts' },
+      h('div', { class: 'd-fact' }, h('span', null, 'Abgabe'), h('span', null, lang(a.due), ' ', h('em', null, relTage(a.due)))),
+      stunde ? h('div', { class: 'd-fact' }, h('span', null, 'Stunde'), h('span', { html: tn(`${stunde.nr}. Stunde, ${stunde.von}, ${stunde.raum}`) })) : null,
+      h('div', { class: 'd-fact' }, h('span', null, 'Eingetragen'), h('span', null, lang(a.am))),
+      a.done ? h('div', { class: 'd-fact' }, h('span', null, 'Erledigt'), h('span', null, lang(a.done))) : null),
+    bl.length ? h('div', null, plab(`Blätter in ${f.name}`), bl.map(b => blattRow(b))) : null,
+    h('div', { class: 'd-foot' }, done, edit));
+}
+
+/* ================= Klausuren: Lernplan als Wochenstreifen ================= */
+function RENDER_klausuren() {
+  const list = h('div', null, h('h2', { class: 'p-title' }, 'Klausuren'), h('div', { style: 'height:14px' }),
+    KLAUSUREN.map(k => rowBtn(F(k.fach).name, `${kurz(k.datum)} · ${k.thema}`, () => selectIn('klausuren', k.id), null, k.id === ui.sel.klausuren ? 'sel' : '', k.id)));
+  const k = KLAUSUREN.find(x => x.id === ui.sel.klausuren);
+  return split(list, klausurDetail(k));
+}
+function klausurDetail(k) {
+  const f = F(k.fach);
+  const mo = addDays(k.datum, 1 - wd(k.datum));
+  const strip = h('div', { class: 'lp' }, [0, 1, 2, 3, 4].map(i => {
+    const d = addDays(mo, i), today = d === heute();
+    const pl = k.plan.find(p => p.tag === d);
+    const kids = [h('span', { class: 'pday' }, today ? `Heute, ${dm(d)}` : kurz(d))];
+    if (d === k.datum) kids.push(h('b', null, 'Klausur'), h('span', { html: tn(`${k.stunde}. Stunde, ${PERIODS[k.stunde][0]}`) }));
+    else if (pl) {
+      kids.push(h('b', null, pl.art === 'Lernblock' ? pl.thema : pl.art), h('span', null, `${pl.art === 'Lernblock' ? 'Lernblock mit Arbeitsblatt' : pl.thema}, ${pl.min} Minuten${today && db.block === 'erledigt' ? ', erledigt' : ''}`));
+      if (today && db.block !== 'erledigt') { const b = h('button', { class: 'lbbtn', type: 'button' }, db.block === 'laeuft' ? 'Weiter' : 'Starten'); b.addEventListener('click', () => openTisch('blatt', b)); kids.push(b); }
+    } else kids.push(h('span', { class: 'none' }, d < heute() ? '' : 'Frei'));
+    return h('div', { class: `lp-d${today ? ' today' : ''}${d === k.datum ? ' exday' : ''}` }, kids);
+  }));
+  const bl = blattSort().filter(b => b.fach === k.fach && b.thema === k.thema);
+  const n = NOTEN[k.fach], s = schnitt(k.fach);
+  const noten = n ? h('div', null, plab(`Noten in ${f.name}`), n.list.map(x => h('div', { class: 'grade-row' }, h('b', null, noteLabel(x.v)), h('span', null, `${x.t}, ${dm(x.d)}, ${x.art === 's' ? 'schriftlich' : 'mündlich'}`))),
+    h('p', { class: 'split', html: tn(`Schnitt ${fmtAvg(s.avg)}`) })) : h('div');
+  return h('div', { class: 'd-in', style: 'max-width:980px' },
+    h('p', { class: 'd-sub', style: 'margin-top:0;min-height:44px;display:flex;align-items:center' }, `${lang(k.datum)} · ${relTage(k.datum)}`),
+    h('h1', { class: 'd-h1' }, `${f.name}: ${k.thema}`),
+    plab('Lernplan'), strip,
+    h('div', { class: 'two' }, h('div', null, plab('Blätter zum Thema'), bl.length ? bl.map(b => blattRow(b)) : h('p', { class: 'empty' }, 'Noch keine Blätter.')), noten));
+}
+
+/* ================= Woche: Stunden mit Zeit, Abgaben und Lernen ohne Uhrzeit ================= */
+function RENDER_woche() {
+  const mo = ui.woche;
+  const days = [0, 1, 2, 3, 4].map(i => addDays(mo, i));
+  const thisMo = addDays(heute(), 1 - wd(heute()));
+  const prev = h('button', { class: 'icb', type: 'button', 'aria-label': 'Vorige Woche' }, ic('chevron_left'));
+  const next = h('button', { class: 'icb', type: 'button', 'aria-label': 'Nächste Woche' }, ic('chevron_right'));
+  const now = h('button', { class: 'chip', type: 'button', 'aria-disabled': String(mo === thisMo) }, 'Diese Woche');
+  const shift = n => { ui.woche = addDays(ui.woche, 7 * n); render(); const g = $('.view[data-v="woche"] .wk'); if (g && !reduce()) g.animate([{ opacity: 0, transform: `translateX(${n * 12}px)` }, { opacity: 1, transform: 'none' }], { duration: 200, easing: E.out }); };
+  prev.addEventListener('click', () => shift(-1)); next.addEventListener('click', () => shift(1));
+  now.addEventListener('click', () => { if (mo !== thisMo) { ui.woche = thisMo; render(); } });
+  const g = h('div', { class: 'wk', role: 'table', 'aria-label': `Woche vom ${dm(mo)} bis ${dm(days[4])}` });
+  g.append(h('div', { class: 'wk-h wk-corner' }), ...days.map(d => h('div', { class: `wk-h${d === heute() ? ' td' : ''}`, role: 'columnheader' }, h('b', null, TAG[wd(d)]), h('span', { html: tn(d === heute() ? `${dm(d)} · heute` : dm(d)) }))));
+  /* Abgaben je Tag: abhaken direkt im Raster */
+  g.append(h('div', { class: 'wk-lab' }, 'Abgeben'), ...days.map(d => h('div', { class: `wk-x${d === heute() ? ' td' : ''}` },
+    db.aufgaben.filter(a => a.due === d).map(a => miniTask(a)))));
+  /* Lernen je Tag, ohne Uhrzeit: der Lernplan der Klausuren */
+  g.append(h('div', { class: 'wk-lab' }, 'Lernen'), ...days.map(d => h('div', { class: `wk-x${d === heute() ? ' td' : ''}` },
+    KLAUSUREN.flatMap(k => k.plan.filter(p => p.tag === d).map(p => {
+      const today = d === heute();
+      let act = null;
+      if (today && db.block !== 'erledigt') { act = h('button', { class: 'lbbtn', type: 'button' }, db.block === 'laeuft' ? 'Weiter' : 'Starten'); act.addEventListener('click', () => openTisch('blatt', act)); }
+      return h('div', { class: 'ml' }, h('p', null, p.art === 'Lernblock' ? p.thema : p.art, h('span', null, `${F(k.fach).kurz}, ${p.min} Minuten${today && db.block === 'erledigt' ? ', erledigt' : ''}`)), act);
+    })))));
+  const ferien = days.every(d => inFerien(d));
+  if (ferien) g.append(h('div', { class: 'wk-t' }), h('div', { class: 'wk-free' }, 'Ferien'));
+  else [1, 2, 3, 4].forEach(nr => {
+    g.append(h('div', { class: 'wk-t', html: `${tn(PERIODS[nr][0])}<span class="end">${tn(PERIODS[nr][1])}</span>` }));
+    days.forEach(d => {
+      const l = lessonsOn(d).find(x => x.nr === nr);
+      const k = l && KLAUSUREN.find(x => x.datum === d && x.fach === l.fach && x.stunde === l.nr);
+      g.append(h('div', { class: `wk-c${d === heute() ? ' td' : ''}` }, l ? [h('b', null, F(l.fach).name), h('em', null, l.hu ? `Hauptunterricht · ${l.raum}` : l.raum), k ? h('span', { class: 'tag' }, `Klausur: ${k.thema}`) : null] : null));
+    });
+  });
+  return h('div', { class: 'd-scroll' }, h('div', { class: 'd-wide', style: 'max-width:1320px' },
+    h('div', { class: 'd-head' }, h('div', null, h('h1', { class: 'd-h1' }, 'Woche'), h('p', { class: 'd-sub', html: tn(`${dm(mo)} bis ${dm(days[4])}`) })), h('div', { class: 'wk-nav' }, now, prev, next)),
+    g));
+}
+function miniTask(a) {
+  const c = h('button', { class: 'check', type: 'button', 'aria-pressed': String(!!a.done), 'aria-label': `${F(a.fach).kurz}, ${a.text}, ${a.done ? 'wieder öffnen' : 'abhaken'}` }, h('span', { class: 'ring' }, h('span', { class: 'cfill' }, ic('check'))));
+  const row = h('div', { class: `mt${a.done ? ' done' : ''}` }, c, h('p', null, h('b', null, F(a.fach).kurz), h('span', null, a.text)));
+  c.addEventListener('click', () => { const was = a.done; a.done = was ? null : heute(); row.classList.toggle('done', !!a.done); c.setAttribute('aria-pressed', String(!!a.done)); updateCounts(); toast(a.done ? `${F(a.fach).kurz} erledigt` : `${F(a.fach).kurz} wieder offen`, () => { a.done = was; render(); updateCounts(); }); });
+  return row;
+}
+
+/* ================= Ablage: Liste, Blatt, ab 1440 Abschrift und Original nebeneinander ================= */
+function RENDER_ablage() {
+  const fs_ = FAECHER.filter(f => db.blaetter.some(b => b.fach === f.id));
+  const fil = h('div', { class: 'd-fil', role: 'group', 'aria-label': 'Fach' },
+    [['alle', 'Alle'], ...fs_.map(f => [f.id, f.kurz])].map(([id, l]) => { const b = h('button', { class: 'fp', type: 'button', 'aria-pressed': String(ui.filter === id) }, l); b.addEventListener('click', () => { ui.filter = id; render(); }); return b; }));
+  const sorted = blattSort().filter(b => ui.filter === 'alle' || b.fach === ui.filter || !b.fach);
+  const list = h('div', null, h('h2', { class: 'p-title' }, 'Ablage'), fil);
+  const order = []; sorted.forEach(b => { const k = b.fach || '-'; if (!order.includes(k)) order.push(k); });
+  order.forEach(k => { list.append(plab(k === '-' ? 'Ohne Fach' : F(k).name)); sorted.filter(b => (b.fach || '-') === k).forEach(b => list.append(blattRow(b, () => selectIn('ablage', b.id), b.id === ui.sel.ablage))); });
+  const b = db.blaetter.find(x => x.id === ui.sel.ablage) || sorted[0];
+  return split(list, b ? blattDetail(b) : h('p', { class: 'empty' }, 'Noch keine Blätter.'));
+}
+function blattDetail(b) {
+  const pages = Array.from({ length: b.seiten }, (_, i) => b.bild && i === 0 ? b.bild : paperImg(b.id, i));
+  const body = h('div');
+  const tA = h('button', { type: 'button', 'aria-pressed': String(!ui.blattOrig) }, 'Abschrift');
+  const tO = h('button', { type: 'button', 'aria-pressed': String(ui.blattOrig) }, 'Original');
+  const show = orig => {
+    ui.blattOrig = orig; tA.setAttribute('aria-pressed', String(!orig)); tO.setAttribute('aria-pressed', String(orig));
+    body.replaceChildren(...(orig ? pages.map(u => h('div', { class: 'original', style: `background-image:url("${u}");margin-bottom:14px;max-width:560px` })) : [abschriftEl(b)]));
+    if (!reduce()) body.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160 });
+  };
+  tA.addEventListener('click', () => show(false)); tO.addEventListener('click', () => show(true));
+  body.append(...(ui.blattOrig ? pages.map(u => h('div', { class: 'original', style: `background-image:url("${u}");margin-bottom:14px;max-width:560px` })) : [abschriftEl(b)]));
+  const fachPills = h('div', { class: 'refile' }, FAECHER.map(f => {
+    const p = h('button', { class: 'fp', type: 'button', 'aria-pressed': String(b.fach === f.id) }, f.kurz);
+    p.addEventListener('click', () => { if (b.fach === f.id) return; const was = b.fach; b.fach = f.id; render(); toast(`Nach ${f.name} verschoben`, () => { b.fach = was; render(); }); });
+    return p;
+  }));
+  const links = h('div', { class: 'd-foot' });
+  const t = THEMEN.find(x => x.fach === b.fach && x.name === b.thema);
+  if (t) {
+    const lern = h('button', { class: 'btn quiet', type: 'button' }, artVon(t) === 'ueben' ? 'Thema üben' : 'Thema abfragen');
+    lern.addEventListener('click', () => openTisch(artVon(t) === 'ueben' ? 'blatt' : 'karten', lern));
+    links.append(lern);
+  }
+  return h('div', { class: 'bl-two' },
+    h('div', { class: 'd-in' },
+      h('p', { class: 'd-sub', style: 'margin-top:0;min-height:44px;display:flex;align-items:center' }, `${b.fach ? F(b.fach).name : 'Ohne Fach'}, ${dm(b.datum)}, ${b.seiten} ${b.seiten === 1 ? 'Seite' : 'Seiten'}`),
+      h('h1', { class: 'd-h1', style: 'margin-bottom:6px' }, b.titel || 'Blatt von heute'),
+      h('div', { class: 'seg2 bl-seg', role: 'group', 'aria-label': 'Ansicht' }, tA, tO),
+      h('div', { style: 'height:12px' }), body,
+      plab('Fach und Thema'), fachPills, h('p', { class: 'p-sub', style: 'margin-top:8px' }, b.thema || 'Thema folgt'), links),
+    h('aside', { class: 'bl-orig', 'aria-label': 'Original' }, h('p', { class: 'bl-cap' }, 'Original'), pages.map(u => h('div', { class: 'original', style: `background-image:url("${u}")` }))));
+}
+
+/* ================= Fächer ================= */
+function RENDER_faecher() {
+  const list = h('div', null, h('h2', { class: 'p-title' }, 'Fächer'), h('div', { style: 'height:14px' }),
+    FAECHER.map(f => { const nl = nextLesson(f.id, heute()); return rowBtn(f.name, f.id === EPOCHE.fach ? `Hauptunterricht, Epoche seit ${dm(EPOCHE.seit)}` : nl ? `Nächste Stunde ${diffDays(heute(), nl) <= 6 ? TAG[wd(nl)] : lang(nl)}` : 'Gerade nicht im Stundenplan', () => selectIn('faecher', f.id), null, f.id === ui.sel.faecher ? 'sel' : '', f.id); }));
+  const f = F(ui.sel.faecher); const nl = nextLesson(f.id, heute());
+  const offen = db.aufgaben.filter(a => a.fach === f.id && !a.done);
+  const th = THEMEN.filter(t => t.fach === f.id);
+  const bl = blattSort().filter(b => b.fach === f.id);
+  const det = h('div', { class: 'd-in' },
+    h('p', { class: 'd-sub', style: 'margin-top:0;min-height:44px;display:flex;align-items:center' }, f.id === EPOCHE.fach ? `Hauptunterricht · Epoche seit ${lang(EPOCHE.seit)}` : nl ? `Nächste Stunde ${lang(nl)}` : 'Gerade nicht im Stundenplan'),
+    h('h1', { class: 'd-h1' }, f.name),
+    offen.length ? h('div', null, plab('Offen'), offen.map(a => taskRow(a, { sub: x => kurz(x.due) }))) : null,
+    KLAUSUREN.filter(k => k.fach === f.id).map(k => h('div', null, plab('Klausur'), rowBtn(`Klausur am ${lang(k.datum)}`, k.thema, () => go('klausuren', { id: k.id })))),
+    th.length ? h('div', null, plab('Themen'), th.map(t => themaArtRow(t))) : null,
+    bl.length ? h('div', null, plab('Blätter'), bl.map(b => blattRow(b))) : null,
+    NOTEN[f.id] ? h('div', null, plab('Noten'), rowBtn(noteLine(f.id), `Schnitt ${fmtAvg(schnitt(f.id).avg)}`, () => go('noten', { fach: f.id }))) : null);
+  return split(list, det);
+}
+function themaArtRow(t) {
+  const n = FRAGEN.filter(q => q.thema === t.id).length;
+  const text = () => artVon(t) === 'ueben' ? (UEBUNG[t.id] ? 'Üben mit Arbeitsblatt zum Ausdrucken' : 'Üben, Arbeitsblatt folgt') : `Abfragen mit ${n} Fragen`;
+  const sub = h('span', { class: 's' }, text());
+  const seg = h('div', { class: 'seg2', role: 'group', 'aria-label': `Art von ${t.name}`, style: 'margin:8px 0 2px' }, [['abfragen', 'Abfragen'], ['ueben', 'Üben']].map(([v, l]) => {
+    const b = h('button', { type: 'button', 'aria-pressed': String(artVon(t) === v), dataset: { v } }, l);
+    b.addEventListener('click', () => { if (artVon(t) === v) return; db.art[t.id] = v; seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); sub.textContent = text(); toast(v === 'ueben' ? 'Ab jetzt mit Arbeitsblatt' : 'Ab jetzt mit Karten'); });
+    return b;
+  }));
+  return h('div', { class: 'lrow plain', style: 'cursor:default;display:block' }, h('span', null, h('b', null, t.name), sub), seg);
+}
+
+/* ================= Noten ================= */
+function RENDER_noten() {
+  const fs_ = FAECHER.filter(f => NOTEN[f.id]);
+  const avgs = fs_.map(f => schnitt(f.id).avg);
+  const list = h('div', null, h('h2', { class: 'p-title' }, 'Noten'),
+    h('p', { class: 'total' }, h('span', null, 'Gesamt'), h('b', { html: tn(fmtAvg(avgs.reduce((s, x) => s + x, 0) / avgs.length)) })),
+    fs_.map(f => rowBtn(f.name, noteLine(f.id), () => selectIn('noten', f.id), h('span', { class: 'avg', html: tn(fmtAvg(schnitt(f.id).avg)) }), f.id === ui.sel.noten ? 'sel' : '', f.id)));
+  const f = F(ui.sel.noten), n = NOTEN[f.id], s = schnitt(f.id);
+  const add = h('button', { class: 'textbtn', type: 'button', style: 'margin-top:14px' }, 'Note eintragen');
+  add.addEventListener('click', () => toast('Im Entwurf nicht eingebaut'));
+  const det = h('div', { class: 'd-in' },
+    h('p', { class: 'd-sub', style: 'margin-top:0;min-height:44px;display:flex;align-items:center', html: tn(`Schnitt ${fmtAvg(s.avg)}`) }),
+    h('h1', { class: 'd-h1', style: 'margin-bottom:14px' }, `Noten ${f.name}`),
+    n.list.map(x => h('div', { class: 'grade-row' }, h('b', null, noteLabel(x.v)), h('span', null, `${x.t}, ${dm(x.d)}, ${x.art === 's' ? 'schriftlich' : 'mündlich'}`))),
+    h('p', { class: 'split', html: tn([s.w != null ? `Schriftlich ${fmtAvg(s.w)}` : null, s.o != null ? `Mündlich ${fmtAvg(s.o)}` : null].filter(Boolean).join(' · ')) }), add);
+  return split(list, det);
+}
+
+/* ================= Einstellungen ================= */
+const SET = [['stundenplan', 'Stundenplan', `${Object.values(PLAN).flat().length} Stunden in der Woche`], ['epoche', 'Epoche', `${F(EPOCHE.fach).name} seit ${dm(EPOCHE.seit)}`], ['darstellung', 'Hell und dunkel', null], ['tastatur', 'Tastatur', 'Kürzel am Rechner']];
+function RENDER_einstellungen() {
+  const label = { system: 'Wie das System', light: 'Hell', dark: 'Dunkel' };
+  const list = h('div', null, h('h2', { class: 'p-title' }, 'Einstellungen'), h('div', { style: 'height:14px' }),
+    SET.map(([id, t, s]) => rowBtn(t, id === 'darstellung' ? label[ui.theme] : s, () => selectIn('einstellungen', id), null, id === ui.sel.einstellungen ? 'sel' : '', id)));
+  const id = ui.sel.einstellungen; let det;
+  const head = (t, s) => [h('p', { class: 'd-sub', style: 'margin-top:0;min-height:44px;display:flex;align-items:center' }, s || ''), h('h1', { class: 'd-h1' }, t)];
+  if (id === 'darstellung') {
+    const seg = h('div', { class: 'seg2', role: 'group', 'aria-label': 'Hell und dunkel', style: 'margin-top:18px' }, Object.entries(label).map(([v, l]) => {
+      const b = h('button', { type: 'button', 'aria-pressed': String(ui.theme === v) }, l);
+      b.addEventListener('click', () => { ui.theme = v; try { localStorage.setItem('d-theme', v); } catch (e) { } applyTheme(); render(); });
+      return b;
+    }));
+    det = h('div', { class: 'd-in' }, ...head('Hell und dunkel', 'Gilt für Handy und Rechner'), seg, h('p', { class: 'd-lede', style: 'color:var(--ink-2);font-size:15px' }, 'Wie das System folgt der Einstellung des Geräts, also abends oft dunkel.'));
+  } else if (id === 'tastatur') {
+    const K = [['Eintragen oder suchen', ['/']], ['Seiten wechseln', ['1', 'bis', '7']], ['In der Liste nach oben und unten', ['↑', '↓']], ['Aufgabe abhaken', ['X']], ['Tisch schließen', ['Esc']], ['Karte aufdecken', ['Leertaste']], ['Daneben oder Saß', ['1', '2']]];
+    det = h('div', { class: 'd-in' }, ...head('Tastatur', 'Nur am Rechner'), h('div', { class: 'keys' }, K.map(([t, ks]) => h('div', { class: 'key-row' }, h('span', null, t), h('span', null, ks.map(k => k === 'bis' ? h('span', { style: 'font-size:13px;color:var(--ink-3);margin:0 6px' }, 'bis') : h('span', { class: 'kbd' }, k)))))));
+  } else if (id === 'stundenplan') {
+    det = h('div', { class: 'd-in' }, ...head('Stundenplan', `${Object.values(PLAN).flat().length} Stunden in der Woche`), h('div', { style: 'height:12px' }),
+      rowBtn('In der Woche ansehen', 'Montag bis Freitag', () => go('woche')), rowBtn('Zeiten der Stunden', '4 Stunden, ab 08:00', () => toast('Im Entwurf nicht eingebaut')));
+  } else {
+    det = h('div', { class: 'd-in' }, ...head('Epoche', 'Hauptunterricht'), h('div', { style: 'height:12px' }),
+      rowBtn(F(EPOCHE.fach).name, `Seit ${lang(EPOCHE.seit)}`, () => go('faecher', { fach: EPOCHE.fach })));
+  }
+  return split(list, det);
+}
+const RENDER_MAP = { heute: RENDER_heute, hausaufgaben: RENDER_hausaufgaben, klausuren: RENDER_klausuren, woche: RENDER_woche, ablage: RENDER_ablage, faecher: RENDER_faecher, noten: RENDER_noten, einstellungen: RENDER_einstellungen };
+Object.assign(RENDER, RENDER_MAP);
+
+/* ================= Toast ================= */
+let toastT = null;
+function toast(text, undo, _, actLabel) {
+  const t = $('#toast'), a = $('#toastAct');
+  $('#toastText').textContent = text;
+  a.hidden = !undo; a.textContent = actLabel || 'Rückgängig';
+  a.onclick = () => { hideToast(); undo && undo(); };
+  t.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(hideToast, 4200);
+}
+function hideToast() { $('#toast').classList.remove('on'); }
+
+/* ================= Zeile: eintragen oder suchen ================= */
+const field = $('#field'), menu = $('#menu'), dock = $('#dock');
+let mSel = 0, mItems = [];
+function parse(q) {
+  const words = q.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return null;
+  const fach = FAECHER.find(f => f.alias.includes(norm(words[0])) || norm(f.name) === norm(words[0]));
+  return { fach, rest: words.slice(1).join(' '), words };
+}
+function menuItems(q) {
+  const out = [];
+  const p = parse(q);
+  if (!p) {
+    out.push({ g: 'Öffnen', l1: 'Woche', l2: `${dm(ui.woche)} bis ${dm(addDays(ui.woche, 4))}`, run: () => go('woche') });
+    out.push({ g: 'Öffnen', l1: `Klausur ${F('ma').name}`, l2: `${lang(KLAUSUREN[0].datum)}, ${relTage(KLAUSUREN[0].datum)}`, run: () => go('klausuren', { id: 'k1' }) });
+    out.push({ g: 'Öffnen', l1: 'Noten', l2: null, run: () => go('noten') });
+    out.push({ g: 'Eintragen', l1: 'Fach und Aufgabe tippen', l2: 'zum Beispiel: Bio Arbeitsblatt Zelle', run: null });
+    return out;
+  }
+  if (p.fach && p.rest) {
+    const due = nextLesson(p.fach.id, heute()) || nextSchool(heute());
+    out.push({ g: 'Eintragen', first: true, l1: `<b>${esc(p.fach.kurz)}</b> ${esc(p.rest)}`, l2: `bis ${esc(lang(due))}, nächste Stunde`, run: () => {
+      const a = { id: 'a' + (nextId++), fach: p.fach.id, text: p.rest, due, done: null, am: heute() };
+      db.aufgaben.push(a); updateCounts(); ui.sel.hausaufgaben = a.id;
+      if (['heute', 'hausaufgaben', 'woche'].includes(ui.view)) render();
+      toast(`${p.fach.kurz} eingetragen, bis ${TAG[wd(due)]}`, () => { db.aufgaben = db.aufgaben.filter(x => x !== a); updateCounts(); render(); });
+    } });
+  }
+  const qn = norm(q);
+  if (p.fach && !p.rest) out.push({ g: 'Fach', l1: esc(p.fach.name), l2: 'Fach öffnen', run: () => go('faecher', { fach: p.fach.id }) });
+  db.aufgaben.filter(a => norm(a.text).includes(qn) || norm(F(a.fach).kurz).includes(qn)).slice(0, 4)
+    .forEach(a => out.push({ g: 'Aufgaben', l1: `<b>${esc(F(a.fach).kurz)}</b> ${esc(a.text)}`, l2: `bis ${esc(lang(a.due))}${a.done ? ', erledigt' : ''}`, run: () => go('hausaufgaben', { aufgabe: a.id }) }));
+  blattSort().filter(b => norm(b.titel + ' ' + (b.thema || '') + ' ' + (b.abschrift || []).map(x => x[1]).join(' ')).includes(qn)).slice(0, 5)
+    .forEach(b => out.push({ g: 'Blätter', thumb: bildVon(b), l1: esc(b.titel), l2: esc(`${dm(b.datum)}, ${b.thema}`), run: () => go('ablage', { blatt: b.id }) }));
+  [['woche', 'Woche'], ['hausaufgaben', 'Hausaufgaben'], ['klausuren', 'Klausuren'], ['ablage', 'Ablage'], ['noten', 'Noten'], ['faecher', 'Fächer'], ['einstellungen', 'Einstellungen']]
+    .filter(([, l]) => norm(l).startsWith(qn)).forEach(([v, l]) => out.push({ g: 'Seiten', l1: l, l2: null, run: () => go(v) }));
+  if (!out.length) out.push({ g: 'Nichts gefunden', l1: `Kein Treffer für »${esc(q)}«`, l2: 'Fach zuerst, dann die Aufgabe, trägt ein', run: null });
+  return out;
+}
+function renderMenu() {
+  mItems = menuItems(field.value);
+  mSel = Math.max(0, mItems.findIndex(i => i.run));
+  const kids = []; let g = null;
+  mItems.forEach((it, i) => {
+    if (it.g !== g) { g = it.g; kids.push(h('div', { class: 'm-gl' }, g)); }
+    const o = h('div', { class: `opt${it.thumb ? ' has-ic' : ''}${it.first ? ' first' : ''}`, role: 'option', 'aria-selected': String(i === mSel), dataset: { i } },
+      it.thumb ? h('span', { class: 'mini', style: `background-image:url("${it.thumb}")` }) : null,
+      h('div', null, h('div', { class: 'o1', html: it.l1 }), it.l2 ? h('div', { class: 'o2', html: it.l2 }) : null),
+      h('span', { class: 'o-end' }, i === mSel && it.run ? 'Enter' : ''));
+    if (it.run) o.addEventListener('mousedown', e => { e.preventDefault(); runItem(i); });
+    else o.style.cursor = 'default';
+    kids.push(o);
+  });
+  menu.replaceChildren(...kids);
+}
+function markSel() { $$('.opt', menu).forEach(o => { const on = Number(o.dataset.i) === mSel; o.setAttribute('aria-selected', String(on)); o.querySelector('.o-end').textContent = on && mItems[mSel].run ? 'Enter' : ''; if (on) o.scrollIntoView({ block: 'nearest' }); }); }
+function runItem(i) { const it = mItems[i]; if (!it || !it.run) return; closeMenu(); field.value = ''; dock.classList.remove('typing'); $('#send').classList.remove('on'); field.blur(); it.run(); }
+function openMenu() { renderMenu(); menu.classList.add('on'); field.setAttribute('aria-expanded', 'true'); }
+function closeMenu() { menu.classList.remove('on'); field.setAttribute('aria-expanded', 'false'); }
+field.addEventListener('focus', openMenu);
+field.addEventListener('blur', () => setTimeout(closeMenu, 0));
+field.addEventListener('input', () => { dock.classList.toggle('typing', !!field.value); $('#send').classList.toggle('on', !!field.value.trim()); renderMenu(); });
+field.addEventListener('keydown', e => {
+  const runs = mItems.map((x, i) => x.run ? i : -1).filter(i => i >= 0);
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault(); if (!runs.length) return;
+    const at = runs.indexOf(mSel); mSel = runs[(at + (e.key === 'ArrowDown' ? 1 : runs.length - 1)) % runs.length]; markSel();
+  } else if (e.key === 'Escape') { field.value = ''; dock.classList.remove('typing'); field.blur(); }
+});
+dock.addEventListener('submit', e => { e.preventDefault(); runItem(mSel); });
+
+/* ================= Blatt ablegen: Datei wählen oder ins Fenster ziehen ================= */
+$('#upBtn').addEventListener('click', () => $('#fileUp').click());
+$('#fileUp').addEventListener('change', e => { ablegen([...e.target.files]); e.target.value = ''; });
+let dragN = 0;
+addEventListener('dragenter', e => { if (![...(e.dataTransfer?.types || [])].includes('Files')) return; dragN++; $('#drop').classList.add('on'); });
+addEventListener('dragleave', () => { dragN = Math.max(0, dragN - 1); if (!dragN) $('#drop').classList.remove('on'); });
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', e => { e.preventDefault(); dragN = 0; $('#drop').classList.remove('on'); ablegen([...(e.dataTransfer?.files || [])].filter(f => /^image\/|pdf$/.test(f.type))); });
+function ablegen(files) {
+  if (!files.length) return;
+  const neu = files.map(f => {
+    const b = { id: 'n' + (nextId++), fach: null, titel: null, thema: null, datum: heute(), seiten: 1, status: 'neu', abschrift: null };
+    if (f.type.startsWith('image/')) b.bild = URL.createObjectURL(f);
+    db.blaetter.unshift(b); return b;
+  });
+  if (['heute', 'ablage'].includes(ui.view)) render();
+  toast(neu.length === 1 ? 'Blatt abgelegt' : `${cap(zahl(neu.length, 'n'))} Blätter abgelegt`, () => go('ablage', { blatt: neu[0].id }), null, 'Ansehen');
+}
+
+/* ================= Tisch: Lernblock mit Arbeitsblatt und Wiederholen ================= */
+const T = { mode: null, origin: null, i: 0, first: {}, q: [], flipped: false, clock: 25 * 60, paused: false, timer: null };
+const tisch = $('#tisch'), tK = $('#tK');
+function openTisch(mode, origin) {
+  closeMenu(); hideToast();
+  T.mode = mode; T.origin = origin; T.zuLoesung = false;
+  tisch.classList.add('open');
+  if (mode === 'blatt') { if (db.block === 'idle') db.block = 'laeuft'; buildBlatt(); startClock(); }
+  else { T.q = FRAGEN.slice(); T.i = 0; T.first = {}; T.flipped = false; buildKarten(); $('#tRight').replaceChildren(h('span', { class: 't-of' }, 'Thema 1 von 3')); }
+  const s = $('#tSurf'), body = $('#tBody');
+  if (reduce() || !origin) { tisch.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160 }); return; }
+  /* die Fläche wächst aus dem Knopf, den er gedrückt hat; der Inhalt kommt danach */
+  const r = origin.getBoundingClientRect();
+  const sx = r.width / innerWidth, sy = r.height / innerHeight;
+  s.animate([{ transform: `translate(${r.left}px,${r.top}px) scale(${sx},${sy})`, borderRadius: '26px' }, { transform: 'none', borderRadius: '0px' }], { duration: 420, easing: E.drawer });
+  body.animate([{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 0, offset: .4 }, { opacity: 1, transform: 'none' }], { duration: 460, easing: E.out });
+}
+function closeTisch() {
+  stopClock();
+  const done = () => { tisch.classList.remove('open'); tK.replaceChildren(); render(); updateCounts(); };
+  const o = T.origin;
+  if (reduce() || !o || !o.isConnected) { tisch.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160 }).finished.then(done); return; }
+  const r = o.getBoundingClientRect();
+  $('#tBody').animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, fill: 'forwards' });
+  $('#tSurf').animate([{ transform: 'none', borderRadius: '0px' }, { transform: `translate(${r.left}px,${r.top}px) scale(${r.width / innerWidth},${r.height / innerHeight})`, borderRadius: '26px', opacity: .0 }], { duration: 300, easing: E.grow, fill: 'forwards' })
+    .finished.then(() => { $$('#tSurf,#tBody').forEach(x => x.getAnimations().forEach(a => a.cancel())); done(); });
+}
+$('#tClose').addEventListener('click', closeTisch);
+
+/* Uhr des Lernblocks: ein Anhalt, keine Pflicht. Ein Klick hält sie an */
+function startClock() {
+  const b = h('button', { class: 't-clock', type: 'button', 'aria-label': 'Uhr anhalten' }, h('span', { class: 'ic', hidden: true }), h('span', { id: 'tClockText' }));
+  b.addEventListener('click', () => { T.paused = !T.paused; b.classList.toggle('paused', T.paused); const i = b.firstChild; i.hidden = !T.paused; if (T.paused) setIc(i, 'pause'); b.setAttribute('aria-label', T.paused ? 'Uhr weiterlaufen lassen' : 'Uhr anhalten'); });
+  $('#tRight').replaceChildren(b);
+  const tick = () => { const m = Math.floor(T.clock / 60), s = T.clock % 60; const el = $('#tClockText'); if (el) el.textContent = `${m}:${String(s).padStart(2, '0')}`; };
+  tick(); clearInterval(T.timer);
+  T.timer = setInterval(() => { if (!T.paused && T.clock > 0) { T.clock--; tick(); } }, 1000);
+}
+function stopClock() { clearInterval(T.timer); }
+
+/* Arbeitsblatt: dasselbe A4 wie am Handy und im Druck */
+const A4W = 210 * 96 / 25.4, A4H = 297 * 96 / 25.4;
+const mx = s => esc(s).replace(/\{([^}]+)\}/g, (m, f) => `<span class="m">${f}</span>`);
+const gapx = s => mx(s).replace(/___/g, '<span class="gap"></span>');
+const ABC = 'abcdefgh';
+let padN = 0;
+function padSvg(papier, n) {
+  const W = 165; padN++;
+  const id = `k5-${padN}`;
+  return `<svg class="a4-pad" viewBox="0 0 ${W} ${n}" style="width:${W}mm;height:${n}mm" aria-hidden="true"><defs><pattern id="${id}" width="5" height="5" patternUnits="userSpaceOnUse"><path d="M5 0V5H0" style="fill:none;stroke:var(--a4-grid);stroke-width:.18"/></pattern></defs>`
+    + `<rect width="${W}" height="${n}" style="fill:url(#${id})"/><rect x=".11" y=".11" width="${W - .22}" height="${n - .22}" style="fill:none;stroke:var(--a4-grid-edge);stroke-width:.22"/></svg>`;
+}
+function blattQuellen(tid) {
+  const qs = UEBUNG[tid].quellen.map(id => db.blaetter.find(b => b.id === id)).filter(Boolean);
+  const tage = [...new Set(qs.map(b => dm(b.datum)))];
+  return `Aus deinen Blättern vom ${tage.join(' und ')}: ${qs.map(b => `<b>»${esc(b.titel)}«</b>`).join(', ')}`;
+}
+function teileHTML(list, it, label = true) {
+  const kurz_ = list.every(x => x.replace(/[{}]/g, '').length <= 22);
+  if (kurz_) return `<p class="a4-parts">${list.map((x, i) => `<span class="p">${label ? `<span class="lb">${ABC[i]})</span>` : ''}<span${it ? ' class="fr"' : ''}>${gapx(x)}</span></span>`).join('')}</p>`;
+  return list.map((x, i) => `<p>${label ? `<span class="tl">${ABC[i]})</span>` : ''}<span${it ? ' class="fr"' : ''}>${gapx(x)}</span></p>`).join('');
+}
+function a4HTML(tid, side) {
+  const t = TH(tid), U = UEBUNG[tid], f = F(t.fach), d = D(heute());
+  const datum = `${voll(heute())} ${d.getFullYear()}`;
+  const top = `<div class="a4-top"><span><b>${esc(f.name)}</b> · ${side === 1 ? 'Arbeitsblatt' : 'Lösungen'}</span><span>${esc(datum)}</span></div>`;
+  if (side === 1) {
+    const li = U.aufgaben.map((a, i) => `<li class="a4-task"><span class="a4-nr">${i + 1}</span><div><p class="a4-q">${mx(a.q)}</p>${a.teile ? `<div class="${a.teile.some(x => x.includes('___')) ? 'a4-luecke' : ''}">${teileHTML(a.teile, a.fr)}</div>` : ''}${a.platz ? padSvg(U.papier, a.platz) : ''}</div></li>`).join('');
+    return `${top}<h1>${esc(t.name)}</h1><p class="a4-sub">${esc(U.teil)} · ${U.aufgaben.length} Aufgaben, von leicht nach schwer · etwa ${U.minuten} Minuten</p>`
+      + `<p class="a4-src">${blattQuellen(tid)}</p><ol class="a4-list" style="list-style:none">${li}</ol>`
+      + `<div class="a4-foot"><span>Rechne in den Kästchen. Die Lösungen stehen auf Seite 2.</span><b>1 / 2</b></div>`;
+  }
+  const block = ([k, v]) => k === 'p' ? `<p>${mx(v)}</p>` : k === 'teile' ? teileHTML(v, false)
+    : k === 'eq' ? `<div class="a4-eqs">${v.map(([l, r]) => `<span>${mx(l)}</span><span class="eq">=</span><span>${mx(r)}</span>`).join('')}</div>`
+      : k === 'erg' ? `<p class="a4-erg">${mx(v)}</p>` : `<p class="a4-hint"><b>Achtung:</b> ${mx(v)}</p>`;
+  const li = U.aufgaben.map((a, i) => `<li class="a4-task a4-s"><span class="a4-nr">${i + 1}</span><div>${a.l.map(block).join('')}</div></li>`).join('');
+  return `${top}<h1>Lösungen</h1><p class="a4-sub">${esc(t.name)} · ${esc(U.teil)}, mit Rechenweg</p>`
+    + `<p class="a4-src">Erst nach dem Lösen ansehen. Danach trägst du in der App je Aufgabe ein, ob sie richtig war.</p><ol class="a4-sol" style="list-style:none">${li}</ol>`
+    + `<div class="a4-foot"><span>${blattQuellen(tid)}</span><b>2 / 2</b></div>`;
+}
+const a4Seite = (tid, side) => h('div', { class: 'a4', 'aria-hidden': 'true', html: a4HTML(tid, side) });
+
+function buildBlatt() {
+  const tid = 'ma-qf', U = UEBUNG[tid], st = db.blatt;
+  const pagesBox = h('div', { class: 'd-pages' });
+  const papers = [];
+  [[1, 'Aufgaben'], [2, 'Lösungen']].forEach(([side, l]) => {
+    const paper = h('div', { class: 'tb-paper' }, a4Seite(tid, side));
+    papers.push(paper);
+    pagesBox.append(h('div', { class: 'tb-page' }, h('p', { class: 'tb-cap' }, h('span', null, `Seite ${side} · ${l}`), h('span', null, 'A4')), paper));
+  });
+  /* Lesegröße: so breit, wie die linke Fläche es zulässt, höchstens Originalgröße */
+  const fit = () => {
+    const cw = pagesBox.clientWidth - 80, two = cw >= 2 * 560 + 28;
+    pagesBox.classList.toggle('two', two);
+    const w = Math.min(A4W, two ? (cw - 28) / 2 : cw), s = w / A4W;
+    papers.forEach(p => { p.style.width = `${A4W * s}px`; p.style.height = `${A4H * s}px`; p.firstChild.style.transform = `scale(${s})`; });
+  };
+  const side = h('div', { class: 'd-side' });
+  const fill = () => {
+    const kids = [h('p', { class: 't-fach' }, 'Mathematik · Lernblock'), h('h2', { class: 't-thema' }, TH(tid).name)];
+    if (st.phase === 'fertig') {
+      const ok = Object.values(st.wertung).filter(Boolean).length, n = U.aufgaben.length;
+      const falsch = Object.entries(st.wertung).filter(([, v]) => !v).map(([k]) => Number(k));
+      const fin = h('button', { class: 'tlink known', type: 'button' }, 'Fertig'); fin.addEventListener('click', closeTisch);
+      kids.push(h('div', { class: 't-end' }, h('h2', { class: 'sans' }, 'Blatt ausgewertet.'), h('p', null, `${n} Aufgaben, ${ok === n ? 'alle' : ok} richtig.`),
+        falsch.length ? h('p', null, `${falsch.length === 1 ? 'Aufgabe' : 'Aufgaben'} ${falsch.join(', ').replace(/, (\d+)$/, ' und $1')} ${falsch.length === 1 ? 'kommt' : 'kommen'} aufs nächste Blatt.`) : null,
+        h('p', null, 'Der Lernblock zählt als erledigt.'), h('div', { class: 'tnext' }, fin)));
+    } else if (st.phase === 'bewerten') {
+      const rows = U.aufgaben.map((a, i) => {
+        const nr = i + 1;
+        const mk = (v, l) => { const b = h('button', { type: 'button', 'aria-pressed': String(st.wertung[nr] === v), dataset: { v: String(v) } }, l); b.addEventListener('click', () => { st.wertung[nr] = v; fill(); }); return b; };
+        return h('li', { class: 'tb-row', dataset: { nr } }, h('span', { class: 'nr' }, String(nr)), h('span', { class: 'k', html: mx(a.kurz) }), h('div', { class: 'tb-seg', role: 'group', 'aria-label': `Aufgabe ${nr}` }, mk(true, 'Richtig'), mk(false, 'Falsch')));
+      });
+      kids.push(h('div', { class: 'tb-wert' }, h('h2', null, 'Wie lief es?'), h('p', null, 'Vergleiche mit dem Lösungsblatt. Dann klick je Aufgabe an, wie es lief.'), h('ol', { class: 'tb-rows' }, rows)));
+      requestAnimationFrame(() => { if (!pagesBox.classList.contains('two') && !T.zuLoesung) { T.zuLoesung = true; const p2 = pagesBox.children[1]; pagesBox.scrollTo({ top: p2.offsetTop - 8, behavior: reduce() || QS.has('tisch') ? 'auto' : 'smooth' }); } });
+      const offen = U.aufgaben.length - Object.keys(st.wertung).length;
+      const main = h('button', { class: 'tb-main', type: 'button', 'aria-disabled': String(offen > 0) }, 'Fertig');
+      main.addEventListener('click', () => { if (offen > 0) return; st.phase = 'fertig'; db.block = 'erledigt'; stopClock(); fill(); });
+      const nochmal = h('button', { class: 'tb-art', type: 'button' }, 'Nochmal drucken'); nochmal.addEventListener('click', drucken);
+      kids.push(h('div', { class: 't-bfoot' }, h('p', { class: 'tb-state' }, offen ? `Noch ${offen} von ${U.aufgaben.length} offen` : `Alle ${U.aufgaben.length} bewertet`), main, nochmal));
+    } else {
+      kids.push(h('p', { class: 'd-lead' }, `Arbeitsblatt · ${U.aufgaben.length} Aufgaben, etwa ${U.minuten} Minuten`),
+        h('p', { class: 'd-lead', style: 'font-size:15px;margin-top:14px' }, 'Drucken, auf Papier lösen, dann hier eintragen, wie es lief.'));
+      const main = h('button', { class: 'tb-main', type: 'button' }, 'Arbeitsblatt drucken', h('span', { class: 'k' }, 'P'));
+      main.addEventListener('click', drucken);
+      const art = h('button', { class: 'tb-art', type: 'button' }, 'Dieses Thema lieber abfragen');
+      art.addEventListener('click', () => toast('Ab jetzt mit Karten'));
+      kids.push(h('div', { class: 't-bfoot' }, main, art));
+    }
+    side.replaceChildren(...kids);
+  };
+  fill();
+  tK.replaceChildren(h('div', { class: 'd-blatt' }, pagesBox, side));
+  requestAnimationFrame(fit);
+  T.fit = fit; T.fillSide = fill;
+}
+function drucken() {
+  $('#druck').replaceChildren(a4Seite('ma-qf', 1), a4Seite('ma-qf', 2));
+  if (!QS.has('ohnedruck')) { try { window.print(); } catch (e) { } }
+  if (db.blatt.phase === 'vorschau') { db.blatt.phase = 'bewerten'; T.fillSide && T.fillSide(); }
+}
+addEventListener('resize', () => { if (tisch.classList.contains('open') && T.mode === 'blatt' && T.fit) T.fit(); });
+
+/* Karten: eine Spalte in der Mitte, Tastatur neben der Maus */
+function buildKarten() {
+  const q = T.q[T.i];
+  const box = h('div', { class: 'd-cards' });
+  if (!q) {
+    const n = T.q.length, ok = Object.values(T.first).filter(Boolean).length;
+    const go1 = h('button', { class: 'tlink known', type: 'button' }, h('span', null, 'Weiter mit Mathematik'), h('span', { class: 's' }, 'Quadratische Funktionen, Arbeitsblatt'));
+    go1.addEventListener('click', () => { T.mode = 'blatt'; db.block = db.block === 'idle' ? 'laeuft' : db.block; buildBlatt(); startClock(); });
+    const stop = h('button', { class: 'tlink', type: 'button' }, 'Für heute aufhören'); stop.addEventListener('click', closeTisch);
+    box.append(h('div', { class: 't-end' }, h('h2', null, 'Industrialisierung in England sitzt.'), h('p', null, `${n} Fragen, ${ok === n ? 'alle' : ok} beim ersten Mal.`), h('p', null, 'Wieder dran: Dienstag, 13.10.'), h('div', { class: 'tnext' }, stop, go1)));
+    tK.replaceChildren(box); return;
+  }
+  const ticks = h('div', { class: 't-ticks' }, T.q.map((_, i) => h('span', { class: `tick${i < T.i ? ' past' : ''}` }, h('i'))));
+  const sol = h('ol', { class: 'cb-sol' }, q.l.map(x => h('li', { html: fx(x) })));
+  const ta = h('textarea', { placeholder: 'Schreib, was du weißt.', rows: '1', 'aria-label': 'Deine Antwort' });
+  const card = h('div', { class: `sc${T.flipped ? ' flipped' : ''}`, dataset: { pos: '0' } }, h('div', { class: 'sc-lift' }, h('div', { class: 'sc-flip' },
+    h('div', { class: 'face front' }, h('div', { class: 'c-q' }, h('p', { html: fx(q.q) })), h('div', { class: 'c-field' }, ta)),
+    h('div', { class: 'face back' }, h('div', { class: 'c-back' }, h('p', { class: 'cb-lab' }, 'Deine Antwort'), h('p', { class: `cb-mine${T.mine ? '' : ' none'}` }, T.mine || 'Keine Antwort'),
+      h('p', { class: 'cb-lab' }, 'Musterlösung'), sol, h('p', { class: 'cb-verw' }, q.v))))));
+  const under = [1, 2].map(p => h('div', { class: 'sc', dataset: { pos: String(p) } }, h('div', { class: 'sc-lift' }, h('div', { class: 'sc-flip' }, h('div', { class: 'face front' })))));
+  const stack = h('div', { class: 't-stack' }, ...under.reverse(), card);
+  const ask = h('div', { class: 't-ask', style: T.flipped ? 'visibility:hidden' : null },
+    h('button', { class: 'rb', type: 'button', onclick: () => reveal(ta) }, 'Weiß ich nicht'), h('button', { class: 'rb known', type: 'button', onclick: () => reveal(ta) }, 'Aufdecken', h('span', { class: 'k' }, 'Leertaste')));
+  const rate = h('div', { class: 't-rate', style: T.flipped ? 'visibility:visible' : null },
+    h('button', { class: 'rb', type: 'button', onclick: () => rateQ(false) }, 'Daneben', h('span', { class: 'k' }, '1')), h('button', { class: 'rb known', type: 'button', onclick: () => rateQ(true) }, 'Saß', h('span', { class: 'k' }, '2')));
+  box.append(h('div', { class: 't-head' }, h('p', { class: 't-fach' }, 'Epoche · Geschichte'), h('p', { class: 't-thema' }, 'Industrialisierung in England')), ticks,
+    h('div', { class: 't-meta' }, h('p', { class: 't-count' }, T.i === 0 ? `${T.q.length} Fragen` : `Noch ${T.q.length - T.i} von ${T.q.length}`)), stack, h('div', { class: 't-foot' }, ask, rate));
+  tK.replaceChildren(box);
+  requestAnimationFrame(() => {
+    const front = $('.face.front .c-q', card).scrollHeight + 72 + 12;
+    const back = T.flipped ? $('.c-back', card).scrollHeight + 8 : 0;
+    stack.style.height = `${Math.max(240, front, back)}px`;
+    if (!T.flipped) ta.focus({ preventScroll: true });
+  });
+  ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); reveal(ta); } });
+}
+function reveal(ta) {
+  if (T.flipped) return;
+  T.mine = ta ? ta.value.trim() : ''; T.flipped = true;
+  const sc = $('.d-cards .sc[data-pos="0"]');
+  const mine = $('.cb-mine', sc); mine.textContent = T.mine || 'Keine Antwort'; mine.classList.toggle('none', !T.mine);
+  sc.classList.add('flipped'); document.activeElement && document.activeElement.blur();
+  const st = $('.d-cards .t-stack'), need = $('.c-back', sc).scrollHeight + 8; if (need > st.offsetHeight) st.style.height = `${need}px`;
+  $('.d-cards .t-ask').style.visibility = 'hidden'; $('.d-cards .t-rate').style.visibility = 'visible';
+}
+function rateQ(ok) {
+  if (!T.flipped) return;
+  T.first[T.q[T.i].id] = ok;
+  const sc = $('.d-cards .sc[data-pos="0"]');
+  const next = () => { T.i++; T.flipped = false; T.mine = ''; buildKarten(); };
+  if (reduce()) { next(); return; }
+  sc.animate([{ transform: 'none', opacity: 1 }, { transform: `translateX(${ok ? 120 : -120}px) rotate(${ok ? 4 : -4}deg)`, opacity: 0 }], { duration: 220, easing: E.out, fill: 'forwards' }).finished.then(next);
+}
+
+/* ================= Tastatur ================= */
+addEventListener('keydown', e => {
+  const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName);
+  if (tisch.classList.contains('open')) {
+    if (e.key === 'Escape') { e.preventDefault(); closeTisch(); return; }
+    if (T.mode === 'karten') {
+      if (!T.flipped && e.key === ' ' && !typing) { e.preventDefault(); reveal($('.d-cards textarea')); }
+      else if (T.flipped && (e.key === '1' || e.key === 'ArrowLeft')) rateQ(false);
+      else if (T.flipped && (e.key === '2' || e.key === 'ArrowRight' || e.key === ' ')) { e.preventDefault(); rateQ(true); }
+    } else if (T.mode === 'blatt' && (e.key === 'p' || e.key === 'P') && !e.metaKey && !e.ctrlKey && db.blatt.phase === 'vorschau') drucken();
+    return;
+  }
+  if (typing) return;
+  if (e.key === '/' || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) { e.preventDefault(); field.focus(); return; }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const n = Number(e.key);
+  if (n >= 1 && n <= 7) { go(['heute', 'hausaufgaben', 'klausuren', 'woche', 'ablage', 'faecher', 'noten'][n - 1], {}, { key: true }); return; }
+  const key = { hausaufgaben: 'hausaufgaben', klausuren: 'klausuren', ablage: 'ablage', faecher: 'faecher', noten: 'noten', einstellungen: 'einstellungen' }[ui.view];
+  if (key && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'j' || e.key === 'k')) {
+    e.preventDefault();
+    const ids = $$(`.view[data-v="${ui.view}"] .d-list [data-id]`).map(x => x.dataset.id).filter(Boolean);
+    if (!ids.length) return;
+    const at = ids.indexOf(ui.sel[key]); const d = e.key === 'ArrowDown' || e.key === 'j' ? 1 : -1;
+    selectIn(key, ids[Math.max(0, Math.min(ids.length - 1, at + d))], { key: true });
+    $(`.view[data-v="${ui.view}"] .d-list .sel`)?.scrollIntoView({ block: 'nearest' });
+  }
+  if (ui.view === 'hausaufgaben' && (e.key === 'x' || e.key === 'X')) { const a = db.aufgaben.find(x => x.id === ui.sel.hausaufgaben); if (a) { toggleTask(a, null); render(); } }
+});
+
+/* ================= Start ================= */
+$('#rWhen').append(h('b', null, voll(heute())));
+updateCounts();
+go(ui.view, {}, { key: true });
+/* Prüfschalter für Bilder: ?tisch=blatt|karten|wertung|ende, ?q=Suchtext */
+const tq = QS.get('tisch');
+if (tq) {
+  if (tq === 'wertung') { db.blatt.phase = 'bewerten'; db.blatt.wertung = { 1: true, 2: true, 3: false }; }
+  if (tq === 'ende') { db.blatt.phase = 'fertig'; db.blatt.wertung = { 1: true, 2: true, 3: false, 4: true, 5: true, 6: true }; }
+  openTisch(tq === 'karten' || tq === 'aufgedeckt' ? 'karten' : 'blatt', null);
+  if (tq === 'aufgedeckt') { const ta = $('.d-cards textarea'); ta.value = 'England, um 1760'; reveal(ta); }
+}
+if (QS.get('q') != null) { field.focus(); field.value = QS.get('q'); field.dispatchEvent(new Event('input')); }
+})();
+</script>
+</body>
+</html>
