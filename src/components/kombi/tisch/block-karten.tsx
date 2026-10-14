@@ -8,6 +8,8 @@ import {
   lernblockZurueckziehenAction,
   type VersuchAntwort,
 } from "@/app/(app)/lernblock-actions";
+import { kartenPlatzRechner } from "@/components/kombi/desktop/tisch-tasten";
+import { istDesktop, useDesktop } from "@/components/kombi/desktop/use-desktop";
 import type { BlockFrage } from "@/lib/kombi/lernblock-daten";
 import { E, buzz, moveTo, reduce, rubber, springOpts, swapText, vvStable } from "@/lib/kombi/motion";
 import { fxTeile } from "@/lib/kombi/text";
@@ -387,6 +389,8 @@ function erzeugeKarten(
 
   /* Die Karte ist so hoch wie ihr Inhalt; aufgeklappt darf sie bis zu den Knöpfen wachsen */
   function stackAvail() {
+    const platz = kartenPlatzRechner(stack);
+    if (platz !== null) return platz;
     const top = stack.getBoundingClientRect().top;
     const foot = t.foot.getBoundingClientRect().top - 16;
     return Math.max(160, foot - top - 30);
@@ -398,11 +402,13 @@ function erzeugeKarten(
     const old = stack.offsetHeight;
     const avail = stackAvail();
     let H: number;
-    if (tisch.classList.contains("typing")) H = Math.min(448, avail);
+    /* am Rechner ohne Deckel: die Karte ist so hoch wie ihr Inhalt (desktop/tisch-tasten) */
+    const deckel = istDesktop() ? Infinity : 448;
+    if (tisch.classList.contains("typing") && deckel === 448) H = Math.min(448, avail);
     else if (top && top.classList.contains("flipped") && top._geloest) {
       const b = top.querySelector<HTMLElement>(".c-back")!;
       const open = top.querySelector('.cb-heft[aria-expanded="true"]');
-      H = Math.min(Math.max(b.scrollHeight, top._frontH || 0, 220), avail, open ? Infinity : 448);
+      H = Math.min(Math.max(b.scrollHeight, top._frontH || 0, 220), avail, open ? Infinity : deckel);
     } else if (top && top.classList.contains("flipped")) {
       H = old;
     } else {
@@ -412,7 +418,7 @@ function erzeugeKarten(
         const f = top.querySelector<HTMLElement>(".c-field")!;
         need = q.scrollHeight + f.offsetHeight + 12;
       }
-      H = Math.min(Math.max(need, 200), avail, 448);
+      H = Math.min(Math.max(need, 200), avail, deckel);
       if (top) top._frontH = H;
     }
     stack.style.height = `${Math.round(H)}px`;
@@ -964,6 +970,14 @@ export function BlockKarten({ blockId, fragen, erste, onEnde, deps }: BlockKarte
   }, [blockId, fragen, erste]);
 
   const ohneFokus = (e: { preventDefault: () => void }) => e.preventDefault();
+  /** Ab 1024 px stehen die Tasten in den Knöpfen (desktop/tisch-tasten) */
+  const desk = useDesktop();
+  const taste = (t: string) =>
+    desk ? (
+      <span className="d-k" aria-hidden="true">
+        {t}
+      </span>
+    ) : null;
 
   return (
     <>
@@ -982,14 +996,17 @@ export function BlockKarten({ blockId, fragen, erste, onEnde, deps }: BlockKarte
           </button>
           <button className="rb known" type="button" onMouseDown={ohneFokus} onClick={() => steuerung.current?.reveal(false)}>
             Aufdecken
+            {taste("Leertaste")}
           </button>
         </div>
         <div className="t-rate" ref={rateRef}>
           <button className="rb" type="button" onClick={() => steuerung.current?.urteil("daneben")}>
             Daneben
+            {taste("1")}
           </button>
           <button className="rb known" type="button" onClick={() => steuerung.current?.urteil("sass")}>
             Saß
+            {taste("2")}
           </button>
         </div>
       </div>

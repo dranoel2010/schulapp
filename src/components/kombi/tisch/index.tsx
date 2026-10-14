@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { artAction, blattOeffnenAction } from "@/app/(app)/arbeitsblatt-actions";
+import { tischTastenAn } from "@/components/kombi/desktop/tisch-tasten";
+import { useDesktop } from "@/components/kombi/desktop/use-desktop";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import { a4Daten, BlattKoerper, BlattLupe, DruckSeiten, type LupeSteuerung } from "@/components/kombi/tisch/arbeitsblatt/blatt";
@@ -45,6 +47,9 @@ export function TischEbene() {
   const ref = useRef<HTMLElement>(null);
   const api = useRef(kombi);
   const steuerung = useRef<Steuerung | null>(null);
+  /** Ab 1024 px: Tastenkästchen in den Knöpfen, Kopf des Blatts in der Spalte rechts */
+  const desk = useDesktop();
+  useEffect(() => tischTastenAn(), []);
 
   // ── Arbeitsblatt eines Übungsthemas ───────────────────────────────────────
   const [blattThema, setBlattThema] = useState<{ t: ThemaKurz; einblenden: number; ab: number | null; nr: number } | null>(null);
@@ -210,14 +215,29 @@ export function TischEbene() {
             </button>
             <button className="rb known" type="button" id="tReveal">
               Aufdecken
+              {desk ? (
+                <span className="d-k" aria-hidden="true">
+                  Leertaste
+                </span>
+              ) : null}
             </button>
           </div>
           <div className="t-rate" id="tRate">
             <button className="rb" type="button" data-r="daneben">
               Daneben
+              {desk ? (
+                <span className="d-k" aria-hidden="true">
+                  1
+                </span>
+              ) : null}
             </button>
             <button className="rb known" type="button" data-r="sass">
               Saß
+              {desk ? (
+                <span className="d-k" aria-hidden="true">
+                  2
+                </span>
+              ) : null}
             </button>
           </div>
         </div>
@@ -235,6 +255,11 @@ export function TischEbene() {
             seitenRef={seitenRef}
             einblenden={blattThema.einblenden}
             einblendenAb={blattThema.ab}
+            kopf={{
+              fach: `${blattThema.t.istEpoche ? "Epoche · " : ""}${blattThema.t.fach}`,
+              thema: blattThema.t.titel,
+              lead: blattZaehlerText(stand, stand.gedrucktAm ? uhrzeit(new Date(stand.gedrucktAm)) : null, phase === "bewerten"),
+            }}
           />
         ) : (
           <>
