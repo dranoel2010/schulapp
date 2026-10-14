@@ -21,6 +21,7 @@ import type { BlockVorher } from "@/app/(app)/lernblock-actions";
 import type { BlockDaten } from "@/lib/kombi/lernblock-daten";
 import { E, moveTo, reduce, rubber } from "@/lib/kombi/motion";
 import { cap, diffDays, dm, lang, TAG, TK, wd, weekdayOrDate, zahl } from "@/lib/kombi/text";
+import { probeHilfsmittel } from "@/lib/probe-hilfsmittel";
 import type { KlausurenSeite, KlausurSeite } from "@/lib/seiten/klausur";
 
 /**
@@ -72,11 +73,11 @@ function PlanTag({ tag, heute, mitDatum }: { tag: string; heute: string; mitDatu
   );
 }
 
-/** Unterzeile einer Planzeile (Prototyp `planRows`). */
-function planUnterzeile(b: BlockDaten): string {
+/** Unterzeile einer Planzeile (Prototyp `planRows`); die Probeklausur nennt ihre Hilfsmittel nach dem Fach. */
+function planUnterzeile(b: BlockDaten, fach: string): string {
   const erledigt = b.status === "done" ? ", erledigt" : "";
   if (b.art === "review") return `${b.thema ?? "Alle Themen"}, ${b.minuten} Minuten${erledigt}`;
-  if (b.art === "probe") return `ohne Hilfsmittel, ${b.minuten} Minuten${erledigt}`;
+  if (b.art === "probe") return `${probeHilfsmittel(fach)}, ${b.minuten} Minuten${erledigt}`;
   return `${b.alsBlatt && !b.blatt?.fehlgeschlagen ? "Lernblock mit Arbeitsblatt" : "Lernblock"}, ${b.minuten} Minuten${erledigt}`;
 }
 
@@ -460,7 +461,7 @@ function PlanZeile({
       role="button"
       tabIndex={0}
       aria-pressed={b.status === "done"}
-      aria-label={`${b.titel}, ${planUnterzeile(b)}${angefangen ? ", Uhr öffnen" : b.status === "done" ? ", wieder öffnen" : ", abhaken"}`}
+      aria-label={`${b.titel}, ${planUnterzeile(b, fach)}${angefangen ? ", Uhr öffnen" : b.status === "done" ? ", wieder öffnen" : ", abhaken"}`}
       // Vergangene Tage treten zurück, wie bisher auf /lernen (opacity .6)
       style={{ touchAction: "pan-y", opacity: b.tag < heute ? 0.6 : undefined }}
       onClick={tippen}
@@ -480,7 +481,7 @@ function PlanZeile({
       </span>
       <div className="pbody">
         <b>{b.titel}</b>
-        <span>{planUnterzeile(b)}</span>
+        <span>{planUnterzeile(b, fach)}</span>
       </div>
       {istHeute && b.status !== "done" ? (
         <button

@@ -10,6 +10,7 @@ import { useArbeitsblatt, type BlattAnfang } from "@/components/kombi/tisch/arbe
 import { BlattSheet } from "@/components/kombi/tisch/blatt-sheet";
 import { erzeugeTisch, type TischOptionen } from "@/components/kombi/tisch/steuerung";
 import type { ThemaKurz } from "@/components/kombi/tisch/typen";
+import { blattZaehlerText } from "@/lib/arbeitsblatt/tisch-text";
 import { buzz } from "@/lib/kombi/motion";
 import { uhrzeit } from "@/lib/kombi/text";
 
@@ -90,15 +91,8 @@ export function TischEbene() {
   const phase = blatt.phase;
   useEffect(() => {
     if (!stand) return;
-    const n = stand.inhalt?.aufgaben.length ?? 0;
     const um = stand.gedrucktAm ? uhrzeit(new Date(stand.gedrucktAm)) : null;
-    steuerung.current?.blattZaehler(
-      !stand.inhalt
-        ? "Arbeitsblatt"
-        : phase === "bewerten" && um
-          ? `Arbeitsblatt · gedruckt um ${um}`
-          : `Arbeitsblatt · ${n} Aufgaben, etwa ${stand.inhalt.minuten} Minuten`,
-    );
+    steuerung.current?.blattZaehler(blattZaehlerText(stand, um, phase === "bewerten"));
   }, [stand, phase]);
 
   const drucken = useCallback(() => {

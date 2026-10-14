@@ -130,19 +130,18 @@ function splitDays(days: string[]): {
 }
 
 /**
- * Der Tag der Probeklausur, ein bis zwei Tage vor dem Termin (Antwort 4): mit
- * genug Vorlauf (mindestens vier Lerntage) zwei Tage vorher, sonst einer.
- * Ist dieser Tag kein Schultag unter den Lerntagen, gilt der Tag vor der
- * Prüfung, wenn er einer ist (Test am Dienstag: Probe am Montag). Sonst der
- * nächstfrühere Schultag, aber nur über ein bloßes Wochenende hinweg
- * (Klausur am Montag: Probe am Freitag). Liegen dazwischen freie Schultage
- * (Ferien, Feiertag), zählt der Lerntag im Abstand von ein bis zwei Tagen,
- * auch am Wochenende (Test direkt nach den Ferien). Nie der Prüfungstag, nie
- * vor heute (beides steckt schon in `studyDays`).
+ * Der Tag der Probeklausur, ein bis zwei Tage vor dem Termin (Antwort 4 vom
+ * 13.10.2026, Regel vom 14.10.2026): mit genug Vorlauf (mindestens vier
+ * Lerntage) zwei Tage vorher, sonst einer. Liegt die Klausur am Montag, ist
+ * es ausdrücklich der Sonntag davor. Ein Wochenendtag ist erlaubt, Ferien und
+ * freie Tage nicht (sie fehlen schon in `studyDays`). Ist der Tag nicht
+ * erlaubt, gilt der nächstfrühere Lerntag (bei einem Tag Abstand also der Tag
+ * zwei vorher), nie ein späterer. Nur ein Tag, der schon vorbei ist (eine
+ * verpasste Probe beim Nachholen), rückt auf den Tag vor der Klausur. Nie der Prüfungstag, nie vor heute (beides
+ * steckt schon in `studyDays`).
  *
- * Bleibt nur ein Lerntag und ist er ein Schultag (Test morgen), gehört er der
- * Probeklausur: „sonst einen Tag vorher“ gilt auch hier. Null, wenn kein
- * Tag in Frage kommt.
+ * Bleibt nur ein Lerntag (Test morgen), gehört er der Probeklausur. Null,
+ * wenn kein Tag in Frage kommt.
  */
 export function probeTagFuer(examDate: string, studyDays: string[]): string | null {
   if (studyDays.length === 0) return null;
@@ -150,23 +149,18 @@ export function probeTagFuer(examDate: string, studyDays: string[]): string | nu
 }
 
 function probeTagMitAbstand(examDate: string, studyDays: string[], abstand: number): string | null {
-  const ziel = addDays(examDate, -abstand);
-  const vortag = addDays(examDate, -1);
-  const schultage = studyDays.filter((day) => weekdayIndex(day) < 5);
-  if (schultage.includes(ziel)) return ziel;
-  if (schultage.includes(vortag)) return vortag;
-  const frueher = schultage.filter((day) => day < ziel);
-  const letzter = frueher[frueher.length - 1];
-  if (!letzter) return null;
-  // Zwischen ihm und der Prüfung nur Wochenende: er bleibt (Freitag vor Montag)
-  let freierSchultag = false;
-  for (let tag = addDays(letzter, 1); tag < examDate; tag = addDays(tag, 1)) {
-    if (weekdayIndex(tag) < 5 && !studyDays.includes(tag)) freierSchultag = true;
-  }
-  if (!freierSchultag) return letzter;
-  // Ferien dazwischen: ein bis zwei Tage vorher, auch am Wochenende
-  const nah = [ziel, vortag, addDays(examDate, -2)].find((day) => studyDays.includes(day));
-  return nah ?? null;
+  // Klausur am Montag: die Probe liegt am Sonntag davor (Antwort vom 14.10.2026)
+  const tage = weekdayIndex(examDate) === 0 ? 1 : abstand;
+  const ziel = addDays(examDate, -tage);
+  if (studyDays.includes(ziel)) return ziel;
+  // Ist der Tag schon vorbei (verpasst, Nachholen), bleibt der Tag vor der
+  // Klausur, wenn er noch kommt.
+  if (tage === 2 && ziel < studyDays[0]) return probeTagMitAbstand(examDate, studyDays, 1);
+  // Geht der Tag nicht, gilt der nächstfrühere erlaubte, nie ein späterer:
+  // bei einem Tag Abstand also zuerst der Tag zwei vorher, bei zwei Tagen
+  // Abstand nie der Tag direkt vor der Klausur.
+  const frueher = studyDays.filter((day) => day < ziel);
+  return frueher[frueher.length - 1] ?? null;
 }
 
 /**
@@ -186,8 +180,9 @@ export function probeTagGueltig(examDate: string, studyDays: string[], tag: stri
  * Wiederholen.
  *
  * Durchgearbeitet wird nur vor der Probeklausur, sonst prüfte sie Stoff, der
- * laut Plan noch gar nicht dran war. Lerntage nach ihr (Klausur am Montag,
- * Probe am Freitag davor, das Wochenende dazwischen) sind Wiederholungstage.
+ * laut Plan noch gar nicht dran war. Lerntage nach ihr (Klausur am
+ * Donnerstag, Probe am Dienstag, der Mittwoch dazwischen) sind
+ * Wiederholungstage.
  * Liegt vor der Probe kein Tag zum Durcharbeiten mehr, entfällt sie, außer
  * sie ist der einzige Lerntag überhaupt (siehe `probeTagFuer`).
  *

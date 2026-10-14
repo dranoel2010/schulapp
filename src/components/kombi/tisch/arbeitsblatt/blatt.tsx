@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 import { A4Seite, Mx, type A4Daten } from "@/components/kombi/a4/seite";
 import { Icon } from "@/components/kombi/icon";
 import type { BlattStand } from "@/lib/arbeitsblatt/ablauf";
+import { blattDruckenText } from "@/lib/arbeitsblatt/tisch-text";
 import { E, reduce, swapText } from "@/lib/kombi/motion";
 
 import type { BlattPhase } from "./use-arbeitsblatt";
@@ -232,7 +233,7 @@ export function BlattKoerper(p: KoerperProps) {
   const fertigGesperrt = bewerten && offen > 0;
   const ohneInhalt = !daten;
   const gescheitert = stand.status === "fehlgeschlagen" && ohneInhalt;
-  const mainText = bewerten ? "Fertig" : "Arbeitsblatt drucken";
+  const mainText = bewerten ? "Fertig" : blattDruckenText(stand);
 
   return (
     <>
