@@ -2,7 +2,7 @@ import { ablageSeite, blattSeite } from "@/lib/seiten/ablage";
 import { archivSeite } from "@/lib/seiten/archiv";
 import { einstellungenSeite } from "@/lib/seiten/einstellungen";
 import { fachSeite, faecherSeite } from "@/lib/seiten/faecher";
-import { hausaufgabenSeite } from "@/lib/seiten/hausaufgaben";
+import { aufgabeSeite, hausaufgabenSeite } from "@/lib/seiten/hausaufgaben";
 import { klausurenSeite, klausurSeite } from "@/lib/seiten/klausur";
 import { notenfachSeite, notenSeite } from "@/lib/seiten/noten";
 import { probeSeite } from "@/lib/seiten/probe";
@@ -28,6 +28,8 @@ export const SEITEN_LOADER: Record<string, SeitenLoader | undefined> = {
   probe: probeSeite,
   woche: wocheSeite,
   hausaufgaben: (userId) => hausaufgabenSeite(userId),
+  // nur am Rechner: das Detail einer Aufgabe neben der Liste (desktop/aufgabe-detail.tsx)
+  aufgabe: (userId, params) => aufgabeSeite(userId, params),
   klausuren: (userId) => klausurenSeite(userId),
   klausur: klausurSeite,
   noten: (userId) => notenSeite(userId),

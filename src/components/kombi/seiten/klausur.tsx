@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState, type PointerEvent as RPointerEvent } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from "react";
 
 import {
   auslassenAction,
@@ -11,17 +12,21 @@ import {
   nachholenAction,
   termineNeuAction,
 } from "@/app/(app)/lernblock-actions";
+import { useAuswahl } from "@/components/kombi/desktop/auswahl";
+import { LernplanStreifen, planUnterzeile } from "@/components/kombi/desktop/lernplan-streifen";
+import { useDesktop } from "@/components/kombi/desktop/use-desktop";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import { TextLine } from "@/components/kombi/seiten/zeilen";
 import { blockMerken, useBlock, zustand } from "@/components/kombi/lernblock/uhr";
+import { Tn } from "@/components/kombi/tn";
+import { formatAverage } from "@/lib/grade-scale";
 import { useOptimistischeAktion } from "@/lib/kombi/aktion";
 import { klausurenLeerSatz, klausurPlanAnsicht, planBrauchtDatum } from "@/lib/kombi/archiv";
 import type { BlockVorher } from "@/app/(app)/lernblock-actions";
 import type { BlockDaten } from "@/lib/kombi/lernblock-daten";
 import { E, moveTo, reduce, rubber } from "@/lib/kombi/motion";
 import { cap, diffDays, dm, lang, TAG, TK, wd, weekdayOrDate, zahl } from "@/lib/kombi/text";
-import { probeHilfsmittel } from "@/lib/probe-hilfsmittel";
 import type { KlausurenSeite, KlausurSeite } from "@/lib/seiten/klausur";
 
 /**
@@ -73,18 +78,12 @@ function PlanTag({ tag, heute, mitDatum }: { tag: string; heute: string; mitDatu
   );
 }
 
-/** Unterzeile einer Planzeile (Prototyp `planRows`); die Probeklausur nennt ihre Hilfsmittel nach dem Fach. */
-function planUnterzeile(b: BlockDaten, fach: string): string {
-  const erledigt = b.status === "done" ? ", erledigt" : "";
-  if (b.art === "review") return `${b.thema ?? "Alle Themen"}, ${b.minuten} Minuten${erledigt}`;
-  if (b.art === "probe") return `${probeHilfsmittel(fach)}, ${b.minuten} Minuten${erledigt}`;
-  return `${b.alsBlatt && !b.blatt?.fehlgeschlagen ? "Lernblock mit Arbeitsblatt" : "Lernblock"}, ${b.minuten} Minuten${erledigt}`;
-}
-
 type Schalten = { id: string; status: "open" | "done" };
 
 export function KlausurInhalt({ daten }: { params: Record<string, string>; daten: KlausurSeite }) {
   const kombi = useKombi();
+  // Am Rechner steht die Klausur im Detail neben der Liste (KlausurAmRechner)
+  const desktop = useDesktop();
   const [bloecke, setBloecke] = useState(daten.bloecke);
   const [vorher, setVorher] = useState(daten);
   if (vorher !== daten) {
@@ -169,149 +168,97 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
   }
   const mitDatum = planBrauchtDatum([...tageGesehen, daten.datum]);
 
-  return (
+  // Teile, die Handy und Rechner gleich zeigen (am Handy in dieser Reihenfolge untereinander)
+  const themenLeer = (
     <>
-      {daten.thema ? <p style={{ fontSize: 17 }}>{daten.thema}</p> : null}
-      {ansicht.lernplan ? <h3 className="p-lab">Lernplan</h3> : null}
-
-      {!ansicht.lernplan ? null : daten.themen === 0 ? (
+      <p className="p-sub">
+        Die App verteilt die Themen auf die Tage vor der Prüfung. Sobald du einträgst, was drankommt, steht der Plan.
+      </p>
+      <Link className="textline" href={`/klausuren/${daten.id}/bearbeiten`}>
+        Themen eintragen
+        <Icon name="chevron_right" />
+      </Link>
+    </>
+  );
+  const planKopf = (
+    <>
+      {geplant > 0 ? (
+        <p className="p-sub">
+          {erledigt} von {geplant} {geplant === 1 ? "Block" : "Blöcken"} erledigt
+          {daten.gestrichen > 0 ? ` · ${daten.gestrichen} gestrichen` : ""}
+        </p>
+      ) : null}
+      {geplant > 0 && kommend ? (
+        <p className="p-sub">
+          {daten.minutenProTag}&nbsp;min am Tag · {daten.vorlauf} Tage Vorlauf
+        </p>
+      ) : null}
+      {daten.warnung ? <p className="p-sub">{daten.warnung}</p> : null}
+      {daten.verpasst ? (
         <>
           <p className="p-sub">
-            Die App verteilt die Themen auf die Tage vor der Prüfung. Sobald du einträgst, was drankommt, steht der Plan.
+            {daten.verpasst.anzahl === 1
+              ? `Ein Lernblock von ${weekdayOrDate(daten.verpasst.tag, heute)} ist offen.`
+              : `${cap(zahl(daten.verpasst.anzahl))} Lernblöcke sind offen.`}{" "}
+            {daten.verpasst.anzahl === 1
+              ? "Nachholen verteilt ihn auf die Tage bis zur Klausur, Auslassen streicht ihn."
+              : "Nachholen verteilt sie auf die Tage bis zur Klausur, Auslassen streicht sie."}
           </p>
-          <Link className="textline" href={`/klausuren/${daten.id}/bearbeiten`}>
-            Themen eintragen
-            <Icon name="chevron_right" />
-          </Link>
-        </>
-      ) : (
-        <>
-          {geplant > 0 ? (
-            <p className="p-sub">
-              {erledigt} von {geplant} {geplant === 1 ? "Block" : "Blöcken"} erledigt
-              {daten.gestrichen > 0 ? ` · ${daten.gestrichen} gestrichen` : ""}
-            </p>
-          ) : null}
-          {geplant > 0 && kommend ? (
-            <p className="p-sub">
-              {daten.minutenProTag}&nbsp;min am Tag · {daten.vorlauf} Tage Vorlauf
-            </p>
-          ) : null}
-          {daten.warnung ? <p className="p-sub">{daten.warnung}</p> : null}
-          {daten.verpasst ? (
-            <>
-              <p className="p-sub">
-                {daten.verpasst.anzahl === 1
-                  ? `Ein Lernblock von ${weekdayOrDate(daten.verpasst.tag, heute)} ist offen.`
-                  : `${cap(zahl(daten.verpasst.anzahl))} Lernblöcke sind offen.`}{" "}
-                {daten.verpasst.anzahl === 1
-                  ? "Nachholen verteilt ihn auf die Tage bis zur Klausur, Auslassen streicht ihn."
-                  : "Nachholen verteilt sie auf die Tage bis zur Klausur, Auslassen streicht sie."}
-              </p>
-              <div style={{ display: "flex", gap: 24 }}>
-                <button
-                  className="textbtn"
-                  type="button"
-                  disabled={!!arbeitet}
-                  onClick={() => void mitToast("nachholen", () => nachholenAction(daten.id), () => "Auf die Tage bis zur Klausur verteilt")}
-                >
-                  Nachholen
-                </button>
-                <button
-                  className="textbtn"
-                  type="button"
-                  disabled={!!arbeitet}
-                  onClick={() => void mitToast("auslassen", () => auslassenAction(daten.id), () => "Ausgelassen")}
-                >
-                  Auslassen
-                </button>
-              </div>
-            </>
-          ) : null}
-
-          {geplant === 0 ? (
-            <p className="p-sub">
-              {daten.gestrichen > 0
-                ? "Alle Lernblöcke sind gestrichen. Kommt ein neues Thema dazu, plant die App wieder."
-                : kommend
-                  ? `Die Themen stehen. Die App verteilt sie auf ${daten.vorlauf} Tage vor der Prüfung, ${daten.minutenProTag} Minuten am Tag.`
-                  : "Für diese Prüfung gibt es keinen Lernplan."}
-            </p>
-          ) : null}
-
-          <div className="plan">
-            {sicht.map((b) => (
-              <PlanZeile
-                key={b.id}
-                block={b}
-                geschaltet={b.status !== bloecke.find((x) => x.id === b.id)?.status}
-                heute={heute}
-                zeigeTag={ersteJeTag.has(b.id)}
-                mitDatum={mitDatum}
-                fach={daten.fach}
-                klausurDatum={daten.datum}
-                onSchalten={() => schalten(b)}
-              />
-            ))}
-            <div className="prow exday">
-              <span className="pday" aria-label={TAG[wd(daten.datum)]}>
-                <PlanTag tag={daten.datum} heute={heute} mitDatum={mitDatum} />
-              </span>
-              <div className="pbody">
-                <b>{daten.art}</b>
-                {daten.stunde ? <span>{daten.stunde}. Stunde</span> : null}
-              </div>
-              <span />
-            </div>
+          <div style={{ display: "flex", gap: 24 }}>
+            <button
+              className="textbtn"
+              type="button"
+              disabled={!!arbeitet}
+              onClick={() => void mitToast("nachholen", () => nachholenAction(daten.id), () => "Auf die Tage bis zur Klausur verteilt")}
+            >
+              Nachholen
+            </button>
+            <button
+              className="textbtn"
+              type="button"
+              disabled={!!arbeitet}
+              onClick={() => void mitToast("auslassen", () => auslassenAction(daten.id), () => "Ausgelassen")}
+            >
+              Auslassen
+            </button>
           </div>
         </>
-      )}
-
-      {daten.noten ? (
-        <>
-          <div style={{ height: 16 }} />
-          <button
-            className="lrow plain"
-            type="button"
-            onPointerDown={() => kombi.vorladen("notenfach", { id: daten.fachId })}
-            onClick={() => kombi.openPage("notenfach", { id: daten.fachId })}
-          >
-            <span>
-              <b>Noten in {daten.fach}</b>
-              <span className="s">{daten.noten}</span>
-            </span>
-            <Icon name="chevron_right" />
-          </button>
-        </>
       ) : null}
 
-      {daten.blaetter.length ? (
-        <>
-          <h3 className="p-lab">Blätter zum Thema</h3>
-          {daten.blaetter.map((b) => (
-            <button
-              key={b.id}
-              className="lrow"
-              type="button"
-              onPointerDown={() => kombi.vorladen("blatt", { id: b.id })}
-              onClick={() => kombi.openPage("blatt", { id: b.id })}
-            >
-              <span
-                className="mini"
-                style={b.deckblatt ? { backgroundImage: `url("/api/material/${b.deckblatt}/vorschau")` } : undefined}
-              />
-              <span>
-                <b>{b.titel}</b>
-                <span className="s">
-                  {dm(b.datum)}, {b.thema}
-                </span>
-              </span>
-              <Icon name="chevron_right" />
-            </button>
-          ))}
-        </>
+      {geplant === 0 ? (
+        <p className="p-sub">
+          {daten.gestrichen > 0
+            ? "Alle Lernblöcke sind gestrichen. Kommt ein neues Thema dazu, plant die App wieder."
+            : kommend
+              ? `Die Themen stehen. Die App verteilt sie auf ${daten.vorlauf} Tage vor der Prüfung, ${daten.minutenProTag} Minuten am Tag.`
+              : "Für diese Prüfung gibt es keinen Lernplan."}
+        </p>
       ) : null}
-
+    </>
+  );
+  const blattZeilen = daten.blaetter.map((b) => (
+    <button
+      key={b.id}
+      className="lrow"
+      type="button"
+      onPointerDown={() => kombi.vorladen("blatt", { id: b.id })}
+      onClick={() => kombi.openPage("blatt", { id: b.id })}
+    >
+      <span
+        className="mini"
+        style={b.deckblatt ? { backgroundImage: `url("/api/material/${b.deckblatt}/vorschau")` } : undefined}
+      />
+      <span>
+        <b>{b.titel}</b>
+        <span className="s">
+          {dm(b.datum)}, {b.thema}
+        </span>
+      </span>
+      <Icon name="chevron_right" />
+    </button>
+  ));
+  const wege = (
+    <>
       <div style={{ height: 16 }} />
       {kommend && daten.themen > 0 ? (
         <button
@@ -364,6 +311,183 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
         <Icon name="chevron_right" />
       </Link>
     </>
+  );
+
+  if (desktop) {
+    return (
+      <KlausurAmRechner
+        daten={daten}
+        sicht={sicht}
+        lernplan={ansicht.lernplan}
+        themenLeer={themenLeer}
+        planKopf={planKopf}
+        blattZeilen={blattZeilen}
+        wege={wege}
+      />
+    );
+  }
+
+  return (
+    <>
+      {daten.thema ? <p style={{ fontSize: 17 }}>{daten.thema}</p> : null}
+      {ansicht.lernplan ? <h3 className="p-lab">Lernplan</h3> : null}
+
+      {!ansicht.lernplan ? null : daten.themen === 0 ? (
+        themenLeer
+      ) : (
+        <>
+          {planKopf}
+
+          <div className="plan">
+            {sicht.map((b) => (
+              <PlanZeile
+                key={b.id}
+                block={b}
+                geschaltet={b.status !== bloecke.find((x) => x.id === b.id)?.status}
+                heute={heute}
+                zeigeTag={ersteJeTag.has(b.id)}
+                mitDatum={mitDatum}
+                fach={daten.fach}
+                klausurDatum={daten.datum}
+                onSchalten={() => schalten(b)}
+              />
+            ))}
+            <div className="prow exday">
+              <span className="pday" aria-label={TAG[wd(daten.datum)]}>
+                <PlanTag tag={daten.datum} heute={heute} mitDatum={mitDatum} />
+              </span>
+              <div className="pbody">
+                <b>{daten.art}</b>
+                {daten.stunde ? <span>{daten.stunde}. Stunde</span> : null}
+              </div>
+              <span />
+            </div>
+          </div>
+        </>
+      )}
+
+      {daten.noten ? (
+        <>
+          <div style={{ height: 16 }} />
+          <button
+            className="lrow plain"
+            type="button"
+            onPointerDown={() => kombi.vorladen("notenfach", { id: daten.fachId })}
+            onClick={() => kombi.openPage("notenfach", { id: daten.fachId })}
+          >
+            <span>
+              <b>Noten in {daten.fach}</b>
+              <span className="s">{daten.noten}</span>
+            </span>
+            <Icon name="chevron_right" />
+          </button>
+        </>
+      ) : null}
+
+      {daten.blaetter.length ? (
+        <>
+          <h3 className="p-lab">Blätter zum Thema</h3>
+          {blattZeilen}
+        </>
+      ) : null}
+
+      {wege}
+    </>
+  );
+}
+
+/**
+ * Die Klausur am Rechner (desktop.html `klausurDetail`), im Detail neben der
+ * Liste: „Datum · relativ“, „Fach: Thema“, der Lernplan als Wochenstreifen
+ * (desktop/lernplan-streifen.tsx), darunter nebeneinander „Blätter zum Thema“
+ * und „Noten in ⟨Fach⟩“ mit Schnitt. Fortschritt, Warnungen, verpasste
+ * Blöcke und die Wege (Lernplan neu erstellen, Stoff und Fragen, Bearbeiten)
+ * sind dieselben wie am Handy. Titel und Untertitel der Seite blendet
+ * listen.css hier aus; die Überschrift steht in `.d-klausur`.
+ */
+function KlausurAmRechner({
+  daten,
+  sicht,
+  lernplan,
+  themenLeer,
+  planKopf,
+  blattZeilen,
+  wege,
+}: {
+  daten: KlausurSeite;
+  sicht: BlockDaten[];
+  lernplan: boolean;
+  themenLeer: ReactNode;
+  planKopf: ReactNode;
+  blattZeilen: ReactNode;
+  wege: ReactNode;
+}) {
+  return (
+    <div className="d-klausur">
+      <p className="d-sub d-ober">
+        <span>
+          <Tn s={`${lang(daten.datum)} · ${relTageSeite(daten.heute, daten.datum)}`} />
+        </span>
+      </p>
+      <h1 className="d-h1">{daten.thema ? `${daten.fach}: ${daten.thema}` : daten.fach}</h1>
+      {lernplan ? (
+        <>
+          <h3 className="p-lab">Lernplan</h3>
+          {daten.themen === 0 ? (
+            themenLeer
+          ) : (
+            <>
+              {planKopf}
+              <LernplanStreifen
+                bloecke={sicht}
+                heute={daten.heute}
+                klausurTag={daten.datum}
+                art={daten.art}
+                stunde={daten.stunde}
+                stundeVon={daten.stundeVon}
+                fach={daten.fach}
+              />
+            </>
+          )}
+        </>
+      ) : null}
+      <div className="two">
+        <div>
+          <h3 className="p-lab">Blätter zum Thema</h3>
+          {daten.blaetter.length ? <div>{blattZeilen}</div> : <p className="empty">Noch keine Blätter.</p>}
+        </div>
+        <div>
+          <h3 className="p-lab">Noten in {daten.fach}</h3>
+          {daten.notenListe.length ? (
+            <>
+              <div>
+                {daten.notenListe.map((n) => (
+                  <Link
+                    className="grade-row"
+                    href={`/noten/${n.id}`}
+                    key={n.id}
+                    aria-label={`${n.label}, ${n.titel ?? n.art}, ${dm(n.datum)}, bearbeiten`}
+                  >
+                    <b>{n.label}</b>
+                    <span>
+                      <Tn s={`${n.titel ? `${n.titel}, ` : ""}${dm(n.datum)}, ${n.art}${n.gewicht !== 1 ? `, zählt ${n.gewicht}-fach` : ""}`} />
+                    </span>
+                  </Link>
+                ))}
+              </div>
+              {daten.schnitt !== null ? (
+                <p className="split">
+                  <Tn s={`Schnitt ${formatAverage(daten.schnitt, 1)}`} />
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p className="empty">Noch keine Noten eingetragen.</p>
+          )}
+        </div>
+      </div>
+      <div className="d-wege">{wege}</div>
+    </div>
   );
 }
 
@@ -510,6 +634,16 @@ function PlanZeile({
  */
 export function KlausurenInhalt({ daten }: { params: Record<string, string>; daten: KlausurenSeite }) {
   const kombi = useKombi();
+  // Am Rechner die Liste neben dem Detail: welche Klausur gewählt ist
+  const auswahl = useAuswahl();
+  const pfad = usePathname();
+  // ohne Auswahl steht die nächste Klausur im Detail (desktop.html), nicht aber neben dem Formular
+  const erste = daten.klausuren[0]?.id ?? null;
+  const amRechner = !!auswahl;
+  useEffect(() => {
+    if (!amRechner || auswahl?.sel || !erste || pfad !== "/klausuren") return;
+    kombi.zeigeBereich("klausur", { id: erste }, { ersetzen: true });
+  }, [amRechner, auswahl?.sel, erste, pfad, kombi]);
   return (
     <>
       {klausurenLeerSatz(daten) ? <p className="empty">{klausurenLeerSatz(daten)}</p> : null}
@@ -518,8 +652,10 @@ export function KlausurenInhalt({ daten }: { params: Record<string, string>; dat
         {daten.klausuren.map((k) => (
           <button
             key={k.id}
-            className={`lrow plain${k.vorbei ? " vorbei" : ""}`}
+            className={`lrow plain${k.vorbei ? " vorbei" : ""}${auswahl?.sel === k.id ? " sel" : ""}`}
             type="button"
+            data-id={auswahl ? k.id : undefined}
+            aria-current={auswahl?.sel === k.id ? "true" : undefined}
             onPointerDown={() => kombi.vorladen("klausur", { id: k.id })}
             onClick={() => kombi.openPage("klausur", { id: k.id })}
           >
