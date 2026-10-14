@@ -26,7 +26,7 @@ import { klausurenLeerSatz, klausurPlanAnsicht, planBrauchtDatum } from "@/lib/k
 import type { BlockVorher } from "@/app/(app)/lernblock-actions";
 import type { BlockDaten } from "@/lib/kombi/lernblock-daten";
 import { E, moveTo, reduce, rubber } from "@/lib/kombi/motion";
-import { cap, diffDays, dm, lang, TAG, TK, wd, weekdayOrDate, zahl } from "@/lib/kombi/text";
+import { cap, diffDays, dm, kurz, lang, TAG, TK, wd, weekdayOrDate, zahl } from "@/lib/kombi/text";
 import type { KlausurenSeite, KlausurSeite } from "@/lib/seiten/klausur";
 
 /**
@@ -320,7 +320,6 @@ export function KlausurInhalt({ daten }: { params: Record<string, string>; daten
         sicht={sicht}
         lernplan={ansicht.lernplan}
         themenLeer={themenLeer}
-        planKopf={planKopf}
         blattZeilen={blattZeilen}
         wege={wege}
       />
@@ -410,7 +409,6 @@ function KlausurAmRechner({
   sicht,
   lernplan,
   themenLeer,
-  planKopf,
   blattZeilen,
   wege,
 }: {
@@ -418,7 +416,6 @@ function KlausurAmRechner({
   sicht: BlockDaten[];
   lernplan: boolean;
   themenLeer: ReactNode;
-  planKopf: ReactNode;
   blattZeilen: ReactNode;
   wege: ReactNode;
 }) {
@@ -437,7 +434,7 @@ function KlausurAmRechner({
             themenLeer
           ) : (
             <>
-              {planKopf}
+              {/* ohne „n von m Blöcken erledigt“ und Vorlauf wie im Entwurf: der Streifen zeigt beides */}
               <LernplanStreifen
                 bloecke={sicht}
                 heute={daten.heute}
@@ -662,7 +659,8 @@ export function KlausurenInhalt({ daten }: { params: Record<string, string>; dat
             <span>
               <b>{k.fach}</b>
               <span className="s">
-                {lang(k.datum)} · {k.thema}
+                {/* am Rechner das kurze Datum wie im Entwurf („Fr 16.10.“), dann passt die Zeile */}
+                {amRechner ? kurz(k.datum) : lang(k.datum)} · {k.thema}
               </span>
             </span>
             <Icon name="chevron_right" />

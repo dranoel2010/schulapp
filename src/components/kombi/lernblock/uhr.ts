@@ -107,6 +107,22 @@ export function blockMerken(b: BlockDaten): void {
   melden();
 }
 
+/**
+ * Stände, die schon einmal aus Server-Daten übernommen wurden. Hängt sich eine
+ * Seite neu ein (etwa die Klausur, wenn das Fenster die Desktop-Schwelle
+ * quert), bringt sie dieselben, inzwischen alten Daten noch einmal mit: die
+ * dürfen den laufenden Stand nicht auf „Ruhe“ zurücksetzen. Neue Daten vom
+ * Server sind neue Objekte und gelten.
+ */
+const uebernommen = new WeakSet<BlockDaten>();
+
+/** Ein Stand aus Seitendaten: nur einmal je Objekt (siehe `uebernommen`). */
+export function blockAusSeite(b: BlockDaten): void {
+  if (uebernommen.has(b)) return;
+  uebernommen.add(b);
+  blockMerken(b);
+}
+
 /** Ein Stand vom Server, mit dem Versatz seiner Uhr. */
 export function blockVomServer(r: { block: BlockDaten; uhrVersatz: number }): void {
   appUhrStellen(r.uhrVersatz);
@@ -146,7 +162,7 @@ function abonnieren(h: () => void) {
  */
 export function useBlock(vomServer: BlockDaten | null): BlockDaten | null {
   useEffect(() => {
-    if (vomServer) blockMerken(vomServer);
+    if (vomServer) blockAusSeite(vomServer);
   }, [vomServer]);
   useSyncExternalStore(
     abonnieren,

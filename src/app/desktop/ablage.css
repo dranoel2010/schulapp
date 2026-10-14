@@ -3,9 +3,9 @@
    Alles ab 1024 px, Hover nur mit feiner Maus. Gemeinsames (auch .d-drop, .d-dlg) steht in grund.css. */
 @media (min-width:1024px){
 
-/* ---------- Ablage: Fachpillen über der Liste, eine Zeile, seitlich wischbar ---------- */
-.d-fil{display:flex;gap:6px;margin:10px -22px 4px -24px;padding:0 22px 0 24px;overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain}
-.d-fil::-webkit-scrollbar{display:none}
+/* ---------- Ablage: Fachpillen über der Liste ---------- */
+/* Sie brechen um statt seitlich zu scrollen: mit der Maus gibt es kein Wischen, und Höhe ist genug da */
+.d-fil{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
 .d-fil .fp{height:36px;padding:0 13px;white-space:nowrap}
 
 /* ---------- Blatt im Detail ---------- */
@@ -21,9 +21,10 @@
 .bl-hinweis{margin-top:10px}
 
 @media (min-width:1440px){
-  /* Titel, Unterzeile und Inhalt links, das Original rechts daneben. Die letzte Zeile ist 1fr:
+  /* Titel, Unterzeile und Inhalt links, das Original rechts daneben, am rechten Rand der Spalte
+     (desktop.html `.bl-two .d-in{max-width:none}`; die Abschrift selbst bleibt bis 640 px). Die letzte Zeile ist 1fr:
      ist das Original höher als der Text, wächst nur sie, die Abstände links bleiben. */
-  .d-in:has(> .bl-main){display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,340px);grid-template-rows:auto auto auto 1fr;column-gap:48px;align-items:start;max-width:1180px}
+  .d-in:has(> .bl-main){display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,340px);grid-template-rows:auto auto auto 1fr;column-gap:48px;align-items:start;max-width:none}
   .d-in:has(> .bl-main) > *{grid-column:1}
   .d-in > .bl-orig{display:block;grid-column:2;grid-row:1 / 5;position:sticky;top:var(--dtop)}
   .bl-seg{display:none}

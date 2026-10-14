@@ -80,7 +80,8 @@ export const examInputSchemaAb = (heute: string) => z.object({
   date: z
     .string("Wann ist die Prüfung?")
     .trim()
-    .refine(isCalendarDate, "Dieses Datum gibt es nicht.")
+    .min(1, "Datum fehlt.")
+    .refine((value) => value === "" || isCalendarDate(value), "Dieses Datum gibt es nicht.")
     // Der Vergangenheits-Test greift nur, wenn das Datum überhaupt lesbar ist —
     // sonst stünden zwei Meldungen an einem Feld.
     .refine(

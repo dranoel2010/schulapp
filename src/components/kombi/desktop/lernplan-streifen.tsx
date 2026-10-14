@@ -74,12 +74,15 @@ export function LernplanStreifen({
                   ))}
                   {klausur ? (
                     <div className="lp-b">
-                      <b>{art}</b>
-                      {stunde ? (
-                        <span>
-                          <Tn s={stundeVon ? `${stunde}. Stunde, ${stundeVon}` : `${stunde}. Stunde`} />
-                        </span>
-                      ) : null}
+                      {/* in <p> wie die Blöcke: knapp steht die Stunde unter „Klausur“, nicht in der Spalte von „Starten“ */}
+                      <p>
+                        <b>{art}</b>
+                        {stunde ? (
+                          <span>
+                            <Tn s={stundeVon ? `${stunde}. Stunde, ${stundeVon}` : `${stunde}. Stunde`} />
+                          </span>
+                        ) : null}
+                      </p>
                     </div>
                   ) : null}
                   {!amTag.length && !klausur ? <span className="none">{d < heute || d > klausurTag ? "" : "Frei"}</span> : null}

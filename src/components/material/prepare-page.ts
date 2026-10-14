@@ -62,6 +62,17 @@ function formatName(file: File): string {
 }
 
 /**
+ * Was der Browser nicht öffnen kann: ein anderes Format (etwa HEIC) lässt sich
+ * als JPEG speichern; ist es schon ein JPEG, ist die Datei kaputt, und der Rat
+ * „als JPEG speichern“ widerspräche sich.
+ */
+export function nichtLesbar(file: File): string {
+  const format = formatName(file);
+  if (format === "JPEG" || format === "JPG") return "Die Datei ist beschädigt. Lad sie neu herunter oder fotografier das Blatt.";
+  return `Dieses Bild kann der Browser nicht öffnen (${format}). Speicher es als JPEG und versuch es noch einmal.`;
+}
+
+/**
  * Das Bild als ImageBitmap, aufrecht.
  *
  * `imageOrientation: "from-image"` dreht das Bild so, wie die Kamera es meint —
@@ -77,9 +88,7 @@ async function readBitmap(file: File): Promise<ImageBitmap> {
     try {
       return await createImageBitmap(file);
     } catch {
-      throw new CaptureError(
-        `Dieses Bild kann der Browser nicht öffnen (${formatName(file)}). Speicher es als JPEG und versuch es noch einmal.`,
-      );
+      throw new CaptureError(nichtLesbar(file));
     }
   }
 }

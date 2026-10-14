@@ -81,3 +81,28 @@ export function AbbrechenKnopf({ children = "Abbrechen" }: { children?: string }
     </button>
   );
 }
+
+/**
+ * Nach einer abgewiesenen Eingabe (Server Action mit Fehlern): der Fokus geht
+ * auf das erste Feld mit Fehler (`aria-invalid`), sonst auf die Meldung über
+ * dem Formular. Das scrollt mit, und wer liest, hört die Meldung, die per
+ * `aria-describedby` am Feld hängt. Ohne Fehler tut es nichts.
+ */
+export function FehlerFokus({ zustand }: { zustand: { message?: string; errors?: object } }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const vorher = useRef(zustand);
+  useEffect(() => {
+    if (zustand === vorher.current) return;
+    vorher.current = zustand;
+    const fehler = zustand.message || (zustand.errors && Object.keys(zustand.errors).length);
+    const form = ref.current?.closest("form");
+    if (!fehler || !form) return;
+    const ziel =
+      form.querySelector<HTMLElement>('[aria-invalid="true"]') ?? form.querySelector<HTMLElement>('[role="alert"]');
+    if (!ziel) return;
+    if (!ziel.matches("input, select, textarea, button, [tabindex]")) ziel.setAttribute("tabindex", "-1");
+    ziel.focus();
+    ziel.scrollIntoView({ block: "center" });
+  }, [zustand]);
+  return <span ref={ref} hidden />;
+}

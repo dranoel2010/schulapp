@@ -51,7 +51,8 @@ export function RowBtn({
   const inhalt = (
     <>
       <span>
-        <b style={strong ? { fontWeight: 650 } : undefined}>{titel}</b>
+        {/* am Rechner in der Liste nie fett: alle Listen gleich laut (desktop.html) */}
+        <b style={strong && !auswahl ? { fontWeight: 650 } : undefined}>{titel}</b>
         {sub ? <span className="s">{sub}</span> : null}
       </span>
       {rechts ?? <Icon name="chevron_right" />}

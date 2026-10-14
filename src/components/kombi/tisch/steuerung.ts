@@ -476,7 +476,8 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
         const f = top.querySelector<HTMLElement>(".c-field")!;
         need = q.scrollHeight + f.offsetHeight + 12;
       }
-      H = Math.min(Math.max(need, 200), avail, deckel);
+      // am Rechner mindestens 260 px wie im Entwurf (desktop.html `.d-cards .t-stack`)
+      H = Math.min(Math.max(need, deckel === Infinity ? 260 : 200), avail, deckel);
       if (top) top._frontH = H;
     }
     tStack.style.height = `${Math.round(H)}px`;

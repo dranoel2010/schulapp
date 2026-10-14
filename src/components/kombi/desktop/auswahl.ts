@@ -10,7 +10,12 @@ import type { Bereich } from "./bereiche";
  * tragen Zeilen weder `data-id` noch `.sel`. Eigene Datei ohne weitere
  * Importe, damit die Zeilen der Seiten sie ohne Kreis über die Registry lesen.
  */
-export type Auswahl = { bereich: Bereich; sel: string | null };
+export type Auswahl = {
+  bereich: Bereich;
+  sel: string | null;
+  /** die Detailspalte daneben (für `LeeresDetail`, solange nichts gewählt ist) */
+  detailEl?: HTMLElement | null;
+};
 
 export const AuswahlKontext = createContext<Auswahl | null>(null);
 

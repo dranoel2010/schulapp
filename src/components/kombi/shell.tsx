@@ -16,6 +16,8 @@ import { Ablegen } from "@/components/kombi/desktop/ablegen";
 import { zielFuerArt, type Bereich } from "@/components/kombi/desktop/bereiche";
 import { Buehne, heuteGezeigt, zielVon, type BuehnenEintrag } from "@/components/kombi/desktop/buehne";
 import { dialogAuf, dialogZu } from "@/components/kombi/desktop/dialog";
+import { useEntwurfUeberSchwelle } from "@/components/kombi/desktop/entwurf";
+import { useUeberlagerungFokus } from "@/components/kombi/desktop/fokus";
 import { dateienAblegen } from "@/components/kombi/desktop/hochladen";
 import { datenNeu } from "@/components/kombi/desktop/liste-detail";
 import { Seitenleiste } from "@/components/kombi/desktop/seitenleiste";
@@ -900,6 +902,9 @@ export function KombiShell({ children }: { children: ReactNode }) {
   const menuOffen = useCallback(
     (offen: boolean, ausHistory: boolean) => {
       if (offen) {
+        // am Rechner ist das Menü ein Popover ohne Eintrag in der History: ein Klick daneben
+        // schließt es und tut zugleich, was er trifft (ein `back()` liefe dem in die Quere)
+        if (istDesktop()) return;
         if (stateJetzt().overlay !== "menu") {
           window.history.pushState({ ...stateJetzt(), kombi: 1, stapel: stapelJetzt(), idx: idx.current, ladung: LADUNG, overlay: "menu" }, "");
         }
@@ -1447,7 +1452,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
       // Eine Ebene über der Shell (der Tisch) hat Escape schon für sich genommen
       if (e.key !== "Escape" || e.defaultPrevented) return;
       if (sheetRef.current?.classList.contains("open")) sheetSchliessen();
-      else if (zeileRef.current?.istOffen()) zeileRef.current.schliessen();
+      else if (zeileRef.current?.istOffen()) zeileRef.current.schliessen({ fokusZurueck: true });
       else if (obersteEbene() && !istDesktop()) popPage();
     };
     document.addEventListener("keydown", onKey);
@@ -1566,6 +1571,10 @@ export function KombiShell({ children }: { children: ReactNode }) {
   const oben = desktop ? ([...ebenen].reverse().find((e) => !e.geht) ?? null) : null;
   const ziel = desktop ? zielVon(oben, pathname, suche) : null;
   useTasten(desktop, () => zeileRef.current?.oeffnen(), bereichWechseln);
+  // Tisch, Kamera, Dialog: was darunter liegt, ist inert; der Fokus geht hinein und zurück
+  useUeberlagerungFokus(desktop);
+  // Ungespeicherte Eingaben überstehen das Queren der Schwelle (Handy und Rechner rendern verschieden)
+  useEntwurfUeberSchwelle(desktop, pathname);
   useEffect(() => {
     if (ziel?.bereich && oben?.typ === "stapel" && ziel.lage === "split") gewaehlt.current.set(ziel.bereich, { art: oben.art, params: oben.params });
   }, [ziel?.bereich, ziel?.lage, oben]);
@@ -1586,7 +1595,8 @@ export function KombiShell({ children }: { children: ReactNode }) {
       <Seitenleiste daten={tagDaten} aktiv={ziel?.bereich ?? null} onBereich={bereichWechseln} />
       <main className="stage" id="stage" data-lay={ziel ? (ziel.lage === "heute" ? "scroll" : ziel.lage) : undefined} data-v={ziel?.bereich ?? undefined}>
       <div id="app" ref={appRef}>
-        <div className="layer on" id="home" ref={homeRef}>
+        {/* am Rechner liegt Heute unter jedem anderen Bereich: dann nicht per Tab erreichbar */}
+        <div className="layer on" id="home" ref={homeRef} inert={desktop && !!oben}>
           {istStart ? children : <Startseite daten={tagDaten} />}
         </div>
         <div className="layer" id="flow">

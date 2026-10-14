@@ -61,9 +61,8 @@ function AufgabeDetail({ id }: { id: string }) {
 
   return (
     <div className="d-aufgabe">
-      <h1 className="d-h1">
-        {a.fach}: {a.text}
-      </h1>
+      <p className="d-sub d-ober">{a.fachName}</p>
+      <h1 className="d-h1">{a.text}</h1>
       <div className="d-facts">
         <div className="d-fact">
           <span>Abgabe</span>

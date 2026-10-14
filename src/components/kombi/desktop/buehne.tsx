@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 
-import { Seite, SeitenInhalt } from "@/components/kombi/seite";
+import { ImDetail, Seite, SeitenInhalt } from "@/components/kombi/seite";
 import { seitenArt } from "@/components/kombi/seiten/registry";
 import { E, reduce } from "@/lib/kombi/motion";
 
@@ -23,8 +23,23 @@ let zuletzt: string | null | undefined;
 
 /** Heute (die Startseite) meldet sich hier, wenn sie wieder vorn steht. */
 export function heuteGezeigt(el: HTMLElement | null): void {
-  if (zuletzt !== undefined && zuletzt !== "heute" && el) bereichEinblenden(el);
+  if (zuletzt !== undefined && zuletzt !== "heute" && el) {
+    bereichEinblenden(el);
+    fokusHinein(el);
+  }
   zuletzt = "heute";
+}
+
+/**
+ * Nach einem Bereichswechsel steht der Fokus im neuen Bereich (nicht auf
+ * einem Knopf des alten, der jetzt verdeckt ist): auf der Fläche selbst, der
+ * nächste Tab führt zum ersten Bedienelement darin.
+ */
+function fokusHinein(el: HTMLElement): void {
+  const a = document.activeElement;
+  if (a instanceof HTMLElement && el.contains(a) && a !== el) return;
+  if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+  el.focus({ preventScroll: true });
 }
 
 /**
@@ -76,7 +91,10 @@ export function Buehne({
 
   // Bereichswechsel: mit der Maus 180 ms und 6 px, mit der Tastatur nichts
   useLayoutEffect(() => {
-    if (zuletzt !== undefined && zuletzt !== ziel.bereich && ref.current) bereichEinblenden(ref.current);
+    if (zuletzt !== undefined && zuletzt !== ziel.bereich && ref.current) {
+      bereichEinblenden(ref.current);
+      fokusHinein(ref.current);
+    }
     zuletzt = ziel.bereich;
   }, [ziel.bereich]);
   // Geht die Bühne (zurück nach Heute), weiß der nächste Bereich, woher er kommt
@@ -125,7 +143,13 @@ export function Buehne({
           bereich={ziel.bereich}
           sel={ziel.sel}
           liste={liste}
-          detail={detail ? <div className="d-in">{detail}</div> : null}
+          detail={
+            detail ? (
+              <ImDetail.Provider value>
+                <div className="d-in">{detail}</div>
+              </ImDetail.Provider>
+            ) : null
+          }
           detailKey={detailKey}
         />
       </section>

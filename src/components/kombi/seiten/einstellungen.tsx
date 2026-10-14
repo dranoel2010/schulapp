@@ -100,8 +100,8 @@ export function TastaturDetail() {
   ];
   return (
     <>
-      <h2 className="p-title">Tastatur</h2>
-      <p className="p-sub">Nur am Rechner</p>
+      <p className="d-sub d-ober">Nur am Rechner</p>
+      <h1 className="d-h1">Tastatur</h1>
       <div className="keys">
         {KUERZEL.map(([text, tasten]) => (
           <div className="key-row" key={text}>

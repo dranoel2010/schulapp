@@ -6,7 +6,9 @@ import { afterEach, describe, it } from "node:test";
 import {
   appJetzt,
   appUhrStellen,
+  blockAusSeite,
   blockLesen,
+  blockMerken,
   blockVomServer,
   fmtRest,
   gelernt,
@@ -115,5 +117,21 @@ describe("Lernblock-Uhr mit der App-Uhr", () => {
     assert.match(tisch, /!zeitUm\(block\)\) return;/);
     const uhr = readFileSync(join(process.cwd(), "src", "components", "kombi", "lernblock", "uhr.ts"), "utf8");
     assert.match(uhr, /useLayoutEffect\(\(\) => \{[\s\S]*?if \(aktiv\) setJetzt\(appJetzt\(\)\);\s*\}, \[aktiv, v\]\)/);
+  });
+
+  it("dieselben Seitendaten setzen einen laufenden Block nicht zurück (Seite neu eingehängt)", () => {
+    // die Klausurseite hat den Block in Ruhe geladen
+    const alt = block({ id: "b-neu", minuten: 25 });
+    blockAusSeite(alt);
+    // Starten (optimistisch, danach vom Server)
+    const laeuft = gestartet(alt, appJetzt() - 3000);
+    blockMerken(laeuft);
+    // das Fenster quert die Desktop-Schwelle: die Seite hängt sich mit denselben Daten neu ein
+    blockAusSeite(alt);
+    assert.equal(blockLesen("b-neu")!.laeuftSeit, laeuft.laeuftSeit);
+    // neue Daten vom Server (ein neues Objekt) gelten weiter
+    const fertig = { ...laeuft, status: "done" } as BlockDaten;
+    blockAusSeite(fertig);
+    assert.equal(blockLesen("b-neu")!.status, "done");
   });
 });

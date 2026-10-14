@@ -24,7 +24,7 @@ describe("Lernplan-Streifen: Wochen", () => {
     const w = streifenWochen(tage, "2026-10-14");
     assert.equal(w.length, 2);
     assert.deepEqual(w[0], ["2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09", "2026-10-11"]);
-    assert.deepEqual(w[1], ["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16"]);
+    assert.deepEqual(w[1], ["2026-10-12", "2026-10-13", "2026-10-14"]);
     // jeder Tag mit Block steht in genau einem Streifen
     for (const t of tage) assert.equal(w.flat().filter((d) => d === t).length, 1, t);
   });
@@ -36,6 +36,11 @@ describe("Lernplan-Streifen: Wochen", () => {
   });
 
   it("ohne Blöcke: nur die Klausurwoche", () => {
-    assert.deepEqual(streifenWochen([], "2026-10-21"), [["2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23"]]);
+    assert.deepEqual(streifenWochen([], "2026-10-21"), [["2026-10-19", "2026-10-20", "2026-10-21"]]);
+  });
+
+  it("der Klausurtag ist die letzte Spalte (Klausur Do 12.11.: kein Fr 13.11. danach)", () => {
+    const w = streifenWochen(["2026-11-09", "2026-11-10"], "2026-11-12");
+    assert.deepEqual(w, [["2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12"]]);
   });
 });

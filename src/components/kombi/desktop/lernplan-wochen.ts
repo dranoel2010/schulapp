@@ -9,7 +9,8 @@ import { wd } from "@/lib/kombi/text";
  * und die Probeklausur darf auf einem Wochenende liegen (Klausur am Montag:
  * Sonntag davor). Darum: ein Streifen je Woche vom ersten Eintrag bis zur
  * Woche der Klausur, je Woche Montag bis Freitag, Samstag und Sonntag nur,
- * wenn dort etwas liegt. So fällt kein Block aus dem Streifen.
+ * wenn dort etwas liegt. So fällt kein Block aus dem Streifen. Der letzte
+ * Streifen endet mit dem Klausurtag.
  */
 
 /** Montag der Woche eines Tages ('YYYY-MM-DD') */
@@ -23,7 +24,8 @@ export function streifenWochen(blockTage: readonly string[], klausurTag: string)
   for (let mo = montagVon(alle[0]); mo <= letzte; mo = addDays(mo, 7)) {
     const tage = [0, 1, 2, 3, 4].map((i) => addDays(mo, i));
     for (const i of [5, 6]) if (belegt.has(addDays(mo, i))) tage.push(addDays(mo, i));
-    wochen.push(tage);
+    // der Klausurtag ist die letzte Spalte (desktop.html): danach kommt nichts mehr
+    wochen.push(tage.filter((t) => t <= klausurTag));
   }
   return wochen;
 }

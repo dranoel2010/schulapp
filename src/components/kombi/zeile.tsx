@@ -68,7 +68,7 @@ import { nextLesson, type VorratAufgabe, type ZeilenVorrat } from "@/lib/kombi/v
 
 export type ZeileHandle = {
   oeffnen: (kontext?: Record<string, unknown> | null) => void;
-  schliessen: (optionen?: { blur?: boolean; ausHistory?: boolean; keepText?: boolean }) => void;
+  schliessen: (optionen?: { blur?: boolean; ausHistory?: boolean; keepText?: boolean; fokusZurueck?: boolean }) => void;
   istOffen: () => boolean;
 };
 
@@ -205,6 +205,8 @@ export function Zeile({
   const ueberNr = useRef(0);
   /** Vertrag mit dem Ablauf (C): wohin ein Eintrag aus dessen Kontext geht */
   const sendenRef = useRef<((e: EintragSenden) => void) | null>(null);
+  /** Wer den Fokus vor der Zeile hatte (am Rechner bekommt er ihn nach Esc zurück) */
+  const vorFokus = useRef<HTMLElement | null>(null);
   const ablaufZ = useSyncExternalStore(ablaufStore.subscribe, ablaufStore.get, ablaufStore.getServer);
   /** false beim Server-Rendern und beim Hydrieren, danach true */
   const hydriert = useSyncExternalStore(ohneAbo, () => true, () => false);
@@ -395,7 +397,7 @@ export function Zeile({
   }, [kombi, onOffen, vorratAuffrischen]);
 
   const schliessen = useCallback(
-    (optionen: { blur?: boolean; ausHistory?: boolean; keepText?: boolean } = {}) => {
+    (optionen: { blur?: boolean; ausHistory?: boolean; keepText?: boolean; fokusZurueck?: boolean } = {}) => {
       if (!offenRef.current) return;
       offenRef.current = false;
       const z = Z.current;
@@ -404,7 +406,12 @@ export function Zeile({
       z.nachVorrat = null;
       setOffen(false);
       onOffen?.(false, !!optionen.ausHistory);
-      if (optionen.blur !== false) feldRef.current?.blur();
+      // am Rechner: Esc gibt den Fokus dem zurück, der ihn vor der Zeile hatte
+      const zurueck = vorFokus.current;
+      vorFokus.current = null;
+      if (optionen.fokusZurueck && istDesktop() && zurueck?.isConnected && !zurueck.closest("[inert]") && document.activeElement === feldRef.current) {
+        zurueck.focus({ preventScroll: true });
+      } else if (optionen.blur !== false) feldRef.current?.blur();
       const menu = menuRef.current;
       const fertig = () => {
         if (offenRef.current) return;
@@ -456,6 +463,12 @@ export function Zeile({
   const nachSchliessen = useCallback(
     (fn: () => void) => {
       if (!offenRef.current) return fn();
+      // ohne Eintrag in der History (am Rechner) kommt kein popstate: gleich danach
+      if (window.history.state?.overlay !== "menu") {
+        schliessen();
+        setTimeout(fn, 0);
+        return;
+      }
       let erledigt = false;
       const los = () => {
         if (erledigt) return;
@@ -539,6 +552,8 @@ export function Zeile({
           sendenRef.current = typeof senden === "function" ? (senden as (e: EintragSenden) => void) : null;
           return;
         }
+        const a = document.activeElement;
+        if (a instanceof HTMLElement && a !== document.body && !zeileRef.current?.contains(a)) vorFokus.current = a;
         feldRef.current?.focus({ preventScroll: true });
         oeffnen();
       },
@@ -1300,6 +1315,28 @@ export function Zeile({
     };
   }, [suchText, markWoerter, neu]);
 
+  // Am Rechner: ein Klick neben das Popover schließt es und kommt trotzdem an
+  // (der Scrim ist dort durchlässig, grund.css); ebenso, wenn der Fokus die Zeile verlässt
+  useEffect(() => {
+    if (!desktop || !offen) return;
+    const daneben = (e: PointerEvent) => {
+      const t = e.target;
+      if (t instanceof Node && zeileRef.current?.contains(t)) return;
+      schliessen({ keepText: true });
+    };
+    // der Fokus kommt woanders an (Tab aus der Zeile, auch über die Leiste des Browsers hinweg)
+    const fokusWoanders = (e: FocusEvent) => {
+      const t = e.target;
+      if (t instanceof Node && t !== document.body && !zeileRef.current?.contains(t)) schliessen({ keepText: true, blur: false });
+    };
+    document.addEventListener("pointerdown", daneben, true);
+    document.addEventListener("focusin", fokusWoanders);
+    return () => {
+      document.removeEventListener("pointerdown", daneben, true);
+      document.removeEventListener("focusin", fokusWoanders);
+    };
+  }, [desktop, offen, schliessen]);
+
   // Tastatur: die Zeile bleibt am Daumen (03 Z. 96, Prototyp vvFit)
   useEffect(() => {
     const vv = window.visualViewport;
@@ -1377,7 +1414,11 @@ export function Zeile({
   return (
     <>
       <div className={`scrim${offen ? " on" : ""}`} id="scrim" onClick={() => schliessen({ keepText: true })} />
-      <div className={`zeile d-zeile${offen ? " menu-on" : ""}${versteckt ? " hide" : ""}`} id="zeile" ref={zeileRef}>
+      <div
+        className={`zeile d-zeile${offen ? " menu-on" : ""}${versteckt ? " hide" : ""}`}
+        id="zeile"
+        ref={zeileRef}
+      >
         <div
           className="menu d-menu"
           id="menu"
@@ -1494,7 +1535,9 @@ export function Zeile({
               setFeld(e.target.value);
               onInput();
             }}
-            onFocus={() => {
+            onFocus={(e) => {
+              const vor = e.relatedTarget;
+              if (vor instanceof HTMLElement && !zeileRef.current?.contains(vor)) vorFokus.current = vor;
               const zz = Z.current;
               if (zz.keptAt && Date.now() - zz.keptAt > 600000) {
                 setFeld("");

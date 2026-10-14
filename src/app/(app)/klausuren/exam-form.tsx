@@ -4,7 +4,7 @@ import { useActionState, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
 import { Button, type ButtonProps } from "@/components/kombi/form";
-import { AbbrechenKnopf, FertigBeiErfolg, useNachAktion } from "@/components/kombi/form/fertig";
+import { AbbrechenKnopf, FehlerFokus, FertigBeiErfolg, useNachAktion } from "@/components/kombi/form/fertig";
 import { Field } from "@/components/kombi/form";
 import { Input, Select, Textarea } from "@/components/kombi/form";
 import type { Exam, ExamKind, Subject } from "@/db/schema";
@@ -302,6 +302,7 @@ export function ExamForm({
   return (
     <form action={formAction} className="kf-form" noValidate>
       <FertigBeiErfolg marke={state.fertig} toast={exam ? "Gespeichert" : "Klausur eingetragen"} />
+      <FehlerFokus zustand={state} />
       {state.message ? (
         <p
           role="alert"

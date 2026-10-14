@@ -141,6 +141,7 @@ export function ListeDetail({
 }) {
   const listeRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
+  const [detailEl, setDetailEl] = useState<HTMLDivElement | null>(null);
   const vorher = useRef(detailKey);
 
   // Detailwechsel: mit der Maus 140 ms Überblenden, mit der Tastatur keins
@@ -188,9 +189,15 @@ export function ListeDetail({
   return (
     <div className="d-split">
       <div className="d-list" ref={listeRef}>
-        <AuswahlKontext.Provider value={{ bereich, sel }}>{liste}</AuswahlKontext.Provider>
+        <AuswahlKontext.Provider value={{ bereich, sel, detailEl }}>{liste}</AuswahlKontext.Provider>
       </div>
-      <div className="d-detail" ref={detailRef}>
+      <div
+        className="d-detail"
+        ref={(el) => {
+          detailRef.current = el;
+          setDetailEl(el);
+        }}
+      >
         {detail}
       </div>
     </div>

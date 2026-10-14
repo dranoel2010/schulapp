@@ -6,8 +6,7 @@
 /* ---------- Hausaufgaben ---------- */
 /* „Archiv“ als Zeile der Liste, mit Abstand zu „Mit Details eintragen“ */
 .d-list .d-arch{margin-top:6px}
-/* Aufgabe im Detail: die Überschrift steht auf der Höhe des Listentitels */
-.d-aufgabe > .d-h1{min-height:44px;display:flex;align-items:center}
+/* Aufgabe im Detail: das Fach als Angabe (.d-ober), darunter die Aufgabe als Titel, wie die Klausur */
 .d-aufgabe .p-lab{margin-top:28px}
 .d-notiz{white-space:pre-line}
 
@@ -22,6 +21,8 @@
 .d-in > .p-title:has(~ .d-klausur),.d-in > .p-sub:has(+ .d-klausur){display:none}
 .d-in:has(> .d-klausur){max-width:980px}
 .d-ober{margin-top:0;min-height:44px;display:flex;align-items:center}
+/* Kopf im Detail von Blatt, Fach, Noten: 6 px bis zum Inhalt wie im Entwurf */
+.d-kopf{margin-bottom:6px}
 .d-klausur > .p-lab:first-of-type{margin-top:28px}
 
 /* Lernplan als Wochenstreifen: Mo bis Fr, Samstag und Sonntag nur mit Eintrag (--n Spalten) */
@@ -48,7 +49,8 @@
 .two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:48px;margin-top:8px}
 .two > div{min-width:0}
 .two .p-lab{margin-top:28px}
-.d-wege{margin-top:20px;max-width:560px}
+/* Handlungszeilen über die volle Breite: ihre Linien fluchten mit Streifen und Notenspalte */
+.d-wege{margin-top:20px}
 
 /* Die Klausurliste: vergangene blasser (wie am Handy); gewählt auch dann deutlich */
 .d-list .lrow.vorbei.sel{opacity:1}

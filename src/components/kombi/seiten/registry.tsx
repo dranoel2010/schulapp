@@ -8,7 +8,7 @@ import { EinstellungenInhalt } from "@/components/kombi/seiten/einstellungen";
 import { FachInhalt, FaecherInhalt } from "@/components/kombi/seiten/faecher";
 import { HausaufgabenInhalt } from "@/components/kombi/seiten/hausaufgaben";
 import { KlausurenInhalt, KlausurInhalt, klausurTitel, klausurUntertitel } from "@/components/kombi/seiten/klausur";
-import { NotenfachInhalt, NotenInhalt } from "@/components/kombi/seiten/noten";
+import { notenfachKopf, NotenfachInhalt, NotenInhalt } from "@/components/kombi/seiten/noten";
 import { ProbeInhalt, probeTitel } from "@/components/kombi/seiten/probe";
 import { BEREICH_JE_ART, type BereichAngabe } from "@/components/kombi/desktop/bereiche";
 import { zuletztAngabe } from "@/components/kombi/zeile/zuletzt-angabe";
@@ -38,6 +38,12 @@ export type SeitenArt = {
   url: (params: Record<string, string>) => string;
   titel: (params: Record<string, string>, daten: unknown) => string;
   untertitel?: (params: Record<string, string>, daten: unknown) => string | null;
+  /**
+   * Nur am Rechner im Detail: der Kopf wie in desktop.html, die Angabe
+   * (`.d-sub`) über dem Titel (`.d-h1`). `true` nimmt den Untertitel als
+   * Angabe, eine Funktion eine eigene. Ohne steht der Kopf des Handys.
+   */
+  detailKopf?: true | ((params: Record<string, string>, daten: unknown) => string | null);
   /**
    * Titel und Unterzeile für „Zuletzt geöffnet“ aus den Seitendaten (Klausur,
    * Noten eines Fachs, Fach, Blatt). Die Shell ruft es, sobald die Antwort von
@@ -110,6 +116,7 @@ export const SEITEN: Record<string, SeitenArt | undefined> = {
       const n = (d as NotenfachDaten | undefined)?.name;
       return n ? `Noten ${n}` : "Noten";
     },
+    detailKopf: (_p, d) => notenfachKopf(d as NotenfachDaten),
     Inhalt: inhalt(NotenfachInhalt),
   },
   ablage: {
@@ -125,6 +132,7 @@ export const SEITEN: Record<string, SeitenArt | undefined> = {
     bereich: BEREICH_JE_ART.blatt,
     titel: (_p, d) => (d as BlattDaten | undefined)?.titel ?? "",
     untertitel: (_p, d) => blattSub(d as BlattDaten),
+    detailKopf: true,
     Inhalt: inhalt(BlattInhalt),
   },
   faecher: {
@@ -139,6 +147,7 @@ export const SEITEN: Record<string, SeitenArt | undefined> = {
     bereich: BEREICH_JE_ART.fach,
     titel: (_p, d) => (d as FachDaten | undefined)?.name ?? "",
     untertitel: (_p, d) => (d as FachDaten).sub,
+    detailKopf: true,
     Inhalt: inhalt(FachInhalt),
   },
   einstellungen: {

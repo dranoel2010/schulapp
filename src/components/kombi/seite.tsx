@@ -1,8 +1,9 @@
 "use client";
 
-import type { ReactNode, Ref } from "react";
+import { createContext, useContext, type ReactNode, type Ref } from "react";
 
 import { Icon } from "@/components/kombi/icon";
+import { Tn } from "@/components/kombi/tn";
 import { seitenArt } from "@/components/kombi/seiten/registry";
 import { uhrzeit } from "@/lib/kombi/text";
 
@@ -40,6 +41,9 @@ export function Seite({
   );
 }
 
+/** Steht die Seite am Rechner im Detail neben einer Liste? (gesetzt von der Bühne) */
+export const ImDetail = createContext(false);
+
 /**
  * Titel und Inhalt einer Nachschlage-Seite — im Stapel und beim direkten
  * Aufruf der URL dieselbe Komponente. Ohne Daten (noch am Laden, nach 150 ms
@@ -61,6 +65,7 @@ export function SeitenInhalt({
   ohneNetz?: boolean;
 }) {
   const s = seitenArt(art);
+  const imDetail = useContext(ImDetail);
   if (!s) return null;
   const sub = daten === undefined ? null : (s.untertitel?.(params, daten) ?? null);
   const titel = s.titel(params, daten);
@@ -71,6 +76,22 @@ export function SeitenInhalt({
         <p className="empty">{titel ? "Ohne Verbindung. Diese Seite war noch nicht geöffnet." : "Diese Seite war noch nicht geöffnet."}</p>
       </>
     );
+  if (imDetail && s.detailKopf && daten !== undefined) {
+    // am Rechner im Detail: erst die Angabe, dann der Titel (desktop.html, wie die Klausur)
+    const angabe = s.detailKopf === true ? sub : s.detailKopf(params, daten);
+    return (
+      <>
+        {/* .d-ober ist flex: der Text in einem span, sonst gehen die Leerzeichen an den Kommas verloren */}
+        <p className="d-sub d-ober">
+          <span>
+            <Tn s={ausCache ? `Ohne Verbindung · Stand ${uhrzeit(new Date(ausCache))}` : (angabe ?? "")} />
+          </span>
+        </p>
+        <h1 className="d-h1 d-kopf">{titel}</h1>
+        <s.Inhalt params={params} daten={daten} />
+      </>
+    );
+  }
   return (
     <>
       <h2 className="p-title">{titel}</h2>

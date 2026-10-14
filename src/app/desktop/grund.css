@@ -54,6 +54,8 @@ button{-webkit-user-select:none;user-select:none}
 .d-list .p-title{min-height:44px;display:flex;align-items:center;margin:0}
 .d-lede{font-size:17px;line-height:1.4;margin-top:14px}
 .d-foot{display:flex;gap:10px;margin-top:28px}
+/* Leere Liste: rechts ein Satz auf der Höhe des Listentitels und die Handlung dazu (leeres-detail.tsx) */
+.d-leer .d-lede{margin-top:0;min-height:44px;display:flex;align-items:center;color:var(--ink-2)}
 .d-foot .btn{flex:none;min-width:168px}
 /* Bereichsseiten haben keinen Zurück-Pfeil; Seiten ohne Bereich (Spalte) behalten ihn */
 .d-bereich .p-top{display:none}
@@ -73,6 +75,15 @@ button{-webkit-user-select:none;user-select:none}
 @media (hover:hover) and (pointer:fine){.d-list .lrow:not(.sel):hover{background:var(--quiet);opacity:1}.d-list .lrow:hover::before,.d-list .lrow:hover + .lrow::before{opacity:0}}
 .d-list .lrow .mini{width:30px}
 .d-list .p-lab:first-of-type{margin-top:16px}
+/* Abstand unter dem Listentitel wie im Entwurf: 14 px vor der ersten Zeile (Klausuren, Fächer),
+   6 px in den Einstellungen, 14 px vor der ersten sichtbaren Gruppe (Hausaufgaben) */
+.d-list .p-title + div > .lrow:first-child{margin-top:14px}
+.d-list .p-title + .lrow{margin-top:6px}
+.d-list .p-title + div > .group:not([hidden]):not(.group:not([hidden]) ~ .group){margin-top:14px}
+/* In der Liste kein Pfeil: die Auswahl ist die leise Fläche, der Platz gehört dem Untertitel */
+.d-list .lrow > .ic:last-child{display:none}
+.d-list .lrow.plain:has(> .ic:last-child){grid-template-columns:minmax(0,1fr)}
+.d-list .lrow:not(.plain):has(> .ic:last-child){grid-template-columns:44px minmax(0,1fr)}
 /* Aufgabenzeile in der Liste: Text wählt aus, der Ring hakt ab */
 .task .t-front{cursor:default}
 .d-list .task .t-text{cursor:pointer}
@@ -126,8 +137,11 @@ button{-webkit-user-select:none;user-select:none}
 .menu.d-menu{overflow:hidden;clip-path:none}
 .d-menu .m-grab{display:none}
 .d-menu .m-scroll{padding:0}
-/* kein abgedunkelter Hintergrund; ein Klick daneben schließt das Popover trotzdem */
-.stage #scrim{background:transparent}
+/* kein abgedunkelter Hintergrund und kein Fänger: ein Klick daneben schließt das Popover
+   und kommt trotzdem an (zeile.tsx hört auf pointerdown außerhalb) */
+.stage #scrim{background:transparent;pointer-events:none}
+/* der gewählte Eintrag sagt, was Enter tut (desktop.html `markSel`) */
+.d-menu .opt[aria-selected="true"] .o-end:empty::after{content:"Enter"}
 
 /* Toast in der Bühne über der Zeile */
 #desk .toast{position:absolute;left:var(--zc);bottom:84px;max-width:var(--zw);translate:-50% 0}
@@ -159,6 +173,23 @@ button{-webkit-user-select:none;user-select:none}
 .d-inp{display:block;width:100%;height:52px;padding:0 16px;border:0;border-radius:14px;background:var(--raise);font-size:17px;outline:none}
 .d-inp:focus-visible{box-shadow:0 0 0 2px var(--ink)}
 .d-form .refile{display:flex;flex-wrap:wrap;gap:6px}
+
+/* ---------- Fokus und Tastatur ---------- */
+/* Flächen, die den Fokus nur halten (Bereich nach dem Wechsel, Tisch, Dialog), zeigen keinen Ring */
+.d-bereich:focus,#home:focus,.page.d-spalte:focus,.tisch:focus,.cam:focus,.sheet:focus,.d-dlg:focus{outline:none}
+/* Wischaktionen des Handys: nur sichtbar und per Tab erreichbar, wenn die Zeile sie zeigt */
+.task:not(.drag-l):not(.open-l) .t-acts{visibility:hidden}
+/* „Zeigen“ der Zeile ist ohne Text 0 px breit: dann auch kein Tab-Stopp */
+.send:not(.on){visibility:hidden}
+/* Was den Fokus hat, liegt nicht unter der schwebenden Zeile (52 px, 20 px über dem Rand) */
+.d-scroll,.d-list,.d-detail,#homeScroll{scroll-padding-bottom:96px}
+
+/* ---------- Hover der Knöpfe (nur mit feiner Maus), leise wie Zeilen und Seitenleiste ---------- */
+@media (hover:hover) and (pointer:fine){
+  .btn.primary:hover,.whbtn:hover,.fp[aria-pressed="true"]:hover{opacity:.88}
+  .btn.quiet:hover,.fp:not([aria-pressed="true"]):hover{background:var(--raise-2)}
+  .lbbtn:hover,.textbtn:hover,.camb:hover{opacity:.7}
+}
 
 /* Tisch und Kamera füllen das Fenster (die Gestalt des Tisches macht der Teil „Tisch“) */
 .tisch,.cam{max-width:none}

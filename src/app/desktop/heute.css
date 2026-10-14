@@ -5,6 +5,8 @@
 @media (min-width:1024px){
 /* Die Seitenleiste trägt das Datum und die Einstellungen: keine Datumszeile mit Zahnrad */
 #whenrow{display:none}
+/* Keine Ausblendung am unteren Rand wie am Handy: die Bühne hat Platz, die Zeile schwebt (desktop.html .d-scroll) */
+#homeScroll{-webkit-mask-image:none;mask-image:none}
 /* Die Überschrift steht wie .d-head der anderen Bereiche */
 #homeScroll h1.hl{min-height:44px;align-content:center;margin:0}
 
@@ -23,6 +25,10 @@
 /* Links dieselben Blöcke, mit etwas mehr Luft (desktop.html .h-col) */
 .h-grid .mode > .blk + .blk{margin-top:24px}
 .h-grid .mode > .wh{margin-top:28px}
+/* Nichts offen: der Block der Aufgaben ist leer (nur die Überschrift für Vorleser) und nimmt keinen Platz,
+   dann beginnt die linke Spalte wie die rechte an der Oberkante */
+.h-grid .mode > .blk:first-child:not(:has(> div > *)){margin-top:0}
+.h-grid .mode > .blk:first-child:not(:has(> div > *)) + .wh{margin-top:0}
 .h-grid .mode > .wh + .blk{margin-top:28px}
 /* Stunden und Woche stehen in der Packhilfe, nicht noch einmal links */
 .h-grid .mo-stunden,.h-grid .mo-woche{display:none}

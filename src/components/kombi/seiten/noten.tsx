@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { useErsteAuswahl } from "@/components/kombi/desktop/ablegen";
+import { LeeresDetail } from "@/components/kombi/desktop/leeres-detail";
 import { Tn } from "@/components/kombi/tn";
 import { formatAverage } from "@/lib/grade-scale";
 import { dm } from "@/lib/kombi/text";
@@ -23,6 +24,9 @@ import { PLab, RowBtn, TextLine } from "./zeilen";
 
 const avg = (x: number) => formatAverage(x, 1);
 
+/** Am Rechner über dem Titel im Detail: „Schnitt 2,3“ (desktop.html, Noten). */
+export const notenfachKopf = (d: NotenfachDaten): string | null => (d.schnitt !== null ? `Schnitt ${avg(d.schnitt)}` : null);
+
 export function NotenInhalt({ daten }: { daten: NotenDaten }) {
   // Am Rechner ohne Auswahl: das erste Fach
   const erstes = daten.faecher[0]?.id ?? daten.abgewaehlt[0]?.id ?? null;
@@ -32,6 +36,12 @@ export function NotenInhalt({ daten }: { daten: NotenDaten }) {
       <>
         <p className="empty">Noch keine Noten eingetragen.</p>
         {daten.hatFaecher ? <TextLine href="/noten/neu">Note eintragen</TextLine> : null}
+        {/* am Rechner: rechts ein Satz statt einer leeren Spalte */}
+        <LeeresDetail
+          satz={daten.hatFaecher ? "Noch keine Noten." : "Noch keine Fächer."}
+          knopf={daten.hatFaecher ? "Note eintragen" : "Fach anlegen"}
+          href={daten.hatFaecher ? "/noten/neu" : "/faecher/neu"}
+        />
       </>
     );
   }
