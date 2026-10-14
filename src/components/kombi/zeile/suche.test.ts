@@ -6,7 +6,7 @@ import { nextLesson } from "@/lib/kombi/vorrat";
 
 import { parse } from "./parser";
 import { prototypVorrat } from "./prototyp-vorrat";
-import { AREAS, answerFor, dublette, rueckfrageTage, suche, suggestions, txtText, type Antwort, type SuchUmgebung } from "./suche";
+import { AREAS, answerFor, dublette, rueckfrageTage, suche, suggestions, txtText, zuletztZiel, type Antwort, type SuchUmgebung } from "./suche";
 
 const v = prototypVorrat();
 const u: SuchUmgebung = { v, jetzt: v.jetzt, doneFuer: (a) => a.done };
@@ -274,5 +274,19 @@ describe("Vorschläge im leeren Menü", () => {
   it("morgens: Woche und die Klausur dieser Woche", () => {
     const s = suggestions({ v, jetzt: v.jetzt, ansicht: "morgens", undo: null, used: new Set() });
     assert.deepEqual(s.map((o) => `${txtText(o.l1)} | ${txtText(o.l2)}`), ["Woche | 12.10. bis 16.10.", "Klausur Mathematik | Freitag, 16.10., in 4 Tagen"]);
+  });
+});
+
+describe("„Zuletzt geöffnet“", () => {
+  it("öffnet die Woche mit demselben Tag wie „Wohin? → Woche“ (gleicher Cache-Schlüssel ohne Netz)", () => {
+    const wohin = AREAS.find((a) => a.key === "woche")!.ziel(v);
+    const zuletzt = zuletztZiel({ art: "woche", params: {} }, v);
+    assert.deepEqual(zuletzt, wohin);
+    assert.ok(zuletzt.typ === "seite" && /^\d{4}-\d{2}-\d{2}$/.test(zuletzt.params?.tag ?? ""));
+  });
+
+  it("andere Seiten öffnet es mit ihren gemerkten Parametern", () => {
+    assert.deepEqual(zuletztZiel({ art: "klausur", params: { id: "k1" } }, v), { typ: "seite", art: "klausur", params: { id: "k1" } });
+    assert.deepEqual(zuletztZiel({ art: "hausaufgaben", params: {} }, v), { typ: "seite", art: "hausaufgaben", params: {} });
   });
 });

@@ -1,6 +1,6 @@
 import { after } from "next/server";
 
-import { abschriftScheitern, blattAnlegen, seiteAnhaengen } from "@/lib/kombi/blatt-aufnahme";
+import { abschriftScheitern, blattAnlegen, seiteAnhaengen, uploadSchluessel } from "@/lib/kombi/blatt-aufnahme";
 import { jetztFuerAblauf } from "@/lib/kombi/ablauf-uhr";
 import { blattKurz } from "@/lib/kombi/blaetter";
 import { zuteilungAnstossen } from "@/lib/leser/zuteilung";
@@ -20,6 +20,10 @@ import { getSessionUser } from "@/lib/session";
  * - `folge=1`: zweite und weitere Seite eines eben angelegten Blatts,
  * - `seiten=<n>`: wie viele Seiten das Blatt bekommt (fürs Protokoll),
  * - `ziel=liste|zeile`: von wo die Kamera kam (fürs Protokoll),
+ * - `aufnahme=<uid>` und `seite=<i>`: welche Seite welcher Aufnahme das ist.
+ *   Kommt dieselbe Seite noch einmal (der Browser wiederholt, weil nur die
+ *   Antwort verloren ging), gibt es das vorhandene Blatt zurück, ohne ein
+ *   zweites anzulegen oder die Seite zweimal anzuhängen.
  * - `fehler=abschrift`: Testweiche, nur mit `SCHULAPP_TESTUHR=1`.
  *
  * Antwort: das Blatt in Kurzform (`BlattKurz`), oder `{message}` mit Status.
@@ -47,6 +51,7 @@ export async function POST(request: Request) {
   const seite = await readPage(form);
   if (!seite.ok) return Response.json({ message: seite.message }, { status: 400, headers: HEADERS });
 
+  const page = { ...seite.page, uploadKey: uploadSchluessel(user.id, feld(form, "aufnahme"), feld(form, "seite")) };
   const now = await jetztFuerAblauf();
   const attach = feld(form, "attach");
   const seiten = Number(feld(form, "seiten")) || 1;
@@ -55,15 +60,17 @@ export async function POST(request: Request) {
   let ergebnis;
   try {
     ergebnis = attach
-      ? await seiteAnhaengen(user.id, now, attach, seite.page, { folge: feld(form, "folge") === "1", seiten })
-      : await blattAnlegen(user.id, now, seite.page, { seiten, ziel: feld(form, "ziel") === "zeile" ? "zeile" : "liste" });
+      ? await seiteAnhaengen(user.id, now, attach, page, { folge: feld(form, "folge") === "1", seiten })
+      : await blattAnlegen(user.id, now, page, { seiten, ziel: feld(form, "ziel") === "zeile" ? "zeile" : "liste" });
   } catch (fehler) {
     console.error("Blatt ablegen fehlgeschlagen", fehler);
     return Response.json({ message: "Das Blatt konnte nicht gespeichert werden. Versuch es noch einmal." }, { status: 500, headers: HEADERS });
   }
   if (!ergebnis.ok) return Response.json({ message: ergebnis.message }, { status: ergebnis.status, headers: HEADERS });
 
-  if (test) {
+  if (ergebnis.wiederholt) {
+    // schon angekommen: weder Testweiche noch Zuteilung ein zweites Mal
+  } else if (test) {
     await abschriftScheitern(user.id, ergebnis.id);
   } else {
     // Wer die Seite liest, entscheidet die App — nach der Antwort, wie beim

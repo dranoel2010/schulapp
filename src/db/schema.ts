@@ -783,12 +783,23 @@ export const materialPages = pgTable(
      * gegengelesen, und Lesefehler stehen darin ohne ⟨⟩.
      */
     maschinell: boolean("maschinell").notNull().default(false),
+    /**
+     * Woran der Server eine wiederholte Aufnahme erkennt (Abnahmerunde 16):
+     * Nutzer, uid der Aufnahme aus der Kamera und Nummer der Seite. Geht nur
+     * die Antwort eines Uploads verloren (Mobilfunk reißt ab, der Funnel
+     * antwortet mit 504), schickt der Browser dieselbe Seite noch einmal;
+     * dann gibt POST /api/blaetter das vorhandene Blatt zurück, statt ein
+     * zweites anzulegen oder die Seite zweimal anzuhängen. NULL bei Seiten,
+     * die nicht über die Kamera kamen (Formular, Altbestand).
+     */
+    uploadKey: text("upload_key"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (t) => [
     index("material_pages_material_idx").on(t.materialId, t.sortOrder),
+    uniqueIndex("material_pages_upload_key_idx").on(t.uploadKey),
     // Volltextsuche in der Abschrift (Modell 23, Plan 3.7). Derselbe Ausdruck
     // wie in `sucheBlaetter()`.
     index("material_pages_volltext_idx").using(

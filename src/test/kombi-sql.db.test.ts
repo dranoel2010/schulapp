@@ -34,6 +34,7 @@ export const KOMBI_SQL = [
   "kombi-themen-art.sql",
   "kombi-arbeitsblaetter.sql",
   "kombi-arbeitsblaetter-checks.sql",
+  "kombi-upload-schluessel.sql",
 ] as const;
 
 async function basisMitWanderungen(): Promise<PGlite> {
@@ -89,6 +90,14 @@ describe("kombi-*.sql gegen die Basis von main", () => {
     await neu.apply();
 
     assert.deepEqual(await stand(gewandert), await stand(frisch));
+  });
+
+  it("kombi-upload-schluessel.sql läuft ein zweites Mal ohne Fehler und ohne Änderung", async () => {
+    const client = await basisMitWanderungen();
+    const vorher = await stand(client);
+    const text = readFileSync(path.join(process.cwd(), "scripts", "kombi-upload-schluessel.sql"), "utf8");
+    await client.exec(`begin;\n${ohneKommentare(text)}\ncommit;`);
+    assert.deepEqual(await stand(client), vorher);
   });
 
   it("ein Arbeitsblatt-Lauf: mit arbeitsblatt_id rein, mit material_id raus", async () => {

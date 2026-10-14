@@ -48,7 +48,7 @@ Am Handy geht die Kamera nur über HTTPS. Dafür auf dem Mac `tailscale funnel 3
 
 **Vor dem Push** wird der ganze Branch nach echten Namen und Schuldaten durchsucht, weil das Repo öffentlich ist. Gepusht wird erst nach deinem Ja.
 
-Die Datenbank auf dem NAS kennt die neuen Tabellen noch nicht. Die sechs Dateien müssen **vor** `nas.sh hoch` hinein, **in genau dieser Reihenfolge**:
+Die Datenbank auf dem NAS kennt die neuen Tabellen noch nicht. Die sieben Dateien müssen **vor** `nas.sh hoch` hinein, **in genau dieser Reihenfolge**:
 
 1. `scripts/kombi-tagesprotokoll.sql`
 2. `scripts/kombi-lernblock-uhr.sql`
@@ -56,6 +56,7 @@ Die Datenbank auf dem NAS kennt die neuen Tabellen noch nicht. Die sechs Dateien
 4. `scripts/kombi-themen-art.sql`
 5. `scripts/kombi-arbeitsblaetter.sql`
 6. `scripts/kombi-arbeitsblaetter-checks.sql` (geht nur nach 5)
+7. `scripts/kombi-upload-schluessel.sql` (Spalte `material_pages.upload_key`: ein Foto, das der Browser nach verlorener Antwort noch einmal schickt, legt kein zweites Blatt an. Wiederholbar.)
 
 Jede Datei einzeln so (Dateinamen austauschen):
 
@@ -69,7 +70,7 @@ Ablauf im Ganzen:
 
 1. `modell-23` in `main` mischen und pushen. `nas.sh hoch` holt nur `main`.
 2. Auf dem NAS das Repo aktualisieren, damit die SQL-Dateien unter `repo/scripts/` liegen.
-3. Die sechs SQL-Dateien einspielen, wie oben.
+3. Die sieben SQL-Dateien einspielen, wie oben.
 4. `scripts/nas.sh hoch`. Es hält an, wenn eine Datei fehlt.
 5. `/api/tag/stand` aufrufen, dann am Handy öffnen. Die App lädt einmal neu.
 6. Eine Aufgabe über die Zeile eintragen und abhaken. Dann im Google-Kalender „Schule“ nachsehen.

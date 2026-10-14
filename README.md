@@ -1449,7 +1449,7 @@ Die Sicherungen liegen unter `.backups/` und sind nicht in Git.
 ### Modell 23 auf dem NAS
 
 Modell 23 (Bauplan `entwurf-modelle/23-kombi-v2/UMSETZUNG.md`, 5.7) bringt
-sechs SQL-Dateien. Auf dem NAS kommen sie **erst nach der Abnahme von
+sieben SQL-Dateien. Auf dem NAS kommen sie **erst nach der Abnahme von
 Abschnitt H**, per psql, **vor** dem Neubau und in genau dieser Reihenfolge:
 
 1. `scripts/kombi-tagesprotokoll.sql` — Tabelle `tagesprotokoll`
@@ -1458,6 +1458,7 @@ Abschnitt H**, per psql, **vor** dem Neubau und in genau dieser Reihenfolge:
 4. `scripts/kombi-themen-art.sql` — Spalte `subject_topics.art`
 5. `scripts/kombi-arbeitsblaetter.sql` — `arbeitsblaetter`, `arbeitsblatt_wertung`, `leser_laeufe.arbeitsblatt_id`
 6. `scripts/kombi-arbeitsblaetter-checks.sql` — tauscht `leser_laeufe_art_check` und `leser_laeufe_ziel_check` (braucht 5)
+7. `scripts/kombi-upload-schluessel.sql` — Spalte `material_pages.upload_key` mit eindeutigem Index (ein wiederholter Foto-Upload legt kein zweites Blatt an)
 
 Jede Datei hat im Kopf einen Abschnitt „Vorher zählen“: vorher sichern,
 zählen, einspielen, dieselben Zahlen wieder zählen. Eingespielt wird jede wie

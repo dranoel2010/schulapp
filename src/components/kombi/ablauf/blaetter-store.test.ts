@@ -4,14 +4,14 @@ import { test } from "node:test";
 import { dazuAn, dazuStore, seitenFelder } from "@/components/kombi/ablauf/blaetter-store";
 
 test("seitenFelder: neues Blatt legt mit der ersten Seite an, die weiteren hängen daran", () => {
-  assert.deepEqual(seitenFelder({ i: 0, n: 2, blattId: null, dazu: false, ziel: "liste", fehler: null }), { seiten: "2", ziel: "liste" });
-  assert.deepEqual(seitenFelder({ i: 1, n: 2, blattId: "b1", dazu: false, ziel: "liste", fehler: null }), { attach: "b1", folge: "1" });
-  assert.deepEqual(seitenFelder({ i: 0, n: 1, blattId: null, dazu: false, ziel: "zeile", fehler: "x" }), { seiten: "1", ziel: "zeile", fehler: "x" });
+  assert.deepEqual(seitenFelder({ uid: "u1", i: 0, n: 2, blattId: null, dazu: false, ziel: "liste", fehler: null }), { seiten: "2", ziel: "liste", aufnahme: "u1", seite: "0" });
+  assert.deepEqual(seitenFelder({ uid: "u1", i: 1, n: 2, blattId: "b1", dazu: false, ziel: "liste", fehler: null }), { attach: "b1", folge: "1", aufnahme: "u1", seite: "1" });
+  assert.deepEqual(seitenFelder({ uid: "u1", i: 0, n: 1, blattId: null, dazu: false, ziel: "zeile", fehler: "x" }), { seiten: "1", ziel: "zeile", fehler: "x", aufnahme: "u1", seite: "0" });
 });
 
 test("seitenFelder: „Seite dazu“ hängt jede Seite an das vorhandene Blatt, auch nach Neuladen ab Seite 2", () => {
-  assert.deepEqual(seitenFelder({ i: 0, n: 2, blattId: "b1", dazu: true, ziel: "zeile", fehler: null }), { attach: "b1", seiten: "2" });
-  assert.deepEqual(seitenFelder({ i: 1, n: 2, blattId: "b1", dazu: true, ziel: "zeile", fehler: null }), { attach: "b1", folge: "1" });
+  assert.deepEqual(seitenFelder({ uid: "u1", i: 0, n: 2, blattId: "b1", dazu: true, ziel: "zeile", fehler: null }), { attach: "b1", seiten: "2", aufnahme: "u1", seite: "0" });
+  assert.deepEqual(seitenFelder({ uid: "u1", i: 1, n: 2, blattId: "b1", dazu: true, ziel: "zeile", fehler: null }), { attach: "b1", folge: "1", aufnahme: "u1", seite: "1" });
 });
 
 test("dazuStore und dazuAn: hängt, solange ein Eintrag hängt, und zählt Angekommenes", () => {

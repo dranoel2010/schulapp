@@ -1,0 +1,42 @@
+-- Wiederholte Uploads erkennen (Modell 23, Abnahmerunde 16): eine Spalte und
+-- ein eindeutiger Index an `material_pages`.
+--
+-- Der Browser wiederholt ein Foto, wenn die Antwort ausbleibt (Mobilfunk
+-- reißt ab, der Funnel antwortet mit 504). Kam die Seite trotzdem an, legte
+-- der Server bisher ein zweites Blatt an. Jetzt schickt die Kamera die uid
+-- der Aufnahme und die Seitennummer mit; der Server schreibt sie als
+-- `upload_key` an die Seite und gibt bei einer Wiederholung das vorhandene
+-- Blatt zurück. Der eindeutige Index hält auch zwei gleichzeitige Anfragen
+-- auseinander.
+--
+-- Rein additiv und wiederholbar (IF NOT EXISTS). Bestehende Seiten bleiben
+-- NULL; NULL zählt im eindeutigen Index nicht, also kommt kein Konflikt.
+--
+-- Die Anweisungen sind aus `drizzle-kit generate` übernommen und um
+-- IF NOT EXISTS ergänzt. Name und Definition des Index sind die, die
+-- drizzle-kit selbst vergibt (geprüft in src/test/kombi-sql.db.test.ts).
+--
+-- ── Wie sie in die Datenbank kommt ──────────────────────────────────────────
+--
+-- Lokal (Entwicklungsserver AUS, vorher `npm run db:backup`):
+--
+--   npx tsx scripts/sql-einspielen.ts scripts/kombi-upload-schluessel.sql
+--
+-- Auf dem NAS nach den anderen kombi-*.sql (Reihenfolge in
+-- entwurf-modelle/23-kombi-v2/EINBAU.md); ZUERST einspielen, DANN bauen:
+--
+--   sudo docker compose exec -T db \
+--     psql -v ON_ERROR_STOP=1 --single-transaction -U schulapp -d schulapp \
+--     < repo/scripts/kombi-upload-schluessel.sql
+--
+-- ── Vorher zählen (ändert nichts) ───────────────────────────────────────────
+--
+--   SELECT count(*) AS seiten FROM material_pages;
+--
+-- Danach: dieselbe Zahl; `SELECT count(*) FROM material_pages WHERE
+-- upload_key IS NOT NULL` gibt 0.
+--
+-- Danach nachsehen: \d material_pages
+
+ALTER TABLE "material_pages" ADD COLUMN IF NOT EXISTS "upload_key" text;
+CREATE UNIQUE INDEX IF NOT EXISTS "material_pages_upload_key_idx" ON "material_pages" USING btree ("upload_key");

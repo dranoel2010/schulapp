@@ -13,6 +13,10 @@
  *    „Nicht gespeichert“ mit „Erneut“, wie Startseite und Stapelseiten.
  * 3. Ohne Vorrat im Cache: Enter tut nicht still nichts, sondern sagt
  *    „Keine Verbindung“ mit „Erneut“.
+ * 4. Flugmodus nach einem Besuch (Abnahmerunde 16): online über „Wohin?“
+ *    Hausaufgaben und Woche geöffnet, dann ohne Netz „Zuletzt geöffnet →
+ *    Woche“: die Woche kommt aus dem Cache, mit „Ohne Verbindung“, ohne Toast
+ *    „Keine Verbindung“. Dafür holt „Zuletzt“ dieselbe Adresse wie „Wohin?“.
  *
  *   BASIS=http://localhost:3380 node scripts/pruef-kombi/zeile-offline.mjs
  *
@@ -33,14 +37,23 @@ const tippen = async (page, s) => {
   return page.$$eval("#mHits .opt, #mHits [role=option]", (e) => e.map((x) => x.textContent.trim()));
 };
 const toastText = (page) => page.evaluate(() => document.body.innerText);
+/** Die Startseite; steht um 16:40 noch der Ablauf da, wird er übersprungen. */
+const startseite = async (page) => {
+  await page.goto(`${BASIS}/`);
+  await page.waitForSelector("#whenrow", { state: "attached" });
+  await page.waitForTimeout(1200);
+  if (!(await page.isVisible("#whenrow"))) {
+    await page.getByRole("button", { name: "Überspringen" }).first().click();
+  }
+  await page.waitForSelector("#whenrow");
+};
 
 for (const ohneCache of [false, true]) {
   const ctx = await kontext(browser);
   const page = await ctx.newPage();
   await anmelden(page);
   await page.goto(`${BASIS}/api/testuhr?jetzt=2026-10-13T16:40`);
-  await page.goto(`${BASIS}/`);
-  await page.waitForSelector("#whenrow");
+  await startseite(page);
   await page.evaluate(() => navigator.serviceWorker.ready);
   // erst unter der Kontrolle des Workers geht der Vorrat durch ihn
   await page.reload();
@@ -89,6 +102,45 @@ for (const ohneCache of [false, true]) {
       p.ok(/Nicht gespeichert/.test(t) && !/Keine Verbindung/.test(t) && /Erneut/.test(t), `ohne Netz: Abhaken im Menü sagt „Nicht gespeichert“ mit „Erneut“ (${JSON.stringify(t)})`);
     }
   }
+  await ctx.close();
+}
+
+{
+  const ctx = await kontext(browser);
+  const page = await ctx.newPage();
+  const geholt = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/api/seite/woche")) geholt.push(r.url().replace(/^.*\/api/, "/api"));
+  });
+  await anmelden(page);
+  await page.goto(`${BASIS}/api/testuhr?jetzt=2026-10-13T16:40`);
+  await startseite(page);
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.reload();
+  await page.waitForSelector("#whenrow");
+  const oeffnen = async (gruppe, label) => {
+    await page.tap("#field");
+    await page.waitForTimeout(600);
+    await page.locator(`[role=group][aria-label="${gruppe}"]`).getByText(label, { exact: true }).first().click();
+    await page.waitForTimeout(1800);
+  };
+  const zurueck = async () => {
+    await page.goBack();
+    await page.waitForTimeout(1200);
+  };
+  for (const l of ["Hausaufgaben", "Woche"]) {
+    await oeffnen("Wohin?", l);
+    await zurueck();
+  }
+  const online = geholt.at(-1);
+  await ctx.setOffline(true);
+  await oeffnen("Zuletzt geöffnet", "Woche");
+  const offline = geholt.at(-1);
+  const seite = await page.evaluate(() => [...document.querySelectorAll("#pages > .page")].pop()?.innerText ?? "");
+  const toast = await page.$eval("#toast", (e) => e.textContent.trim()).catch(() => "");
+  p.ok(online === offline && /\?tag=\d{4}-\d{2}-\d{2}$/.test(offline ?? ""), `„Zuletzt“ holt dieselbe Adresse wie „Wohin?“ (${online} / ${offline})`);
+  p.ok(/^Woche/.test(seite) && /Ohne Verbindung/.test(seite), `ohne Netz: „Zuletzt geöffnet → Woche“ zeigt die Woche aus dem Cache (${JSON.stringify(seite.slice(0, 60))})`);
+  p.ok(!/Keine Verbindung/.test(toast), `ohne Netz: kein Toast „Keine Verbindung“ (${JSON.stringify(toast)})`);
   await ctx.close();
 }
 

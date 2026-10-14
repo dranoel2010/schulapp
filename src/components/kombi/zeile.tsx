@@ -38,6 +38,7 @@ import {
   type Antwort,
   type BlattTreffer,
   type Option,
+  zuletztZiel,
   type Ziel,
 } from "@/components/kombi/zeile/suche";
 import { Tokens, tokensFuer } from "@/components/kombi/zeile/tokens";
@@ -912,7 +913,7 @@ export function Zeile({
     // erst nach dem Hydrieren: der Server kennt sessionStorage nicht (React #418)
     items: (hydriert ? zuletztListe() : [])
       .slice(0, 3)
-      .map((r) => ({ key: "r:" + r.key, l1: r.label, l2: r.sub, ziel: { typ: "seite" as const, art: r.art, params: r.params } })),
+      .map((r) => ({ key: "r:" + r.key, l1: r.label, l2: r.sub, ziel: zuletztZiel(r, v) })),
   });
   leerGruppen.push({
     label: "Wohin?",

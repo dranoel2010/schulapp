@@ -21,6 +21,7 @@ import {
 
 import { grammatikAntwort, istGrammatikBlatt } from "./grammatik";
 import { WH_WORDS, ZIEL, type Geparst } from "./parser";
+import type { Zuletzt } from "./zuletzt";
 
 /**
  * Die Suche der Zeile (Prototyp Z. 2348–2519, 2592–2616): Antworten beim
@@ -338,6 +339,18 @@ export const AREAS: readonly Bereich[] = [
   { key: "faecher", label: "Fächer", terms: "faecher fach", ziel: () => ({ typ: "seite", art: "faecher" }) },
   { key: "einstellungen", label: "Einstellungen", terms: "einstellungen", ziel: () => ({ typ: "seite", art: "einstellungen" }) },
 ];
+
+/**
+ * Wohin ein Eintrag unter „Zuletzt geöffnet“ führt. „woche“ ist ohne Tag
+ * gemerkt (Prototyp `openPage('woche', {})`); geöffnet wird sie mit dem Tag,
+ * den auch „Wohin? → Woche“ nimmt, aus dem Vorrat zur Öffnungszeit. Sonst
+ * holte sie /api/seite/woche ohne Tag, und ohne Netz fände der Service Worker
+ * die eben besuchte Woche nicht (Abnahmerunde 16).
+ */
+export function zuletztZiel(r: Pick<Zuletzt, "art" | "params">, v: ZeilenVorrat | null): Ziel {
+  if (r.art === "woche") return AREAS.find((a) => a.key === "woche")!.ziel(v);
+  return { typ: "seite", art: r.art, params: r.params };
+}
 
 /**
  * Bereiche, die die Suche findet, aber nicht im Raster „Wohin?“ stehen: das

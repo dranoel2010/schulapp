@@ -3,7 +3,7 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { materialPages, materialTopics, materials, subjectTopics } from "@/db/schema";
 import { daysBetween } from "@/lib/dates";
-import { getExam, listExams, mitProbe } from "@/lib/exams";
+import { examTopicTitles, getExam, listExams, mitProbe } from "@/lib/exams";
 import { freeDatesFrom } from "@/lib/free-days";
 import { gradeLabel } from "@/lib/grade-scale";
 import { gradesBySubject } from "@/lib/grades";
@@ -235,13 +235,14 @@ export type KlausurenSeite = {
  */
 export async function klausurenSeite(userId: string, jetztZeit?: Date): Promise<KlausurenSeite> {
   const heute = appTag(jetztZeit ?? (await jetzt()));
-  const liste = await listExams(userId, { includePast: true, heute });
+  const [liste, themen] = await Promise.all([listExams(userId, { includePast: true, heute }), examTopicTitles(userId)]);
   const { liste: klausuren, archiv } = klausurListe(
     liste.map((k) => ({
       id: k.id,
       fach: k.subject.name,
       datum: k.date,
-      thema: k.title ?? ART_NAMEN[k.kind] ?? "Prüfung",
+      // wie die Seite der Klausur: Titel, sonst die Themen, sonst die Art
+      thema: klausurThema(k, themen.get(k.id) ?? []),
     })),
     heute,
   );

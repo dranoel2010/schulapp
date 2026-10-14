@@ -10,6 +10,7 @@ import { protokollieren } from "@/lib/protokoll";
 import { listSubjects } from "@/lib/subjects";
 import { ensurePeriods, lessonsForWeekday, weekdayOf } from "@/lib/timetable";
 import { timeInBerlin } from "@/lib/dates";
+import { eindeutigVerletzt } from "@/lib/leser/laeufe";
 
 /**
  * Ein Blatt ohne Fachwahl ablegen (Modell 23, Plan 3.8). `materials.subject_id`
@@ -53,15 +54,71 @@ export async function vorlaeufigesFach(userId: string, now: Date): Promise<strin
   return aktiv[0].id;
 }
 
-export type AblageErgebnis = { ok: true; id: string } | { ok: false; status: number; message: string };
+/** `wiederholt`: diese Seite war schon angekommen, nichts wurde neu angelegt. */
+export type AblageErgebnis = { ok: true; id: string; wiederholt?: boolean } | { ok: false; status: number; message: string };
 
-/** Ein neues Blatt mit seiner ersten Seite; protokolliert `blatt_abgelegt`. */
+/**
+ * Der Schlüssel einer Seite aus der Kamera (`material_pages.upload_key`):
+ * Nutzer, uid der Aufnahme und Nummer der Seite. Ohne gültige uid oder
+ * Seitennummer null, dann gibt es keinen Schutz vor Wiederholungen (alte
+ * Fassung der App im Cache).
+ */
+export function uploadSchluessel(userId: string, aufnahme: string, seite: string): string | null {
+  if (!/^[A-Za-z0-9-]{8,64}$/.test(aufnahme)) return null;
+  if (!/^\d{1,2}$/.test(seite) || Number(seite) >= MAX_PAGES) return null;
+  return `${userId}:${aufnahme}:${Number(seite)}`;
+}
+
+/** Das Blatt, an dem die Seite mit diesem Schlüssel schon hängt, sonst null. */
+export async function blattZurAufnahme(userId: string, schluessel: string | null | undefined): Promise<string | null> {
+  if (!schluessel) return null;
+  const [zeile] = await db
+    .select({ id: materials.id })
+    .from(materialPages)
+    .innerJoin(materials, and(eq(materials.id, materialPages.materialId), eq(materials.userId, userId)))
+    .where(eq(materialPages.uploadKey, schluessel))
+    .limit(1);
+  return zeile?.id ?? null;
+}
+
+/**
+ * Anlegen oder Anhängen, aber eine Seite mit demselben Schlüssel nur einmal
+ * (Abnahmerunde 16): Kam sie schon an, nur die Antwort ging verloren, gibt
+ * es das vorhandene Blatt zurück. Laufen beide Anfragen zugleich (der Proxy
+ * gab 504, der Server schreibt noch), hält der eindeutige Index die zweite
+ * auf; ihre Transaktion fällt ganz zurück, samt eines neu angelegten Blatts.
+ */
+async function hoechstensEinmal(
+  userId: string,
+  schluessel: string | null | undefined,
+  f: () => Promise<AblageErgebnis>,
+): Promise<AblageErgebnis> {
+  const vorhanden = await blattZurAufnahme(userId, schluessel);
+  if (vorhanden) return { ok: true, id: vorhanden, wiederholt: true };
+  try {
+    return await f();
+  } catch (fehler) {
+    if (!schluessel || !eindeutigVerletzt(fehler)) throw fehler;
+    const id = await blattZurAufnahme(userId, schluessel);
+    if (!id) throw fehler;
+    return { ok: true, id, wiederholt: true };
+  }
+}
+
+/**
+ * Ein neues Blatt mit seiner ersten Seite; protokolliert `blatt_abgelegt`.
+ * Trägt die Seite einen Schlüssel, der schon da ist: das vorhandene Blatt.
+ */
 export async function blattAnlegen(
   userId: string,
   now: Date,
   page: NewPage,
   { seiten = 1, ziel = "liste" }: { seiten?: number; ziel?: string } = {},
 ): Promise<AblageErgebnis> {
+  return hoechstensEinmal(userId, page.uploadKey, () => blattNeu(userId, now, page, { seiten, ziel }));
+}
+
+async function blattNeu(userId: string, now: Date, page: NewPage, { seiten, ziel }: { seiten: number; ziel: string }): Promise<AblageErgebnis> {
   const subjectId = await vorlaeufigesFach(userId, now);
   if (!subjectId) return { ok: false, status: 409, message: "Noch kein Fach angelegt." };
   const tag = appTagVon(now);
@@ -84,6 +141,16 @@ export async function seiteAnhaengen(
   materialId: string,
   page: NewPage,
   { folge = false, seiten = 1 }: { folge?: boolean; seiten?: number } = {},
+): Promise<AblageErgebnis> {
+  return hoechstensEinmal(userId, page.uploadKey, () => seiteDran(userId, now, materialId, page, { folge, seiten }));
+}
+
+async function seiteDran(
+  userId: string,
+  now: Date,
+  materialId: string,
+  page: NewPage,
+  { folge, seiten }: { folge: boolean; seiten: number },
 ): Promise<AblageErgebnis> {
   const material = await getMaterial(userId, materialId);
   if (!material) return { ok: false, status: 404, message: "Dieses Blatt gibt es nicht mehr." };

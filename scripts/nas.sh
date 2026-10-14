@@ -408,7 +408,8 @@ tagesprotokoll typ scripts/kombi-tagesprotokoll.sql
 study_blocks pause_ms scripts/kombi-lernblock-uhr.sql
 subject_topics art scripts/kombi-themen-art.sql
 arbeitsblaetter inhalt scripts/kombi-arbeitsblaetter.sql
-leser_laeufe arbeitsblatt_id scripts/kombi-arbeitsblaetter.sql"
+leser_laeufe arbeitsblatt_id scripts/kombi-arbeitsblaetter.sql
+material_pages upload_key scripts/kombi-upload-schluessel.sql"
 
 # Postgres im db-Container, Benutzer und Datenbank aus SEINER Umgebung — wie
 # psql_db() in scripts/kalender-einrichten.sh; "schulapp" nur als Rückfall.
@@ -474,7 +475,7 @@ spalten_pruefen() {
         echo "  sudo sh -c 'cd $APP && $DC exec -T db psql -X -v ON_ERROR_STOP=1 --single-transaction -U $benutzer -d $datenbank -f - < repo/$datei'" >&2
         case "$datei" in
           scripts/kombi-*)
-            echo "Modell 23: sechs Dateien in fester Reihenfolge, README „Modell 23 auf dem NAS“." >&2 ;;
+            echo "Modell 23: sieben Dateien in fester Reihenfolge, README „Modell 23 auf dem NAS“." >&2 ;;
         esac
         if [ "$datei" = "scripts/kombi-arbeitsblaetter.sql" ]; then
           echo "Gleich danach, genauso, die Folgedatei (tauscht zwei CHECKs an leser_laeufe):" >&2

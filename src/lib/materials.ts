@@ -457,6 +457,8 @@ export type NewPage = {
   /** Die Fassung für den Agenten, lange Kante 1000px. Warum es sie gibt, steht am Schema. */
   reading: Uint8Array;
   thumb: Uint8Array;
+  /** Kennung der Aufnahme aus der Kamera (`material_pages.upload_key`), sonst leer */
+  uploadKey?: string | null;
 };
 
 /**
@@ -736,6 +738,7 @@ export async function createMaterialWithPage(
       ...leserBeimAnlegen(),
       materialId: created.id,
       sortOrder: 0,
+      uploadKey: page.uploadKey ?? null,
     });
 
     return created.id;
@@ -870,6 +873,7 @@ export async function addPage(
         ...leserBeimAnlegen(),
         materialId,
         sortOrder: highest + 1,
+        uploadKey: page.uploadKey ?? null,
       })
       .returning({ id: materialPages.id });
 

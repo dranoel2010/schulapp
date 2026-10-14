@@ -348,7 +348,7 @@ export type LaufAbschluss = {
 };
 
 /** Ist das der Fehler „eindeutiger Index verletzt“ (23505) — auch durch drizzle gereicht? */
-function eindeutigVerletzt(fehler: unknown): boolean {
+export function eindeutigVerletzt(fehler: unknown): boolean {
   for (let f: unknown = fehler, tiefe = 0; f && tiefe < 4; tiefe += 1) {
     if ((f as { code?: unknown }).code === "23505") return true;
     f = (f as { cause?: unknown }).cause;

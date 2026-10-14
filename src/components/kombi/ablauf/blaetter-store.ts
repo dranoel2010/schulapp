@@ -212,9 +212,12 @@ type Hochladen = {
 /**
  * Die Formularfelder zur Seite `i` von `n`: ohne Blatt legt die Seite eines
  * an, sonst hängt sie daran. Bei „Seite dazu“ steht das Blatt von Anfang an
- * fest; die erste Seite sagt, wie viele kommen.
+ * fest; die erste Seite sagt, wie viele kommen. Jede Seite trägt die uid der
+ * Aufnahme und ihre Nummer: schickt `versuch` sie nach einem verlorenen
+ * Ergebnis noch einmal, gibt der Server das vorhandene Blatt zurück.
  */
 export function seitenFelder(a: {
+  uid: string;
   i: number;
   n: number;
   blattId: string | null;
@@ -222,9 +225,11 @@ export function seitenFelder(a: {
   ziel: "liste" | "zeile";
   fehler: string | null;
 }): Record<string, string> {
-  if (a.dazu) return { attach: a.blattId ?? "", ...(a.i > 0 ? { folge: "1" } : { seiten: String(a.n) }) };
-  if (a.i === 0 || !a.blattId) return { seiten: String(a.n), ziel: a.ziel, ...(a.fehler ? { fehler: a.fehler } : {}) };
-  return { attach: a.blattId, folge: "1" };
+  // Woran der Server eine Wiederholung derselben Seite erkennt (Abnahmerunde 16)
+  const kennung = { aufnahme: a.uid, seite: String(a.i) };
+  if (a.dazu) return { attach: a.blattId ?? "", ...(a.i > 0 ? { folge: "1" } : { seiten: String(a.n) }), ...kennung };
+  if (a.i === 0 || !a.blattId) return { seiten: String(a.n), ziel: a.ziel, ...(a.fehler ? { fehler: a.fehler } : {}), ...kennung };
+  return { attach: a.blattId, folge: "1", ...kennung };
 }
 
 /**
@@ -251,7 +256,7 @@ async function hochladenAb(h: Hochladen): Promise<BlattKurz | null> {
   let blattId = h.id;
   try {
     for (let i = ab; i < fassungen.length; i++) {
-      const felder = seitenFelder({ i, n: fassungen.length, blattId, dazu, ziel, fehler });
+      const felder = seitenFelder({ uid, i, n: fassungen.length, blattId, dazu, ziel, fehler });
       const k = await versuch(() => senden(fassungen[i], felder));
       kurz = k;
       if (!blattId) {
