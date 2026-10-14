@@ -878,8 +878,9 @@ export async function moveOffFreeDays(
     ]);
 
     const open = all.filter((block) => frei(block) && block.date >= today);
-    // Die Probe darf an ihrem freien Tag liegen (letzter Ferientag vor der
-    // Klausur, `probeTagFuer`); nur alles andere muss aus den Ferien.
+    // Die Probe darf an ihrem freien Tag liegen, wenn das Freie bis direkt vor
+    // die Klausur reicht (letzter Ferientag, `probeTagFuer`). Ein einzelner
+    // freier Tag mitten in der Woche gilt nicht: sie zieht wie alles andere.
     const lerntage = studyDaysFor({ examDate: exam.date, today, leadDays: exam.leadDays, excludedDates });
     const darfBleiben = (block: StudyBlock) =>
       block.kind === "probe" && probeTagGueltig(exam.date, lerntage, block.date, excludedDates);

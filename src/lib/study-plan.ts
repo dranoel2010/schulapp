@@ -137,10 +137,14 @@ function splitDays(days: string[]): {
  *
  * Ferien und freie Tage (`frei`, nur ab heute) sind sonst ganz frei, die
  * Probe ist die einzige Ausnahme (Antwort vom 14.10.2026, „am letzten Tag von
- * den Ferien“): fällt ihr Tag in einen freien Zeitraum, liegt sie am letzten
- * freien Tag vor der Klausur. Reichen die Ferien bis zum Tag vor der Klausur,
- * ist es dieser; endet der freie Zeitraum vorher, sein letzter Tag. So springt
- * sie nie eine Woche vor die Ferien zurück.
+ * den Ferien“): fällt ihr Tag in einen freien Zeitraum, der bis zum Tag
+ * direkt vor der Klausur reicht, liegt sie an diesem letzten Ferientag. So
+ * springt sie nie eine Woche vor die Ferien zurück.
+ *
+ * Ein freier Zeitraum, der vorher endet (Klausur am Donnerstag, Dienstag
+ * frei), bekommt die Probe nicht: dann gilt zuerst der andere Tag im Abstand
+ * eins bis zwei, also der Lerntag direkt vor der Klausur (Mittwoch), sonst
+ * der nächstfrühere Lerntag.
  *
  * Sonst, ist der Tag nicht erlaubt, gilt der nächstfrühere Lerntag, nie ein
  * späterer. Nur ein Tag, der schon vorbei ist (eine verpasste Probe beim
@@ -165,12 +169,15 @@ function probeTagMitAbstand(
   const tage = weekdayIndex(examDate) === 0 ? 1 : abstand;
   const ziel = addDays(examDate, -tage);
   if (studyDays.includes(ziel)) return ziel;
-  // Ferien: der letzte freie Tag ab dem Zieltag, höchstens der Tag vor der Klausur
+  // Ferien bis direkt vor die Klausur: der letzte Ferientag. Endet der freie
+  // Zeitraum vorher, zuerst der Lerntag direkt vor der Klausur.
   const freieTage = new Set(frei.filter((day) => day < examDate));
   if (freieTage.has(ziel)) {
     let letzter = ziel;
     while (freieTage.has(addDays(letzter, 1))) letzter = addDays(letzter, 1);
-    return letzter;
+    const tagDavor = addDays(examDate, -1);
+    if (letzter === tagDavor) return letzter;
+    if (studyDays.includes(tagDavor)) return tagDavor;
   }
   // Ist der Tag schon vorbei (verpasst, Nachholen), bleibt der Tag vor der
   // Klausur, wenn er noch kommt.
@@ -228,12 +235,9 @@ function freieTageFuerProbe(input: { examDate: string; today: string; excludedDa
  * legt eine Probe neu, deren Tag nicht mehr gilt, mit dem Abstand, den sie
  * beim Planen bekommen hat.
  *
- * Liegt die Probe an einem freien Tag, gehört er nicht zu `studyDays`: die
- * Lerntage bleiben alle zum Durcharbeiten und Wiederholen. Liegt vor ihr
- * dann kein Tag zum Durcharbeiten (Ferien nachträglich eingetragen, oder
- * Nachholen in den Ferien), zieht sie auf den Lerntag danach, wie beim
- * Planen, auch wenn sie schon im Plan steht (`fest`). Nur `behalten` lässt
- * sie am freien Tag.
+ * Liegt die Probe an einem freien Tag, ist es der letzte Ferientag direkt
+ * vor der Klausur (`probeTagFuer`) und gehört nicht zu `studyDays`: die
+ * Lerntage liegen alle davor und bleiben zum Durcharbeiten und Wiederholen.
  */
 export function tageAufteilen(
   examDate: string,
@@ -263,18 +267,10 @@ export function tageAufteilen(
   const vorher = learnDays.filter((day) => day < probeTag);
   const nachher = learnDays.filter((day) => day > probeTag);
   if (vorher.length === 0) {
-    const amFreienTag = !studyDays.includes(probeTag);
-    if (optionen.behalten?.(probeTag) || (optionen.fest && !amFreienTag)) {
+    if (optionen.fest || optionen.behalten?.(probeTag)) {
       // Die Probe bleibt; was noch durchzuarbeiten ist, kommt danach, zuerst
       // durcharbeiten, dann wiederholen.
       return { probeTag, ...splitDays(rest) };
-    }
-    // Am freien Tag, und danach liegt nur noch der Lerntag zum Durcharbeiten:
-    // sie zieht auf diesen Lerntag, wie beim Planen, statt zu entfallen oder
-    // Stoff zu prüfen, der erst danach dran ist.
-    const danach = amFreienTag ? studyDays.find((day) => day > probeTag) : undefined;
-    if (danach) {
-      return tageAufteilen(examDate, studyDays, true, { ...optionen, fest: danach, abstand: undefined });
     }
     return { probeTag: null, ...splitDays(studyDays) };
   }

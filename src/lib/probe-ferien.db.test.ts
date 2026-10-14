@@ -121,6 +121,25 @@ describe("Probeklausur am letzten Ferientag", () => {
     assert.ok(b.filter((x) => x.kind !== "probe").every((x) => x.date < "2026-11-12"));
   });
 
+  it("ein freier Dienstag vor der Donnerstagsklausur bekommt die Probe nicht, sie liegt am Mittwoch", async () => {
+    const f = await fachMitThema(nutzer, "Chemie", "Säuren", "2026-10-01");
+    const [k] = await testDb
+      .insert(exams)
+      .values({ userId: nutzer, subjectId: f.subjectId, date: "2026-11-26", kind: "klausur", leadDays: 10, minutesPerDay: 45 })
+      .returning({ id: exams.id });
+    await testDb.insert(examTopics).values({ examId: k.id, title: "Säuren", sortOrder: 0, subjectTopicId: f.topicId });
+    await testDb.insert(freePeriods).values({ userId: nutzer, kind: "frei", startsOn: "2026-11-24", endsOn: "2026-11-24" });
+    await generatePlan(nutzer, k.id, "2026-11-16");
+    const probe = (await bloecke(k.id)).find((x) => x.kind === "probe")!;
+    assert.equal(probe.date, "2026-11-25");
+    // So stand sie nach der Regel vom Abend des 14.10.2026: Ferien eintragen zieht sie weg
+    await testDb.update(studyBlocks).set({ date: "2026-11-24" }).where(eq(studyBlocks.id, probe.id));
+    assert.equal(await moveOffFreeDays(nutzer, "2026-11-16"), 1);
+    const b = await bloecke(k.id);
+    assert.deepEqual(b.filter((x) => x.kind === "probe").map((x) => x.date), ["2026-11-25"]);
+    assert.ok(b.every((x) => x.date !== "2026-11-24"), "der freie Dienstag bleibt frei");
+  });
+
   it("Startseite: im Ferienmodus am Sonntag 1.11. die Probe, an den übrigen Ferientagen nichts", async () => {
     const sonntag = await ladeTag(nutzer, berlinZeitpunkt("2026-11-01", "10:00"));
     assert.ok(sonntag.ferien, "Ferienmodus");
