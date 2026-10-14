@@ -678,9 +678,41 @@ describe("Probeklausur (Antwort 4 vom 13.10.2026)", () => {
     assert.equal(probeTagFuer("2026-10-19", range("2026-10-16", "2026-10-18")), "2026-10-16");
   });
 
-  it("ein freier Tag: der nächstfrühere Lerntag", () => {
+  it("ein freier Tag zwei Tage vorher: der Tag vor der Klausur", () => {
     const days = range("2026-10-10", "2026-10-15").filter((d) => d !== "2026-10-14");
-    assert.equal(probeTagFuer("2026-10-16", days), "2026-10-13");
+    assert.equal(probeTagFuer("2026-10-16", days), "2026-10-15");
+  });
+
+  it("Test am Dienstag: die Probe liegt am Montag davor, nicht am Freitag (Abnahmerunde 17)", () => {
+    assert.equal(probeTagFuer("2026-10-20", range("2026-10-13", "2026-10-19")), "2026-10-19");
+    const result = buildPlan({ ...plan({ examDate: "2026-10-20", today: "2026-10-12", topics: topics(1) }), leadDays: 7, probe: true });
+    assert.deepEqual(result.blocks.filter((b) => b.kind === "probe").map((b) => b.date), ["2026-10-19"]);
+    // nach der Probe kein Lernen und kein Wiederholen mehr
+    assert.ok(!result.blocks.some((b) => b.kind !== "probe" && b.date > "2026-10-19"));
+    assert.equal(probeTagGueltig("2026-10-20", range("2026-10-13", "2026-10-19"), "2026-10-19"), true);
+    assert.equal(probeTagGueltig("2026-10-20", range("2026-10-13", "2026-10-19"), "2026-10-16"), false, "vier Tage vorher");
+  });
+
+  it("Klausur am Montag: Freitag bleibt, das Wochenende dazwischen ist unvermeidbar", () => {
+    assert.equal(probeTagFuer("2026-10-19", range("2026-10-12", "2026-10-18")), "2026-10-16");
+  });
+
+  it("Test direkt nach den Ferien: die Probe liegt am Wochenende davor, nicht vor den Ferien (Abnahmerunde 17)", () => {
+    // Ferien 26.10. bis 30.10., Klausur Montag 2.11.
+    const ferien = range("2026-10-26", "2026-10-30");
+    for (const heute of ["2026-10-19", "2026-10-23"]) {
+      const result = buildPlan({ ...plan({ examDate: "2026-11-02", today: heute, topics: topics(2) }), excludedDates: ferien, probe: true });
+      const probe = result.blocks.filter((b) => b.kind === "probe").map((b) => b.date);
+      assert.deepEqual(probe, ["2026-10-31"], heute);
+      // durchgearbeitet wird vor der Probe
+      assert.ok(result.blocks.filter((b) => b.kind === "learn").every((b) => b.date < "2026-10-31"), heute);
+      assert.equal(probeTagGueltig("2026-11-02", studyDaysFor({ examDate: "2026-11-02", today: heute, leadDays: 10, excludedDates: ferien }), "2026-10-31"), true);
+      assert.equal(probeTagGueltig("2026-11-02", studyDaysFor({ examDate: "2026-11-02", today: heute, leadDays: 10, excludedDates: ferien }), "2026-10-23"), false);
+    }
+    // wenig Vorlauf: der Sonntag davor
+    assert.equal(probeTagFuer("2026-11-02", ["2026-10-23", "2026-11-01"]), "2026-11-01");
+    // Ferien bis Sonntag: kein Tag ein bis zwei Tage vorher, keine Probe
+    assert.equal(probeTagFuer("2026-11-02", ["2026-10-22", "2026-10-23"]), null);
   });
 
   it("nie am Prüfungstag, nie in der Vergangenheit, bei nur einem Lerntag dieser, wenn er ein Schultag ist", () => {
@@ -838,7 +870,8 @@ describe("Probeklausur (Antwort 4 vom 13.10.2026)", () => {
     assert.equal(ohne.find((b) => b.id === "p1")?.date, "2026-10-22");
     // Ein Tag, der nicht mehr gilt (frei, vorbei, falscher Abstand), wird neu gelegt.
     const frei = replanOpen({ ...plan({ examDate: "2026-10-23", today: "2026-10-19" }), excludedDates: ["2026-10-21"], open });
-    assert.equal(frei.find((b) => b.id === "p1")?.date, "2026-10-20");
+    // Mittwoch frei: der Tag vor der Klausur, nicht drei Tage vorher (Antwort 4)
+    assert.equal(frei.find((b) => b.id === "p1")?.date, "2026-10-22");
     const weit = replanOpen({
       ...plan({ examDate: "2026-10-23", today: "2026-10-13" }),
       open: [{ id: "p1", topicId: null, kind: "probe" as const, date: "2026-10-15" }],

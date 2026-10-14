@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { examTopics, materialTopics, materials, studyBlocks, subjectTopics } from "@/db/schema";
 import { berlinDay } from "@/lib/dates";
 import { planEintragArt, planEintragTitel } from "@/lib/study-plan";
-import { blocksForDay, listExams } from "@/lib/exams";
+import { blocksForDay, examTopicTitles, listExams } from "@/lib/exams";
 import { listFreePeriods } from "@/lib/free-days";
 import { gradeLabel } from "@/lib/grade-scale";
 import { gradesBySubject } from "@/lib/grades";
@@ -30,6 +30,7 @@ import {
 } from "@/lib/kombi/vorrat";
 import { blockRest, blockZustand } from "@/lib/lernblock";
 import { ablaufSchritt, ablaufStand, protokollVomTag } from "@/lib/protokoll";
+import { klausurThema } from "@/lib/seiten/klausur";
 import { listSubjects } from "@/lib/subjects";
 import { DEFAULT_PERIODS, listLessons, listPeriods, periodTimes } from "@/lib/timetable";
 import { dauertaktSicher } from "@/recall/nachlegen";
@@ -56,7 +57,7 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
   // Themen ohne Klausur bekommen ihren nächsten Termin, bevor die Zeile sie liest (Antwort 6)
   await dauertaktSicher(userId, heute);
 
-  const [faecherRoh, periodenRoh, stundenRoh, freiRoh, aufgabenRoh, klausurenRoh, notenRoh, bloeckeHeute, stand, protokoll, schritt] =
+  const [faecherRoh, periodenRoh, stundenRoh, freiRoh, aufgabenRoh, klausurenRoh, notenRoh, bloeckeHeute, stand, protokoll, schritt, klausurThemen] =
     await Promise.all([
       listSubjects(userId),
       listPeriods(userId),
@@ -69,6 +70,7 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
       ablaufStand(userId, heute),
       protokollVomTag(userId, heute),
       ablaufSchritt(userId, heute),
+      examTopicTitles(userId),
     ]);
 
   const faecher = fachEintraege(faecherRoh);
@@ -150,10 +152,11 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
       }));
   // Was im Archiv steht (ab Tag 15 nach dem Klausurtag), findet die Zeile nicht
   // mehr, wie die Liste „Klausuren“ und die Seite eines Fachs (klausurListe);
-  // dorthin führt „archiv“
+  // dorthin führt „archiv“. Eine Klausur ohne Titel heißt nach ihren Themen,
+  // wie in der Liste, auf ihrer Seite und im Archiv (klausurThema)
   const klausuren: VorratKlausur[] = klausurenRoh
     .filter((k) => aktiv.has(k.subjectId) && !klausurImArchiv(k.date, heute))
-    .map((k) => ({ id: k.id, fachId: k.subjectId, datum: k.date, thema: k.title?.trim() || "Klausur", plan: planVon(k.id) }));
+    .map((k) => ({ id: k.id, fachId: k.subjectId, datum: k.date, thema: klausurThema({ title: k.title?.trim() || null, kind: k.kind }, klausurThemen.get(k.id) ?? []), plan: planVon(k.id) }));
   const archivFaecher = [
     ...new Set(klausurenRoh.filter((k) => aktiv.has(k.subjectId) && klausurImArchiv(k.date, heute)).map((k) => k.subjectId)),
   ];
@@ -210,11 +213,18 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
   }
 
   // ── Themen für die Suche: Klausuren, Lernblöcke, Themen der Blätter ───────
+  // Je Fach und Titel ein Eintrag: haben zwei Klausuren eines Fachs dasselbe
+  // Thema, führt es zur näheren (der Vorrat ist nach Datum sortiert); ein
+  // Lernblock von heute bleibt dabei erkennbar
   const themenListe: VorratThemaTreffer[] = [];
-  for (const k of klausuren) {
-    themenListe.push({ t: k.thema, fachId: k.fachId, ziel: { art: "klausur", id: k.id }, lb: false });
-    for (const p of k.plan)
-      if (p.art === "Lernblock") themenListe.push({ t: p.thema, fachId: k.fachId, ziel: { art: "klausur", id: k.id }, lb: p.tag === heute });
+  const themaDazu = (t: VorratThemaTreffer) => {
+    const da = themenListe.find((o) => o.fachId === t.fachId && o.t === t.t);
+    if (da) da.lb ||= t.lb;
+    else themenListe.push(t);
+  };
+  for (const k of [...klausuren].filter((k) => k.datum >= heute).concat(klausuren.filter((k) => k.datum < heute).reverse())) {
+    themaDazu({ t: k.thema, fachId: k.fachId, ziel: { art: "klausur", id: k.id }, lb: false });
+    for (const p of k.plan) if (p.art === "Lernblock") themaDazu({ t: p.thema, fachId: k.fachId, ziel: { art: "klausur", id: k.id }, lb: p.tag === heute });
   }
   const blattThemen = await db
     .selectDistinct({ title: subjectTopics.title, subjectId: subjectTopics.subjectId })
@@ -223,7 +233,7 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
     .innerJoin(materials, eq(materials.id, materialTopics.materialId))
     .where(and(eq(materials.userId, userId), isNull(subjectTopics.mergedInto)));
   for (const b of blattThemen)
-    if (aktiv.has(b.subjectId) && !themenListe.some((o) => o.t === b.title))
+    if (aktiv.has(b.subjectId) && !themenListe.some((o) => o.fachId === b.subjectId && o.t === b.title))
       themenListe.push({ t: b.title, fachId: b.subjectId, ziel: { art: "fach", id: b.subjectId }, lb: false });
 
   // ── Grammatikthemen für „Blatt Grammatik …“ (Antwort 5) ──────────────────

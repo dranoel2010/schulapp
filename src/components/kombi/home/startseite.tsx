@@ -96,6 +96,8 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
   const [view, setViewState] = useState<Ansicht | null>(() => startAnsicht(d));
   const viewRef = useRef<Ansicht | null>(view);
   const liveRef = useRef<Ansicht | null>(d ? d.ansicht : null);
+  /** App-Tag der zuletzt gemeldeten Ansicht */
+  const tagRef = useRef<string | null>(d ? d.tag : null);
   const wechsel = useRef(false);
   const viewGen = useRef(0);
   const ueberschrift = useRef<UeberschriftApi>(null);
@@ -480,6 +482,7 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
   useEffect(() => {
     if (!d) return;
     if (liveRef.current == null) liveRef.current = d.ansicht;
+    if (tagRef.current == null) tagRef.current = d.tag;
     if (viewRef.current == null) {
       // Auch hier gilt der Ablauf nach dem Malen: wer über eine Stapel-URL
       // (Push-Erinnerung, Lesezeichen) einsteigt, sieht ihn beim Zurück
@@ -532,11 +535,15 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
     const onVis = async () => {
       if (document.hidden) return;
       let neu: Ansicht | null = null;
+      let tagNeu: string | null = null;
       try {
         const r = await fetch("/api/tag/stand", { headers: { accept: "application/json" } });
         if (r.ok) {
-          const j = (await r.json()) as { ok?: boolean; ansicht?: Ansicht };
-          if (j.ok && j.ansicht) neu = j.ansicht;
+          const j = (await r.json()) as { ok?: boolean; ansicht?: Ansicht; tag?: string };
+          if (j.ok && j.ansicht) {
+            neu = j.ansicht;
+            tagNeu = j.tag ?? null;
+          }
         }
       } catch {
         // ohne Verbindung bleibt die Ansicht
@@ -544,12 +551,19 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
       await neuLaden();
       if (!neu) return;
       const alt = liveRef.current;
+      const tagAlt = tagRef.current;
       liveRef.current = neu;
+      if (tagNeu) tagRef.current = tagNeu;
       if (document.querySelector("#tisch.open, #cam.open")) return;
       // Solange der Ablauf fehlt, steht statt seiner der Überblick: beide
       // Seiten gleich abbilden, sonst bliebe der Abend morgens stehen.
       const eff = (x: Ansicht | null) => (x === "ablauf" && !ablaufDa() ? "ueberblick" : x);
-      if (eff(neu) !== eff(alt) && viewRef.current === eff(alt)) setView(neu);
+      // Gewechselt wird, wenn der Server eine andere Ansicht oder einen neuen
+      // Tag nennt; verglichen wird mit der gezeigten Ansicht, nicht mit der
+      // zuletzt gemeldeten: nach „Fertig“ oder „Überspringen“ steht der
+      // Überblick da, obwohl der Server zuletzt „ablauf“ sagte
+      const geaendert = eff(neu) !== eff(alt) || (!!tagNeu && !!tagAlt && tagNeu !== tagAlt);
+      if (geaendert && eff(neu) !== viewRef.current) setView(neu);
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);

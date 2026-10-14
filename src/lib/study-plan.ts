@@ -130,14 +130,19 @@ function splitDays(days: string[]): {
 }
 
 /**
- * Der Tag der Probeklausur: mit genug Vorlauf (mindestens vier Lerntage) zwei
- * Tage vor dem Termin, sonst einer. Fällt er auf ein Wochenende oder einen
- * freien Tag, gilt der nächstfrühere Schultag unter den Lerntagen. Nie der
- * Prüfungstag, nie vor heute (beides steckt schon in `studyDays`).
+ * Der Tag der Probeklausur, ein bis zwei Tage vor dem Termin (Antwort 4): mit
+ * genug Vorlauf (mindestens vier Lerntage) zwei Tage vorher, sonst einer.
+ * Ist dieser Tag kein Schultag unter den Lerntagen, gilt der Tag vor der
+ * Prüfung, wenn er einer ist (Test am Dienstag: Probe am Montag). Sonst der
+ * nächstfrühere Schultag, aber nur über ein bloßes Wochenende hinweg
+ * (Klausur am Montag: Probe am Freitag). Liegen dazwischen freie Schultage
+ * (Ferien, Feiertag), zählt der Lerntag im Abstand von ein bis zwei Tagen,
+ * auch am Wochenende (Test direkt nach den Ferien). Nie der Prüfungstag, nie
+ * vor heute (beides steckt schon in `studyDays`).
  *
  * Bleibt nur ein Lerntag und ist er ein Schultag (Test morgen), gehört er der
  * Probeklausur: „sonst einen Tag vorher“ gilt auch hier. Null, wenn kein
- * Schultag in Frage kommt.
+ * Tag in Frage kommt.
  */
 export function probeTagFuer(examDate: string, studyDays: string[]): string | null {
   if (studyDays.length === 0) return null;
@@ -146,13 +151,22 @@ export function probeTagFuer(examDate: string, studyDays: string[]): string | nu
 
 function probeTagMitAbstand(examDate: string, studyDays: string[], abstand: number): string | null {
   const ziel = addDays(examDate, -abstand);
-  const schultage = studyDays.filter((day) => weekdayIndex(day) < 5);
-  const passend = schultage.filter((day) => day <= ziel);
-  if (passend.length > 0) return passend[passend.length - 1];
-  // Vor dem Ziel liegt kein Schultag (nur bei zwei Tagen Abstand möglich):
-  // dann der Tag davor, wenn er ein Schultag ist.
   const vortag = addDays(examDate, -1);
-  return schultage.includes(vortag) ? vortag : null;
+  const schultage = studyDays.filter((day) => weekdayIndex(day) < 5);
+  if (schultage.includes(ziel)) return ziel;
+  if (schultage.includes(vortag)) return vortag;
+  const frueher = schultage.filter((day) => day < ziel);
+  const letzter = frueher[frueher.length - 1];
+  if (!letzter) return null;
+  // Zwischen ihm und der Prüfung nur Wochenende: er bleibt (Freitag vor Montag)
+  let freierSchultag = false;
+  for (let tag = addDays(letzter, 1); tag < examDate; tag = addDays(tag, 1)) {
+    if (weekdayIndex(tag) < 5 && !studyDays.includes(tag)) freierSchultag = true;
+  }
+  if (!freierSchultag) return letzter;
+  // Ferien dazwischen: ein bis zwei Tage vorher, auch am Wochenende
+  const nah = [ziel, vortag, addDays(examDate, -2)].find((day) => studyDays.includes(day));
+  return nah ?? null;
 }
 
 /**
@@ -163,7 +177,7 @@ function probeTagMitAbstand(examDate: string, studyDays: string[], abstand: numb
  * Lerntage, rückt die Probe deshalb nicht auf den Tag vor der Prüfung.
  */
 export function probeTagGueltig(examDate: string, studyDays: string[], tag: string): boolean {
-  if (!studyDays.includes(tag) || weekdayIndex(tag) >= 5) return false;
+  if (!studyDays.includes(tag)) return false;
   return probeTagMitAbstand(examDate, studyDays, 2) === tag || probeTagMitAbstand(examDate, studyDays, 1) === tag;
 }
 

@@ -285,7 +285,14 @@ export function AblaufEbene() {
       if (zuAblauf) {
         // prepareAblauf: Schritt vom Server, ohne Bewegung
         goStep(z.current.daten?.schritt ?? "blaetter", { instant: true });
-        void laden();
+        const stepGen = z.current.stepGen;
+        // Waren die Daten beim Zeigen noch nicht da oder älter (Kaltstart ohne
+        // Netz: die Seite kommt aus dem Cache, die Daten danach), gilt der
+        // Schritt der frischen Daten, solange man nicht selbst weiter ist
+        void laden().then((d) => {
+          if (d && z.current.sichtbar && z.current.stepGen === stepGen && d.schritt !== z.current.schritt)
+            goStep(d.schritt, { instant: true });
+        });
       }
       home.classList.toggle("on", !zuAblauf);
       flow.classList.toggle("on", zuAblauf);

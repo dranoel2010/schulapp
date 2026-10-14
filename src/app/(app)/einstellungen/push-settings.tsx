@@ -7,6 +7,7 @@ import { Field } from "@/components/kombi/form";
 import { Select } from "@/components/kombi/form";
 
 import type { ReminderTimeState } from "./actions";
+import { erinnerungsHinweis } from "./erinnerungs-hinweis";
 
 /**
  * Erinnerungen einschalten — der heikelste Teil der App, weil der Browser
@@ -139,6 +140,13 @@ export function PushSettings({ vapidPublicKey }: PushSettingsProps) {
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [installiert, setInstalliert] = useState(false);
+  const hinweis = erinnerungsHinweis({
+    status,
+    hasWorker,
+    entwicklung: process.env.NODE_ENV !== "production",
+    installiert,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -166,6 +174,7 @@ export function PushSettings({ vapidPublicKey }: PushSettingsProps) {
       if (cancelled) return;
 
       setHasWorker(Boolean(registration));
+      setInstalliert(window.matchMedia?.("(display-mode: standalone)").matches ?? false);
 
       if (Notification.permission === "denied") {
         setStatus("denied");
@@ -416,11 +425,9 @@ export function PushSettings({ vapidPublicKey }: PushSettingsProps) {
         </p>
       ) : null}
 
-      {status !== "unsupported" && status !== "checking" ? (
+      {hinweis ? (
         <div className="rounded-[12px] bg-raise p-3 text-[15px] text-ink-2">
-          Erinnerungen kommen nur in der gebauten App an: in der Entwicklung
-          läuft der Dienst im Hintergrund absichtlich nicht. Am zuverlässigsten
-          ist es, wenn du die Schulapp über Chrome installiert hast.
+          {hinweis}
         </div>
       ) : null}
     </div>

@@ -531,7 +531,7 @@ export function suche(
       key: "g:th",
       label: "Themen",
       items: th.map((t) => ({
-        key: "th:" + t.t,
+        key: "th:" + t.fachId + ":" + t.t,
         l1: hl(t.t, qs),
         l2: `Thema in ${F(v, t.fachId).name}`,
         ziel: t.ziel.art === "klausur" ? { typ: "seite", art: "klausur", params: { id: t.ziel.id } } : { typ: "seite", art: "fach", params: { id: t.ziel.id } },
