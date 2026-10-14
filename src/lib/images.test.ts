@@ -165,7 +165,7 @@ describe("die Grenzen", () => {
   });
 
   it("lässt die Lesefassung ein Vielfaches ihrer üblichen Größe zu", () => {
-    // Die Leiter in @/components/material/capture-button zielt auf
+    // Die Leiter in @/components/material/prepare-page zielt auf
     // READING_TARGET_BYTES; die Grenze hier ist das Netz darunter und darf
     // auch ein Blatt durchlassen, das sich nicht kleinrechnen ließ.
     assert.ok(MAX_READING_BYTES >= 3 * READING_TARGET_BYTES);

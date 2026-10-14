@@ -5,9 +5,7 @@ import { after } from "next/server";
 
 import { requireUser } from "@/lib/auth";
 import { formErrors } from "@/lib/form-errors";
-import { readPage } from "@/lib/material-seite";
 import { markFiled } from "@/lib/inbox";
-import { MAX_PAGES } from "@/lib/images";
 import { claudeConfigured } from "@/lib/claude/client";
 import {
   claudeKnopfMoeglich,
@@ -16,12 +14,8 @@ import {
 } from "@/lib/leser/claude-leser";
 import {
   korbblattAnstossen,
-  zuteilungAnstossen,
 } from "@/lib/leser/zuteilung";
 import {
-  addPage,
-  createMaterialWithPage,
-  defaultMaterialTitle,
   deleteMaterial,
   deletePage,
   getMaterial,
@@ -45,18 +39,9 @@ import {
  * Das Prüfschema steht in @/lib/materials und wird hier nur benutzt — dieselbe
  * Tür gilt damit für jeden Aufrufer und nicht nur für dieses Formular.
  *
- * **Alles, was der Browser mitschickt, wird hier noch einmal geprüft.** Er hat
- * das Bild verkleinert, das Format gewählt und die Maße gezählt; keine dieser
- * Angaben ist deshalb wahr. Eine Server Action ist eine Adresse wie jede
- * andere, und wer sie ohne Browser anspricht, schickt, was er will. Geprüft
- * werden Format, Größe und Maße, bevor irgendetwas in die Datenbank geht.
- *
- * Die beiden Aufnahme-Actions geben ein Ergebnis zurück und leiten nicht
- * weiter. Der Auslöser ist eine Client-Komponente und soll dem Nutzer einen
- * Satz zeigen können; ein `redirect()` wirft intern, und dann käme bei ihm nie
- * eine Antwort an. Was mit der id geschieht, entscheidet der Browser — heute:
- * stehenbleiben und sie als Weg zum Blatt anbieten (siehe `run()` in
- * @/components/material/capture-button).
+ * Fotos kommen hier nicht mehr an: die Kamera von Modell 23 lädt über
+ * /api/blaetter hoch, mit Upload-Kennung, damit eine Wiederholung kein
+ * zweites Blatt anlegt.
  *
  * Aufgefrischt wird nach jeder Änderung auch „/“: die Startseite zeigt die
  * letzten Blätter — am Handy auf der Kameraseite, am Rechner in der
@@ -73,9 +58,6 @@ import {
  */
 type MaterialErrorField = keyof MaterialFieldErrors & string;
 
-/** Was der Auslöser zurückbekommt: die id des Blattes oder einen Satz dazu. */
-export type CaptureResult = { ok: true; id: string } | { ok: false; message: string };
-
 /**
  * Wenn beim Speichern etwas schiefgeht, das die App nicht vorhergesehen hat.
  *
@@ -89,17 +71,6 @@ const SAVE_FAILED =
 function text(formData: FormData, key: string): string {
   const value = formData.get(key);
   return typeof value === "string" ? value : "";
-}
-
-/**
- * Beim Aufnehmen gibt es kein Feld, unter das eine Meldung passt — der
- * Auslöser hat nur einen Platz für einen Satz. Also den ersten.
- */
-function firstMessage(
-  issues: { message: string }[],
-  fallback: string,
-): string {
-  return issues[0]?.message ?? fallback;
 }
 
 /**
@@ -118,118 +89,6 @@ function revalidateMaterial(id?: string): void {
   revalidatePath("/material");
   revalidatePath("/material/eingang");
   if (id) revalidatePath(`/material/${id}`);
-}
-
-/**
- * Ein frisch aufgenommenes Blatt: Fach, Tag und die erste Seite.
- *
- * Der Titel wird nicht mitgeschickt, sondern vorgeschlagen („Blatt vom 21.8.“).
- * Beim Aufnehmen im Unterricht bleiben zwei Sekunden; getippt wird auf der
- * Seite danach, und dort steht der Vorschlag im Feld.
- */
-export async function captureMaterialAction(
-  formData: FormData,
-): Promise<CaptureResult> {
-  const user = await requireUser();
-
-  const capturedOn = text(formData, "capturedOn");
-
-  const parsed = materialInputSchema.safeParse({
-    subjectId: text(formData, "subjectId"),
-    title: defaultMaterialTitle(capturedOn),
-    capturedOn,
-    note: null,
-  });
-
-  if (!parsed.success) {
-    return {
-      ok: false,
-      message: firstMessage(
-        parsed.error.issues,
-        "Diese Aufnahme lässt sich nicht speichern.",
-      ),
-    };
-  }
-
-  if (!(await ownsSubject(user.id, parsed.data.subjectId))) {
-    return { ok: false, message: "Dieses Fach gibt es nicht mehr." };
-  }
-
-  const page = await readPage(formData);
-  if (!page.ok) {
-    return { ok: false, message: page.message };
-  }
-
-  try {
-    const id = await createMaterialWithPage(user.id, parsed.data, page.page);
-
-    // Wer die neue Seite liest, entscheidet die App — nach der Antwort, damit
-    // die Kamera nicht auf Docling wartet. `after()` läuft in Server
-    // Functions, nachdem die Antwort raus ist, und ist unter `next start`
-    // voll unterstützt (node_modules/next/dist/docs: after.md,
-    // self-hosting.md). Der Callback stößt nur an und kehrt sofort zurück:
-    // ein Herunterfahren wartet auf offene `after()`-Callbacks, und auf
-    // Docling soll es nicht warten — auf Opus erst recht nicht. Geht der
-    // Anstoß verloren, holt ihn der nächste Upload nach, ein `read_inbox` aus
-    // einem Chat oder der nächste Start der App (src/instrumentation.ts).
-    after(() => zuteilungAnstossen(user.id));
-
-    revalidateMaterial(id);
-    return { ok: true, id };
-  } catch (error) {
-    console.error("Blatt aufnehmen fehlgeschlagen", error);
-    return { ok: false, message: SAVE_FAILED };
-  }
-}
-
-/**
- * Eine weitere Seite an ein vorhandenes Blatt.
- *
- * Ob es das Blatt noch gibt und wie viele Seiten daran hängen, wird vorher
- * nachgesehen: `addPage()` gibt für beide Fälle dasselbe Nichts zurück, und
- * „gibt es nicht mehr“ und „zwölf sind genug“ sind zwei verschiedene
- * Nachrichten.
- */
-export async function addPageAction(
-  formData: FormData,
-): Promise<CaptureResult> {
-  const user = await requireUser();
-
-  const materialId = text(formData, "materialId");
-
-  const material = await getMaterial(user.id, materialId);
-  if (!material) {
-    return { ok: false, message: "Dieses Blatt gibt es nicht mehr." };
-  }
-
-  if (material.pages.length >= MAX_PAGES) {
-    return {
-      ok: false,
-      message: `An ein Blatt passen ${MAX_PAGES} Seiten. Was mehr ist, ist ein zweites Blatt.`,
-    };
-  }
-
-  const page = await readPage(formData);
-  if (!page.ok) {
-    return { ok: false, message: page.message };
-  }
-
-  try {
-    const created = await addPage(user.id, material.id, page.page);
-    if (!created) {
-      return { ok: false, message: SAVE_FAILED };
-    }
-
-    // Wie beim Aufnehmen: die App entscheidet, wer die neue Seite liest —
-    // angestoßen nach der Antwort, siehe `captureMaterialAction()`.
-    after(() => zuteilungAnstossen(user.id));
-
-    revalidateMaterial(material.id);
-    return { ok: true, id: material.id };
-  } catch (error) {
-    console.error("Seite hinzufügen fehlgeschlagen", error);
-    return { ok: false, message: SAVE_FAILED };
-  }
 }
 
 /**
@@ -371,7 +230,7 @@ export async function updateMaterialAction(
     // **Speichern heißt durchgesehen.** Das ist der dritte Ort, an dem
     // `filed_at` gesetzt wird, und ohne ihn hätte der Eingangskorb ein Loch in
     // seiner Hauptschleife: die Kamera schickt nach jeder Aufnahme genau
-    // hierher (siehe capture-button.tsx), hier bekommt das Blatt seinen Titel
+    // hierher, hier bekommt das Blatt seinen Titel
     // und seine Themen — und ohne diese Zeile stünde es danach trotzdem
     // unverändert im Korb. Der Korb füllte sich bei jeder Auslösung und leerte
     // sich auf dem Weg, den die App selbst anbietet, nie.

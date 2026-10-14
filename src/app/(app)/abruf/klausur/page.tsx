@@ -12,13 +12,13 @@ import {
   daysBetween,
   formatCountdown,
   formatGerman,
-  todayInBerlin,
 } from "@/lib/dates";
 import { listExams, type ExamListItem } from "@/lib/exams";
 import { fragenLaufenGerade, fragenStand } from "@/lib/fragenlauf";
 import { laufAnzeige } from "@/lib/leser/claude-ablauf";
 import { letzterFragenLauf } from "@/lib/leser/laeufe";
 import { transcriptPreview } from "@/lib/transcripts";
+import { appTag, jetzt } from "@/lib/tag";
 import { stoffZuKlausur } from "@/recall/source";
 
 import { fragenBauenLassenAction } from "../actions";
@@ -58,7 +58,8 @@ export default async function KlausurStoffPage({
   searchParams,
 }: PageProps<"/abruf/klausur">) {
   const user = await requireUser();
-  const heute = todayInBerlin();
+  // App-Tag wie die übrigen Seiten: bis 4 Uhr gilt noch der Vortag
+  const heute = appTag(await jetzt());
   const { klausur: gewuenscht, id } = await searchParams;
   // `?id=` ist der Weg von der Klausurseite (Plan 2.2), `?klausur=` der alte.
   const klausur = gewuenscht ?? id;

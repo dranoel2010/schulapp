@@ -3,9 +3,10 @@ import type { Metadata } from "next";
 import { SeitenKopf } from "@/components/kombi/form";
 import { TextLine } from "@/components/kombi/seiten/zeilen";
 import { requireUser } from "@/lib/auth";
-import { addDays, formatGerman, todayInBerlin } from "@/lib/dates";
+import { addDays, formatGerman } from "@/lib/dates";
 import { freeLabel, listFreePeriods } from "@/lib/free-days";
 import { listSubjects } from "@/lib/subjects";
+import { appTag, jetzt } from "@/lib/tag";
 import { isDefaultPeriods, isoWeekNumber, loadWeek, weekdayOf } from "@/lib/timetable";
 
 import { WeekGrid } from "../week-grid";
@@ -28,7 +29,8 @@ const MIN_ROWS = 6;
 
 export default async function TimetableEditPage() {
   const user = await requireUser();
-  const today = todayInBerlin();
+  // App-Tag wie die übrigen Seiten: bis 4 Uhr gilt noch der Vortag
+  const today = appTag(await jetzt());
 
   const [week, subjects, freePeriods] = await Promise.all([
     loadWeek(user.id),

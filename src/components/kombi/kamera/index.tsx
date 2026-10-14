@@ -573,7 +573,16 @@ export function KameraEbene() {
   const nSheet = mitSeiten.length;
 
   return (
-    <section className="cam" id="cam" aria-label="Blatt aufnehmen" role="dialog" ref={camRef} aria-hidden={!offen}>
+    <section
+      className="cam"
+      id="cam"
+      aria-label="Blatt aufnehmen"
+      role="dialog"
+      ref={camRef}
+      aria-hidden={!offen}
+      // Solange die Kamera offen ist, lädt AutoRefresh die Seite darunter nicht nach
+      data-aufnahme-laeuft={offen ? "" : undefined}
+    >
       <div className="cam-top">
         <button
           className="cbtn"

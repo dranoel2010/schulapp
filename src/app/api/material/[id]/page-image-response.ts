@@ -74,7 +74,7 @@ export async function pageImageResponse(
   // schließt das die Tür dagegen, dass der Browser die Bytes als etwas anderes
   // deutet als ein Bild. Dass die Vorschau dasselbe Format trägt wie das
   // Vollbild — die Zeile hat für beide nur eine Spalte —, ist beim Aufnehmen
-  // geprüft; siehe readPage() in @/app/(app)/material/actions.
+  // geprüft; siehe readPage() in @/lib/material-seite.
   if (!page || !isAllowedMime(page.mimeType)) {
     return plainText("Dieses Blatt gibt es nicht mehr.", 404);
   }

@@ -19,6 +19,8 @@ let nutzer = "";
 let test = "";
 let nah = "";
 let fern = "";
+let gesch = "";
+let englisch = "";
 const JETZT = berlinZeitpunkt("2026-10-12", "16:40");
 
 const fach = (name: string, short: string) =>
@@ -39,7 +41,14 @@ before(async () => {
   fern = b.id;
   await setTopics(nutzer, a.id, ["Scheitelpunktform"]);
   await setTopics(nutzer, b.id, ["Scheitelpunktform"]);
-  for (const id of [test, nah, fern]) await generatePlan(nutzer, id, "2026-10-12");
+  const ge = await fach("Geschichte", "G");
+  const en = await fach("Englisch", "E");
+  gesch = ge.id;
+  englisch = en.id;
+  const g = await createExam(nutzer, { subjectId: ge.id, title: null, kind: "test", date: "2026-10-20", leadDays: 5, minutesPerDay: 20, notes: null });
+  await setTopics(nutzer, g.id, ["Industrialisierung in Deutschland", "Industrialisierung in England"]);
+  const e = await createExam(nutzer, { subjectId: en.id, title: null, kind: "test", date: "2026-10-21", leadDays: 5, minutesPerDay: 20, notes: null });
+  for (const id of [test, nah, fern, g.id, e.id]) await generatePlan(nutzer, id, "2026-10-12");
 });
 
 describe("Zeile: Name einer Klausur ohne Titel", () => {
@@ -63,5 +72,24 @@ describe("Zeile: Themen ohne Dopplung", () => {
     assert.deepEqual(s[0].ziel, { art: "klausur", id: nah });
     const schluessel = v.themenListe.map((t) => `${t.fachId}:${t.t}`);
     assert.equal(new Set(schluessel).size, schluessel.length);
+  });
+});
+
+describe("Zeile: nur echte Themen", () => {
+  it("Klausur ohne Titel mit zwei Themen: genau die zwei Themen, nicht ihr zusammengesetzter Name", async () => {
+    const v = await zeilenVorrat(nutzer, JETZT);
+    const g = v.themenListe.filter((t) => t.fachId === gesch).map((t) => t.t).sort();
+    assert.deepEqual(g, ["Industrialisierung in Deutschland", "Industrialisierung in England"]);
+  });
+
+  it("Test ohne Titel und ohne Themen: kein Thema „Test“", async () => {
+    const v = await zeilenVorrat(nutzer, JETZT);
+    assert.ok(!v.themenListe.some((t) => t.fachId === englisch && (t.t === "Test" || t.t === "Klausur")));
+    assert.ok(!v.themenListe.some((t) => t.t === "Test"));
+  });
+
+  it("Klausur mit eigenem Titel: der Titel bleibt ein Thema", async () => {
+    const v = await zeilenVorrat(nutzer, JETZT);
+    assert.ok(v.themenListe.some((t) => t.t === "Quadratische Funktionen"));
   });
 });

@@ -3,7 +3,7 @@ import { and, asc, eq, gt, inArray, isNotNull, isNull, lt, or } from "drizzle-or
 import { db } from "@/db";
 import { examTopics, exams, studyBlocks, type StudyBlock } from "@/db/schema";
 import { lernblockEreignisseLoeschen, protokollieren } from "@/lib/protokoll";
-import { recallItems } from "@/recall/schema";
+import { recallAttempts, recallItems } from "@/recall/schema";
 import { faelligHeute, type FaelligerBaustein } from "@/recall/sessions";
 import { versucheDesTages } from "@/recall/themen";
 
@@ -262,6 +262,12 @@ export async function vergangeneUhrenZuruecksetzen(
  * (`recall_items.exam_id`). Sortiert nach `exam_topics.sort_order`, innerhalb
  * eines Themas in der Reihenfolge von `faelligHeute`. Eine Frage, die hier
  * saß, ist auch für Wiederholen erledigt — beide schreiben denselben Termin.
+ *
+ * Was am App-Tag schon saß, fällt weg (dieselbe Regel wie in Wiederholen):
+ * `faelligHeute` nimmt je Baustein den ältesten offenen Termin, und hat eine
+ * Frage zwei überfällige Termine, rückte nach „Saß“ sofort der zweite nach.
+ * Er kommt am nächsten Abend. Was heute danebenging, kommt wie bisher hinten
+ * noch einmal.
  */
 export async function fragenFuerLernblock(
   userId: string,
@@ -285,7 +291,20 @@ export async function fragenFuerLernblock(
     }
   }
 
-  const faellig = await faelligHeute(userId, heute);
+  const [alleFaellig, versuche, gespeichert] = await Promise.all([
+    faelligHeute(userId, heute),
+    versucheDesTages(userId, heute),
+    // `answered_on` ist der Tag beim Speichern; er gilt auch, wenn die Testuhr
+    // auf einem anderen Tag steht als die Uhr der Datenbank (`created_at`)
+    db
+      .select({ itemId: recallAttempts.itemId })
+      .from(recallAttempts)
+      .where(and(eq(recallAttempts.userId, userId), eq(recallAttempts.answeredOn, heute), eq(recallAttempts.correct, true))),
+  ]);
+  const sassHeute = new Set(
+    [...versuche.filter((v) => v.correct), ...gespeichert].flatMap((v) => (v.itemId ? [v.itemId] : [])),
+  );
+  const faellig = alleFaellig.filter((f) => !sassHeute.has(f.itemId));
   if (faellig.length === 0) return [];
 
   const zuordnung = await db

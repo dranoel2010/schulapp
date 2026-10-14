@@ -84,12 +84,18 @@ Ablauf im Ganzen:
 - **Die eigene Saat `saat-kombi.mts`** aus dem Plan gibt es nicht. Stattdessen gibt es `scripts/pruef-kombi/saat-startseite.mts` und `saat-zeile.mts`.
 - **Noch nicht gepusht:** Der Branch liegt nur auf dem Mac.
 
-## Fragen, die deine Entscheidung brauchen
+## Deine Antworten
 
-Bis zu deiner Antwort gilt der Vorschlag. Antwort etwa „4 ja, 6 nein“.
+Offene Fragen gibt es keine mehr. Beantwortet am 12.10. (1 bis 3) und am 13.10. (4 bis 11):
 
-7. **Arbeitsblätter vorab bauen:** für Übungsthemen und Lernblöcke von heute und morgen, höchstens eins je Thema und Tag. Jedes Blatt ist ein Opus-Aufruf. *Vorschlag: ja.*
-9. **Wann auf den NAS:** erst nach deinem Durchklicken am Handy? *Vorschlag: ja.*
-10. **Üben nach Mitternacht:** Antworten zwischen 0 und 4 Uhr zählen beim Speichern zum neuen Tag, in der Anzeige zum alten. *Vorschlag: so lassen.*
-
-Die Fragen 1 bis 3 hast du am 12.10. schon beantwortet: volle Breite am Rechner, kein Hell/Dunkel-Umschalter, und ein ausgewertetes Arbeitsblatt zählt wie eine Kartenrunde. Frage 4 am 13.10.: die Probeklausur kommt als neue Art in den Lernplan, gebaut wie oben. Frage 5 am 13.10.: Grammatik bleibt am Stichwort erkannt und von Hand umstellbar, das Blatt richtet sich nach der Sprache des Fachs, gebaut wie oben. Frage 6 am 13.10.: Themen ohne Klausur werden trotzdem regelmäßig abgefragt, gebaut wie oben („Wiederholen ohne Klausur“). Frage 8 am 13.10.: dir egal, gewählt ist der Vorschlag: Fachfarben bleiben gespeichert und stehen nur im Fach-Formular. Frage 11 am 13.10.: Vergangenes kommt nach zwei Wochen ins Archiv, gebaut wie oben („Archiv“).
+1. Am Rechner keine Handyspalte, Inhalt mittig bis 680px.
+2. Kein Hell/Dunkel-Umschalter.
+3. Ein ausgewertetes Arbeitsblatt zählt wie eine Kartenrunde.
+4. Die Probeklausur kommt als neue Art in den Lernplan, gebaut wie oben.
+5. Grammatik bleibt am Stichwort erkannt und von Hand umstellbar, das Blatt richtet sich nach der Sprache des Fachs, gebaut wie oben.
+6. Themen ohne Klausur werden trotzdem regelmäßig abgefragt, gebaut wie oben („Wiederholen ohne Klausur“).
+7. Ja: Arbeitsblätter für Übungsthemen und Lernblöcke von heute und morgen werden vorab gebaut, höchstens eins je Thema und Tag. Gebaut.
+8. Dir egal, gewählt ist der Vorschlag: Fachfarben bleiben gespeichert und stehen nur im Fach-Formular.
+9. Ja: auf den NAS erst nach deinem Durchklicken am Handy.
+10. So lassen: Antworten zwischen 0 und 4 Uhr zählen beim Speichern zum neuen Tag, in der Anzeige zum alten.
+11. Vergangenes kommt nach zwei Wochen ins Archiv, gebaut wie oben („Archiv“).

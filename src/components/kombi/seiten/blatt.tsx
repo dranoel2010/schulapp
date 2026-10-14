@@ -60,6 +60,35 @@ function Abschrift({ text }: { text: string }) {
   );
 }
 
+/**
+ * „Seite dazu“: öffnet die Kamera der Shell mit dem Blatt als Ziel, auf der
+ * Blattseite und unter „Blatt bearbeiten“. Ist eine Seite ohne Netz
+ * fotografiert, sagt die Zeile es, bis der Server sie hat.
+ */
+export function SeiteDazu({ id, seiten }: { id: string; seiten: string[] }) {
+  const kombi = useKombi();
+  const dazu = dazuAn(useSyncExternalStore(dazuStore.subscribe, dazuStore.get, dazuStore.leer), id);
+  return (
+    <RowBtn
+      titel="Seite dazu"
+      sub={
+        dazu?.lokal === "haengt"
+          ? "Hängt, wird erneut versucht"
+          : dazu
+            ? "Wird hochgeladen"
+            : "Noch eine Seite zu diesem Blatt fotografieren"
+      }
+      ziel={{
+        onClick: () =>
+          kombi.openCam({
+            ziel: { kind: "attach", materialId: id },
+            attach: { id, seiten: seiten.length, bild: seiten[0] ? `/api/material/${seiten[0]}/vorschau` : null },
+          }),
+      }}
+    />
+  );
+}
+
 export function BlattInhalt({ daten }: { daten: BlattDaten }) {
   const kombi = useKombi();
   const [original, setOriginal] = useState(false);
@@ -68,8 +97,6 @@ export function BlattInhalt({ daten }: { daten: BlattDaten }) {
   const [vorher, setVorher] = useState(daten);
   const [loeschen, setLoeschen] = useState(false);
   const [laeuft, setLaeuft] = useState(false);
-  // „Seite dazu“ unterwegs (ohne Netz fotografiert): die Zeile sagt es, bis der Server die Seite hat
-  const dazu = dazuAn(useSyncExternalStore(dazuStore.subscribe, dazuStore.get, dazuStore.leer), daten.id);
   if (vorher !== daten) {
     setVorher(daten);
     setFach(daten.warte ? null : daten.fachId);
@@ -189,23 +216,7 @@ export function BlattInhalt({ daten }: { daten: BlattDaten }) {
 
       <PLab>Blatt</PLab>
       <RowBtn titel="Blatt bearbeiten" sub="Fach, Titel, Datum, Notiz, Themen, Abschrift, Seiten" ziel={{ href: `/material/${daten.id}/bearbeiten` }} />
-      <RowBtn
-        titel="Seite dazu"
-        sub={
-          dazu?.lokal === "haengt"
-            ? "Hängt, wird erneut versucht"
-            : dazu
-              ? "Wird hochgeladen"
-              : "Noch eine Seite zu diesem Blatt fotografieren"
-        }
-        ziel={{
-          onClick: () =>
-            kombi.openCam({
-              ziel: { kind: "attach", materialId: daten.id },
-              attach: { id: daten.id, seiten: daten.seiten.length, bild: daten.seiten[0] ? `/api/material/${daten.seiten[0].id}/vorschau` : null },
-            }),
-        }}
-      />
+      <SeiteDazu id={daten.id} seiten={daten.seiten.map((x) => x.id)} />
       {daten.knopf && !laeuft ? (
         <RowBtn
           titel="Abschreiben lassen"

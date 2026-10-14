@@ -40,9 +40,9 @@ import {
  * - solange ein Eingabefeld den Fokus hat — dann ein Hinweis mit „Neu laden“,
  *   und der Knopf sieht beim Druck noch einmal nach, ob inzwischen getippt
  *   wurde;
- * - solange der Auslöser hochlädt oder sein Sucher offen ist
- *   (`data-aufnahme-laeuft` in capture-button.tsx) — er lädt am Ende selbst
- *   nach;
+ * - solange die Kamera offen ist (`data-aufnahme-laeuft` in
+ *   @/components/kombi/kamera); was sie hochlädt, kommt danach mit dem
+ *   nächsten Stand;
  * - solange eben gescrollt oder mit Maus oder Finger gezeigt wurde
  *   (`BERUEHRT_RUHE_MS`) — wer auf „Übernehmen“ zielt, soll nicht die Zeile
  *   darunter treffen. Hier gibt es keinen Hinweis; gefragt wird gleich noch

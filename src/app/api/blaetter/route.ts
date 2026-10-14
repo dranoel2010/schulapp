@@ -73,8 +73,8 @@ export async function POST(request: Request) {
   } else if (test) {
     await abschriftScheitern(user.id, ergebnis.id);
   } else {
-    // Wer die Seite liest, entscheidet die App — nach der Antwort, wie beim
-    // Auslöser der Ablage (`captureMaterialAction`).
+    // Wer die Seite liest, entscheidet die App, nach der Antwort: die Kamera
+    // wartet nicht auf den Leser.
     after(() => zuteilungAnstossen(user.id));
   }
 

@@ -1,10 +1,6 @@
 "use client";
 
 import {
-  addPageAction,
-  captureMaterialAction,
-} from "@/app/(app)/material/actions";
-import {
   fitWithin,
   JPEG_QUALITY,
   MAX_EDGE,
@@ -16,18 +12,11 @@ import {
 } from "@/lib/images";
 
 /**
- * Vom Bild zur gespeicherten Seite — die Rechnung, die beide Auslöser teilen.
- *
- * Es gibt zwei Wege zu einem Foto: den Knopf, der die Kamera des Geräts öffnet
- * und eine Datei zurückbekommt, und den Sucher, der die Kamera in der App
- * offenhält und einzelne Bilder aus dem laufenden Bild greift. Was danach
- * geschieht, ist beide Male dasselbe: verkleinern auf drei Größen, prüfen, und
- * eine Seite über die Leitung schicken.
- *
- * Deshalb steht es hier und nicht in einer der beiden Komponenten. Stünde es in
- * der einen und riefe die andere hinüber, wäre die eine stillschweigend die
- * Heimat von etwas, das ihr nicht gehört; stünde es zweimal da, würde die
- * Qualitätsleiter irgendwann an einer Stelle geändert und an der anderen nicht.
+ * Vom Bild zu den drei Fassungen einer Seite, für die Kamera von Modell 23
+ * (@/components/kombi/kamera): ein eingefrorenes Standbild aus dem Sucher
+ * (`prepareCanvas`) oder ein Bild aus der Galerie (`prepareFile`). Beide Male
+ * dasselbe: verkleinern auf drei Größen und prüfen. Hochgeladen wird über
+ * /api/blaetter.
  *
  * Nicht hier steht die reine Rechnung — Maße, Grenzen, Größen liegen in
  * @/lib/images, ohne Canvas und ohne DOM, weil der Server dieselben Zahlen
@@ -60,13 +49,6 @@ export class CaptureError extends Error {}
 
 export const CANVAS_MESSAGE =
   "Das Bild ließ sich auf diesem Gerät nicht verkleinern. Versuch es noch einmal oder nimm ein anderes Foto.";
-
-/**
- * Wenn die Leitung abreißt oder der Server gar nicht erst antwortet. Der Satz
- * verspricht nichts, was die App nicht weiß — nur, dass nichts angekommen ist.
- */
-export const NETWORK_MESSAGE =
-  "Das Blatt ist nicht angekommen. Prüf deine Verbindung und versuch es noch einmal.";
 
 /** Wie das Format in der Fehlermeldung heißt: "HEIC", "AVIF", "TIFF". */
 function formatName(file: File): string {
@@ -192,7 +174,7 @@ async function toReadingJpeg(frame: Frame): Promise<Blob> {
  * versteht sich das; beim Sucher nicht — würde direkt aus dem laufenden
  * `<video>` gezeichnet, lägen zwischen dem Vollbild und der Vorschau ein paar
  * Hundertstelsekunden Handbewegung, und die Vorschau in der Ablage zeigte ein
- * anderes Bild als die Seite dahinter. Deshalb friert `prepareFrame()` das Bild
+ * anderes Bild als die Seite dahinter. Deshalb friert die Kamera das Bild
  * vorher ein.
  */
 async function prepareFrame_(frame: Frame): Promise<PreparedPage> {
@@ -239,54 +221,6 @@ export async function prepareFile(file: File): Promise<PreparedPage> {
 }
 
 /**
- * Ein Standbild aus dem laufenden Kamerabild.
- *
- * Gezeichnet wird zuerst einmal in voller Auflösung auf ein eigenes Canvas —
- * das ist das Einfrieren, von dem `prepareFrame_()` oben spricht. Erst von dort
- * entstehen die drei Fassungen, und alle drei zeigen damit garantiert denselben
- * Augenblick.
- *
- * Der Umweg über ein Canvas und nicht über `createImageBitmap(video)`: das
- * Zeichnen eines Videos auf ein Canvas ist die älteste Zeichenoperation, die
- * der Browser kennt, und funktioniert überall. `createImageBitmap` mit einem
- * Video als Quelle ist es nicht — und ein Blatt, das sich auf einem Gerät nicht
- * aufnehmen lässt, ist ein verlorenes Blatt.
- */
-export async function prepareFrame(
-  video: HTMLVideoElement,
-): Promise<PreparedPage> {
-  const width = video.videoWidth;
-  const height = video.videoHeight;
-
-  // Vor dem ersten Bild steht beides auf 0. Ein Canvas mit der Breite 0 wirft
-  // nicht, es liefert ein leeres Bild — die Aufnahme wäre lautlos weg.
-  if (!width || !height) {
-    throw new CaptureError(
-      "Das Kamerabild steht noch nicht. Warte einen Moment und tipp noch einmal.",
-    );
-  }
-
-  const shot = document.createElement("canvas");
-  shot.width = width;
-  shot.height = height;
-
-  const context = shot.getContext("2d");
-  if (!context) throw new CaptureError(CANVAS_MESSAGE);
-
-  context.drawImage(video, 0, 0);
-
-  try {
-    return await prepareFrame_({ draw: shot, width, height });
-  } finally {
-    // Ein Standbild in voller Auflösung belegt rund 20 MB. Im Sucher entsteht
-    // alle paar Sekunden eines; ohne das Zurücksetzen hätte ein Stapel von
-    // zwanzig Zetteln das Gerät voll, bevor er durch ist.
-    shot.width = 0;
-    shot.height = 0;
-  }
-}
-
-/**
  * Ein schon eingefrorenes Standbild (Canvas in voller Auflösung) in die drei
  * Fassungen — für die Kamera von Modell 23, die beim Auslösen einfriert und
  * erst nebenher rechnet, damit der nächste Tipp sofort geht. Das Canvas wird
@@ -301,46 +235,4 @@ export async function prepareCanvas(
     shot.width = 0;
     shot.height = 0;
   }
-}
-
-/**
- * Eine Seite über die Leitung. Das Ergebnis ist die id des Blattes — ohne
- * `materialId` die eines frisch angelegten, sonst die schon bekannte.
- *
- * Next bricht eine zu große Anfrage mit einem Fehler ab, den der Aufrufer als
- * Ausnahme sieht und nicht als Ergebnis; ohne das catch stünde davon ein
- * Overlay auf dem Bildschirm statt eines Satzes unter dem Knopf.
- */
-export async function sendPage(
-  page: PreparedPage,
-  target: { materialId: string } | { subjectId: string; capturedOn: string },
-): Promise<string> {
-  const formData = new FormData();
-  formData.set("breite", String(page.width));
-  formData.set("hoehe", String(page.height));
-  formData.set("bild", page.image, "blatt.jpg");
-  formData.set("lesefassung", page.reading, "lesefassung.jpg");
-  formData.set("vorschau", page.thumb, "vorschau.jpg");
-
-  const attaching = "materialId" in target;
-
-  if (attaching) {
-    formData.set("materialId", target.materialId);
-  } else {
-    formData.set("subjectId", target.subjectId);
-    formData.set("capturedOn", target.capturedOn);
-  }
-
-  let result;
-  try {
-    result = attaching
-      ? await addPageAction(formData)
-      : await captureMaterialAction(formData);
-  } catch {
-    throw new CaptureError(NETWORK_MESSAGE);
-  }
-
-  if (!result.ok) throw new CaptureError(result.message);
-
-  return result.id;
 }

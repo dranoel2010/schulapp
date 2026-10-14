@@ -7,7 +7,8 @@ import { useKombi } from "@/components/kombi/kontext";
 import { fmtRest, restMs, useBlock, useSekunde, zustand } from "@/components/kombi/lernblock/uhr";
 import type { BlockDaten, LernblockUeberblick } from "@/lib/kombi/lernblock-daten";
 import { E, reduce } from "@/lib/kombi/motion";
-import { cap, diffDays, esc, kurz, tn, weekdayOrDate, zahl } from "@/lib/kombi/text";
+import { verpasstSatz } from "@/lib/kombi/verpasst";
+import { diffDays, esc, kurz, tn, weekdayOrDate, zahl } from "@/lib/kombi/text";
 
 /**
  * Der Block „Klausur“ im Überblick (Prototyp `ovKlausur` und
@@ -83,9 +84,7 @@ export function KlausurBlock({ daten, heute }: { daten: LernblockUeberblick; heu
           onPointerDown={() => kombi.vorladen("klausur", { id: v.examId })}
           onClick={() => kombi.openPage("klausur", { id: v.examId })}
         >
-          {v.anzahl === 1
-            ? `Ein Lernblock von ${weekdayOrDate(v.tag, heute)} ist offen`
-            : `${cap(zahl(v.anzahl))} Lernblöcke sind offen`}
+          {verpasstSatz(v, heute)}
           <Icon name="chevron_right" />
         </button>
       ))}

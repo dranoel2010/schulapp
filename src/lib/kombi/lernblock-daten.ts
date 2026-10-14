@@ -15,6 +15,7 @@ import {
   type StudyBlock,
 } from "@/db/schema";
 import { addDays } from "@/lib/dates";
+import { klausurNamen, type VerpasstEintrag } from "@/lib/kombi/verpasst";
 import { planEintragArt, planEintragTitel } from "@/lib/study-plan";
 import { missedBlocks } from "@/lib/exams";
 import { ersteVersucheImBlock, fragenFuerLernblock } from "@/lib/lernblock";
@@ -148,13 +149,18 @@ export type LernblockUeberblick = {
   /**
    * Weitere Klausuren mit einem offenen Block heute (das alte /lernen zeigte
    * unter „Heute“ die Blöcke aller Klausuren). Je Klausur eine Zeile in der
-   * Gestalt von „Und eine weitere …“: „Noch ein Lernblock heute: Mathe ›“.
+   * Gestalt von „Und eine weitere …“: „Noch ein Lernblock heute: Mathe ›“,
+   * bei zwei Klausuren im selben Fach mit dem Tag („Mathe So 18.10.“).
    */
   heuteWeitere: { examId: string; kurz: string }[];
   /** „Und eine weitere am Do 22.10.“ */
   weitere: { anzahl: number; datum: string } | null;
-  /** Verpasste offene Blöcke je Klausur (Plan 3.5) */
-  verpasst: { examId: string; anzahl: number; tag: string }[];
+  /**
+   * Verpasste offene Blöcke je Klausur (Plan 3.5). `name` ist null bei der
+   * gezeigten Klausur, sonst das Fach („Englisch“), bei zwei Klausuren im
+   * selben Fach mit dem Tag der Klausur („Mathe Sa 17.10.“).
+   */
+  verpasst: VerpasstEintrag[];
 };
 
 /**
@@ -173,14 +179,20 @@ export async function lernblockUeberblick(
     .orderBy(asc(exams.date), asc(exams.createdAt));
 
   const verpasstRoh = await missedBlocks(userId, tag);
-  const jeKlausur = new Map<string, { examId: string; anzahl: number; tag: string }>();
+  const jeKlausur = new Map<string, Omit<VerpasstEintrag, "name">>();
   for (const b of verpasstRoh) {
-    const e = jeKlausur.get(b.examId) ?? { examId: b.examId, anzahl: 0, tag: b.date };
+    const e = jeKlausur.get(b.examId) ?? {
+      examId: b.examId,
+      anzahl: 0,
+      tag: b.date,
+      kurz: fachKurz(b.subject.name),
+      datum: b.exam.date,
+    };
     e.anzahl += 1;
     if (b.date > e.tag) e.tag = b.date;
     jeKlausur.set(b.examId, e);
   }
-  const verpasst = [...jeKlausur.values()];
+  const verpasstOhneNamen = [...jeKlausur.values()];
 
   const k = bald[0] ?? null;
   let heute: BlockDaten | null = null;
@@ -214,12 +226,13 @@ export async function lernblockUeberblick(
     .innerJoin(subjects, eq(subjects.id, exams.subjectId))
     .where(and(eq(studyBlocks.date, tag), eq(studyBlocks.status, "open"), sql`${exams.date} > ${tag}`))
     .orderBy(asc(exams.date), asc(exams.createdAt));
-  const heuteWeitere: LernblockUeberblick["heuteWeitere"] = [];
+  const weitereRoh: { examId: string; kurz: string; datum: string }[] = [];
   for (const a of andere) {
-    if (a.examId === k?.id || heuteWeitere.some((h) => h.examId === a.examId)) continue;
-    heuteWeitere.push({ examId: a.examId, kurz: fachKurz(a.fach) });
+    if (a.examId === k?.id || weitereRoh.some((h) => h.examId === a.examId)) continue;
+    weitereRoh.push({ examId: a.examId, kurz: fachKurz(a.fach), datum: a.datum });
   }
 
+  const { verpasst, heuteWeitere } = klausurNamen(verpasstOhneNamen, k ? { id: k.id, kurz: fachKurz(k.fach) } : null, weitereRoh);
   if (!k && verpasst.length === 0 && heuteWeitere.length === 0) return null;
 
   const rest = bald.slice(1);

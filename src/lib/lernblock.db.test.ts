@@ -24,6 +24,8 @@ import {
 } from "@/lib/lernblock";
 import { protokollVomTag } from "@/lib/protokoll";
 import { recallAttempts, recallItems, recallSchedule } from "@/recall/schema";
+import { urteilFesthalten, versuchFesthalten } from "@/recall/sessions";
+import { berlinZeitpunkt } from "@/lib/tag";
 
 const TAG = "2026-10-12";
 const T0 = new Date("2026-10-12T14:40:00.000Z");
@@ -181,5 +183,61 @@ describe("Lernblock gegen die Datenbank", () => {
     await testDb.insert(recallAttempts).values({ userId: nutzer, itemId: b, answeredOn: "2026-10-11", gapDays: 0, answerText: "x", correct: false, createdAt: new Date("2026-10-11T15:00:00.000Z") });
 
     assert.deepEqual(await ersteVersucheImBlock(nutzer, block.id, TAG), { [a]: false, [b]: true });
+  });
+});
+
+describe("Lernblock: zwei überfällige Termine einer Frage (Abnahmerunde 18)", () => {
+  it("nach „Saß“ kommt die Frage am selben Abend nicht noch einmal, der zweite Termin bleibt offen", async () => {
+    const n = await testNutzer("Zwei Termine");
+    const [ma] = await testDb.insert(subjects).values({ userId: n, name: "Mathematik", short: "M" }).returning({ id: subjects.id });
+    const [k] = await testDb.insert(exams).values({ userId: n, subjectId: ma.id, date: "2026-10-18" }).returning({ id: exams.id });
+    const [t] = await testDb
+      .insert(subjectTopics)
+      .values({ userId: n, subjectId: ma.id, title: "Scheitelpunktform", matchKey: "scheitelpunktform", lastSeenAt: "2026-10-12" })
+      .returning({ id: subjectTopics.id });
+    await testDb.insert(examTopics).values({ examId: k.id, title: "Scheitelpunktform", sortOrder: 0, subjectTopicId: t.id });
+    const [b] = await testDb.insert(studyBlocks).values({ examId: k.id, date: "2026-10-14", minutes: 25 }).returning({ id: studyBlocks.id });
+    const neu = async (text: string) => {
+      const [f] = await testDb
+        .insert(recallItems)
+        .values({ userId: n, subjectId: ma.id, subjectTopicId: t.id, examId: null, promptFree: text, solution: "Lösung", misconception: "Verwechslung", sourceQuote: "Zitat", sourceLength: 5 })
+        .returning({ id: recallItems.id });
+      const termine = await testDb
+        .insert(recallSchedule)
+        .values([
+          { itemId: f.id, dueOn: "2026-10-12" },
+          { itemId: f.id, dueOn: "2026-10-14" },
+        ])
+        .returning({ id: recallSchedule.id, dueOn: recallSchedule.dueOn });
+      return { id: f.id, termine };
+    };
+    const sass = await neu("Scheitel?");
+    const daneben = await neu("Streckung?");
+    const HEUTE = "2026-10-14";
+    const uhr = berlinZeitpunkt(HEUTE, "16:45");
+
+    const vorher = await fragenFuerLernblock(n, b.id, HEUTE);
+    assert.deepEqual(vorher.map((f) => f.itemId).sort(), [sass.id, daneben.id].sort());
+    const alt = (x: typeof sass) => x.termine.find((z) => z.dueOn === "2026-10-12")!.id;
+    assert.ok(vorher.every((f) => f.scheduleId === alt(f.itemId === sass.id ? sass : daneben)));
+
+    for (const [x, richtig] of [[sass, true], [daneben, false]] as const) {
+      const v = await versuchFesthalten(n, { scheduleId: alt(x), itemId: x.id, answerText: "x" }, HEUTE);
+      assert.ok(v.ok);
+      await urteilFesthalten(n, v.attemptId, richtig, uhr);
+    }
+
+    // Wiederöffnen: was saß, fehlt; was danebenging, kommt noch einmal
+    const danach = await fragenFuerLernblock(n, b.id, HEUTE);
+    assert.deepEqual(danach.map((f) => f.itemId), [daneben.id]);
+
+    const offen = await testDb.select().from(recallSchedule).where(eq(recallSchedule.itemId, sass.id));
+    assert.equal(offen.find((z) => z.dueOn === "2026-10-12")?.doneAt?.toISOString(), uhr.toISOString());
+    assert.equal(offen.find((z) => z.dueOn === "2026-10-14")?.doneAt, null);
+
+    // am nächsten Abend ist der Termin vom 14.10. dran
+    const morgen = await fragenFuerLernblock(n, b.id, "2026-10-15");
+    const s = morgen.find((f) => f.itemId === sass.id);
+    assert.equal(s?.scheduleId, sass.termine.find((z) => z.dueOn === "2026-10-14")!.id);
   });
 });

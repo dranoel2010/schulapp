@@ -75,9 +75,8 @@ const nextConfig: NextConfig = {
    * mit 1000 beziehungsweise 320 Pixeln langer Kante. Schlägt der Rand doch
    * einmal an, bricht Next die Anfrage mit Status 413 ab; die Action läuft dann
    * gar nicht erst, der Abbruch kommt beim Auslöser als Ausnahme an, und
-   * `callAction()` in @/components/material/capture-button fängt sie und
-   * schreibt einen Satz unter den Knopf statt eine Fehlermeldung quer über den
-   * Bildschirm.
+   * die Kamera (@/components/kombi/kamera) zeigt dann einen Satz statt einer
+   * Fehlermeldung quer über den Bildschirm.
    */
   experimental: {
     serverActions: {

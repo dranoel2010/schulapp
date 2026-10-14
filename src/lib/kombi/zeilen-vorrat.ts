@@ -222,8 +222,13 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
     if (da) da.lb ||= t.lb;
     else themenListe.push(t);
   };
+  // Nur echte Themen: der eigene Titel einer Klausur, ihre Themen und die des
+  // Plans. Ohne Titel ist `k.thema` aus den Themen zusammengesetzt oder der
+  // Name der Art („Test“) und steht nicht als eigenes Thema da
+  const mitTitel = new Set(klausurenRoh.filter((k) => k.title?.trim()).map((k) => k.id));
   for (const k of [...klausuren].filter((k) => k.datum >= heute).concat(klausuren.filter((k) => k.datum < heute).reverse())) {
-    themaDazu({ t: k.thema, fachId: k.fachId, ziel: { art: "klausur", id: k.id }, lb: false });
+    if (mitTitel.has(k.id)) themaDazu({ t: k.thema, fachId: k.fachId, ziel: { art: "klausur", id: k.id }, lb: false });
+    for (const t of klausurThemen.get(k.id) ?? []) themaDazu({ t, fachId: k.fachId, ziel: { art: "klausur", id: k.id }, lb: false });
     for (const p of k.plan) if (p.art === "Lernblock") themaDazu({ t: p.thema, fachId: k.fachId, ziel: { art: "klausur", id: k.id }, lb: p.tag === heute });
   }
   const blattThemen = await db

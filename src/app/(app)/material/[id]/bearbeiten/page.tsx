@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { SeitenKopf } from "@/components/kombi/form";
 import { AutoRefresh } from "@/components/material/auto-refresh";
-import { CaptureButton } from "@/components/material/capture-button";
+import { SeiteDazu } from "@/components/kombi/seiten/blatt";
 import { requireUser } from "@/lib/auth";
 import { claudeLiestGerade } from "@/lib/leser/claude-zustand";
 import { formatGerman, todayInBerlin } from "@/lib/dates";
@@ -20,8 +20,8 @@ import { MaterialDangerZone, MaterialForm, MaterialPages } from "../../material-
  * `material-form.tsx` und `updateMaterialAction` — Fach, Titel, Datum
  * (`capturedOn`), Notiz, Themen und je Seite das Abschrift-Feld. Abtippen ist
  * ohne `ANTHROPIC_API_KEY` oder nach einem gescheiterten Lauf der einzige Weg
- * zur Abschrift. Dazu die Seiten mit „Seite löschen“, eine Seite hinzufügen
- * und ganz unten das Löschen des Blatts.
+ * zur Abschrift. Dazu die Seiten mit „Seite löschen“, „Seite dazu“ über die
+ * Kamera der Shell wie auf der Blattseite und ganz unten das Löschen des Blatts.
  *
  * Das Formular bleibt nach dem Speichern stehen und sagt, was geschah (die
  * Hinweise zu Themen und überholten Abschriften); die Blattseite darunter
@@ -111,15 +111,7 @@ export default async function MaterialEditPage({ params }: PageProps<"/material/
         </p>
       ) : null}
 
-      <CaptureButton
-        subjectId={item.subject.id}
-        subjects={active}
-        today={today}
-        materialId={item.id}
-        label="Seite hinzufügen"
-        allArchived={active.length === 0}
-        remaining={MAX_PAGES - item.pages.length}
-      />
+      {full ? null : <SeiteDazu id={item.id} seiten={item.pages.map((page) => page.id)} />}
 
       <MaterialDangerZone
         materialLabel={`${item.subject.name} · ${item.title}`}

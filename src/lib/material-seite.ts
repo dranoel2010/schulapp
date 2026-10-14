@@ -7,12 +7,10 @@ import {
 import type { NewPage } from "@/lib/materials";
 
 /**
- * Eine aufgenommene Seite aus einem Formular lesen und prüfen — die Tür, die
- * die Server Actions der Ablage (`captureMaterialAction`, `addPageAction`)
- * und der Route Handler `POST /api/blaetter` (Modell 23, Plan 3.8) teilen.
- * Bis zum 12.10.2026 stand das als `readPage()` in
- * src/app/(app)/material/actions.ts; dort hätte ein Route Handler es nicht
- * importieren dürfen, ohne es zu einer Server Action zu machen.
+ * Eine aufgenommene Seite aus einem Formular lesen und prüfen, für den Route
+ * Handler `POST /api/blaetter` (Modell 23, Plan 3.8). Bis zum 12.10.2026
+ * stand das als `readPage()` in src/app/(app)/material/actions.ts; die
+ * Server Actions der alten Kamera sind seit Abnahmerunde 18 weg.
  */
 
 /** Ein Formularfeld als Text; alles andere (etwa eine Datei) zählt als leer. */
