@@ -107,7 +107,9 @@ time,.tn,.t-count,.t-clock,.lbbtn,.whbtn .n,.avg,.total,.grade-row b,.pstack .n,
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 #app{position:fixed;inset:0;margin:0 auto;max-width:100%;overflow:hidden;isolation:isolate;background:var(--bg)}
-@media (min-width:600px){#app{max-width:390px;box-shadow:0 0 0 1px var(--line)}}
+:root{--col:680px}
+/* wie src/app/kombi.css: zwischen 600 und 1023 px die mittige Spalte bis --col */
+@media (min-width:600px){#app{max-width:var(--col)}html,body{background:var(--bg)}}
 .pre .enter{opacity:0}
 
 /* ---------- Ebenen: Tag (Morgens, Überblick) und Ablauf ---------- */
@@ -443,7 +445,7 @@ h1.q{font-family:var(--sans);font-size:32px;line-height:1.08;font-weight:650;let
 .zeile{position:fixed;z-index:40;left:0;right:0;bottom:var(--safe-b);margin:0 auto;max-width:100%;pointer-events:none}
 .zeile::before{content:"";position:absolute;left:0;right:0;bottom:calc(-1 * var(--safe-b));height:calc(52px + var(--safe-b) + 10px);background:var(--bg);pointer-events:auto}
 .zeile.hide::before,.zeile.menu-on::before{visibility:hidden}
-@media (min-width:600px){.zeile{max-width:390px}}
+@media (min-width:600px){.zeile{max-width:var(--col)}}
 .dock{pointer-events:auto;position:relative;z-index:3;margin:0 var(--pad);height:52px;border-radius:26px;background:var(--dock);color:var(--dock-text);
   display:flex;align-items:center;padding:4px;box-shadow:var(--dock-shadow)}
 .dock .lupe{width:40px;display:grid;place-items:center;color:var(--dock-muted);flex:none}
@@ -845,11 +847,6 @@ body.toast-on .scroll{padding-bottom:calc(var(--foot-space) + 54px)}
 }
 
 /* ======================= Desktop ab 1024 px ======================= */
-/* Drei Stufen: 1024 bis 1279 knapp, ab 1280 normal, ab 1440 breit (Blatt: Abschrift und Original nebeneinander) */
-:root{--rail:224px;--list:328px;--dpad:40px;--dtop:28px}
-@media (min-width:1280px){:root{--rail:244px;--list:360px;--dpad:48px}}
-@media (min-width:1680px){:root{--list:392px;--dpad:64px;--dtop:36px}}
-
 .d-narrow{display:none}
 @media (max-width:1023px){
   #desk,.d-tisch{display:none !important}
@@ -857,6 +854,14 @@ body.toast-on .scroll{padding-bottom:calc(var(--foot-space) + 54px)}
   .d-narrow p{max-width:340px;font-size:17px;line-height:1.4;color:var(--ink-2)}
   .d-narrow a{color:var(--accent);font-weight:650;text-decoration:none}
 }
+
+@media (min-width:1024px){
+/* Alles hier gilt nur ab 1024 px; darunter ändert diese Datei nichts.
+   Stufen: 1024 bis 1279 knapp, 1280 bis 1439 normal, ab 1440 steht beim Blatt das Original neben der Abschrift,
+   ab 1680 breit (Liste 392, Rand 64, Inhalt bis 1320). */
+:root{--rail:224px;--list:328px;--dpad:40px;--dtop:28px}
+@media (min-width:1280px){:root{--rail:244px;--list:360px;--dpad:48px}}
+@media (min-width:1680px){:root{--list:392px;--dpad:64px;--dtop:36px}}
 
 #desk{position:fixed;inset:0;display:grid;grid-template-columns:var(--rail) minmax(0,1fr);background:var(--bg)}
 button{-webkit-user-select:none;user-select:none}
@@ -874,13 +879,16 @@ button{-webkit-user-select:none;user-select:none}
 .r-item[aria-current="page"]{background:var(--raise);color:var(--ink);font-weight:650}
 .r-item[aria-current="page"] .n{color:var(--ink-2)}
 .r-item:active{transform:scale(.98)}
-@media (hover:hover){.r-item:not([aria-current="page"]):hover{background:var(--quiet);color:var(--ink)}}
+@media (hover:hover) and (pointer:fine){.r-item:not([aria-current="page"]):hover{background:var(--quiet);color:var(--ink)}}
 .r-sep{height:1px;background:var(--line);margin:10px 10px}
 .r-foot{margin-top:auto;display:flex;flex-direction:column;gap:2px}
 .r-item .ic{width:18px;height:18px;color:var(--ink-3)}
 
 /* ---------- Bühne ---------- */
-.stage{position:relative;min-width:0;min-height:0;overflow:hidden}
+.stage{position:relative;min-width:0;min-height:0;overflow:hidden;--wide:1180px;
+  /* Mitte der Zeile: unter dem Inhalt, nicht unter der Bühne */
+  --zc:calc(var(--dpad) + min(var(--wide), 100% - 2 * var(--dpad)) / 2);--zw:min(600px, calc(100% - 2 * var(--dpad)))}
+.stage[data-lay="split"]{--zc:calc(var(--list) + (100% - var(--list)) / 2);--zw:min(600px, calc(100% - var(--list) - 2 * var(--dpad)))}
 .view{position:absolute;inset:0;display:none}
 .view.on{display:block}
 .d-scroll{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;padding:var(--dtop) var(--dpad) 128px}
@@ -902,7 +910,7 @@ button{-webkit-user-select:none;user-select:none}
 .d-list .lrow.sel{background:var(--raise)}
 .d-list .lrow.sel::before,.d-list .lrow.sel + .lrow::before{opacity:0}
 .d-list .lrow:active{opacity:1}
-@media (hover:hover){.d-list .lrow:not(.sel):hover{background:var(--quiet);opacity:1}.d-list .lrow:hover::before,.d-list .lrow:hover + .lrow::before{opacity:0}}
+@media (hover:hover) and (pointer:fine){.d-list .lrow:not(.sel):hover{background:var(--quiet);opacity:1}.d-list .lrow:hover::before,.d-list .lrow:hover + .lrow::before{opacity:0}}
 .d-list .lrow .mini{width:30px}
 .d-list .p-lab:first-of-type{margin-top:16px}
 /* Aufgabenzeile in der Liste: Text wählt aus, der Ring hakt ab */
@@ -911,9 +919,9 @@ button{-webkit-user-select:none;user-select:none}
 .d-list .task.sel .t-front{background:var(--raise);border-radius:10px;margin:0 0}
 .d-list .task.sel::after,.d-list .task.sel + .task::after{opacity:0}
 .d-list .task .t-front::before{inset:0}
-@media (hover:hover){.d-list .task:not(.sel) .t-front:hover{background:var(--quiet);border-radius:10px}}
+@media (hover:hover) and (pointer:fine){.d-list .task:not(.sel) .t-front:hover{background:var(--quiet);border-radius:10px}}
 .ring{cursor:pointer}
-@media (hover:hover){.check:hover .ring{border-color:var(--ink-2)}}
+@media (hover:hover) and (pointer:fine){.check:hover .ring{border-color:var(--ink-2)}}
 
 /* Detail: Angaben als Haarlinienzeilen */
 .d-facts{margin-top:22px;border-top:1px solid var(--line)}
@@ -932,14 +940,16 @@ button{-webkit-user-select:none;user-select:none}
 .h-col .wh + .blk{margin-top:28px}
 .h-side .blk:first-child{margin-top:0}
 .h-side .lab{height:30px}
-.d-thumbs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px 16px}
+.h-thumbs{margin-top:44px}
+.d-thumbs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px 16px}
+@media (min-width:1440px){.d-thumbs{grid-template-columns:repeat(6,minmax(0,1fr))}}
 .d-thumbs .tcell{flex:none;width:100%}
 .d-thumbs .tmini{height:auto;aspect-ratio:1/.74}
-.d-thumbs .tcell b{font-size:15px}
+.d-thumbs .tcell b{font-size:15px;overflow-wrap:anywhere;hyphens:auto;-webkit-hyphens:auto}
 .d-thumbs .tcell span{font-size:13px}
-@media (max-width:1439px){.d-thumbs .tcell:nth-child(n+4){display:none}}
-@media (min-width:1680px){.d-wide{max-width:1320px}}
-@media (hover:hover){.tcell:hover .tmini{box-shadow:0 0 0 1px var(--line-strong)}}
+@media (max-width:1439px){.d-thumbs .tcell:nth-child(n+5){display:none}}
+@media (min-width:1680px){.d-wide{max-width:1320px}.stage{--wide:1320px}}
+@media (hover:hover) and (pointer:fine){.tcell:hover .tmini{box-shadow:0 0 0 1px var(--line-strong)}}
 .h-pack .lesson-row{min-height:52px}
 .h-note{font-size:15px;line-height:1.35;color:var(--ink-2);margin-top:6px}
 
@@ -948,10 +958,9 @@ button{-webkit-user-select:none;user-select:none}
 .icb{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--ink-2);transition:background-color 120ms ease,transform 140ms var(--ease-out)}
 .icb .ic{width:20px;height:20px}
 .icb:active{transform:scale(.94)}
-@media (hover:hover){.icb:hover{background:var(--quiet);color:var(--ink)}}
-.chip{height:36px;padding:0 14px;border-radius:999px;background:var(--raise);font-size:15px;font-weight:560;color:var(--ink);transition:transform 140ms var(--ease-out)}
-.chip:active{transform:scale(.96)}
-.chip[aria-disabled="true"]{visibility:hidden}
+@media (hover:hover) and (pointer:fine){.icb:hover{background:var(--quiet);color:var(--ink)}}
+.wk-nav .textbtn{height:40px;padding:0 10px;margin-right:4px;font-size:15px;border-radius:10px}
+.wk-nav .textbtn[aria-hidden="true"]{visibility:hidden}
 .wk{display:grid;grid-template-columns:76px repeat(5,minmax(0,1fr));margin-top:20px;border-top:1px solid var(--line-strong)}
 .wk > *{border-bottom:1px solid var(--line);min-width:0}
 .wk-h{display:flex;flex-direction:column;justify-content:center;gap:2px;height:60px;padding:0 14px;border-left:1px solid var(--line);color:var(--ink-2)}
@@ -990,6 +999,12 @@ button{-webkit-user-select:none;user-select:none}
 .ml .lbbtn{height:36px;font-size:15px}
 .wk-legend{margin-top:14px;font-size:15px;color:var(--ink-2)}
 
+/* Lange Wörter (Scheitelpunktform, Gedichtanalyse) brechen in engen Spalten mit Trennstrich, statt in die Nachbarspalte zu laufen */
+.lp-d,.wk-c em,.wk-c .tag,.wk-x,.mt p,.ml p{overflow-wrap:anywhere;hyphens:auto;-webkit-hyphens:auto}
+/* Titel und Listen haben Platz: dort nur im Notfall umbrechen, ohne Trennstrich */
+.d-h1,.d-fact,.d-list .lrow b,.d-list .lrow .s{overflow-wrap:break-word}
+.ml{grid-template-columns:minmax(0,1fr)}
+.ml .lbbtn{justify-self:start;padding:0;height:36px}
 /* ---------- Klausur: Lernplan als Wochenstreifen ---------- */
 .lp{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin-top:8px;border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line)}
 .lp-d{display:flex;flex-direction:column;gap:4px;min-height:132px;padding:12px 14px 14px;border-left:1px solid var(--line);min-width:0}
@@ -997,6 +1012,7 @@ button{-webkit-user-select:none;user-select:none}
 .lp-d .pday{font-size:15px;color:var(--ink-2)}
 .lp-d.today .pday{color:var(--ink);font-weight:650}
 .lp-d b{display:block;font-size:17px;line-height:1.3;font-weight:560;margin-top:8px}
+.lp-t{min-width:0}
 .lp-d b + span{display:block;font-size:15px;line-height:1.35;color:var(--ink-2)}
 .lp-d .lbbtn{margin-top:auto;justify-content:flex-start;padding:0;height:40px}
 .lp-d.exday b{font-weight:650}
@@ -1004,8 +1020,27 @@ button{-webkit-user-select:none;user-select:none}
 .two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:48px;margin-top:8px}
 .two > div{min-width:0}
 
+/* knapp (1024 bis 1279): steht nach den Grundregeln von Woche und Lernplan, damit es sie überschreibt */
+@media (max-width:1279px){
+  .wk{grid-template-columns:72px repeat(5,minmax(0,1fr))}
+  .wk-h,.wk-c{padding-left:10px;padding-right:10px}
+  .wk-x{padding-left:6px;padding-right:6px}
+  .wk-c b{font-size:15px}
+  .mt p b{display:block;hyphens:manual;-webkit-hyphens:manual;overflow-wrap:normal}
+  .mt{grid-template-columns:26px minmax(0,1fr);column-gap:2px}
+  .mt .check{width:26px}
+  /* Lernplan knapp: eine Zeile je Tag statt fünf schmaler Spalten */
+  .lp{grid-template-columns:minmax(0,1fr)}
+  .lp-d{display:grid;grid-template-columns:116px minmax(0,1fr) auto;column-gap:16px;align-items:baseline;min-height:56px;padding:12px 0;border-left:0;border-top:1px solid var(--line)}
+  .lp-d:first-child{border-top:0}
+  .lp-d b{margin-top:0}
+  .lp-d .none{margin-top:0}
+  .lp-d .lbbtn{margin-top:0;align-self:center}
+}
+
 /* ---------- Ablage und Blatt ---------- */
-.d-fil{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+.d-fil{display:flex;gap:6px;margin:10px -22px 4px -24px;padding:0 22px 0 24px;overflow-x:auto;scrollbar-width:none}
+.d-fil::-webkit-scrollbar{display:none}
 .d-fil .fp{height:36px;padding:0 13px}
 .bl-two{display:block}
 .bl-orig{display:none}
@@ -1022,7 +1057,7 @@ button{-webkit-user-select:none;user-select:none}
 
 /* ---------- Noten ---------- */
 .d-list .total{margin-top:8px}
-.lrow .avg{min-width:32px;text-align:right}
+.d-list .lrow .avg{min-width:32px;text-align:right}
 
 /* ---------- Einstellungen ---------- */
 .keys{margin-top:18px;border-top:1px solid var(--line)}
@@ -1032,11 +1067,11 @@ button{-webkit-user-select:none;user-select:none}
 .kbd + .kbd{margin-left:4px}
 
 /* ---------- Zeile am Rechner: dieselbe dunkle Pille, unten in der Bühne ---------- */
-.d-zeile{position:absolute;z-index:40;left:50%;bottom:20px;width:min(600px,calc(100% - 48px));translate:-50% 0}
+.d-zeile{position:absolute;z-index:40;left:var(--zc);bottom:20px;width:var(--zw);translate:-50% 0}
 .d-zeile .dock{margin:0}
 .dock .dkbd{display:inline-grid;place-items:center;min-width:26px;height:26px;padding:0 7px;margin-right:8px;border-radius:7px;font-size:13px;font-weight:600;color:var(--dock-muted);box-shadow:inset 0 0 0 1px var(--dock-line);flex:none}
 .dock.typing .dkbd{display:none}
-.camb{color:var(--dock-text)}
+.d-zeile .camb{color:var(--dock-text)}
 .d-menu{position:absolute;left:0;right:0;bottom:62px;max-height:min(62vh,540px);overflow-y:auto;padding:6px;border-radius:16px;background:var(--sheet);color:var(--ink);box-shadow:var(--pop-shadow);
   transform-origin:50% 100%;opacity:0;transform:translateY(6px) scale(.98);pointer-events:none;visibility:hidden;
   transition:opacity 150ms ease-out,transform 180ms var(--ease-out),visibility 0s linear 180ms}
@@ -1046,7 +1081,7 @@ button{-webkit-user-select:none;user-select:none}
 .d-menu .m-gl{padding:10px 16px 4px}
 
 /* Toast in der Bühne über der Zeile */
-#desk .toast{position:absolute;left:50%;bottom:84px;max-width:min(520px,calc(100% - 48px));translate:-50% 0}
+#desk .toast{position:absolute;left:var(--zc);bottom:84px;max-width:var(--zw);translate:-50% 0}
 
 /* Ablegen: ein Blatt aus dem Ordner ins Fenster ziehen */
 .d-drop{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity 160ms ease}
@@ -1056,6 +1091,20 @@ button{-webkit-user-select:none;user-select:none}
 .d-drop-in b{display:block;font-size:22px;line-height:1.2;font-weight:650;letter-spacing:-.02em}
 .d-drop-in p{font-size:15px;line-height:1.4;color:var(--ink-2);margin-top:6px}
 
+/* Sheet am Rechner: derselbe Bogen, als Dialog in der Mitte */
+.d-dlg{position:fixed;z-index:72;left:50%;top:50%;width:min(560px,calc(100% - 48px));max-height:min(80vh,640px);overflow-y:auto;padding:26px 28px 24px;border-radius:22px;background:var(--sheet);color:var(--ink);box-shadow:var(--pop-shadow);
+  translate:-50% -50%;opacity:0;transform:scale(.97);visibility:hidden;pointer-events:none;transition:opacity 160ms ease-out,transform 200ms var(--ease-out),visibility 0s linear 200ms}
+.d-dlg.on{opacity:1;transform:none;visibility:visible;pointer-events:auto;transition:opacity 160ms ease-out,transform 200ms var(--ease-out),visibility 0s}
+.d-dlg h2{font-size:22px;line-height:1.2;font-weight:650;letter-spacing:-.02em}
+.d-dlg p{font-size:15px;line-height:1.4;color:var(--ink-2);margin-top:6px}
+.d-dlg .d-foot{margin-top:22px}
+.d-dlg .d-foot .btn{flex:1;min-width:0}
+.d-form{margin-top:18px;display:flex;flex-direction:column;gap:18px}
+.d-form label{display:block;font-size:15px;line-height:1.3;color:var(--ink-2);margin-bottom:8px}
+.d-inp{display:block;width:100%;height:52px;padding:0 16px;border:0;border-radius:14px;background:var(--raise);font-size:17px;outline:none}
+.d-inp:focus-visible{box-shadow:0 0 0 2px var(--ink)}
+.d-form .refile{display:flex;flex-wrap:wrap;gap:6px}
+
 /* ---------- Tisch in Fensterbreite ---------- */
 .d-tisch{position:fixed;inset:0;z-index:65;display:none;color:var(--t-on)}
 .d-tisch.open{display:block}
@@ -1063,7 +1112,7 @@ button{-webkit-user-select:none;user-select:none}
 .d-tbody{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0}
 .d-ttop{position:relative;z-index:3;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:12px;height:76px;padding:0 32px 0 20px;flex:none}
 .d-ttop .tbtn{border-radius:12px}
-@media (hover:hover){.d-ttop .tbtn:hover,.t-clock:hover{background:var(--t-fill)}}
+@media (hover:hover) and (pointer:fine){.d-ttop .tbtn:hover,.t-clock:hover{background:var(--t-fill)}}
 .d-ttop .t-of{justify-self:end}
 .d-ttop .t-clock{margin-right:-14px}
 .d-tk{position:relative;flex:1;min-height:0}
@@ -1074,7 +1123,7 @@ button{-webkit-user-select:none;user-select:none}
 .d-cards .t-stack{height:260px;width:min(600px,100%);margin:0}
 .d-cards .c-q p{font-size:30px}
 .d-cards .t-foot{width:min(600px,100%);margin-top:56px}
-.rb .k,.tb-main .k{display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 6px;margin-left:10px;border-radius:6px;font-size:13px;font-weight:600;vertical-align:1px;box-shadow:inset 0 0 0 1px currentColor;opacity:.5}
+.d-k{display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 6px;margin-left:10px;border-radius:6px;font-size:13px;font-weight:600;vertical-align:1px;box-shadow:inset 0 0 0 1px currentColor;opacity:.5}
 .d-cards .t-end{position:static;visibility:visible;padding:0;margin-top:9vh}
 .d-cards .t-end .tnext{margin-top:40px;flex-direction:row}
 .d-cards .t-end .tlink{flex:1}
@@ -1084,6 +1133,9 @@ button{-webkit-user-select:none;user-select:none}
 .d-pages{min-height:0;overflow-y:auto;padding:0 40px 40px;display:flex;flex-direction:column;align-items:center;gap:28px;scrollbar-width:thin;scrollbar-color:var(--t-fill-2) transparent}
 .d-pages .tb-page{gap:10px}
 .d-pages.two{flex-direction:row;align-items:flex-start;justify-content:center}
+/* Vor dem Bewerten liegt die Lösungsseite zugeklappt: auf ihr steht „Erst nach dem Lösen ansehen“ */
+.d-fold{display:flex;justify-content:space-between;align-items:center;gap:16px;min-height:52px;padding:0 18px;border-radius:14px;background:var(--t-fill);font-size:15px;line-height:1.3;font-weight:560;color:var(--t-on);flex:none}
+.d-fold span:last-child{opacity:.7;font-weight:450}
 .d-pages .tb-paper{cursor:default}
 .d-pages .tb-paper:active{transform:none}
 .d-side{min-height:0;overflow-y:auto;padding:0 40px 32px 8px;display:flex;flex-direction:column}
@@ -1097,9 +1149,10 @@ button{-webkit-user-select:none;user-select:none}
 .d-side .t-end .tnext{margin-top:32px}
 
 @media (prefers-reduced-motion: reduce){
-  .d-menu,.d-drop,.d-drop-in{transition-duration:120ms}
-  .d-menu,.d-drop-in{transform:none}
+  .d-menu,.d-drop,.d-drop-in,.d-dlg{transition-duration:120ms}
+  .d-menu,.d-drop-in,.d-dlg{transform:none}
 }
+} /* Ende ab 1024 px */
 @media print{body > *:not(#druck){display:none !important}}
 </style>
 </head>
@@ -1150,6 +1203,8 @@ button{-webkit-user-select:none;user-select:none}
   </main>
 </div>
 
+<div class="scrim" id="dlgScrim" style="z-index:71"></div>
+<div class="d-dlg" id="dlg" role="dialog" aria-modal="true"></div>
 <div class="d-drop" id="drop" aria-hidden="true"><div class="d-drop-in"><b>Loslassen zum Ablegen</b><p>Ein Bild je Blatt. Fach und Thema erkennt die App.</p></div></div>
 
 <section class="d-tisch" id="tisch" role="dialog" aria-label="Tisch">
@@ -1259,7 +1314,7 @@ const KLAUSUREN = [{
   id: 'k1', fach: 'ma', datum: '2026-10-16', stunde: 2, thema: 'Quadratische Funktionen', plan: [
     { tag: '2026-10-12', art: 'Lernblock', thema: 'Scheitelpunktform', min: 25, blatt: 'b7' },
     { tag: '2026-10-14', art: 'Wiederholung', thema: 'Alles bis Scheitelpunktform', min: 25, blatt: 'b7' },
-    { tag: '2026-10-15', art: 'Probeklausur', thema: 'ohne Hilfsmittel', min: 45, blatt: 'b7' },
+    { tag: '2026-10-15', art: 'Probeklausur', thema: 'mit Taschenrechner', min: 45, blatt: 'b7' },
   ]
 }];
 const NOTEN = {
@@ -1361,6 +1416,10 @@ const db = {
     { id: 'a3', fach: 'en', text: 'Vokabeln Unit 3', due: '2026-10-12', done: '2026-10-11', am: '2026-10-07' },
     { id: 'a4', fach: 'ge', text: 'Fragen zur Dampfmaschine', due: '2026-10-12', done: '2026-10-12', am: '2026-10-08' },
   ],
+  archiv: [
+    { id: 'r1', fach: 'bi', text: 'Protokoll Mikroskopieren', due: '2026-10-01', done: '2026-09-30', am: '2026-09-28' },
+    { id: 'r2', fach: 'de', text: 'Lesetagebuch Kapitel 3', due: '2026-09-29', done: '2026-09-28', am: '2026-09-24' },
+  ],
   blaetter: BLAETTER0.slice(),
   art: {},
   block: 'idle',          /* idle, laeuft, erledigt */
@@ -1369,7 +1428,8 @@ const db = {
 };
 let nextId = 100;
 const artVon = t => db.art[t.id] || artAbgeleitet(t);
-const offeneFuer = d => db.aufgaben.filter(a => a.due === d && !a.done);
+/* wie offeneFuer der App: nach Schulschluss gehört Überfälliges zum nächsten Schultag */
+const offeneFuer = d => db.aufgaben.filter(a => a.due <= d && !a.done).sort((a, b) => a.due < b.due ? -1 : a.due > b.due ? 1 : 0);
 
 /* Blattfoto im Entwurf: wörtlich aus dem Handy-Prototyp */
 const paperCache = new Map();
@@ -1418,21 +1478,17 @@ const blattSort = () => db.blaetter.slice().sort((a, b) => a.datum < b.datum ? 1
 const VIEWS = ['heute', 'hausaufgaben', 'klausuren', 'woche', 'ablage', 'faecher', 'noten', 'einstellungen'];
 const ui = {
   view: VIEWS.includes(QS.get('v')) ? QS.get('v') : 'heute',
-  sel: { hausaufgaben: 'a1', klausuren: 'k1', ablage: QS.get('blatt') || 'b7', faecher: 'ma', noten: 'ma', einstellungen: 'darstellung' },
+  sel: { hausaufgaben: 'a1', klausuren: 'k1', ablage: QS.get('blatt') || 'b7', faecher: 'ma', noten: 'ma', einstellungen: 'tastatur' },
   woche: addDays(nextSchool(heute()), 1 - wd(nextSchool(heute()))),
   filter: 'alle',
   blattOrig: false,
-  theme: QS.get('theme') || (() => { try { return localStorage.getItem('d-theme'); } catch (e) { return null; } })() || 'system',
+  edit: null,
 };
 
-/* Hell und dunkel: wie das System, oder fest */
-function applyTheme() {
-  const r = document.documentElement;
-  if (ui.theme === 'system') delete r.dataset.theme; else r.dataset.theme = ui.theme;
-  const dark = ui.theme === 'dark' || (ui.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-  $('#themeColor').setAttribute('content', dark ? '#141416' : '#F7F7F5');
-}
-applyTheme();
+/* Hell und dunkel folgen dem System, einen Umschalter gibt es nicht (EINBAU.md) */
+const DMQ = matchMedia('(prefers-color-scheme: dark)');
+const themeColor = () => $('#themeColor').setAttribute('content', DMQ.matches ? '#141416' : '#F7F7F5');
+themeColor(); DMQ.addEventListener('change', themeColor);
 
 /* ================= Gemeinsame Bausteine ================= */
 const lab = (t, right) => h('div', { class: 'lab' }, h('h2', { style: 'font:inherit' }, t), right || null);
@@ -1444,7 +1500,7 @@ function rowBtn(title, sub, onClick, right, extra, id) {
 }
 function blattRow(b, onClick, sel) {
   const r = h('button', { class: `lrow${sel ? ' sel' : ''}`, type: 'button', dataset: { id: b.id } }, h('span', { class: 'mini', style: `background-image:url("${bildVon(b)}")` }),
-    h('span', null, h('b', null, b.titel || 'Blatt von heute'), h('span', { class: 's' }, b.status === 'neu' ? 'Wird eingeordnet' : `${dm(b.datum)}, ${b.thema || (b.fach ? F(b.fach).name : '')}`)), onClick ? h('span') : ic('chevron_right'));
+    h('span', null, h('b', null, b.titel || 'Blatt von heute'), h('span', { class: 's' }, b.status === 'neu' ? 'Wird eingeordnet …' : `${dm(b.datum)}, ${b.thema || (b.fach ? F(b.fach).name : '')}`)), onClick ? h('span') : ic('chevron_right'));
   r.addEventListener('click', onClick || (() => go('ablage', { blatt: b.id })));
   return r;
 }
@@ -1492,6 +1548,8 @@ const strikesIn = (root, animate) => requestAnimationFrame(() => $$('.task.done'
 function toggleTask(a, row) {
   const was = a.done;
   a.done = was ? null : heute();
+  /* aus dem Archiv wieder geöffnet: steht danach wieder unter „Hausaufgaben“ (wie die App) */
+  if (!a.done && db.archiv.includes(a)) { db.archiv = db.archiv.filter(x => x !== a); db.aufgaben.push(a); ui.sel.hausaufgaben = a.id; setTimeout(render, 0); }
   if (row) {
     row.classList.toggle('done', !!a.done);
     row.querySelector('.check').setAttribute('aria-pressed', String(!!a.done));
@@ -1514,6 +1572,7 @@ function go(v, p = {}, how = {}) {
   if (p.blatt) ui.sel.ablage = p.blatt;
   if (p.id && v === 'klausuren') ui.sel.klausuren = p.id;
   if (p.aufgabe) ui.sel.hausaufgaben = p.aufgabe;
+  ui.edit = null;
   if (p.fach && v === 'faecher') ui.sel.faecher = p.fach;
   if (p.fach && v === 'noten') ui.sel.noten = p.fach;
   if (p.woche) ui.woche = p.woche;
@@ -1521,6 +1580,7 @@ function go(v, p = {}, how = {}) {
   ui.view = v;
   $$('.r-item').forEach(b => b.toggleAttribute('aria-current', false) || (b.dataset.v === v && b.setAttribute('aria-current', 'page')));
   $$('.view').forEach(s => s.classList.toggle('on', s.dataset.v === v));
+  $('#stage').dataset.lay = ['heute', 'woche'].includes(v) ? 'scroll' : 'split';
   render(false);
   const el = $(`.view[data-v="${v}"]`);
   /* Mit der Maus ein kurzes Einblenden, mit der Tastatur keins: was man hundertmal am Tag tut, bewegt sich nicht */
@@ -1568,11 +1628,11 @@ const RENDER = {};
 function RENDER_heute() {
   const ns = nextSchool(heute());
   const ha = offeneFuer(ns);
-  const erl = db.aufgaben.filter(a => a.due === ns && a.done);
+  const erl = db.aufgaben.filter(a => a.done && a.due <= ns && (a.due === ns || a.done === heute()));
   const k = KLAUSUREN[0];
   const left = h('div', { class: 'h-col' });
   const tl = h('div', { class: 'blk' });
-  [...ha, ...erl].forEach(a => tl.append(taskRow(a, { onSelect: x => go('hausaufgaben', { aufgabe: x.id }) })));
+  [...ha, ...erl].forEach(a => tl.append(taskRow(a, { onSelect: x => go('hausaufgaben', { aufgabe: x.id }), sub: x => x.due < heute() && !x.done ? `War fällig ${kurz(x.due)}` : null })));
   if (!ha.length && !erl.length) tl.append(h('p', { class: 'empty' }, `Für ${tagName(ns)} ist nichts offen.`));
   const more = db.aufgaben.filter(a => !a.done && a.due > ns).length;
   if (more) { const m = h('button', { class: 'textline more', type: 'button' }, `${cap(zahl(more, 'f'))} weitere später`, ic('chevron_right')); m.addEventListener('click', () => go('hausaufgaben')); tl.append(m); }
@@ -1597,33 +1657,37 @@ function RENDER_heute() {
     const c = h('button', { class: 'tcell', type: 'button' }, h('span', { class: 'tmini', style: `background-image:url("${bildVon(b)}")` }), h('b', { class: 'tc-t' }, b.titel), h('span', { class: 'tc-s' }, b.fach ? F(b.fach).name : 'Wird eingeordnet'));
     c.addEventListener('click', () => go('ablage', { blatt: b.id })); return c;
   }));
-  right.append(h('div', { class: 'blk', style: 'margin-top:32px' }, lab('Zuletzt abgelegt', alle), th));
-
   return h('div', { class: 'd-scroll' }, h('div', { class: 'd-wide' },
     h('div', { class: 'd-head' }, h('h1', { class: 'd-h1' }, headline())),
-    h('div', { class: 'h-grid' }, left, right)));
+    h('div', { class: 'h-grid' }, left, right),
+    h('div', { class: 'blk h-thumbs' }, lab('Zuletzt abgelegt', alle), th)));
 }
 
 /* ================= Hausaufgaben: Liste und Detail ================= */
 function RENDER_hausaufgaben() {
   const ns = nextSchool(heute());
+  /* „Heute“ gibt es bis Schulschluss (wie die App); um 16:40 steht Überfälliges unter „Für ⟨Tag⟩“ */
   const groups = [
     [`Für ${tagName(ns)}`, offeneFuer(ns)],
     ['Später', db.aufgaben.filter(a => !a.done && a.due > ns).sort((a, b) => a.due < b.due ? -1 : 1)],
-    ['Erledigt', db.aufgaben.filter(a => a.done).sort((a, b) => a.done < b.done ? 1 : -1)],
+    ['Erledigt', db.aufgaben.filter(a => a.done && diffDays(a.done, heute()) <= 2).sort((a, b) => a.done < b.done ? 1 : -1)],
   ];
   const list = h('div', null, h('h2', { class: 'p-title' }, 'Hausaufgaben'));
   const all = groups.flatMap(g => g[1]);
-  if (!all.find(a => a.id === ui.sel.hausaufgaben) && all[0]) ui.sel.hausaufgaben = all[0].id;
+  if (ui.sel.hausaufgaben !== 'archiv' && !all.find(a => a.id === ui.sel.hausaufgaben) && all[0]) ui.sel.hausaufgaben = all[0].id;
   groups.forEach(([l, arr], i) => {
     if (!arr.length && i > 0) return;
     const g = h('div', { class: 'group', style: i === 0 ? 'margin-top:14px' : null }, h('h3', { class: 'lab' }, l));
     if (!arr.length) g.append(h('p', { class: 'empty' }, `Für ${tagName(ns)} ist nichts offen.`));
-    arr.forEach(a => g.append(taskRow(a, { sel: a.id === ui.sel.hausaufgaben, onSelect: x => selectIn('hausaufgaben', x.id), sub: x => x.due !== ns && !x.done ? kurz(x.due) : null })));
+    arr.forEach(a => g.append(taskRow(a, { sel: a.id === ui.sel.hausaufgaben, onSelect: x => selectIn('hausaufgaben', x.id), sub: x => x.due < heute() && !x.done ? `War fällig ${kurz(x.due)}` : x.due !== ns && !x.done ? kurz(x.due) : null })));
     list.append(g);
   });
+  /* Unterseiten der App (Archiv, Bearbeiten) öffnen im Detail, die Liste bleibt stehen */
+  const arch = db.archiv.length ? rowBtn('Archiv', `${cap(zahl(db.archiv.length, 'f'))} erledigte ${db.archiv.length === 1 ? 'Aufgabe' : 'Aufgaben'}`, () => selectIn('hausaufgaben', 'archiv'), undefined, ui.sel.hausaufgaben === 'archiv' ? 'sel' : '', 'archiv') : null;
+  if (arch) list.append(h('div', { style: 'margin-top:18px' }, arch));
+  if (ui.sel.hausaufgaben === 'archiv') return split(list, archivDetail());
   const a = db.aufgaben.find(x => x.id === ui.sel.hausaufgaben);
-  return split(list, a ? aufgabeDetail(a) : h('p', { class: 'empty' }, 'Keine Aufgabe gewählt.'));
+  return split(list, a ? (ui.edit === a.id ? aufgabeForm(a) : aufgabeDetail(a)) : h('p', { class: 'empty' }, 'Keine Aufgabe gewählt.'));
 }
 function aufgabeDetail(a) {
   const f = F(a.fach);
@@ -1632,7 +1696,7 @@ function aufgabeDetail(a) {
   const done = h('button', { class: 'btn primary', type: 'button' }, a.done ? 'Wieder öffnen' : 'Erledigt');
   done.addEventListener('click', () => { const row = $(`.d-list .task[data-id="${a.id}"]`); toggleTask(a, row); render(); });
   const edit = h('button', { class: 'btn quiet', type: 'button' }, 'Bearbeiten');
-  edit.addEventListener('click', () => toast('Im Entwurf nicht eingebaut'));
+  edit.addEventListener('click', () => { ui.edit = a.id; selectIn('hausaufgaben', a.id); });
   return h('div', { class: 'd-in' },
     h('p', { class: 'd-sub', style: 'margin-top:0;min-height:44px;display:flex;align-items:center' }, f.name),
     h('h1', { class: 'd-h1' }, a.text),
@@ -1643,6 +1707,33 @@ function aufgabeDetail(a) {
       a.done ? h('div', { class: 'd-fact' }, h('span', null, 'Erledigt'), h('span', null, lang(a.done))) : null),
     bl.length ? h('div', null, plab(`Blätter in ${f.name}`), bl.map(b => blattRow(b))) : null,
     h('div', { class: 'd-foot' }, done, edit));
+}
+
+/* Bearbeiten: dasselbe Formular wie die App-Seite, hier im Detail statt als eigene Seite */
+function aufgabeForm(a) {
+  let fach = a.fach, due = a.due;
+  const inp = h('input', { class: 'd-inp', type: 'text', value: a.text, 'aria-label': 'Aufgabe' });
+  const fp = h('div', { class: 'refile' }, FAECHER.map(f => { const b = h('button', { class: 'fp', type: 'button', 'aria-pressed': String(f.id === fach) }, f.kurz); b.addEventListener('click', () => { fach = f.id; [...fp.children].forEach(x => x.setAttribute('aria-pressed', String(x === b))); }); return b; }));
+  const tage = [nextLesson(a.fach, heute()), nextSchool(heute()), addDays(nextSchool(heute()), 1)].filter((d, i, l) => d && l.indexOf(d) === i).concat(a.due < heute() ? [] : [a.due]).filter((d, i, l) => l.indexOf(d) === i).sort();
+  const dp = h('div', { class: 'refile' }, tage.map(d => { const b = h('button', { class: 'fp', type: 'button', 'aria-pressed': String(d === due) }, kurz(d)); b.addEventListener('click', () => { due = d; [...dp.children].forEach(x => x.setAttribute('aria-pressed', String(x === b))); }); return b; }));
+  const save = h('button', { class: 'btn primary', type: 'button' }, 'Speichern');
+  const cancel = h('button', { class: 'btn quiet', type: 'button' }, 'Abbrechen');
+  save.addEventListener('click', () => { const was = { ...a }; a.text = inp.value.trim() || a.text; a.fach = fach; a.due = due; ui.edit = null; selectIn('hausaufgaben', a.id); updateCounts(); toast('Gespeichert', () => { Object.assign(a, was); render(); updateCounts(); }); });
+  cancel.addEventListener('click', () => { ui.edit = null; selectIn('hausaufgaben', a.id); });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') save.click(); else if (e.key === 'Escape') cancel.click(); });
+  requestAnimationFrame(() => inp.focus());
+  return h('div', { class: 'd-in', style: 'max-width:640px' },
+    h('p', { class: 'd-sub', style: 'margin-top:0;min-height:44px;display:flex;align-items:center' }, 'Aufgabe bearbeiten'),
+    h('h1', { class: 'd-h1' }, `${F(a.fach).kurz} ${a.text}`),
+    h('div', { class: 'd-form' }, h('div', null, h('label', null, 'Aufgabe'), inp), h('div', null, h('label', null, 'Fach'), fp), h('div', null, h('label', null, 'Abgabe'), dp)),
+    h('div', { class: 'd-foot' }, save, cancel));
+}
+function archivDetail() {
+  return h('div', { class: 'd-in' },
+    h('p', { class: 'd-sub', style: 'margin-top:0;min-height:44px;display:flex;align-items:center' }, 'Nach zwei Tagen unter „Erledigt“'),
+    h('h1', { class: 'd-h1', style: 'margin-bottom:14px' }, 'Archiv'),
+    db.archiv.map(a => taskRow(a, { sub: x => `Erledigt ${kurz(x.done)}` })),
+    h('p', { class: 'p-sub', style: 'margin-top:12px' }, 'Ein Klick auf den Ring öffnet die Aufgabe wieder.'));
 }
 
 /* ================= Klausuren: Lernplan als Wochenstreifen ================= */
@@ -1659,11 +1750,12 @@ function klausurDetail(k) {
     const d = addDays(mo, i), today = d === heute();
     const pl = k.plan.find(p => p.tag === d);
     const kids = [h('span', { class: 'pday' }, today ? `Heute, ${dm(d)}` : kurz(d))];
-    if (d === k.datum) kids.push(h('b', null, 'Klausur'), h('span', { html: tn(`${k.stunde}. Stunde, ${PERIODS[k.stunde][0]}`) }));
+    const t = h('div', { class: 'lp-t' }); kids.push(t);
+    if (d === k.datum) t.append(h('b', null, 'Klausur'), h('span', { html: tn(`${k.stunde}. Stunde, ${PERIODS[k.stunde][0]}`) }));
     else if (pl) {
-      kids.push(h('b', null, pl.art === 'Lernblock' ? pl.thema : pl.art), h('span', null, `${pl.art === 'Lernblock' ? 'Lernblock mit Arbeitsblatt' : pl.thema}, ${pl.min} Minuten${today && db.block === 'erledigt' ? ', erledigt' : ''}`));
+      t.append(h('b', null, pl.art === 'Lernblock' ? pl.thema : pl.art), h('span', null, `${pl.art === 'Lernblock' ? 'Lernblock mit Arbeitsblatt' : pl.thema}, ${pl.min} Minuten${today && db.block === 'erledigt' ? ', erledigt' : ''}`));
       if (today && db.block !== 'erledigt') { const b = h('button', { class: 'lbbtn', type: 'button' }, db.block === 'laeuft' ? 'Weiter' : 'Starten'); b.addEventListener('click', () => openTisch('blatt', b)); kids.push(b); }
-    } else kids.push(h('span', { class: 'none' }, d < heute() ? '' : 'Frei'));
+    } else t.append(h('span', { class: 'none' }, d < heute() ? '' : 'Frei'));
     return h('div', { class: `lp-d${today ? ' today' : ''}${d === k.datum ? ' exday' : ''}` }, kids);
   }));
   const bl = blattSort().filter(b => b.fach === k.fach && b.thema === k.thema);
@@ -1684,7 +1776,7 @@ function RENDER_woche() {
   const thisMo = addDays(heute(), 1 - wd(heute()));
   const prev = h('button', { class: 'icb', type: 'button', 'aria-label': 'Vorige Woche' }, ic('chevron_left'));
   const next = h('button', { class: 'icb', type: 'button', 'aria-label': 'Nächste Woche' }, ic('chevron_right'));
-  const now = h('button', { class: 'chip', type: 'button', 'aria-disabled': String(mo === thisMo) }, 'Diese Woche');
+  const now = h('button', { class: 'textbtn', type: 'button', 'aria-hidden': String(mo === thisMo), tabindex: mo === thisMo ? '-1' : null }, 'Diese Woche');
   const shift = n => { ui.woche = addDays(ui.woche, 7 * n); render(); const g = $('.view[data-v="woche"] .wk'); if (g && !reduce()) g.animate([{ opacity: 0, transform: `translateX(${n * 12}px)` }, { opacity: 1, transform: 'none' }], { duration: 200, easing: E.out }); };
   prev.addEventListener('click', () => shift(-1)); next.addEventListener('click', () => shift(1));
   now.addEventListener('click', () => { if (mo !== thisMo) { ui.woche = thisMo; render(); } });
@@ -1711,7 +1803,7 @@ function RENDER_woche() {
       g.append(h('div', { class: `wk-c${d === heute() ? ' td' : ''}` }, l ? [h('b', null, F(l.fach).name), h('em', null, l.hu ? `Hauptunterricht · ${l.raum}` : l.raum), k ? h('span', { class: 'tag' }, `Klausur: ${k.thema}`) : null] : null));
     });
   });
-  return h('div', { class: 'd-scroll' }, h('div', { class: 'd-wide', style: 'max-width:1320px' },
+  return h('div', { class: 'd-scroll' }, h('div', { class: 'd-wide' },
     h('div', { class: 'd-head' }, h('div', null, h('h1', { class: 'd-h1' }, 'Woche'), h('p', { class: 'd-sub', html: tn(`${dm(mo)} bis ${dm(days[4])}`) })), h('div', { class: 'wk-nav' }, now, prev, next)),
     g));
 }
@@ -1735,7 +1827,7 @@ function RENDER_ablage() {
   return split(list, b ? blattDetail(b) : h('p', { class: 'empty' }, 'Noch keine Blätter.'));
 }
 function blattDetail(b) {
-  const pages = Array.from({ length: b.seiten }, (_, i) => b.bild && i === 0 ? b.bild : paperImg(b.id, i));
+  const pages = Array.from({ length: b.seiten }, (_, i) => (b.bilder && b.bilder[i]) || (b.bild && i === 0 ? b.bild : paperImg(b.id, i)));
   const body = h('div');
   const tA = h('button', { type: 'button', 'aria-pressed': String(!ui.blattOrig) }, 'Abschrift');
   const tO = h('button', { type: 'button', 'aria-pressed': String(ui.blattOrig) }, 'Original');
@@ -1752,15 +1844,18 @@ function blattDetail(b) {
     return p;
   }));
   const links = h('div', { class: 'd-foot' });
+  const dazu = h('button', { class: 'btn quiet', type: 'button' }, 'Seite dazu');
+  dazu.addEventListener('click', () => seiteDazu(b));
   const t = THEMEN.find(x => x.fach === b.fach && x.name === b.thema);
   if (t) {
     const lern = h('button', { class: 'btn quiet', type: 'button' }, artVon(t) === 'ueben' ? 'Thema üben' : 'Thema abfragen');
     lern.addEventListener('click', () => openTisch(artVon(t) === 'ueben' ? 'blatt' : 'karten', lern));
     links.append(lern);
   }
+  links.append(dazu);
   return h('div', { class: 'bl-two' },
     h('div', { class: 'd-in' },
-      h('p', { class: 'd-sub', style: 'margin-top:0;min-height:44px;display:flex;align-items:center' }, `${b.fach ? F(b.fach).name : 'Ohne Fach'}, ${dm(b.datum)}, ${b.seiten} ${b.seiten === 1 ? 'Seite' : 'Seiten'}`),
+      h('p', { class: 'd-sub', style: 'margin-top:0;min-height:44px;display:flex;align-items:center' }, `${b.status === 'neu' ? 'Wird eingeordnet …' : b.fach ? F(b.fach).name : 'Ohne Fach'}, ${dm(b.datum)}, ${b.seiten} ${b.seiten === 1 ? 'Seite' : 'Seiten'}`),
       h('h1', { class: 'd-h1', style: 'margin-bottom:6px' }, b.titel || 'Blatt von heute'),
       h('div', { class: 'seg2 bl-seg', role: 'group', 'aria-label': 'Ansicht' }, tA, tO),
       h('div', { style: 'height:12px' }), body,
@@ -1807,7 +1902,7 @@ function RENDER_noten() {
     fs_.map(f => rowBtn(f.name, noteLine(f.id), () => selectIn('noten', f.id), h('span', { class: 'avg', html: tn(fmtAvg(schnitt(f.id).avg)) }), f.id === ui.sel.noten ? 'sel' : '', f.id)));
   const f = F(ui.sel.noten), n = NOTEN[f.id], s = schnitt(f.id);
   const add = h('button', { class: 'textbtn', type: 'button', style: 'margin-top:14px' }, 'Note eintragen');
-  add.addEventListener('click', () => toast('Im Entwurf nicht eingebaut'));
+  add.addEventListener('click', () => noteDialog(f.id));
   const det = h('div', { class: 'd-in' },
     h('p', { class: 'd-sub', style: 'margin-top:0;min-height:44px;display:flex;align-items:center', html: tn(`Schnitt ${fmtAvg(s.avg)}`) }),
     h('h1', { class: 'd-h1', style: 'margin-bottom:14px' }, `Noten ${f.name}`),
@@ -1816,30 +1911,58 @@ function RENDER_noten() {
   return split(list, det);
 }
 
+/* Sheet am Rechner: derselbe Inhalt als Dialog in der Mitte */
+function dialog(kids) {
+  const d = $('#dlg'), sc = $('#dlgScrim');
+  d.replaceChildren(...kids); d.classList.add('on'); sc.classList.add('on');
+  const close = () => { d.classList.remove('on'); sc.classList.remove('on'); removeEventListener('keydown', onKey, true); };
+  const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+  addEventListener('keydown', onKey, true); sc.onclick = close;
+  requestAnimationFrame(() => d.querySelector('button')?.focus());
+  return close;
+}
+function noteDialog(fid) {
+  let v = null, art = 's';
+  const notes = h('div', { class: 'refile' }, [10, 20, 30, 40, 50, 60].map(n => { const b = h('button', { class: 'fp', type: 'button', 'aria-pressed': 'false' }, String(n / 10)); b.addEventListener('click', () => { v = n; [...notes.children].forEach(x => x.setAttribute('aria-pressed', String(x === b))); save.removeAttribute('aria-disabled'); }); return b; }));
+  const seg = h('div', { class: 'seg2', role: 'group', 'aria-label': 'Art' }, [['s', 'Schriftlich'], ['m', 'Mündlich']].map(([k, l]) => { const b = h('button', { type: 'button', 'aria-pressed': String(k === art) }, l); b.addEventListener('click', () => { art = k; [...seg.children].forEach(x => x.setAttribute('aria-pressed', String(x === b))); }); return b; }));
+  const save = h('button', { class: 'btn primary', type: 'button', 'aria-disabled': 'true' }, 'Eintragen');
+  const cancel = h('button', { class: 'btn quiet', type: 'button' }, 'Abbrechen');
+  const close = dialog([h('h2', null, `Note in ${F(fid).name}`), h('p', null, 'Datum heute. Den Anlass kannst du später ergänzen.'),
+    h('div', { class: 'd-form' }, h('div', null, h('label', null, 'Note'), notes), h('div', null, h('label', null, 'Art'), seg)), h('div', { class: 'd-foot' }, cancel, save)]);
+  cancel.addEventListener('click', close);
+  save.addEventListener('click', () => { if (v == null) return; NOTEN[fid].list.push({ v, t: art === 's' ? 'Test' : 'Mitarbeit', art, d: heute() }); close(); render(); toast(`${noteLabel(v)} in ${F(fid).kurz} eingetragen`); });
+}
+
 /* ================= Einstellungen ================= */
-const SET = [['stundenplan', 'Stundenplan', `${Object.values(PLAN).flat().length} Stunden in der Woche`], ['epoche', 'Epoche', `${F(EPOCHE.fach).name} seit ${dm(EPOCHE.seit)}`], ['darstellung', 'Hell und dunkel', null], ['tastatur', 'Tastatur', 'Kürzel am Rechner']];
+/* Dieselben Punkte wie die Einstellungen der App (src/components/kombi/seiten/einstellungen.tsx), dazu „Tastatur“ nur am Rechner.
+   Die Unterseiten der App erscheinen rechts im Detail; im Entwurf stehen nur Stundenplan, Epoche und Tastatur aus. */
+const SET = [
+  [null, [['stundenplan', 'Stundenplan', `${Object.values(PLAN).flat().length} Stunden in der Woche`], ['epoche', 'Epoche', `${F(EPOCHE.fach).name} im Hauptunterricht seit ${lang(EPOCHE.seit)}`]]],
+  ['Schule', [['raster', 'Stundenplan bearbeiten', 'Raster, Räume, Stundenzeiten'], ['erinnerungen', 'Erinnerungen', 'Lernerinnerung um 17 Uhr']]],
+  ['Verbindungen', [['kalender', 'Google Kalender', 'Verbunden'], ['iserv', 'IServ', 'Verbunden'], ['programme', 'Verbundene Programme', 'Claude'], ['abschrift', 'Handschrift abschreiben', 'Claude ist eingerichtet']]],
+  ['App', [['tastatur', 'Tastatur', 'Kürzel am Rechner'], ['installieren', 'Als App installieren', 'Am Handy in Chrome'], ['daten', 'Wo deine Daten liegen', 'Was die App speichert und was hinausgeht'], ['konto', 'Konto', 'Leonard']]],
+];
 function RENDER_einstellungen() {
-  const label = { system: 'Wie das System', light: 'Hell', dark: 'Dunkel' };
-  const list = h('div', null, h('h2', { class: 'p-title' }, 'Einstellungen'), h('div', { style: 'height:14px' }),
-    SET.map(([id, t, s]) => rowBtn(t, id === 'darstellung' ? label[ui.theme] : s, () => selectIn('einstellungen', id), null, id === ui.sel.einstellungen ? 'sel' : '', id)));
+  const list = h('div', null, h('h2', { class: 'p-title' }, 'Einstellungen'), h('div', { style: 'height:6px' }));
+  SET.forEach(([g, rows], gi) => {
+    if (g) list.append(plab(g));
+    rows.forEach(([id, t, s]) => list.append(rowBtn(t, s, () => selectIn('einstellungen', id), null, id === ui.sel.einstellungen ? 'sel' : '', id)));
+    if (gi === 0) list.append(h('div', { class: 'set-row' }, 'Hell und dunkel', h('span', null, 'wie das System')));
+  });
   const id = ui.sel.einstellungen; let det;
   const head = (t, s) => [h('p', { class: 'd-sub', style: 'margin-top:0;min-height:44px;display:flex;align-items:center' }, s || ''), h('h1', { class: 'd-h1' }, t)];
-  if (id === 'darstellung') {
-    const seg = h('div', { class: 'seg2', role: 'group', 'aria-label': 'Hell und dunkel', style: 'margin-top:18px' }, Object.entries(label).map(([v, l]) => {
-      const b = h('button', { type: 'button', 'aria-pressed': String(ui.theme === v) }, l);
-      b.addEventListener('click', () => { ui.theme = v; try { localStorage.setItem('d-theme', v); } catch (e) { } applyTheme(); render(); });
-      return b;
-    }));
-    det = h('div', { class: 'd-in' }, ...head('Hell und dunkel', 'Gilt für Handy und Rechner'), seg, h('p', { class: 'd-lede', style: 'color:var(--ink-2);font-size:15px' }, 'Wie das System folgt der Einstellung des Geräts, also abends oft dunkel.'));
-  } else if (id === 'tastatur') {
-    const K = [['Eintragen oder suchen', ['/']], ['Seiten wechseln', ['1', 'bis', '7']], ['In der Liste nach oben und unten', ['↑', '↓']], ['Aufgabe abhaken', ['X']], ['Tisch schließen', ['Esc']], ['Karte aufdecken', ['Leertaste']], ['Daneben oder Saß', ['1', '2']]];
+  if (id === 'tastatur') {
+    const K = [['Eintragen oder suchen', ['/']], ['Seiten wechseln', ['1', 'bis', '7']], ['In der Liste nach oben und unten', ['↑', '↓']], ['Aufgabe abhaken', ['X']], ['Tisch schließen', ['Esc']], ['Karte aufdecken', ['Leertaste']], ['Daneben oder Saß', ['1', '2']], ['Arbeitsblatt drucken', ['P']]];
     det = h('div', { class: 'd-in' }, ...head('Tastatur', 'Nur am Rechner'), h('div', { class: 'keys' }, K.map(([t, ks]) => h('div', { class: 'key-row' }, h('span', null, t), h('span', null, ks.map(k => k === 'bis' ? h('span', { style: 'font-size:13px;color:var(--ink-3);margin:0 6px' }, 'bis') : h('span', { class: 'kbd' }, k)))))));
   } else if (id === 'stundenplan') {
     det = h('div', { class: 'd-in' }, ...head('Stundenplan', `${Object.values(PLAN).flat().length} Stunden in der Woche`), h('div', { style: 'height:12px' }),
       rowBtn('In der Woche ansehen', 'Montag bis Freitag', () => go('woche')), rowBtn('Zeiten der Stunden', '4 Stunden, ab 08:00', () => toast('Im Entwurf nicht eingebaut')));
-  } else {
+  } else if (id === 'epoche') {
     det = h('div', { class: 'd-in' }, ...head('Epoche', 'Hauptunterricht'), h('div', { style: 'height:12px' }),
       rowBtn(F(EPOCHE.fach).name, `Seit ${lang(EPOCHE.seit)}`, () => go('faecher', { fach: EPOCHE.fach })));
+  } else {
+    const row = SET.flatMap(x => x[1]).find(x => x[0] === id);
+    det = h('div', { class: 'd-in' }, ...head(row[1], row[2]), h('p', { class: 'p-sub', style: 'margin-top:14px' }, 'Hier steht die Seite der App, wie sie ist. Im Entwurf nicht nachgebaut.'));
   }
   return split(list, det);
 }
@@ -1937,15 +2060,32 @@ addEventListener('dragenter', e => { if (![...(e.dataTransfer?.types || [])].inc
 addEventListener('dragleave', () => { dragN = Math.max(0, dragN - 1); if (!dragN) $('#drop').classList.remove('on'); });
 addEventListener('dragover', e => e.preventDefault());
 addEventListener('drop', e => { e.preventDefault(); dragN = 0; $('#drop').classList.remove('on'); ablegen([...(e.dataTransfer?.files || [])].filter(f => /^image\/|pdf$/.test(f.type))); });
+/* Wie die Kamera: jede Datei wird ein Blatt, Jev ordnet ein. Mehrere Bilder auf einmal
+   können auch ein Blatt mit mehreren Seiten sein (am Handy „Seite dazu“), das fragt ein Dialog */
 function ablegen(files) {
   if (!files.length) return;
-  const neu = files.map(f => {
-    const b = { id: 'n' + (nextId++), fach: null, titel: null, thema: null, datum: heute(), seiten: 1, status: 'neu', abschrift: null };
-    if (f.type.startsWith('image/')) b.bild = URL.createObjectURL(f);
-    db.blaetter.unshift(b); return b;
-  });
-  if (['heute', 'ablage'].includes(ui.view)) render();
-  toast(neu.length === 1 ? 'Blatt abgelegt' : `${cap(zahl(neu.length, 'n'))} Blätter abgelegt`, () => go('ablage', { blatt: neu[0].id }), null, 'Ansehen');
+  const anlegen = gruppen => {
+    const neu = gruppen.map(fs => {
+      const b = { id: 'n' + (nextId++), fach: null, titel: null, thema: null, datum: heute(), seiten: fs.length, status: 'neu', abschrift: null, bilder: fs.map(f => f.type.startsWith('image/') ? URL.createObjectURL(f) : null) };
+      b.bild = b.bilder[0] || null;
+      db.blaetter.unshift(b); return b;
+    });
+    if (['heute', 'ablage'].includes(ui.view)) render();
+    toast(neu.length === 1 ? 'Blatt abgelegt' : `${cap(zahl(neu.length, 'n'))} Blätter abgelegt`, () => go('ablage', { blatt: neu[0].id }), null, 'Ansehen');
+  };
+  if (files.length === 1) { anlegen([files]); return; }
+  const n = files.length;
+  const eins = h('button', { class: 'btn quiet', type: 'button' }, `Ein Blatt, ${n} Seiten`);
+  const viele = h('button', { class: 'btn primary', type: 'button' }, `${cap(zahl(n, 'n'))} Blätter`);
+  const close = dialog([h('h2', null, `${cap(zahl(n, 'n'))} Bilder`), h('p', null, 'Gehören sie zu einem Blatt, oder ist jedes ein eigenes?'), h('div', { class: 'd-foot' }, eins, viele)]);
+  eins.addEventListener('click', () => { close(); anlegen([files]); });
+  viele.addEventListener('click', () => { close(); anlegen(files.map(f => [f])); });
+}
+/* „Seite dazu“ am Blatt: hängt eine Datei als weitere Seite an */
+function seiteDazu(b) {
+  const inp = h('input', { type: 'file', accept: 'image/*,application/pdf', multiple: true, hidden: true });
+  inp.addEventListener('change', () => { const fs = [...inp.files]; if (!fs.length) return; b.bilder = (b.bilder || [bildVon(b)]).concat(fs.map(f => URL.createObjectURL(f))); b.seiten += fs.length; render(); toast(fs.length === 1 ? 'Seite angehängt' : `${cap(zahl(fs.length, 'f'))} Seiten angehängt`); });
+  document.body.append(inp); inp.click(); setTimeout(() => inp.remove(), 60000);
 }
 
 /* ================= Tisch: Lernblock mit Arbeitsblatt und Wiederholen ================= */
@@ -1956,7 +2096,9 @@ function openTisch(mode, origin) {
   T.mode = mode; T.origin = origin; T.zuLoesung = false;
   tisch.classList.add('open');
   if (mode === 'blatt') { if (db.block === 'idle') db.block = 'laeuft'; buildBlatt(); startClock(); }
-  else { T.q = FRAGEN.slice(); T.i = 0; T.first = {}; T.flipped = false; buildKarten(); $('#tRight').replaceChildren(h('span', { class: 't-of' }, 'Thema 1 von 3')); }
+  else { T.q = FRAGEN.slice(); T.i = 0; T.first = {}; T.flipped = false; T.uhr = mode === 'lernkarten'; T.mode = 'karten'; buildKarten();
+    /* Lernblock ohne Arbeitsblatt: dieselben Karten, oben rechts die Uhr wie beim Arbeitsblatt */
+    if (T.uhr) startClock(); else $('#tRight').replaceChildren(h('span', { class: 't-of' }, 'Thema 1 von 3')); }
   const s = $('#tSurf'), body = $('#tBody');
   if (reduce() || !origin) { tisch.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160 }); return; }
   /* die Fläche wächst aus dem Knopf, den er gedrückt hat; der Inhalt kommt danach */
@@ -2033,15 +2175,26 @@ const a4Seite = (tid, side) => h('div', { class: 'a4', 'aria-hidden': 'true', ht
 function buildBlatt() {
   const tid = 'ma-qf', U = UEBUNG[tid], st = db.blatt;
   const pagesBox = h('div', { class: 'd-pages' });
-  const papers = [];
-  [[1, 'Aufgaben'], [2, 'Lösungen']].forEach(([side, l]) => {
-    const paper = h('div', { class: 'tb-paper' }, a4Seite(tid, side));
-    papers.push(paper);
-    pagesBox.append(h('div', { class: 'tb-page' }, h('p', { class: 'tb-cap' }, h('span', null, `Seite ${side} · ${l}`), h('span', null, 'A4')), paper));
-  });
-  /* Lesegröße: so breit, wie die linke Fläche es zulässt, höchstens Originalgröße */
+  let papers = [];
+  /* Vor dem Bewerten liegt nur die Aufgabenseite offen. Die Lösungsseite ist zugeklappt,
+     auf ihr steht „Erst nach dem Lösen ansehen“; gedruckt werden beide */
+  const pages = () => {
+    const offen = st.phase !== 'vorschau';
+    papers = [];
+    pagesBox.replaceChildren();
+    [[1, 'Aufgaben'], [2, 'Lösungen']].forEach(([side, l]) => {
+      if (side === 2 && !offen) { pagesBox.append(h('div', { class: 'd-fold' }, h('span', null, `Seite ${side} · ${l}`), h('span', null, 'Erst nach dem Lösen'))); return; }
+      const paper = h('div', { class: 'tb-paper' }, a4Seite(tid, side));
+      papers.push(paper);
+      pagesBox.append(h('div', { class: 'tb-page' }, h('p', { class: 'tb-cap' }, h('span', null, `Seite ${side} · ${l}`), h('span', null, 'A4')), paper));
+    });
+  };
+  pages();
+  /* Lesegröße: so breit, wie die linke Fläche es zulässt, höchstens Originalgröße.
+     Zwei Seiten nebeneinander erst beim Bewerten und nur, wenn jede mindestens 560 px breit wird */
   const fit = () => {
-    const cw = pagesBox.clientWidth - 80, two = cw >= 2 * 560 + 28;
+    const cw = pagesBox.clientWidth - 80, two = papers.length === 2 && cw >= 2 * 560 + 28;
+    const fold = pagesBox.querySelector('.d-fold'); if (fold) fold.style.width = `${Math.min(A4W, cw)}px`;
     pagesBox.classList.toggle('two', two);
     const w = Math.min(A4W, two ? (cw - 28) / 2 : cw), s = w / A4W;
     papers.forEach(p => { p.style.width = `${A4W * s}px`; p.style.height = `${A4H * s}px`; p.firstChild.style.transform = `scale(${s})`; });
@@ -2063,6 +2216,7 @@ function buildBlatt() {
         return h('li', { class: 'tb-row', dataset: { nr } }, h('span', { class: 'nr' }, String(nr)), h('span', { class: 'k', html: mx(a.kurz) }), h('div', { class: 'tb-seg', role: 'group', 'aria-label': `Aufgabe ${nr}` }, mk(true, 'Richtig'), mk(false, 'Falsch')));
       });
       kids.push(h('div', { class: 'tb-wert' }, h('h2', null, 'Wie lief es?'), h('p', null, 'Vergleiche mit dem Lösungsblatt. Dann klick je Aufgabe an, wie es lief.'), h('ol', { class: 'tb-rows' }, rows)));
+      if (!papers[1]) { pages(); fit(); }
       requestAnimationFrame(() => { if (!pagesBox.classList.contains('two') && !T.zuLoesung) { T.zuLoesung = true; const p2 = pagesBox.children[1]; pagesBox.scrollTo({ top: p2.offsetTop - 8, behavior: reduce() || QS.has('tisch') ? 'auto' : 'smooth' }); } });
       const offen = U.aufgaben.length - Object.keys(st.wertung).length;
       const main = h('button', { class: 'tb-main', type: 'button', 'aria-disabled': String(offen > 0) }, 'Fertig');
@@ -2072,7 +2226,7 @@ function buildBlatt() {
     } else {
       kids.push(h('p', { class: 'd-lead' }, `Arbeitsblatt · ${U.aufgaben.length} Aufgaben, etwa ${U.minuten} Minuten`),
         h('p', { class: 'd-lead', style: 'font-size:15px;margin-top:14px' }, 'Drucken, auf Papier lösen, dann hier eintragen, wie es lief.'));
-      const main = h('button', { class: 'tb-main', type: 'button' }, 'Arbeitsblatt drucken', h('span', { class: 'k' }, 'P'));
+      const main = h('button', { class: 'tb-main', type: 'button' }, 'Arbeitsblatt drucken', h('span', { class: 'd-k' }, 'P'));
       main.addEventListener('click', drucken);
       const art = h('button', { class: 'tb-art', type: 'button' }, 'Dieses Thema lieber abfragen');
       art.addEventListener('click', () => toast('Ab jetzt mit Karten'));
@@ -2114,10 +2268,10 @@ function buildKarten() {
   const under = [1, 2].map(p => h('div', { class: 'sc', dataset: { pos: String(p) } }, h('div', { class: 'sc-lift' }, h('div', { class: 'sc-flip' }, h('div', { class: 'face front' })))));
   const stack = h('div', { class: 't-stack' }, ...under.reverse(), card);
   const ask = h('div', { class: 't-ask', style: T.flipped ? 'visibility:hidden' : null },
-    h('button', { class: 'rb', type: 'button', onclick: () => reveal(ta) }, 'Weiß ich nicht'), h('button', { class: 'rb known', type: 'button', onclick: () => reveal(ta) }, 'Aufdecken', h('span', { class: 'k' }, 'Leertaste')));
+    h('button', { class: 'rb', type: 'button', onclick: () => reveal(ta) }, 'Weiß ich nicht'), h('button', { class: 'rb known', type: 'button', onclick: () => reveal(ta) }, 'Aufdecken', h('span', { class: 'd-k' }, 'Leertaste')));
   const rate = h('div', { class: 't-rate', style: T.flipped ? 'visibility:visible' : null },
-    h('button', { class: 'rb', type: 'button', onclick: () => rateQ(false) }, 'Daneben', h('span', { class: 'k' }, '1')), h('button', { class: 'rb known', type: 'button', onclick: () => rateQ(true) }, 'Saß', h('span', { class: 'k' }, '2')));
-  box.append(h('div', { class: 't-head' }, h('p', { class: 't-fach' }, 'Epoche · Geschichte'), h('p', { class: 't-thema' }, 'Industrialisierung in England')), ticks,
+    h('button', { class: 'rb', type: 'button', onclick: () => rateQ(false) }, 'Daneben', h('span', { class: 'd-k' }, '1')), h('button', { class: 'rb known', type: 'button', onclick: () => rateQ(true) }, 'Saß', h('span', { class: 'd-k' }, '2')));
+  box.append(h('div', { class: 't-head' }, h('p', { class: 't-fach' }, T.uhr ? 'Geschichte · Lernblock' : 'Epoche · Geschichte'), h('p', { class: 't-thema' }, 'Industrialisierung in England')), ticks,
     h('div', { class: 't-meta' }, h('p', { class: 't-count' }, T.i === 0 ? `${T.q.length} Fragen` : `Noch ${T.q.length - T.i} von ${T.q.length}`)), stack, h('div', { class: 't-foot' }, ask, rate));
   tK.replaceChildren(box);
   requestAnimationFrame(() => {
@@ -2158,7 +2312,7 @@ addEventListener('keydown', e => {
     } else if (T.mode === 'blatt' && (e.key === 'p' || e.key === 'P') && !e.metaKey && !e.ctrlKey && db.blatt.phase === 'vorschau') drucken();
     return;
   }
-  if (typing) return;
+  if (typing || $('#dlg').classList.contains('on')) return;
   if (e.key === '/' || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) { e.preventDefault(); field.focus(); return; }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const n = Number(e.key);
@@ -2172,7 +2326,7 @@ addEventListener('keydown', e => {
     selectIn(key, ids[Math.max(0, Math.min(ids.length - 1, at + d))], { key: true });
     $(`.view[data-v="${ui.view}"] .d-list .sel`)?.scrollIntoView({ block: 'nearest' });
   }
-  if (ui.view === 'hausaufgaben' && (e.key === 'x' || e.key === 'X')) { const a = db.aufgaben.find(x => x.id === ui.sel.hausaufgaben); if (a) { toggleTask(a, null); render(); } }
+  if (ui.view === 'hausaufgaben' && (e.key === 'x' || e.key === 'X')) { const a = db.aufgaben.find(x => x.id === ui.sel.hausaufgaben) || db.archiv.find(x => x.id === ui.sel.hausaufgaben); if (a) { toggleTask(a, null); render(); } }
 });
 
 /* ================= Start ================= */
@@ -2184,7 +2338,7 @@ const tq = QS.get('tisch');
 if (tq) {
   if (tq === 'wertung') { db.blatt.phase = 'bewerten'; db.blatt.wertung = { 1: true, 2: true, 3: false }; }
   if (tq === 'ende') { db.blatt.phase = 'fertig'; db.blatt.wertung = { 1: true, 2: true, 3: false, 4: true, 5: true, 6: true }; }
-  openTisch(tq === 'karten' || tq === 'aufgedeckt' ? 'karten' : 'blatt', null);
+  openTisch(tq === 'karten' || tq === 'aufgedeckt' ? 'karten' : tq === 'lernblock' ? 'lernkarten' : 'blatt', null);
   if (tq === 'aufgedeckt') { const ta = $('.d-cards textarea'); ta.value = 'England, um 1760'; reveal(ta); }
 }
 if (QS.get('q') != null) { field.focus(); field.value = QS.get('q'); field.dispatchEvent(new Event('input')); }

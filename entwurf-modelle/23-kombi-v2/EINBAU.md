@@ -101,6 +101,16 @@ Ablauf im Ganzen:
    ```
    Einzelne Zeilen: `DELETE FROM free_periods WHERE id = '…' AND quelle IS NULL`. Danach `kalender.sh` (oder den nächsten stündlichen Lauf) abwarten; der doppelte Balken verschwindet aus Google. Die Zählzeilen dazu stehen im Kopf von `kombi-iserv-ferien.sql`. Wer nicht warten will: `UPDATE iserv_state SET last_attempt_at = NULL` und dann `kalender.sh`.
 
+## Am Rechner (Entwurf, noch nicht gebaut)
+
+Entwurf: `desktop.html`. Alle Regeln dort gelten erst ab 1024 px, darunter bleibt alles wie oben. Bezug für Farben und Klassen ist `src/app/kombi.css`, nicht `index.html`.
+
+- **Kein Ablauf am Rechner.** Fotos macht das Handy. Am Rechner zeigt die Startseite auch nach der Schule gleich den Überblick. Wer `/ablauf` direkt aufruft, bekommt ihn als Spalte bis 680 px.
+- **Hell und dunkel** folgen dem System, wie am Handy. Einen Umschalter gibt es auch am Rechner nicht.
+- **Hochladen statt Kamera.** Ein Bild wird ein Blatt. Mehrere Bilder auf einmal fragen: ein Blatt mit mehreren Seiten oder je Bild ein Blatt. Am Blatt hängt „Seite dazu“ weitere Seiten an. Danach steht dort „Wird eingeordnet …“ und „Abschrift folgt“, wie am Handy.
+- **Lösungsblatt erst beim Bewerten.** Vor dem Drucken liegt nur die Aufgabenseite offen, die Lösungsseite ist zugeklappt. Gedruckt werden beide.
+- **Unterseiten im Detail.** Formulare (Aufgabe, Klausur, Note), Archiv, Eingangskorb und die Unterseiten der Einstellungen öffnen rechts neben der Liste, nicht als eigener Stapel. Kurze Fragen kommen als Dialog in der Mitte statt als Sheet.
+
 ## Was offen ist
 
 - **Dein Durchklicken am Handy.** Geprüft haben bisher nur Tests, Agenten und Playwright. Fehler, die man nur in der Hand merkt, fehlen noch. Bitte hell und dunkel, mit echter Kamera und mit Drucken.
