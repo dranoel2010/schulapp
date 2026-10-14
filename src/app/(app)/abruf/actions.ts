@@ -344,11 +344,13 @@ export async function versuchAction(
   answerText: string,
 ): Promise<VersuchErgebnis> {
   const user = await requireUser();
+  const now = await jetzt();
 
   return versuchFesthalten(
     user.id,
     { scheduleId, itemId, answerText },
-    todayInBerlin(),
+    todayInBerlin(now),
+    now,
   );
 }
 

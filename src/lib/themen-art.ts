@@ -23,6 +23,10 @@ import { protokollieren, protokollLoeschen } from "@/lib/protokoll";
  * Stichwörter für Grammatik im Thementitel. Verglichen wird ohne
  * Groß-/Kleinschreibung und ohne Akzente („passé“ = „passe“), als ganzes Wort
  * mit üblicher Endung („Zeiten“, „Satzglieder“).
+ *
+ * „Futur“ allein steht nicht hier: mit Endung träfe es englisch „future“
+ * („My future job“). Hier stehen nur die französischen Zeiten; das nackte
+ * Wort gilt in Französisch und Deutsch (`FUTUR_FAECHER`).
  */
 export const GRAMMATIK_STICHWORTE = [
   "Grammatik",
@@ -34,7 +38,10 @@ export const GRAMMATIK_STICHWORTE = [
   "passé composé",
   "imparfait",
   "plus-que-parfait",
-  "futur",
+  "futur simple",
+  "futur proche",
+  "futur composé",
+  "futur antérieur",
   "subjonctif",
   "conditionnel",
   "tense",
@@ -137,9 +144,21 @@ const STICHWORT_MUSTER = GRAMMATIK_STICHWORTE.map(
     ),
 );
 
-export function hatGrammatikStichwort(titel: string): boolean {
+/** „Futur“ als ganzes Wort, mit „Futur I“, „Futur II“, „le futur“. */
+const FUTUR_MUSTER = /(^|[^a-z0-9])futur($|[^a-z0-9])/;
+
+/** Fächer, in denen das nackte „Futur“ Grammatik ist. Englisch nicht. */
+const FUTUR_FAECHER = new Set(["fr", "de"]);
+
+/**
+ * Hat der Titel ein Grammatik-Stichwort? Mit Fach gilt zusätzlich das nackte
+ * „Futur“, wenn das Fach Französisch oder Deutsch ist.
+ */
+export function hatGrammatikStichwort(titel: string, fach?: { name: string }): boolean {
   const text = normText(titel);
-  return STICHWORT_MUSTER.some((muster) => muster.test(text));
+  if (STICHWORT_MUSTER.some((muster) => muster.test(text))) return true;
+  const sprache = fach ? fachSprache(fach.name) : null;
+  return sprache !== null && FUTUR_FAECHER.has(sprache) && FUTUR_MUSTER.test(text);
 }
 
 /**
@@ -159,7 +178,7 @@ export function istGrammatikThema(
 ): boolean {
   return (
     fachArt(fach.name) === "sprache" &&
-    hatGrammatikStichwort(thema.title) &&
+    hatGrammatikStichwort(thema.title, fach) &&
     themaArt(thema, fach) === "ueben"
   );
 }
@@ -189,7 +208,7 @@ export function artAbgeleitet(
 ): ThemaArt {
   const art = fachArt(fach.name);
   if (art === "rechnen") return "ueben";
-  if (art === "sprache" && hatGrammatikStichwort(thema.title)) return "ueben";
+  if (art === "sprache" && hatGrammatikStichwort(thema.title, fach)) return "ueben";
   return "abfragen";
 }
 

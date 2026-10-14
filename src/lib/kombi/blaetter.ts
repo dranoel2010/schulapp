@@ -295,7 +295,7 @@ export async function blattKurz(userId: string, id: string): Promise<BlattKurz |
  *
  * Gibt `false` zurück, wenn Blatt oder Fach nicht (mehr) dem Nutzer gehören.
  */
-export async function fachAendern(userId: string, materialId: string, subjectId: string): Promise<boolean> {
+export async function fachAendern(userId: string, materialId: string, subjectId: string, now: Date = new Date()): Promise<boolean> {
   if (!(await ownsSubject(userId, subjectId))) return false;
   const geaendert = await db.transaction(async (tx) => {
     const [alt] = await tx
@@ -312,6 +312,6 @@ export async function fachAendern(userId: string, materialId: string, subjectId:
     return true;
   });
   if (!geaendert) return false;
-  await markFiled(userId, materialId, true);
+  await markFiled(userId, materialId, true, now);
   return true;
 }

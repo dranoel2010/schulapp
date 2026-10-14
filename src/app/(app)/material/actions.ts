@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 
 import { requireUser } from "@/lib/auth";
+import { jetzt } from "@/lib/tag";
 import { formErrors } from "@/lib/form-errors";
 import { markFiled } from "@/lib/inbox";
 import { claudeConfigured } from "@/lib/claude/client";
@@ -240,7 +241,7 @@ export async function updateMaterialAction(
     // nicht noch einmal an), und genau dann steht es unten im Satz. Wer bloß
     // eine Notiz an einem längst eingeordneten Blatt richtigstellt, liest
     // deshalb nichts davon.
-    const abgehakt = await markFiled(user.id, id, true);
+    const abgehakt = await markFiled(user.id, id, true, await jetzt());
 
     revalidateMaterial(id);
 

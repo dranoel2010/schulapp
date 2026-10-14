@@ -50,8 +50,8 @@ import { urteilFesthalten, versuchFesthalten } from "@/recall/sessions";
  * (Wechsel 04:00), damit Überblick, Klausurseite und Tisch zwischen 0 und
  * 4 Uhr denselben Tag meinen. Nur die Schreibwege des Abrufkerns
  * (`versuchFesthalten`, `neuPlanen`) bleiben beim Berliner Kalendertag.
- * Die Testuhr (`jetzt()`) kommt mit Abschnitt B; bis dahin ist „jetzt“
- * `new Date()`.
+ * Die Uhr ist überall `jetzt()`: ohne Testuhr `new Date()`, mit Testuhr die
+ * Testuhr, auch für die Lernblock-Uhr und `answered_at`.
  */
 
 const id = z.uuid();
@@ -120,10 +120,12 @@ export async function lernblockVersuchAction(
     .safeParse({ scheduleId, itemId, antwort });
   if (!p.success) return { ok: false };
 
+  const now = await jetzt();
   const r = await versuchFesthalten(
     user.id,
     { scheduleId: p.data.scheduleId, itemId: p.data.itemId, answerText: p.data.antwort },
-    todayInBerlin(),
+    todayInBerlin(now),
+    now,
   );
   if (!r.ok) return { ok: false };
   return {
@@ -163,8 +165,8 @@ export async function lernblockZurueckziehenAction(itemId: string): Promise<{ ok
 /** Starten oder, wenn pausiert, fortsetzen (Prototyp `openTisch` im Block). */
 export async function lernblockStartenAction(blockId: string): Promise<Antwort<{ block: BlockDaten }>> {
   const user = await requireUser();
-  const now = new Date();
-  await blockStarten(user.id, id.parse(blockId), now, appTag(await jetzt()));
+  const now = await jetzt();
+  await blockStarten(user.id, id.parse(blockId), now, appTag(now));
   const block = await blockLesen(user.id, blockId);
   return block ? { ok: true, block } : { ok: false, fehler: "Diesen Lernblock gibt es nicht." };
 }
@@ -175,8 +177,8 @@ export async function lernblockUhrAction(
   was: "pause" | "weiter",
 ): Promise<Antwort<{ block: BlockDaten }>> {
   const user = await requireUser();
-  const now = new Date();
-  const tag = appTag(await jetzt());
+  const now = await jetzt();
+  const tag = appTag(now);
   if (z.enum(["pause", "weiter"]).parse(was) === "pause") await blockPausieren(user.id, id.parse(blockId), now, tag);
   else await blockFortsetzen(user.id, id.parse(blockId), now, tag);
   const block = await blockLesen(user.id, blockId);
@@ -191,8 +193,8 @@ export async function lernblockBeendenAction(
   blockId: string,
 ): Promise<Antwort<{ ende: BlockEnde; block: BlockDaten }>> {
   const user = await requireUser();
-  const now = new Date();
-  const ende = await blockBeenden(user.id, id.parse(blockId), now, appTag(await jetzt()));
+  const now = await jetzt();
+  const ende = await blockBeenden(user.id, id.parse(blockId), now, appTag(now));
   const block = await blockLesen(user.id, blockId);
   return block ? { ok: true, ende, block } : { ok: false, fehler: "Diesen Lernblock gibt es nicht." };
 }
@@ -327,7 +329,7 @@ export async function lernplanNeuAction(examId: string): Promise<Antwort<{ bloec
  */
 export async function termineNeuAction(): Promise<Antwort<{ termine: number; bausteine: number }>> {
   const user = await requireUser();
-  const r = await neuPlanen(user.id, todayInBerlin());
+  const r = await neuPlanen(user.id, todayInBerlin(await jetzt()));
   return { ok: true, ...r };
 }
 

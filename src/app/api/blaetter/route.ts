@@ -78,7 +78,7 @@ export async function POST(request: Request) {
   if (ergebnis.wiederholt) {
     // schon angekommen: weder Testweiche noch Zuteilung ein zweites Mal
   } else if (test) {
-    await abschriftScheitern(user.id, ergebnis.id);
+    await abschriftScheitern(user.id, ergebnis.id, now);
   } else {
     // Wer die Seite liest, entscheidet die App, nach der Antwort: die Kamera
     // wartet nicht auf den Leser.

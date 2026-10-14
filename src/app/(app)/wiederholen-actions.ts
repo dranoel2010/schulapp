@@ -49,10 +49,12 @@ export async function versuchThemaAction(
     .safeParse({ scheduleId, itemId, antwort });
   if (!p.success) return { ok: false };
 
+  const now = await jetzt();
   const r = await versuchFesthalten(
     user.id,
     { scheduleId: p.data.scheduleId, itemId: p.data.itemId, answerText: p.data.antwort },
-    todayInBerlin(),
+    todayInBerlin(now),
+    now,
   );
   if (!r.ok) return { ok: false };
   return {

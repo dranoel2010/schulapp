@@ -309,6 +309,8 @@ export async function versuchFesthalten(
   userId: string,
   versuch: Versuch,
   heute: string = todayInBerlin(),
+  /** Die App-Uhr des Aufrufers (`jetzt()`, mit Testuhr die Testuhr) */
+  now: Date = new Date(),
 ): Promise<VersuchErgebnis> {
   // Derselbe nackte POST kann auch eine id schicken, die keine ist — dann
   // antwortete nicht die App, sondern Postgres. Siehe @/recall/ids.
@@ -355,6 +357,7 @@ export async function versuchFesthalten(
       itemId: termin.itemId,
       scheduleId: termin.id,
       sourcePageId: termin.pageId,
+      answeredAt: now,
       answeredOn: heute,
       gapDays,
       level: versuch.level ?? "frei",

@@ -104,6 +104,8 @@ export async function applyProposal(
     nurUngelesene?: boolean;
     nurVorschlag?: string;
     nurAbschrift?: boolean;
+    /** Die App-Uhr für `filed_at`; ohne Angabe die Uhr des Rechners */
+    now?: Date;
   },
 ): Promise<AppliedProposal | null> {
   // Ohne Themen-Schreiben gibt es nichts zu melden; die Zahlen bleiben 0.
@@ -187,7 +189,7 @@ export async function applyProposal(
   // Erst ganz zum Schluss abhaken. Ein schon gesetzter Zeitpunkt bleibt dabei
   // stehen — `markFiled()` fasst ihn nicht noch einmal an, damit „wann hat ein
   // Mensch hingesehen?“ eine Antwort behält.
-  await markFiled(userId, materialId, true);
+  await markFiled(userId, materialId, true, options?.now);
 
   return {
     entfernt,

@@ -177,9 +177,9 @@ async function seiteDran(
  * „letzte Lauf“ endete ohne Ergebnis. So steht die rote Zeile „Abschrift
  * fehlgeschlagen“ mit „Erneut versuchen“ ohne echten Lauf da.
  */
-export async function abschriftScheitern(userId: string, materialId: string): Promise<void> {
+export async function abschriftScheitern(userId: string, materialId: string, now: Date): Promise<void> {
   if (process.env.SCHULAPP_TESTUHR !== "1") return;
-  await markFiled(userId, materialId, true);
+  await markFiled(userId, materialId, true, now);
   await db.update(materialPages).set({ leser: "claude" }).where(eq(materialPages.materialId, materialId));
   await db.insert(leserLaeufe).values({
     userId,

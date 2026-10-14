@@ -91,7 +91,7 @@ export async function fachAendernAction(materialId: string, subjectId: string): 
   const user = await requireUser();
   const mid = id.parse(materialId);
   const sid = id.parse(subjectId);
-  if (!(await fachAendern(user.id, mid, sid))) return null;
+  if (!(await fachAendern(user.id, mid, sid, await jetztFuerAblauf()))) return null;
   // Solange Jev läuft, steht „Thema folgt“; endet der Lauf ohne Thema, bleibt die Zeile leer.
   themenLaufStart(mid);
   after(async () => {

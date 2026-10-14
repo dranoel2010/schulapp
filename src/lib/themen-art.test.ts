@@ -67,6 +67,26 @@ describe("themaArt (Plan 3.6)", () => {
     assert.ok(istGrammatikThema({ title: "Unit 3 if-sentences", art: null }, { name: "Englisch" }));
   });
 
+  it("„Futur“ trifft kein englisches „future“", () => {
+    assert.ok(!hatGrammatikStichwort("My future job"));
+    assert.ok(!hatGrammatikStichwort("My future job", ENGLISCH));
+    assert.equal(artAbgeleitet({ title: "My future job" }, ENGLISCH), "abfragen");
+    assert.ok(!istGrammatikThema({ title: "Talking about the future", art: null }, ENGLISCH));
+    // die französischen Zeiten in jedem Sprachfach
+    for (const titel of ["Le futur simple", "Futur proche", "Le futur composé", "Futur antérieur"])
+      assert.ok(hatGrammatikStichwort(titel), titel);
+    assert.equal(artAbgeleitet({ title: "Futur simple" }, FRANZ), "ueben");
+    // das nackte Wort nur in Französisch und Deutsch
+    assert.ok(!hatGrammatikStichwort("Le futur"));
+    assert.ok(hatGrammatikStichwort("Le futur", FRANZ));
+    assert.ok(hatGrammatikStichwort("Futur I und II", DEUTSCH));
+    assert.ok(!hatGrammatikStichwort("Futur I und II", ENGLISCH));
+    assert.equal(artAbgeleitet({ title: "Futur II" }, DEUTSCH), "ueben");
+    assert.ok(!hatGrammatikStichwort("Future plans", FRANZ));
+    // will-future und going-to-future bleiben Englisch-Grammatik
+    assert.equal(artAbgeleitet({ title: "will-future and going-to-future" }, ENGLISCH), "ueben");
+  });
+
   it("der gespeicherte Wert gewinnt", () => {
     assert.equal(themaArt({ title: "Quadratische Funktionen", art: "abfragen" }, MATHE), "abfragen");
     assert.equal(themaArt({ title: "Quadratische Funktionen", art: null }, MATHE), "ueben");
