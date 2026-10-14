@@ -1,3 +1,8 @@
+import { and, eq, isNull } from "drizzle-orm";
+import { z } from "zod";
+
+import { db } from "@/db";
+import { homework } from "@/db/schema";
 import { createHomework, deleteHomework, getHomework, homeworkInputSchema, setHomeworkDone, updateHomework } from "@/lib/homework";
 import { nachAufgabeGeschrieben } from "@/lib/homework-nachlauf";
 import { protokollieren, protokollLoeschen } from "@/lib/protokoll";
@@ -59,6 +64,39 @@ export async function aufgabeAbhaken(
 export async function abhakenZuruecknehmen(userId: string, id: string, done: boolean, protokollId: string): Promise<Ergebnis> {
   await setHomeworkDone(userId, id, done);
   await protokollLoeschen(userId, protokollId);
+  nachAufgabeGeschrieben(userId);
+  return { ok: true };
+}
+
+const zeitpunkt = z.iso.datetime();
+const kennung = z.uuid();
+
+/**
+ * Rückgängig nach „Wieder öffnen“ im Archiv (Antwort 6): die Aufgabe bekommt
+ * ihr altes `doneAt` zurück, nicht jetzt, und steht damit wieder im Archiv.
+ *
+ * Das alte `doneAt` kommt vom Gerät, also wird geprüft: ein gültiger
+ * Zeitpunkt, nicht nach `jetzt`, die eigene Aufgabe, und sie ist noch offen.
+ * Ist sie inzwischen wieder erledigt (anderer Tab), bleibt ihr neuerer Stand.
+ */
+export async function wiederOeffnenZuruecknehmen(
+  userId: string,
+  id: string,
+  doneAtVorher: string,
+  protokollId: string | null,
+  jetzt: Date,
+): Promise<Ergebnis> {
+  if (!kennung.safeParse(id).success) return { ok: false, fehler: "Ungültig" };
+  if (!zeitpunkt.safeParse(doneAtVorher).success) return { ok: false, fehler: "Ungültig" };
+  const doneAt = new Date(doneAtVorher);
+  if (doneAt.getTime() > jetzt.getTime()) return { ok: false, fehler: "Ungültig" };
+  const a = await getHomework(userId, id);
+  if (!a) return { ok: false, fehler: "Diese Aufgabe gibt es nicht mehr." };
+  await db
+    .update(homework)
+    .set({ doneAt })
+    .where(and(eq(homework.userId, userId), eq(homework.id, id), isNull(homework.doneAt)));
+  if (protokollId && kennung.safeParse(protokollId).success) await protokollLoeschen(userId, protokollId);
   nachAufgabeGeschrieben(userId);
   return { ok: true };
 }

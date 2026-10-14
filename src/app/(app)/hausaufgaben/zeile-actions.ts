@@ -8,6 +8,7 @@ import { homework } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { requestCalendarSync } from "@/lib/calendar/sync";
 import { deleteHomework, getHomework, setHomeworkDone } from "@/lib/homework";
+import { wiederOeffnenZuruecknehmen } from "@/lib/kombi/aufgaben-zeile";
 import { appTagVon } from "@/lib/kombi/tag-daten";
 import { ownsSubject } from "@/lib/materials";
 import { protokollieren, protokollLoeschen } from "@/lib/protokoll";
@@ -25,11 +26,14 @@ import { jetzt } from "@/lib/tag";
 
 const id = z.uuid();
 
-/** Abhaken oder wieder öffnen; gibt die Protokoll-ID für Rückgängig zurück. */
+/**
+ * Abhaken oder wieder öffnen; gibt die Protokoll-ID für Rückgängig zurück,
+ * beim Öffnen dazu das alte `doneAt`, damit Rückgängig es exakt zurückstellt.
+ */
 export async function aufgabeSetzenAction(
   aufgabeId: string,
   done: boolean,
-): Promise<{ ok: boolean; protokollId?: string }> {
+): Promise<{ ok: boolean; protokollId?: string; doneAtVorher?: string | null }> {
   const user = await requireUser();
   const sauber = id.safeParse(aufgabeId);
   if (!sauber.success) return { ok: false };
@@ -44,7 +48,18 @@ export async function aufgabeSetzenAction(
     sauber.data,
   );
   requestCalendarSync(user.id);
-  return { ok: true, protokollId };
+  return { ok: true, protokollId, doneAtVorher: alt.doneAt ? alt.doneAt.toISOString() : null };
+}
+
+/** Rückgängig nach „Wieder öffnen“ im Archiv: das alte `doneAt` gilt wieder. */
+export async function aufgabeWiederAbhakenAction(
+  aufgabeId: string,
+  doneAtVorher: string,
+  protokollId: string | null,
+): Promise<{ ok: boolean }> {
+  const user = await requireUser();
+  const r = await wiederOeffnenZuruecknehmen(user.id, aufgabeId, doneAtVorher, protokollId, await jetzt());
+  return { ok: r.ok };
 }
 
 /** Rückgängig nach dem Abhaken: wieder offen, Protokolleintrag weg. */
