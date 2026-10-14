@@ -85,6 +85,9 @@ export function warnungText(warnings: PlanWarning[]): string | null {
   if (warnings.includes("tight")) {
     return "Bis zur Prüfung bleibt nur ein Lerntag. Der Plan bringt alle Themen an diesem Tag unter, zum Wiederholen reicht die Zeit nicht mehr.";
   }
+  if (warnings.includes("no-days")) {
+    return "Bis zur Prüfung bleibt kein Tag zum Durcharbeiten mehr.";
+  }
   return null;
 }
 
@@ -103,7 +106,8 @@ export type PlanBlockStand = {
  * Prüfung liegen nur offene Lernblöcke, alle an einem Tag, und sie bringen
  * jedes Thema unter. Liegt dort eine Wiederholung oder Probeklausur, ist ein
  * Block erledigt, oder ist ab heute gar nichts mehr geplant (gestrichen oder
- * schon gelernt), entfällt die Warnung.
+ * schon gelernt), entfällt die Warnung. „Kein Tag zum Durcharbeiten“ steht
+ * nur, wenn ab heute kein offener Lern- oder Wiederholungsblock mehr kommt.
  */
 export function planWarnungen(
   warnings: PlanWarning[],
@@ -112,8 +116,14 @@ export function planWarnungen(
   klausurTag: string,
   themen: number,
 ): PlanWarning[] {
-  if (!warnings.includes("tight")) return warnings;
   const ab = bloecke.filter((b) => b.status !== "skipped" && b.date >= heute && b.date < klausurTag);
+  // „Kein Tag zum Durcharbeiten“ gilt nur, wenn ab heute kein offener Lern-
+  // oder Wiederholungsblock mehr steht (etwa nach dem Nachholen vor der Probe).
+  const gemeldet =
+    warnings.includes("no-days") && ab.some((b) => b.kind !== "probe" && b.status === "open")
+      ? warnings.filter((w) => w !== "no-days")
+      : warnings;
+  if (!gemeldet.includes("tight")) return gemeldet;
   const tage = new Set(ab.map((b) => b.date));
   const themenAmTag = new Set(ab.map((b) => b.topicId).filter((t): t is string => t !== null));
   const passt =
@@ -121,7 +131,7 @@ export function planWarnungen(
     tage.size === 1 &&
     ab.every((b) => b.kind === "learn" && b.status === "open") &&
     themenAmTag.size >= themen;
-  return passt ? warnings : warnings.filter((w) => w !== "tight");
+  return passt ? gemeldet : gemeldet.filter((w) => w !== "tight");
 }
 
 export async function klausurSeite(

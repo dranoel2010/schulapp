@@ -229,7 +229,11 @@ function freieTageFuerProbe(input: { examDate: string; today: string; excludedDa
  * beim Planen bekommen hat.
  *
  * Liegt die Probe an einem freien Tag, gehört er nicht zu `studyDays`: die
- * Lerntage bleiben alle zum Durcharbeiten und Wiederholen.
+ * Lerntage bleiben alle zum Durcharbeiten und Wiederholen. Liegt vor ihr
+ * dann kein Tag zum Durcharbeiten (Ferien nachträglich eingetragen, oder
+ * Nachholen in den Ferien), zieht sie auf den Lerntag danach, wie beim
+ * Planen, auch wenn sie schon im Plan steht (`fest`). Nur `behalten` lässt
+ * sie am freien Tag.
  */
 export function tageAufteilen(
   examDate: string,
@@ -259,10 +263,18 @@ export function tageAufteilen(
   const vorher = learnDays.filter((day) => day < probeTag);
   const nachher = learnDays.filter((day) => day > probeTag);
   if (vorher.length === 0) {
-    if (optionen.fest || optionen.behalten?.(probeTag)) {
+    const amFreienTag = !studyDays.includes(probeTag);
+    if (optionen.behalten?.(probeTag) || (optionen.fest && !amFreienTag)) {
       // Die Probe bleibt; was noch durchzuarbeiten ist, kommt danach, zuerst
       // durcharbeiten, dann wiederholen.
       return { probeTag, ...splitDays(rest) };
+    }
+    // Am freien Tag, und danach liegt nur noch der Lerntag zum Durcharbeiten:
+    // sie zieht auf diesen Lerntag, wie beim Planen, statt zu entfallen oder
+    // Stoff zu prüfen, der erst danach dran ist.
+    const danach = amFreienTag ? studyDays.find((day) => day > probeTag) : undefined;
+    if (danach) {
+      return tageAufteilen(examDate, studyDays, true, { ...optionen, fest: danach, abstand: undefined });
     }
     return { probeTag: null, ...splitDays(studyDays) };
   }
@@ -343,7 +355,16 @@ export function buildPlan(input: PlanInput): Plan {
 
   const warnings: PlanWarning[] = [];
   if (topics.length === 0) warnings.push("no-topics");
-  if (studyDays.length === 0 && !probeTag) warnings.push("no-days");
+  // Kein Tag zum Lernen oder Wiederholen: auch mit Probe eine Warnung, wenn
+  // freie Tage die Lerntage genommen haben. Ohne freie Tage (Test morgen)
+  // deckt die Probe den Stoff ab, wie gewollt.
+  const freieImVorlauf = studyDaysFor({ ...input, excludedDates: [] }).length > studyDays.length;
+  if (
+    (studyDays.length === 0 && !probeTag) ||
+    (topics.length > 0 && probeTag && learnDays.length === 0 && reviewDays.length === 0 && freieImVorlauf)
+  ) {
+    warnings.push("no-days");
+  }
   if (topics.length > 0 && studyDays.length > 0 && reviewDays.length === 0 && !probeTag) {
     // Ein einziger Tag: es reicht gerade fürs Durcharbeiten, wiederholt wird nicht mehr.
     warnings.push("tight");
@@ -408,7 +429,9 @@ export function buildPlan(input: PlanInput): Plan {
  *
  * Verplant werden nur die übergebenen Blöcke; alles Erledigte bleibt, wo es
  * ist. Reicht die Zeit nicht mehr, wird trotzdem alles untergebracht: ein
- * voller Tag ist besser als ein verlorenes Thema.
+ * voller Tag ist besser als ein verlorenes Thema. Nur in die Ferien kommt
+ * nichts außer der Probe: ist heute frei und bleibt bis zur Klausur kein
+ * Lerntag, bekommen Lernen und Wiederholen keinen Tag.
  */
 export function replanOpen(
   input: PlanInput & {
@@ -455,8 +478,16 @@ export function replanOpen(
   const freeLearnDays = preferFree(learnDays);
   const freeReviewDays = preferFree(reviewDays);
 
-  // Wenn nichts mehr übrig ist, bleibt heute (die Prüfung ist frühestens morgen).
-  const lastResort = [input.today];
+  // Bleibt kein Tag zum Lernen oder Wiederholen, gehört der einzige Lerntag
+  // der Probe: der Rest kommt mit an diesen Tag, vor die Probe. Gibt es gar
+  // keinen Lerntag mehr, bleibt heute, außer heute ist frei: Ferien bleiben
+  // frei, die Blöcke bekommen dann keinen Tag (der Aufrufer lässt sie stehen).
+  const lastResort =
+    studyDays.length > 0
+      ? [studyDays[studyDays.length - 1]]
+      : (input.excludedDates ?? []).includes(input.today)
+        ? []
+        : [input.today];
   const learnTargets =
     freeLearnDays.length > 0
       ? freeLearnDays
@@ -479,32 +510,37 @@ export function replanOpen(
   const probe = open.filter((block) => block.kind === "probe");
 
   const dateById = new Map<string, string>();
-  learn.forEach((block, index) => {
-    dateById.set(
-      block.id,
-      learnTargets[slotFor(index, learn.length, learnTargets.length)],
-    );
-  });
-  review.forEach((block, index) => {
-    dateById.set(
-      block.id,
-      reviewTargets[slotFor(index, review.length, reviewTargets.length)],
-    );
-  });
+  if (learnTargets.length > 0) {
+    learn.forEach((block, index) => {
+      dateById.set(
+        block.id,
+        learnTargets[slotFor(index, learn.length, learnTargets.length)],
+      );
+    });
+  }
+  if (reviewTargets.length > 0) {
+    review.forEach((block, index) => {
+      dateById.set(
+        block.id,
+        reviewTargets[slotFor(index, review.length, reviewTargets.length)],
+      );
+    });
+  }
 
   // Lernen vor Wiederholen, sonst in der Reihenfolge der Eingabe.
   const placement = new Map<string, { date: string; sortOrder: number }>();
   const usedPerDay = new Map<string, number>();
 
   for (const block of [...learn, ...review]) {
-    const date = dateById.get(block.id) ?? input.today;
+    const date = dateById.get(block.id);
+    if (!date) continue;
     const sortOrder = usedPerDay.get(date) ?? 0;
     usedPerDay.set(date, sortOrder + 1);
     placement.set(block.id, { date, sortOrder });
   }
 
   const geplant = open.flatMap((block) => {
-    if (block.kind !== "probe") return [block];
+    if (block.kind !== "probe") return placement.has(block.id) ? [block] : [];
     // Nur eine Probeklausur je Prüfung; eine zweite (Altlast) bekommt keinen Platz.
     return probeTag && block === probe[0] ? [block] : [];
   });
@@ -514,7 +550,7 @@ export function replanOpen(
       const sortOrder = usedPerDay.get(probeTag!) ?? 0;
       return { id: block.id, date: probeTag!, minutes: PROBE_MINUTEN, sortOrder };
     }
-    const place = placement.get(block.id) ?? { date: input.today, sortOrder: 0 };
+    const place = placement.get(block.id)!;
     return {
       id: block.id,
       date: place.date,

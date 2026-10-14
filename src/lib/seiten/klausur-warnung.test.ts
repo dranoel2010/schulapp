@@ -43,6 +43,13 @@ test("andere Warnungen bleiben unberührt", () => {
   assert.deepEqual(planWarnungen(["no-days"], [], "2026-10-15", "2026-10-16", 1), ["no-days"]);
 });
 
-test("„no-days“ ergibt keinen Satz mehr: am Klausurtag zeigt die Seite keine Warnung", () => {
-  assert.equal(warnungText(["no-days"]), null);
+test("kein Tag zum Durcharbeiten, nur die Probe in den Ferien: ein Hinweis", () => {
+  const w = planWarnungen(["no-days"], [lern("2026-10-22", "a"), probe("2026-11-01")], "2026-10-28", "2026-11-02", 1);
+  assert.deepEqual(w, ["no-days"]);
+  assert.equal(warnungText(w), "Bis zur Prüfung bleibt kein Tag zum Durcharbeiten mehr.");
+});
+
+test("„no-days“, aber ab heute steht noch ein offener Lernblock: kein Hinweis", () => {
+  const bloecke = [lern("2026-11-02", "a"), probe("2026-11-02")];
+  assert.deepEqual(planWarnungen(["no-days"], bloecke, "2026-10-28", "2026-11-03", 1), []);
 });

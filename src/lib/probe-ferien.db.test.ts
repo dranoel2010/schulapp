@@ -91,6 +91,19 @@ describe("Probeklausur am letzten Ferientag", () => {
     assert.deepEqual(proben.map((x) => [x.id, x.date]), [[probe.id, "2026-11-01"]]);
   });
 
+  it("Nachholen mitten in den Ferien: verpasste Lernblöcke rutschen nicht auf heute", async () => {
+    const id = await neueKlausur();
+    await generatePlan(nutzer, id, "2026-10-19");
+    const probe = (await bloecke(id)).find((x) => x.kind === "probe")!;
+    await testDb.update(studyBlocks).set({ date: "2026-10-23" }).where(eq(studyBlocks.id, probe.id));
+    await catchUpMissed(nutzer, id, "2026-10-26");
+    const b = (await bloecke(id)).filter((x) => x.status === "open");
+    assert.deepEqual(b.filter((x) => x.kind === "probe").map((x) => x.date), ["2026-11-01"]);
+    const rest = b.filter((x) => x.kind !== "probe");
+    assert.ok(rest.length > 0);
+    assert.ok(rest.every((x) => !inFerien(x.date)), "Ferien bleiben frei, nur die Probe liegt darin");
+  });
+
   it("Ferien nachträglich eingetragen: die Probe am Sonntag bleibt, alles andere zieht aus den Ferien", async () => {
     const f = await fachMitThema(nutzer, "Physik", "Optik", "2026-10-01");
     const [k] = await testDb

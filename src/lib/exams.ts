@@ -820,8 +820,10 @@ export async function catchUpMissed(
       }
 
       // Kein Platz mehr gefunden: der Block rutscht auf heute, statt in der
-      // Vergangenheit hängen zu bleiben und morgen wieder nachzufragen.
-      if (block.date < today) {
+      // Vergangenheit hängen zu bleiben und morgen wieder nachzufragen. Ist
+      // heute frei, bleibt er stehen: Ferien bleiben frei, und dort fragt die
+      // Startseite nicht nach.
+      if (block.date < today && !excludedDates.includes(today)) {
         await tx
           .update(studyBlocks)
           .set({ date: today })

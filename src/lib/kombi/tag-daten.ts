@@ -128,7 +128,7 @@ export async function ladeTag(userId: string, now: Date, uhrVersatz = 0): Promis
   // Frei heißt ganz frei, mit einer Ausnahme: die Probeklausur am letzten
   // Ferientag vor der Klausur (`probeTagFuer`). An diesem Tag zeigt der
   // Überblick ihren Klausurblock trotzdem.
-  const probeImFrei = frei ? await offeneProbeAm(userId, tag) : false;
+  const probeImFrei = frei ? await probeAm(userId, tag) : false;
 
   const alleStunden = [...k.stunden.values()].flat();
   const epochenFach = guessEpochSubject(
@@ -240,8 +240,12 @@ export async function ladeTag(userId: string, now: Date, uhrVersatz = 0): Promis
   };
 }
 
-/** Steht heute eine offene Probeklausur im Plan einer kommenden Klausur? */
-async function offeneProbeAm(userId: string, tag: string): Promise<boolean> {
+/**
+ * Steht heute eine Probeklausur im Plan einer kommenden Klausur? Offen oder
+ * schon erledigt: nach der Probe bleibt ihr Klausurblock am selben Tag als
+ * Rückblick stehen. Nur eine gestrichene zählt nicht.
+ */
+async function probeAm(userId: string, tag: string): Promise<boolean> {
   const [p] = await db
     .select({ id: studyBlocks.id })
     .from(studyBlocks)

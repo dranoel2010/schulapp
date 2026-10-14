@@ -799,14 +799,14 @@ describe("Probeklausur (Antwort 4 vom 13.10.2026, Regel vom 14.10.2026)", () => 
       assert.ok(!result.warnings.includes("no-days"));
     });
 
-    it("ganz in den Ferien: die Probe allein, kein „keine Lerntage“", () => {
+    it("ganz in den Ferien: die Probe allein, dazu „keine Lerntage“", () => {
       const result = buildPlan({
         ...plan({ examDate: "2026-11-02", today: "2026-10-26", topics: topics(2) }),
         excludedDates: ferien.filter((d) => d >= "2026-10-26"),
         probe: true,
       });
       assert.deepEqual(result.blocks.map((b) => `${b.date} ${b.kind}`), ["2026-11-01 probe"]);
-      assert.ok(!result.warnings.includes("no-days"));
+      assert.ok(result.warnings.includes("no-days"));
       // ohne Probe (Referat) bleibt es bei „keine Lerntage“
       const ohne = buildPlan({
         ...plan({ examDate: "2026-11-02", today: "2026-10-26", topics: topics(2) }),
@@ -880,6 +880,95 @@ describe("Probeklausur (Antwort 4 vom 13.10.2026, Regel vom 14.10.2026)", () => 
         open: [{ id: "p1", topicId: null, kind: "probe" as const, date: "2026-11-01" }],
       });
       assert.equal(bleibt.find((b) => b.id === "p1")?.date, "2026-11-01");
+    });
+
+    it("replanOpen: Nachholen in den Ferien streicht die Probe nicht, wenn danach nur ein Lerntag bleibt", () => {
+      // Klausur Di 3.11., Vorlauf 14: verpasst Lernblock Do 22.10. und die Probe vom Fr 23.10.
+      const open = [
+        { id: "l1", topicId: "t1", kind: "learn" as const, date: "2026-10-22" },
+        { id: "p1", topicId: null, kind: "probe" as const, date: "2026-10-23" },
+        { id: "r1", topicId: "t1", kind: "review" as const, date: "2026-11-02" },
+      ];
+      for (const heute of ["2026-10-26", "2026-10-31"]) {
+        const r = replanOpen({
+          ...plan({ examDate: "2026-11-03", today: heute }),
+          leadDays: 14,
+          excludedDates: ferien.filter((d) => d >= heute),
+          probe: true,
+          open,
+        });
+        const p = r.find((b) => b.id === "p1");
+        assert.equal(p?.date, "2026-11-02", `${heute}: die Probe bleibt, am Montag wie beim Neuplanen`);
+        const l = r.find((b) => b.id === "l1")!;
+        assert.equal(l.date, "2026-11-02", `${heute}: der Lernblock vor der Probe, nicht in den Ferien`);
+        assert.ok(l.sortOrder < p!.sortOrder, "erst durcharbeiten, dann die Probe");
+        assert.ok(r.every((b) => !ferien.includes(b.date)), `${heute}: nichts in den Ferien`);
+      }
+    });
+
+    it("replanOpen: Ferien nachträglich eingetragen, die Probe am Sonntag prüft keinen Stoff von danach", () => {
+      // Plan ohne Ferien am 19.10. für Di 3.11.: Probe So 1.11.; dann Ferien 24.10. bis 1.11.
+      const ohneFerien = buildPlan({ ...plan({ examDate: "2026-11-03", today: "2026-10-19", topics: topics(4) }), probe: true });
+      assert.deepEqual(ohneFerien.blocks.filter((b) => b.kind === "probe").map((b) => b.date), ["2026-11-01"]);
+      const open = ohneFerien.blocks.map((b, i) => ({ id: `b${i}`, topicId: b.topicId, kind: b.kind, date: b.date }));
+      const r = replanOpen({
+        ...plan({ examDate: "2026-11-03", today: "2026-10-19", topics: topics(4) }),
+        excludedDates: ferien,
+        probe: true,
+        open,
+      });
+      const neu = buildPlan({
+        ...plan({ examDate: "2026-11-03", today: "2026-10-19", topics: topics(4) }),
+        excludedDates: ferien,
+        probe: true,
+      });
+      const probeNeu = neu.blocks.find((b) => b.kind === "probe")!.date;
+      const p = r.find((b) => open.find((o) => o.id === b.id)!.kind === "probe")!;
+      assert.equal(p.date, probeNeu, "wie ein frisch gebauter Plan");
+      for (const b of r) {
+        const art = open.find((o) => o.id === b.id)!.kind;
+        if (art === "learn") {
+          assert.ok(b.date < p.date || (b.date === p.date && b.sortOrder < p.sortOrder), "durcharbeiten vor der Probe");
+        }
+        if (art !== "probe") assert.ok(!ferien.includes(b.date), "nicht in den Ferien");
+      }
+    });
+
+    it("replanOpen: heute Ferien und bis zur Klausur kein Lerntag, Lernen und Wiederholen bekommen keinen Ferientag", () => {
+      for (const heute of ["2026-10-24", "2026-10-26"]) {
+        for (const art of ["learn", "review"] as const) {
+          const r = replanOpen({
+            ...plan({ examDate: "2026-11-02", today: heute }),
+            excludedDates: ferien.filter((d) => d >= heute),
+            probe: true,
+            open: [
+              { id: "x1", topicId: "t1", kind: art, date: "2026-10-22" },
+              { id: "p1", topicId: null, kind: "probe" as const, date: "2026-10-23" },
+            ],
+          });
+          assert.equal(r.find((b) => b.id === "p1")?.date, "2026-11-01", `${heute} ${art}`);
+          assert.equal(r.find((b) => b.id === "x1"), undefined, `${heute} ${art}: ohne Tag, nicht heute in den Ferien`);
+        }
+      }
+    });
+
+    it("buildPlan: ganz in den Ferien bleibt die Warnung, auch wenn die Probe liegt", () => {
+      // heute Mi 28.10. in den Ferien, Klausur Mo 2.11.
+      const j = buildPlan({
+        ...plan({ examDate: "2026-11-02", today: "2026-10-28", topics: topics(4) }),
+        excludedDates: ferien.filter((d) => d >= "2026-10-28"),
+        probe: true,
+      });
+      assert.deepEqual(j.blocks.map((b) => `${b.date} ${b.kind}`), ["2026-11-01 probe"]);
+      assert.ok(j.warnings.includes("no-days"));
+      // Ferien bis So, Klausur Di 3.11., Vorlauf 10: nur die Probe am Montag
+      const e = buildPlan({
+        ...plan({ examDate: "2026-11-03", today: "2026-10-19", topics: topics(4) }),
+        excludedDates: ferien,
+        probe: true,
+      });
+      assert.deepEqual(e.blocks.map((b) => `${b.date} ${b.kind}`), ["2026-11-02 probe"]);
+      assert.ok(e.warnings.includes("no-days"));
     });
   });
 
