@@ -26,16 +26,25 @@ import type { IservItem, IservQuelle } from "@/lib/iserv/types";
  *
  * Die App trägt ihre freien Tage (free_periods) selbst in „Schule" ein, als
  * Basilikum-Balken. Stehen die Herbstferien dort schon, wäre ein zweiter
- * Balken „Herbstferien" in Pfau nur Lärm. Umgekehrt schreibt IServ NIE
- * in free_periods: Was frei ist, entscheidet der Mensch von Hand — die
- * Landesferien aus IServ sind an dieser Schule sogar falsch. Deshalb gilt die
- * Richtung nur so herum: Kennt die App die Tage, entfällt der IServ-Termin;
- * kennt sie sie nicht, steht er da — und ist dann der Hinweis, dass in den
- * Einstellungen etwas fehlt.
+ * Balken „Herbstferien" in Pfau nur Lärm. Seit dem 12.10.2026 kommen die
+ * freien Tage selbst aus IServ (@/lib/iserv/ferien): Der Abruf legt aus dem
+ * Plugin „holiday“ und aus genau diesen Ferien- und Frei-Meldungen des
+ * öffentlichen Kalenders Zeilen in free_periods an — und zwar VOR dem
+ * Abgleich mit Google. Die Meldung ist dann von ihren eigenen freien Tagen
+ * gedeckt und entfällt hier; die Ferien stehen genau EINMAL im Kalender, als
+ * Basilikum-Balken mit dem lesbaren Namen („Herbstferien“). Einträge des
+ * Plugins selbst (Quelle `ferien`) kommen hier nie als Termin an.
+ *
+ * Kennt die App die Tage nicht (der Filter hat die Meldung nicht als frei für
+ * die Klasse übernommen, oder der Ferienabgleich ist gescheitert), steht der
+ * IServ-Termin da — lieber doppelt als gar nicht.
  *
  * Entfallen darf nur, was SELBST sagt, dass frei ist (`istFreiTitel()`:
- * Ferien, unterrichtsfrei, schulfrei, „Schule geschlossen“) und aus dem
- * öffentlichen Kalender kommt — denn nur das ist ein Doppel der freien Tage.
+ * beginnt mit „…ferien“, unterrichtsfrei, schulfrei, „Schule geschlossen“ —
+ * dieselbe strenge Prüfung, mit der @/lib/iserv/ferien freie Tage anlegt)
+ * und aus dem öffentlichen Kalender kommt — denn nur das ist ein Doppel der
+ * freien Tage. „Letzter Schultag vor den Herbstferien“ oder eine „Ferien-AG“
+ * bleiben stehen.
  * Eine Abgabe im Klassenkalender am letzten Ferientag, eine Fahrt der eigenen
  * Klasse während einer Klassenfahrt-Zeit der App, ein Schulsamstag: Das sind
  * Termine, keine Ferien, und sie bleiben stehen, auch wenn ihre Tage frei sind.
@@ -94,7 +103,7 @@ export type EinzelUrteil = {
   frei: boolean;
 };
 
-const VORRANG: Record<IservQuelle, number> = { klasse: 0, oeffentlich: 1, aufgaben: 2 };
+const VORRANG: Record<IservQuelle, number> = { klasse: 0, oeffentlich: 1, aufgaben: 2, ferien: 3 };
 
 /** Längster Termin, dessen Tage einzeln geprüft werden — darüber ist er sicher keine Feriensache der App. */
 const MAX_TAGE = 120;
@@ -130,6 +139,19 @@ export function beurteileEinzeln(
   filter: FilterConfig,
   freieZeiten: readonly Pick<FreeRange, "startsOn" | "endsOn">[],
 ): EinzelUrteil {
+  // Ferien und Feiertage aus dem Plugin: nie als Termin, sie sind freie Tage
+  // der App (@/lib/iserv/ferien).
+  if (item.quelle === "ferien") {
+    return {
+      genommen: false,
+      regel: "ferien-plugin",
+      grund: "Ferien oder Feiertag: als freier Tag der App übernommen",
+      knapp: false,
+      zweifel: false,
+      frei: false,
+    };
+  }
+
   if (item.fest) {
     return {
       genommen: item.fest.genommen,
@@ -208,6 +230,8 @@ export function iservAuswahl(input: {
   };
 
   for (const item of sortiert) {
+    // Das Plugin „holiday“ hat hier nichts zu suchen — es sind freie Tage.
+    if (item.quelle === "ferien") continue;
     if (gesehen.has(item.fremdId)) {
       auswertung.doppelt += 1;
       continue;

@@ -23,13 +23,14 @@ export async function loadIservStatus(userId: string): Promise<IservStatus> {
   const heute = todayInBerlin(jetzt);
   const running = isIservFetchRunning();
 
-  const leer = (ruhtGrund: string | null) =>
+  const leer = (ruhtGrund: string | null, freie: Awaited<ReturnType<typeof listAllFreePeriods>> = []) =>
     baueIservStatus({
       config,
       ruhtGrund,
       row: null,
       snapshots: new Map(),
       auswertung: null,
+      freie,
       heute,
       jetzt,
       running,
@@ -37,8 +38,13 @@ export async function loadIservStatus(userId: string): Promise<IservStatus> {
 
   if (!config.ok) return leer(null);
 
+  // Die freien Tage zeigt die Karte auch, wenn IServ gerade ruht: Sie sind
+  // Daten der App, und was IServ zuletzt eingetragen hat, gilt weiter.
   if (!calendarConfig().ok) {
-    return leer("IServ ruht, solange der Google Kalender auf diesem Server nicht eingerichtet ist.");
+    return leer(
+      "IServ ruht, solange der Google Kalender auf diesem Server nicht eingerichtet ist.",
+      await listAllFreePeriods(userId),
+    );
   }
 
   const verbindung = await getConnection(userId);
@@ -75,6 +81,7 @@ export async function loadIservStatus(userId: string): Promise<IservStatus> {
     row,
     snapshots,
     auswertung,
+    freie,
     heute,
     jetzt,
     running,

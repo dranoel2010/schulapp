@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { db } from "@/db";
 import { freePeriods, type FreePeriod } from "@/db/schema";
-import { addDays, daysBetween, isCalendarDate } from "@/lib/dates";
+import { addDays, daysBetween, isCalendarDate, weekdayIndex } from "@/lib/dates";
 
 /**
  * Freie Tage — Ferien, Klassenfahrt und was sonst ohne Schule ist.
@@ -18,9 +18,12 @@ import { addDays, daysBetween, isCalendarDate } from "@/lib/dates";
  * Erinnerung. Eine Unterscheidung „Ferien, aber gelernt wird trotzdem" gibt es
  * bewusst nicht.
  *
- * Eingetragen wird von Hand. Sechs Ferien und eine Klassenfahrt im Jahr sind
- * schneller getippt, als eine Online-Quelle für das richtige Bundesland
- * eingebunden und aktuell gehalten ist.
+ * Woher sie kommen: Bis zum 12.10.2026 nur von Hand. Seitdem legt der Abruf
+ * bei IServ Ferien und unterrichtsfreie Tage selbst an (@/lib/iserv/ferien,
+ * Spalte `quelle = 'iserv'`); die Seite zum Eintragen gibt es seit Modell 23
+ * nicht mehr. Von Hand eingetragene Zeilen (`quelle` leer) bleiben gültig und
+ * werden vom Abgleich nie angefasst. Wo die App einen freien Tag zeigt, sagt
+ * sie mit `freiQuelleText()`, woher er kommt.
  */
 
 export const FREE_KINDS = ["ferien", "klassenfahrt", "frei"] as const;
@@ -48,6 +51,72 @@ export function freeLabel(period: {
 }): string {
   if (period.title) return period.title;
   return FREE_KIND_LABELS[period.kind as FreeKind] ?? "Schulfrei";
+}
+
+/** Woher ein freier Zeitraum kommt, als kurzer Zusatz: „aus IServ“ oder „von Hand eingetragen“. */
+export function freiQuelleText(period: { quelle?: string | null }): string {
+  return period.quelle === "iserv" ? "aus IServ" : "von Hand eingetragen";
+}
+
+/**
+ * Die Zeilen, die als Balken in den Google Kalender gehen — dieselben Ferien
+ * genau einmal.
+ *
+ * Bis zum 12.10.2026 trug der Mensch die Ferien von Hand ein; seitdem legt
+ * der Abgleich mit IServ sie selbst an (@/lib/iserv/ferien) und fasst eine
+ * von Hand eingetragene Zeile nie an. Stehen dieselben Herbstferien also
+ * einmal von Hand und einmal aus IServ da, bleiben in der App beide (Lernplan
+ * und Abruf nehmen ohnehin die Vereinigung der Tage), in Google aber nur
+ * eine:
+ *
+ *   1. Eine von Hand eingetragene Ferien- oder Frei-Zeile, deren Tage eine
+ *      IServ-Zeile abdeckt, fällt weg — IServ hat den lesbaren Namen und die
+ *      richtigen Tage. Bei gleichen Tagen gewinnt IServ.
+ *   2. Eine IServ-Zeile, deren Tage eine (übrig gebliebene) von Hand
+ *      eingetragene Ferien- oder Frei-Zeile abdeckt, fällt weg.
+ *
+ * „Abdecken“ zählt Samstag und Sonntag am Rand nicht mit: Von Hand standen
+ * Herbstferien oft Montag bis Sonntag da, IServ meldet Samstag bis Samstag —
+ * das sind dieselben Ferien, und die Seite, auf der man die alte Hand-Zeile
+ * löschen könnte, gibt es seit Modell 23 nicht mehr. Ein Wochenende am Rand
+ * ist ohnehin schulfrei; es fehlt im Kalender also kein Schultag.
+ *
+ * Eine Klassenfahrt bleibt immer stehen und verdeckt nichts. Überschneiden
+ * sich zwei Zeilen an Werktagen nur teilweise, bleiben beide: Sonst fehlten
+ * Tage im Kalender.
+ */
+export function fuerKalender<
+  T extends Pick<FreePeriod, "id" | "kind" | "startsOn" | "endsOn"> & { quelle?: string | null },
+>(periods: readonly T[]): T[] {
+  const ferienArtig = (p: T) => p.kind === "ferien" || p.kind === "frei";
+  const deckt = (aussen: T, innen: T) => {
+    const kern = ohneWochenendeAmRand(innen.startsOn, innen.endsOn);
+    return aussen.startsOn <= kern.startsOn && kern.endsOn <= aussen.endsOn;
+  };
+
+  const iserv = periods.filter((p) => p.quelle === "iserv");
+  const hand = periods.filter(
+    (p) => p.quelle !== "iserv" && !(ferienArtig(p) && iserv.some((i) => deckt(i, p))),
+  );
+  const handFerien = hand.filter(ferienArtig);
+  const iservBleibt = new Set(
+    iserv.filter((i) => !handFerien.some((h) => deckt(h, i))).map((i) => i.id),
+  );
+  const handBleibt = new Set(hand.map((h) => h.id));
+
+  return periods.filter((p) => (p.quelle === "iserv" ? iservBleibt.has(p.id) : handBleibt.has(p.id)));
+}
+
+/**
+ * Der Zeitraum ohne Samstage und Sonntage am Anfang und am Ende. Liegt er
+ * ganz am Wochenende, bleibt er, wie er ist.
+ */
+function ohneWochenendeAmRand(startsOn: string, endsOn: string): { startsOn: string; endsOn: string } {
+  let von = startsOn;
+  let bis = endsOn;
+  while (von <= bis && weekdayIndex(von) >= 5) von = addDays(von, 1);
+  while (bis >= von && weekdayIndex(bis) >= 5) bis = addDays(bis, -1);
+  return von <= bis ? { startsOn: von, endsOn: bis } : { startsOn, endsOn };
 }
 
 /** Der Zeitraum, in den der Tag fällt — beide Enden zählen mit. */

@@ -308,9 +308,17 @@ export function homeworkEvent(input: {
   };
 }
 
-/** Ferien, Klassenfahrt, ein freier Tag — als Balken über alle Tage, ohne Erinnerung. */
+/**
+ * Ferien, Klassenfahrt, ein freier Tag — als Balken über alle Tage, ohne
+ * Erinnerung. Ein Zeitraum aus IServ (`quelle = 'iserv'`, @/lib/iserv/ferien)
+ * sagt in der Beschreibung, woher er kommt; Titel und Farbe sind dieselben —
+ * die Ferien stehen genau einmal im Kalender, als dieser Balken (der
+ * gleichlautende Termin aus dem öffentlichen IServ-Kalender entfällt, siehe
+ * @/lib/iserv/auswahl, Schritt e).
+ */
 export function freePeriodEvent(input: {
-  period: Pick<FreePeriod, "id" | "kind" | "title" | "startsOn" | "endsOn">;
+  period: Pick<FreePeriod, "id" | "kind" | "title" | "startsOn" | "endsOn"> &
+    Partial<Pick<FreePeriod, "quelle">>;
   appOrigin: string;
 }): WantedEvent {
   const { period } = input;
@@ -326,7 +334,8 @@ export function freePeriodEvent(input: {
       key,
       summary: freeLabel(period),
       description: describe([
-        `In der Schulapp: ${input.appOrigin}/einstellungen`,
+        period.quelle === "iserv" ? "Aus IServ übernommen." : null,
+        `In der Schulapp: ${input.appOrigin}/einstellungen${period.quelle === "iserv" ? "/iserv" : ""}`,
         EVENT_FOOTER,
       ]),
       firstDay: period.startsOn,

@@ -11,6 +11,7 @@ import {
   BLOCK_TEXT,
   baueIservStatus,
   deriveIservState,
+  freieTageAbHeute,
   iservStaleSince,
   leseQuellen,
 } from "@/lib/iserv/report";
@@ -164,5 +165,26 @@ describe("baueIservStatus", () => {
     assert.deepEqual(leseQuellen("kein json"), []);
     assert.deepEqual(leseQuellen('{"a":1}'), []);
     assert.deepEqual(leseQuellen('[{"id":"x","label":"y","grund":"z","rolle":"erfunden"}]'), []);
+  });
+});
+
+describe("freieTageAbHeute", () => {
+  it("zeigt die freien Tage ab heute mit ihrer Herkunft, der früheste zuerst", () => {
+    const tage = freieTageAbHeute(
+      [
+        { kind: "ferien", title: "Herbstferien", startsOn: "2026-10-24", endsOn: "2026-11-07", quelle: "iserv" },
+        { kind: "klassenfahrt", title: null, startsOn: "2026-10-12", endsOn: "2026-10-14", quelle: null },
+        { kind: "ferien", title: "Sommerferien", startsOn: "2026-07-09", endsOn: "2026-08-22", quelle: "iserv" },
+      ],
+      "2026-10-13",
+    );
+
+    assert.deepEqual(
+      tage.map((t) => [t.titel, t.von, t.bis, t.herkunft]),
+      [
+        ["Klassenfahrt", "2026-10-12", "2026-10-14", "von Hand eingetragen"],
+        ["Herbstferien", "2026-10-24", "2026-11-07", "aus IServ"],
+      ],
+    );
   });
 });

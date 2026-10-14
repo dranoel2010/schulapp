@@ -1449,7 +1449,7 @@ Die Sicherungen liegen unter `.backups/` und sind nicht in Git.
 ### Modell 23 auf dem NAS
 
 Modell 23 (Bauplan `entwurf-modelle/23-kombi-v2/UMSETZUNG.md`, 5.7) bringt
-sieben SQL-Dateien. Auf dem NAS kommen sie **erst nach der Abnahme von
+sieben SQL-Dateien, der Ferienabgleich mit IServ eine achte. Auf dem NAS kommen sie **erst nach der Abnahme von
 Abschnitt H**, per psql, **vor** dem Neubau und in genau dieser Reihenfolge:
 
 1. `scripts/kombi-tagesprotokoll.sql` — Tabelle `tagesprotokoll`
@@ -1459,6 +1459,7 @@ Abschnitt H**, per psql, **vor** dem Neubau und in genau dieser Reihenfolge:
 5. `scripts/kombi-arbeitsblaetter.sql` — `arbeitsblaetter`, `arbeitsblatt_wertung`, `leser_laeufe.arbeitsblatt_id`
 6. `scripts/kombi-arbeitsblaetter-checks.sql` — tauscht `leser_laeufe_art_check` und `leser_laeufe_ziel_check` (braucht 5)
 7. `scripts/kombi-upload-schluessel.sql` — Spalte `material_pages.upload_key` mit eindeutigem Index (ein wiederholter Foto-Upload legt kein zweites Blatt an)
+8. `scripts/kombi-iserv-ferien.sql` — Spalten `quelle` und `iserv_key` an `free_periods`, Index und CHECK (Ferien aus IServ)
 
 Jede Datei hat im Kopf einen Abschnitt „Vorher zählen“: vorher sichern,
 zählen, einspielen, dieselben Zahlen wieder zählen. Eingespielt wird jede wie
@@ -1468,7 +1469,7 @@ die Leser-Dateien, in einer Transaktion und mit Abbruch beim ersten Fehler:
 sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose exec -T db sh -c "exec psql -X -v ON_ERROR_STOP=1 --single-transaction -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -f -" < repo/scripts/kombi-tagesprotokoll.sql'
 ```
 
-`nas.sh hoch` hält an, wenn eine Pflichtspalte der Dateien 1, 2, 4 oder 5
+`nas.sh hoch` hält an, wenn eine Pflichtspalte der Dateien 1, 2, 4, 5 oder 7
 fehlt, und eigens, wenn `leser_laeufe_art_check` die Art `'arbeitsblatt'`
 nicht kennt (Datei 6). Die Indizes aus Datei 3 prüft es nicht.
 
@@ -2016,11 +2017,13 @@ Gelesen werden drei Quellen aus `/iserv/calendar/api/eventsources`:
   Klasse mit Datum direkt dahinter („Kl. 11_ 19.10.-30.10. …") wird gelesen,
   „Kl. 9 - 10 Uhr" ist Klasse 9, nicht 9 bis 10.
 
-Nicht gelesen werden gesetzliche Feiertage (Plugin `holiday`), weitere
-Gruppenkalender (AGs, Kurse), Abos, der Klausurplan (Plugin `exam-plan` —
-an dieser Schule gibt es das Modul nicht; erkannt würde es, übernommen noch
-nicht, und nie als Prüfung in der App) und die Landesferien aus
-`dieschulapp/api/…/vacations`, die an dieser Waldorfschule falsch sind.
+Gelesen wird seit dem 12.10.2026 auch das Plugin `holiday` (Ferien und
+gesetzliche Feiertage): Der Nutzer hat bestätigt, dass die Ferien darin für
+seine Schule stimmen. Seine Einträge kommen nie als IServ-Termin in Google,
+sie werden freie Tage der App (siehe *Freie Tage* unten). Nicht gelesen
+werden weitere Gruppenkalender (AGs, Kurse), Abos und der Klausurplan (Plugin
+`exam-plan` — an dieser Schule gibt es das Modul nicht; erkannt würde es,
+übernommen noch nicht, und nie als Prüfung in der App).
 
 Gemessen am echten öffentlichen Kalender vom 5.10.2026 (92 Termine, −14 bis
 +180 Tage, nur gelesen, nicht im Repo): **19 hinein (2 davon knapp), 8
@@ -2104,17 +2107,78 @@ In der Karte **IServ** zeigt „Als Nächstes" den Titel, wie er in Google steht
 Entscheidung. „Im Kalender aus IServ" zählt IServ-Einträge, nicht
 Google-Termine.
 
-**Freie Tage:** IServ schreibt **nie** in die freien Tage der App
-(`free_periods`) — was frei ist, trägt der Mensch von Hand ein. Damit Ferien
-nicht doppelt im Kalender stehen, entfällt eine ganztägige **Ferien- oder
-Frei-Meldung aus dem öffentlichen Kalender** (Ferien, unterrichtsfrei,
-schulfrei, „Schule geschlossen"), wenn die App jeden ihrer Werktage schon als
-frei kennt (Herbstferien Sa–Sa sind gedeckt, wenn die App Mo–Fr kennt). Kennt
-sie sie nicht, bleibt der IServ-Termin stehen — und ist der Hinweis, dass in
-den Einstellungen etwas fehlt. **Nie** entfallen: Termine des
-Klassenkalenders (eine Abgabe am letzten Ferientag bleibt), Aufgaben, Termine
-mit Uhrzeit, Schulsamstage und alles, was keine Ferien sind (eine Fahrt der
-eigenen Klasse während einer Klassenfahrt-Zeit der App).
+**Freie Tage:** Seit dem 12.10.2026 schreibt der Abruf Ferien und
+unterrichtsfreie Tage **selbst** in die freien Tage der App (`free_periods`,
+`src/lib/iserv/ferien.ts`). Eine Seite zum Eintragen gibt es seit Modell 23
+nicht mehr. Frei heißt ganz frei: keine Lernblöcke, kein Abruf, keine
+Erinnerung; hat sich ein freier Tag geändert, rücken Lernplan und Abruf
+gleich danach von ihm weg.
+
+- **Was frei wird:** jeder ganztägige Eintrag des Plugins `holiday` und jede
+  ganztägige Ferien- oder Frei-Meldung des öffentlichen Kalenders (Ferien,
+  unterrichtsfrei, schulfrei, „Schule geschlossen"), die der Klassenfilter für
+  die eigene Klasse gelten lässt — für alle (Regel c), knapp trotz Hort, wenn
+  die Schule zu ist, oder ausdrücklich für die eigene Klasse. **Nie:** Termine
+  mit Uhrzeit, Hort und Ferienbetreuung, AGs, andere Klassen, alles aus
+  `ISERV_NIE`, der Klassenkalender und die Aufgaben.
+- **Doppelte:** Was sich um mindestens einen Tag überschneidet (Plugin Mo–Fr,
+  Schulkalender Sa–Sa), wird ein Zeitraum; ein Feiertag in den Ferien geht
+  darin auf. Der Name ist lesbar („Herbstferien" statt
+  „Herbstferien_Sa. 24. 10. – …"). Tage in Berliner Zeit, das exklusive Ende
+  von IServ ist schon umgerechnet.
+- **Kennzeichen:** Die Zeilen tragen `quelle = 'iserv'` und einen stabilen
+  `iserv_key` (uid bzw. id im Plugin; Spalten aus
+  `scripts/kombi-iserv-ferien.sql`). Nur diese Zeilen legt der Abgleich an,
+  ändert er und entfernt er. **Von Hand eingetragene Zeilen (`quelle` leer)
+  fasst er nie an.** Eine Zeile bleibt dieselbe (und der Balken in Google
+  derselbe), auch wenn IServ die Ferien verschiebt.
+- **Schutz:** Die freien Tage werden aus dem Stand gerechnet, den der Schutz
+  gelten lässt (`schutz.ts`). Eine leere oder kaputte Antwort ändert ihn nicht
+  — und damit keinen freien Tag. Das Plugin `holiday` leer ist (wie der
+  öffentliche Kalender leer) nie echt — im Jahr gibt es immer Ferien und
+  Feiertage —, und bleibt ein Fehler, so oft es auch kommt; eine Zeile, die
+  schon angefangen hat, wächst nicht über ein Jahr, nur weil derselbe
+  Schlüssel wiederkommt, und kein Zeitraum wird 90 Tage oder länger. Ohne jeden Stand des öffentlichen Kalenders
+  bleiben die freien Tage, wie sie sind. Vergangene freie Tage bleiben stehen;
+  laufende Ferien, die IServ nicht mehr meldet, enden gestern.
+- **Anzeige:** Die Karte **IServ** listet die freien Tage, die noch kommen,
+  mit „aus IServ" oder „von Hand eingetragen"; ebenso die Woche und der
+  Stundenplan.
+
+**Ferien genau einmal in Google:** Die freien Tage stehen als
+Basilikum-Balken in „Schule" (Art `frei`, mit „Aus IServ übernommen." in der
+Beschreibung). Damit sie nicht doppelt stehen, entfällt eine ganztägige
+**Ferien- oder Frei-Meldung aus dem öffentlichen Kalender**, wenn die App
+jeden ihrer Werktage schon als frei kennt — und das tut sie jetzt, weil der
+Abruf die freien Tage VOR dem Abgleich mit Google schreibt. Kennt sie sie
+nicht (Filter hat sie nicht genommen, Abgleich gescheitert), bleibt der
+IServ-Termin stehen — lieber doppelt als gar nicht. **Nie** entfallen:
+Termine des Klassenkalenders (eine Abgabe am letzten Ferientag bleibt),
+Aufgaben, Termine mit Uhrzeit, Schulsamstage und alles, was keine Ferien
+sind.
+
+**Von Hand eingetragene Ferien daneben:** Vom 4.10.2026 bis Modell 23 gab es
+die Ferienseite; solche Zeilen (`quelle` leer) bleiben stehen, der Abgleich
+fasst sie nie an. In Google stehen dieselben Ferien trotzdem nur einmal
+(`fuerKalender()` in `src/lib/free-days.ts`): Eine Hand-Zeile für Ferien oder
+freie Tage, deren Tage eine IServ-Zeile abdeckt, fällt dort weg (bei
+gleichen Tagen gewinnt IServ), ebenso eine IServ-Zeile, die eine Hand-Zeile
+abdeckt. Samstag und Sonntag am Rand zählen dabei nicht mit: Von Hand Mo
+26.10.–So 8.11. und aus IServ Sa 24.10.–Sa 7.11. sind dieselben Ferien, in
+Google steht nur „Herbstferien“ aus IServ. Was sich an Werktagen nur
+teilweise überschneidet, bleibt doppelt — sonst fehlten Tage; weil es die
+Ferienseite nicht mehr gibt, nennt EINBAU Schritt 7 den Befehl, solche
+Hand-Zeilen zu löschen. Eine Klassenfahrt bleibt immer. Gezählt wird das mit
+den Zeilen im Kopf von `scripts/kombi-iserv-ferien.sql`.
+
+**Was aus dem öffentlichen Kalender freie Tage wird** (`freiZeitraumArt()` in
+`src/lib/iserv/klasse.ts`), streng, weil daraus ganz freie Tage entstehen:
+Ferien nur, wenn der Titel mit ihrem Namen beginnt („Herbstferien_…“), frei
+nur bei „unterrichtsfrei“, „schulfrei“, „kein Unterricht“, „Schule
+geschlossen“. Nie: „Letzter Schultag vor den Herbstferien“, „Erster Schultag
+nach den Ferien“, „Zeugnisausgabe …, danach Sommerferien“, ein
+Unterrichtsende, eine Stunde, eine „Ferien-AG“, ein Kurs, eine Betreuung.
+Solche Termine bleiben auch in Google stehen.
 
 ### Takt, Anmeldung, Sperre
 
@@ -2268,8 +2332,9 @@ Alle lassen sich über `ISERV_AUCH` und `ISERV_NIE` umstellen, ohne Code:
   mit seiner Uhrzeit im Kalender.
 - Die **Nachschreibetermine** (7.–12. Kl) sind drin; heraus mit
   `ISERV_NIE="nachschreibetermin"`.
-- Weitere Gruppenkalender (außer dem der Klasse) und die gesetzlichen
-  Feiertage aus IServ werden nicht übernommen.
+- Weitere Gruppenkalender (außer dem der Klasse) werden nicht übernommen.
+  Die gesetzlichen Feiertage und Ferien aus IServ werden freie Tage der App,
+  keine IServ-Termine.
 - Ohne `ISERV_*`-Variablen bleiben schon eingetragene IServ-Termine in Google
   stehen.
 - IServ-Termine bekommen keine Google-Erinnerung, auch Aufgaben nicht.

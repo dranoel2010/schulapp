@@ -1,6 +1,6 @@
 # Modell 23 in der App
 
-Stand: 13.10.2026, Branch `modell-23`. Noch nicht auf dem NAS, noch nicht in `main`.
+Stand: 14.10.2026, Branch `modell-23`, mit dem IServ-Ferienabgleich. Noch nicht auf dem NAS, noch nicht in `main`.
 
 ## Was jetzt in der App ist
 
@@ -44,11 +44,11 @@ Am Handy geht die Kamera nur über HTTPS. Dafür auf dem Mac `tailscale funnel 3
 
 ## Auf den NAS: SQL zuerst, dann hochfahren
 
-**Erst wenn der IServ-Ferienabgleich gebaut ist.** Die Ferien-Seite gibt es in Modell 23 nicht mehr (dein Wunsch vom 12.10.). Die Ferien sollen künftig von selbst aus IServ kommen. Bis das gebaut ist, könnte niemand Ferien eintragen, und die App würde in den Ferien Lernblöcke planen.
+**Nur zusammen mit dem IServ-Ferienabgleich** (Branch `iserv-ferien`, seit dem 14.10. in `modell-23` zusammengeführt). Die Ferien-Seite gibt es in Modell 23 nicht mehr (dein Wunsch vom 12.10.). Der Abgleich holt Ferien und unterrichtsfreie Tage selbst aus IServ und trägt sie als freie Tage ein. Ohne ihn könnte niemand Ferien eintragen, und die App würde in den Ferien Lernblöcke planen.
 
 **Vor dem Push** wird der ganze Branch nach echten Namen und Schuldaten durchsucht, weil das Repo öffentlich ist. Gepusht wird erst nach deinem Ja.
 
-Die Datenbank auf dem NAS kennt die neuen Tabellen noch nicht. Die sieben Dateien müssen **vor** `nas.sh hoch` hinein, **in genau dieser Reihenfolge**:
+Die Datenbank auf dem NAS kennt die neuen Tabellen noch nicht. Die acht Dateien müssen **vor** `nas.sh hoch` hinein, **in genau dieser Reihenfolge**:
 
 1. `scripts/kombi-tagesprotokoll.sql`
 2. `scripts/kombi-lernblock-uhr.sql`
@@ -57,6 +57,9 @@ Die Datenbank auf dem NAS kennt die neuen Tabellen noch nicht. Die sieben Dateie
 5. `scripts/kombi-arbeitsblaetter.sql`
 6. `scripts/kombi-arbeitsblaetter-checks.sql` (geht nur nach 5)
 7. `scripts/kombi-upload-schluessel.sql` (Spalte `material_pages.upload_key`: ein Foto, das der Browser nach verlorener Antwort noch einmal schickt, legt kein zweites Blatt an. Wiederholbar.)
+8. `scripts/kombi-iserv-ferien.sql` (Ferien aus IServ: zwei Spalten, ein Index und ein CHECK an `free_periods`)
+
+Gegen `main` fehlen alle acht: keine der Tabellen, Spalten und Bedingungen steht dort im Schema. Wiederholbar ist nur Nummer 7. Die anderen sieben brechen beim zweiten Mal mit „already exists“ ab. Weil jede Datei in einer Transaktion läuft, ändert so ein zweiter Lauf nichts, er hält nur an. Darum jede Datei genau einmal einspielen und bei einem Abbruch erst nachsehen, ob sie schon drin ist (`nas.sh hoch` sagt es: „Datenbank: … ist da.“), statt sie noch einmal zu schicken.
 
 Jede Datei einzeln so (Dateinamen austauschen):
 
@@ -70,10 +73,33 @@ Ablauf im Ganzen:
 
 1. `modell-23` in `main` mischen und pushen. `nas.sh hoch` holt nur `main`.
 2. Auf dem NAS das Repo aktualisieren, damit die SQL-Dateien unter `repo/scripts/` liegen.
-3. Die sieben SQL-Dateien einspielen, wie oben.
-4. `scripts/nas.sh hoch`. Es hält an, wenn eine Datei fehlt.
-5. `/api/tag/stand` aufrufen, dann am Handy öffnen. Die App lädt einmal neu.
-6. Eine Aufgabe über die Zeile eintragen und abhaken. Dann im Google-Kalender „Schule“ nachsehen.
+3. Sichern. Dann die von Hand eingetragenen Ferien zählen, die noch kommen (seit dem 4.10. gab es die Ferienseite, für die Herbstferien steht also wahrscheinlich schon eine Zeile da). Das geht nur **vor** `kombi-iserv-ferien.sql`, danach heißen diese Zeilen `quelle IS NULL`:
+   ```sql
+   SELECT kind, title, starts_on, ends_on FROM free_periods
+    WHERE kind IN ('ferien', 'frei') AND ends_on >= current_date ORDER BY starts_on;
+   ```
+4. Die acht SQL-Dateien einspielen, wie oben, in dieser Reihenfolge.
+5. `scripts/nas.sh hoch`. Es hält an, wenn eine Datei fehlt.
+6. `/api/tag/stand` aufrufen, dann am Handy öffnen. Die App lädt einmal neu.
+7. Eine Aufgabe über die Zeile eintragen und abhaken. Dann im Google-Kalender „Schule“ nachsehen.
+8. Ferien prüfen: Die in Schritt 3 gezählten Zeilen bleiben stehen; der Abgleich fasst sie nie an. Nach dem nächsten Abruf bei IServ (der Kalender-Lauf fragt höchstens alle drei Stunden, zwischen 6 und 21 Uhr) stehen die Ferien unter Einstellungen › IServ › „Freie Tage“, mit „aus IServ“, die alten Zeilen daneben mit „von Hand eingetragen“. In „Schule“ stehen die Herbstferien trotzdem genau einmal: Eine Hand-Zeile, deren Tage die IServ-Ferien abdecken, fällt in Google weg (und umgekehrt); Samstag und Sonntag am Rand zählen dabei nicht mit (von Hand Mo–So, aus IServ Sa–Sa: ein Balken). Nur eine Hand-Zeile, die sich an Werktagen bloß teilweise mit den IServ-Ferien überschneidet, bliebe als zweiter Balken. Die Ferienseite gibt es nicht mehr, gelöscht wird sie deshalb per SQL — **nach** dem ersten Abruf bei IServ und nach einer Sicherung (`npm run db:backup` bzw. Sicherung auf dem NAS). Erst ansehen:
+   ```sql
+   SELECT h.id, h.kind, h.title, h.starts_on, h.ends_on,
+          i.title AS aus_iserv, i.starts_on AS iserv_von, i.ends_on AS iserv_bis
+     FROM free_periods h
+     JOIN free_periods i ON i.user_id = h.user_id AND i.quelle = 'iserv'
+                        AND i.starts_on <= h.ends_on AND h.starts_on <= i.ends_on
+    WHERE h.quelle IS NULL AND h.kind IN ('ferien', 'frei') AND h.ends_on >= current_date
+    ORDER BY h.starts_on;
+   ```
+   Sind das dieselben Ferien (und kein Tag der Hand-Zeile ein eigener freier Tag, den IServ nicht kennt), alle diese Hand-Zeilen auf einmal löschen — eine Klassenfahrt und vergangene Zeilen bleiben:
+   ```sql
+   DELETE FROM free_periods h USING free_periods i
+    WHERE h.quelle IS NULL AND h.kind IN ('ferien', 'frei') AND h.ends_on >= current_date
+      AND i.user_id = h.user_id AND i.quelle = 'iserv'
+      AND i.starts_on <= h.ends_on AND h.starts_on <= i.ends_on;
+   ```
+   Einzelne Zeilen: `DELETE FROM free_periods WHERE id = '…' AND quelle IS NULL`. Danach `kalender.sh` (oder den nächsten stündlichen Lauf) abwarten; der doppelte Balken verschwindet aus Google. Die Zählzeilen dazu stehen im Kopf von `kombi-iserv-ferien.sql`. Wer nicht warten will: `UPDATE iserv_state SET last_attempt_at = NULL` und dann `kalender.sh`.
 
 ## Was offen ist
 

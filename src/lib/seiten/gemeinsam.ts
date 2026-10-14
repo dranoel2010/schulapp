@@ -1,5 +1,5 @@
 import { addDays, berlinDay } from "@/lib/dates";
-import { freePeriodOn, listFreePeriods } from "@/lib/free-days";
+import { freePeriodOn, freiQuelleText, listFreePeriods } from "@/lib/free-days";
 import type { HomeworkItem } from "@/lib/homework";
 import { appTagVon } from "@/lib/kombi/tag-daten";
 import { lessonRoom } from "@/lib/home";
@@ -106,6 +106,8 @@ export type SchulKalender = {
    *  ohne Epoche. */
   epocheSeit: string | null;
   frei: (tag: string) => string | null;
+  /** Woher der freie Tag kommt: „aus IServ“ oder „von Hand eingetragen“ — null an einem Schultag. */
+  freiHerkunft: (tag: string) => string | null;
   stundenAm: (tag: string) => StundeDaten[];
   schultag: (tag: string) => boolean;
   naechsterSchultag: (tag: string) => string;
@@ -130,9 +132,14 @@ export async function schulKalender(userId: string, heute: string): Promise<Schu
     : undefined;
   const epocheSeit = seitMs ? berlinDay(new Date(seitMs)) : null;
 
+  // Der Name aus IServ („Herbstferien“) oder der eingetragene; ohne Namen die Art.
   const frei = (tag: string) => {
     const p = freePeriodOn(freie, tag);
-    return p ? (p.kind === "ferien" ? "Ferien" : p.title || "Frei") : null;
+    return p ? p.title || (p.kind === "ferien" ? "Ferien" : "Frei") : null;
+  };
+  const freiHerkunft = (tag: string) => {
+    const p = freePeriodOn(freie, tag);
+    return p ? freiQuelleText(p) : null;
   };
 
   const roheStunden = (tag: string) => {
@@ -175,5 +182,5 @@ export async function schulKalender(userId: string, heute: string): Promise<Schu
     return null;
   };
 
-  return { week, epoche, epocheSeit, frei, stundenAm, schultag, naechsterSchultag, naechsteStunde };
+  return { week, epoche, epocheSeit, frei, freiHerkunft, stundenAm, schultag, naechsterSchultag, naechsteStunde };
 }

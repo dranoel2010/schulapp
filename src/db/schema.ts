@@ -399,6 +399,15 @@ export const lessons = pgTable(
  *
  * Beide Enden zählen mit: eine Klassenfahrt von Montag bis Freitag steht als
  * startsOn = Montag, endsOn = Freitag hier, nicht bis Samstag.
+ *
+ * Woher eine Zeile kommt, steht in `quelle` (seit 12.10.2026,
+ * scripts/kombi-iserv-ferien.sql): leer heißt von Hand eingetragen, 'iserv'
+ * heißt vom Ferienabgleich mit IServ (@/lib/iserv/ferien). Nur Zeilen mit
+ * 'iserv' legt der Abgleich an, ändert er und nimmt er weg — eine von Hand
+ * eingetragene Zeile fasst er nie an. `iserv_key` ist der stabile Schlüssel
+ * aus IServ (die uid des Termins bzw. die id im Plugin), über den der Abgleich
+ * dieselben Ferien beim nächsten Lauf wiederfindet; die `id` bleibt dabei
+ * dieselbe, und damit auch der Balken im Google Kalender.
  */
 export const freePeriods = pgTable(
   "free_periods",
@@ -416,8 +425,19 @@ export const freePeriods = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    /** null: von Hand | 'iserv': vom Ferienabgleich (@/lib/iserv/ferien) */
+    quelle: text("quelle"),
+    /** Nur bei quelle = 'iserv': der stabile Schlüssel aus IServ */
+    iservKey: text("iserv_key"),
   },
-  (t) => [index("free_periods_user_idx").on(t.userId)],
+  (t) => [
+    index("free_periods_user_idx").on(t.userId),
+    uniqueIndex("free_periods_iserv_key_idx").on(t.userId, t.iservKey),
+    check(
+      "free_periods_quelle_check",
+      sql`(${t.quelle} is null and ${t.iservKey} is null) or (${t.quelle} = 'iserv' and ${t.iservKey} is not null)`,
+    ),
+  ],
 );
 
 /**

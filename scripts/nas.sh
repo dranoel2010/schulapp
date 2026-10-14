@@ -401,7 +401,10 @@ stand() {
 # Modell 23 (Plan 5.7): je neue SQL-Datei eine Zeile. Die GIN-Indizes
 # (kombi-suche.sql) prüft `hoch` nicht: ohne Index ist die Suche nur
 # langsamer. Den getauschten CHECK (kombi-arbeitsblaetter-checks.sql) prüft
-# `spalten_pruefen` eigens am Ende, er hat keine Spalte.
+# `spalten_pruefen` eigens am Ende, er hat keine Spalte. Die siebte Datei
+# (kombi-upload-schluessel.sql) steht mit `material_pages.upload_key` da, die
+# achte (kombi-iserv-ferien.sql, Ferien aus IServ) mit `free_periods.iserv_key`:
+# ohne sie scheitert jede Seite, die freie Tage liest.
 PFLICHTSPALTEN="material_pages leser scripts/leser-tabellen.sql
 leser_laeufe frist_bis scripts/leser-laeufe-tabelle.sql
 tagesprotokoll typ scripts/kombi-tagesprotokoll.sql
@@ -409,7 +412,8 @@ study_blocks pause_ms scripts/kombi-lernblock-uhr.sql
 subject_topics art scripts/kombi-themen-art.sql
 arbeitsblaetter inhalt scripts/kombi-arbeitsblaetter.sql
 leser_laeufe arbeitsblatt_id scripts/kombi-arbeitsblaetter.sql
-material_pages upload_key scripts/kombi-upload-schluessel.sql"
+material_pages upload_key scripts/kombi-upload-schluessel.sql
+free_periods iserv_key scripts/kombi-iserv-ferien.sql"
 
 # Postgres im db-Container, Benutzer und Datenbank aus SEINER Umgebung — wie
 # psql_db() in scripts/kalender-einrichten.sh; "schulapp" nur als Rückfall.
@@ -475,7 +479,7 @@ spalten_pruefen() {
         echo "  sudo sh -c 'cd $APP && $DC exec -T db psql -X -v ON_ERROR_STOP=1 --single-transaction -U $benutzer -d $datenbank -f - < repo/$datei'" >&2
         case "$datei" in
           scripts/kombi-*)
-            echo "Modell 23: sieben Dateien in fester Reihenfolge, README „Modell 23 auf dem NAS“." >&2 ;;
+            echo "Modell 23: acht Dateien in fester Reihenfolge, README „Modell 23 auf dem NAS“." >&2 ;;
         esac
         if [ "$datei" = "scripts/kombi-arbeitsblaetter.sql" ]; then
           echo "Gleich danach, genauso, die Folgedatei (tauscht zwei CHECKs an leser_laeufe):" >&2

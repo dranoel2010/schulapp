@@ -1,0 +1,404 @@
+import { addDays, daysBetween } from "@/lib/dates";
+import { MAX_FREE_DAYS, type FreeKind } from "@/lib/free-days";
+import { freiZeitraumArt, urteil, type FilterConfig } from "@/lib/iserv/klasse";
+import { sprechName } from "@/lib/iserv/sprechtitel";
+import type { IservItem } from "@/lib/iserv/types";
+
+/**
+ * Ferien und unterrichtsfreie Tage aus IServ — als freie Tage der App.
+ *
+ * Bis zum 12.10.2026 schrieb IServ nie in `free_periods`: Die Ferien trug der
+ * Mensch von Hand ein, und die Landesferien aus IServ galten an dieser Schule
+ * als falsch. Beides ist überholt. Der Nutzer hat bestätigt, dass die Ferien
+ * aus IServ stimmen („ne die aus iserv sind richtig“), und die Seite zum
+ * Eintragen gibt es seit Modell 23 nicht mehr. Seitdem legt der Abruf bei
+ * IServ (@/lib/iserv/abruf) die freien Tage selbst an. Frei heißt weiter ganz
+ * frei: kein Unterricht, keine Lernblöcke, kein Abruf, keine Erinnerung.
+ *
+ * Reine Rechnung, in zwei Schritten:
+ *
+ *   1. `ferienAusIserv()` — welche freien Zeiträume IServ meldet;
+ *   2. `ferienPlan()`     — was dafür an den Zeilen der App zu tun ist.
+ *
+ * Geschrieben wird in @/lib/iserv/store (`saveRun`), in derselben Transaktion
+ * wie die Snapshots.
+ *
+ * ── Was ein freier Zeitraum aus IServ ist ────────────────────────────────────
+ *
+ *   a) jeder ganztägige Eintrag des Plugins „holiday“ (Ferien und
+ *      gesetzliche Feiertage);
+ *   b) eine ganztägige Ferien- oder Frei-Meldung des öffentlichen Kalenders
+ *      (`freiZeitraumArt()`: der Titel BEGINNT mit dem Namen der Ferien, oder
+ *      er sagt unterrichtsfrei, schulfrei, „Schule geschlossen“ — und nennt
+ *      keinen Schultag, kein Unterrichtsende, keine Zeugnisse, keine AG), die der Klassenfilter (@/lib/iserv/klasse) für die
+ *      eigene Klasse gelten lässt — für alle (Regel c, „alle-unterricht“, auch
+ *      „knapp“ trotz Hort-Erwähnung, wenn die SCHULE zu ist) oder ausdrücklich
+ *      für sie („eigene-klasse“, „bereich“).
+ *
+ * Nie: ein Termin mit Uhrzeit („Unterrichtsende 11:30“ ist ein Schultag), Hort
+ * und Ferienbetreuung (der Filter lässt sie draußen; „Hort geschlossen“ ist
+ * kein schulfreier Tag), eine AG, ein Termin einer anderen Klasse, alles, was
+ * ISERV_NIE ausschließt. Auch nichts aus dem Klassenkalender und den
+ * Aufgaben: Eine Abgabe am letzten Ferientag ist eine Abgabe, keine Ferien.
+ *
+ * ── Doppelte und Überschneidungen ────────────────────────────────────────────
+ *
+ * Plugin und öffentlicher Kalender melden dieselben Herbstferien — das Plugin
+ * etwa Montag bis Freitag, der Schulkalender Samstag bis Samstag. Was sich um
+ * mindestens einen Tag überschneidet, wird EIN Zeitraum, vom frühesten Anfang
+ * bis zum spätesten Ende. Ein Feiertag in den Ferien geht darin auf. Was nur
+ * aneinandergrenzt (der pädagogische Tag vor den Herbstferien), bleibt ein
+ * eigener Zeitraum mit eigenem Namen.
+ *
+ * Der Name ist der, den ein Bot vorlesen kann (@/lib/iserv/sprechtitel):
+ * „Herbstferien_Sa. 24. 10. – Sa. 7. 11. 2026“ heißt „Herbstferien“. Kommen
+ * mehrere zusammen, gewinnt Ferien vor Feiertag, das Plugin vor dem
+ * Schulkalender.
+ *
+ * ── Tage ─────────────────────────────────────────────────────────────────────
+ *
+ * Die Tage kommen fertig aus @/lib/iserv/parse: Berliner Kalendertage, das
+ * exklusive Ende von IServ schon in ein inklusives umgerechnet.
+ */
+
+/** Ein freier Zeitraum, den IServ meldet — schon zusammengeführt. */
+export type FerienWunsch = {
+  /** Der Schlüssel, unter dem die Zeile steht (`iserv_key`) */
+  schluessel: string;
+  /** Alle Schlüssel der zusammengeführten Einträge — daran wird eine Zeile wiedererkannt */
+  alleSchluessel: string[];
+  kind: Extract<FreeKind, "ferien" | "frei">;
+  /** Höchstens 60 Zeichen, nie leer */
+  title: string;
+  startsOn: string;
+  /** Inklusiv */
+  endsOn: string;
+};
+
+/** Regeln des Klassenfilters, mit denen eine Frei-Meldung für die eigene Klasse gilt. */
+const NIMMT: ReadonlySet<string> = new Set([
+  "alle-unterricht",
+  "unterricht-trotz-marker",
+  "eigene-klasse",
+  "bereich",
+]);
+
+/** So lang darf ein Name sein — wie im Formular, das es früher gab (@/lib/free-days). */
+const TITEL_MAX = 60;
+
+type Kandidat = {
+  schluessel: string;
+  kind: FerienWunsch["kind"];
+  title: string;
+  startsOn: string;
+  endsOn: string;
+  /** 0 Plugin, 1 Schulkalender */
+  vorrang: number;
+};
+
+function kurz(titel: string): string {
+  const t = titel.trim();
+  return t.length <= TITEL_MAX ? t : `${t.slice(0, TITEL_MAX - 1).trimEnd()}…`;
+}
+
+function kandidat(item: IservItem, filter: FilterConfig): Kandidat | null {
+  if (item.fest || !item.ganztaegig) return null;
+  if (daysBetween(item.ersterTag, item.letzterTag) >= MAX_FREE_DAYS) return null;
+
+  let art: FerienWunsch["kind"] | null = null;
+  if (item.quelle === "oeffentlich") {
+    // Streng: „Letzter Schultag vor den Herbstferien“ oder eine „Ferien-AG“
+    // sind Schultage, keine freien (`freiZeitraumArt()` in @/lib/iserv/klasse).
+    art = freiZeitraumArt(item.titel);
+    if (!art) return null;
+    const u = urteil({ titel: item.titel, ganztaegig: true }, filter);
+    if (!u.nehmen || !NIMMT.has(u.regel)) return null;
+  } else if (item.quelle !== "ferien") {
+    return null;
+  }
+
+  const name = sprechName(item, filter.klasse);
+  // Das Plugin meldet nur Ferien und Feiertage: Ferien, wenn der Name so beginnt.
+  const kind = art ?? (name.ferien || freiZeitraumArt(item.titel) === "ferien" ? "ferien" : "frei");
+
+  return {
+    schluessel: item.fremdId,
+    kind,
+    title: kurz(name.name) || (kind === "ferien" ? "Ferien" : "Schulfrei"),
+    startsOn: item.ersterTag,
+    endsOn: item.letzterTag,
+    vorrang: item.quelle === "ferien" ? 0 : 1,
+  };
+}
+
+/** Wer einer Gruppe den Namen gibt: Ferien vor Feiertag, Plugin vor Schulkalender, der längere, dann der Schlüssel. */
+function besser(a: Kandidat, b: Kandidat): number {
+  if (a.kind !== b.kind) return a.kind === "ferien" ? -1 : 1;
+  if (a.vorrang !== b.vorrang) return a.vorrang - b.vorrang;
+  const la = daysBetween(a.startsOn, a.endsOn);
+  const lb = daysBetween(b.startsOn, b.endsOn);
+  if (la !== lb) return lb - la;
+  return a.schluessel < b.schluessel ? -1 : a.schluessel > b.schluessel ? 1 : 0;
+}
+
+/**
+ * Die freien Zeiträume, die IServ meldet und die heute oder später noch
+ * gelten — zusammengeführt, nach Anfang sortiert.
+ */
+export function ferienAusIserv(input: {
+  items: readonly IservItem[];
+  filter: FilterConfig;
+  heute: string;
+}): FerienWunsch[] {
+  const kandidaten = input.items
+    .map((item) => kandidat(item, input.filter))
+    .filter((k): k is Kandidat => k !== null && k.endsOn >= input.heute)
+    .sort((a, b) => (a.startsOn !== b.startsOn ? (a.startsOn < b.startsOn ? -1 : 1) : besser(a, b)));
+
+  const gruppen: Kandidat[][] = [];
+  let ende = "";
+  for (const k of kandidaten) {
+    const letzte = gruppen.at(-1);
+    if (letzte && k.startsOn <= ende) {
+      letzte.push(k);
+      if (k.endsOn > ende) ende = k.endsOn;
+    } else {
+      gruppen.push([k]);
+      ende = k.endsOn;
+    }
+  }
+
+  return gruppen.map((gruppe) => {
+    const kopf = [...gruppe].sort(besser)[0];
+    return {
+      schluessel: kopf.schluessel,
+      alleSchluessel: [...new Set(gruppe.map((k) => k.schluessel))].sort(),
+      kind: gruppe.some((k) => k.kind === "ferien") ? "ferien" : "frei",
+      title: kopf.title,
+      startsOn: gruppe.reduce((min, k) => (k.startsOn < min ? k.startsOn : min), gruppe[0].startsOn),
+      endsOn: gruppe.reduce((max, k) => (k.endsOn > max ? k.endsOn : max), gruppe[0].endsOn),
+    };
+  });
+}
+
+/** Eine Zeile aus `free_periods` mit `quelle = 'iserv'`. */
+export type IservFreiZeile = {
+  id: string;
+  iservKey: string;
+  kind: string;
+  title: string | null;
+  startsOn: string;
+  endsOn: string;
+};
+
+export type FerienAenderung = {
+  id: string;
+  iservKey: string;
+  kind: string;
+  title: string | null;
+  startsOn: string;
+  endsOn: string;
+};
+
+export type FerienPlan = {
+  neu: FerienWunsch[];
+  aendern: FerienAenderung[];
+  /** ids */
+  loeschen: string[];
+};
+
+/**
+ * Was an den IServ-Zeilen der App zu tun ist, damit sie dem entsprechen, was
+ * IServ meldet. Von Hand eingetragene Zeilen kommen hier gar nicht erst an
+ * (der Store liest nur `quelle = 'iserv'`).
+ *
+ * Wiedererkannt wird eine Zeile zuerst an ihrem Schlüssel (irgendeiner der
+ * zusammengeführten), dann an einer Überschneidung — so bleibt sie dieselbe
+ * Zeile (und derselbe Balken in Google), auch wenn IServ die Ferien
+ * verschiebt oder ein Schlüssel wechselt.
+ *
+ * Vergangene freie Tage bleiben stehen:
+ *
+ *   - eine Zeile, die vor heute endete, wird nie gelöscht und nie gekürzt —
+ *     höchstens verlängert, wenn IServ unter ihrem Schlüssel weiter meldet;
+ *   - eine laufende Zeile (Anfang vor heute), die IServ nicht mehr meldet,
+ *     endet gestern, statt zu verschwinden;
+ *   - der Anfang einer laufenden Zeile rückt nie nach vorn;
+ *   - eine Zeile, die schon angefangen hat, nimmt einen Wunsch nur auf, wenn
+ *     er sie überschneidet oder an sie grenzt — sonst gibt sie ihren
+ *     Schlüssel ab (`Schlüssel@Anfang`) und der Wunsch wird neu angelegt;
+ *   - kein Zeitraum wird MAX_FREE_DAYS lang oder länger.
+ *
+ * Die Wünsche kommen aus den Snapshots, die @/lib/iserv/schutz bewacht: Eine
+ * leere oder kaputte Antwort von IServ ändert den Snapshot nicht — und damit
+ * auch keine Zeile hier.
+ */
+export function ferienPlan(
+  bestehend: readonly IservFreiZeile[],
+  alleWuensche: readonly FerienWunsch[],
+  heute: string,
+): FerienPlan {
+  // Was zusammengeführt ein Vierteljahr oder länger wird, ist kein Zeitraum,
+  // den die App glaubt (@/lib/free-days, MAX_FREE_DAYS).
+  const wuensche = alleWuensche.filter((w) => daysBetween(w.startsOn, w.endsOn) < MAX_FREE_DAYS);
+  const gestern = addDays(heute, -1);
+  const vergangen = (z: IservFreiZeile) => z.endsOn < heute;
+
+  /**
+   * Darf diese Zeile den Wunsch aufnehmen? Eine Zeile, die schon angefangen
+   * hat, behält ihren Anfang — also nur, wenn sie den Wunsch überschneidet
+   * oder direkt an ihn grenzt und das Ganze nicht länger als MAX_FREE_DAYS
+   * wird. Sonst wüchse sie über ein Jahr, nur weil IServ einen Schlüssel ein
+   * Jahr später wieder vergibt.
+   */
+  const passt = (z: IservFreiZeile, w: FerienWunsch) => {
+    if (z.startsOn >= heute) return true;
+    const beruehrt = z.startsOn <= addDays(w.endsOn, 1) && w.startsOn <= addDays(z.endsOn, 1);
+    const anfang = z.startsOn < w.startsOn ? z.startsOn : w.startsOn;
+    const ende = vergangen(z) && z.endsOn > w.endsOn ? z.endsOn : w.endsOn;
+    return beruehrt && daysBetween(anfang, ende) < MAX_FREE_DAYS;
+  };
+
+  const frei = new Set(bestehend.map((z) => z.id));
+  /** Zeilen, die ihren Schlüssel an einen neuen Zeitraum abgeben */
+  const abgeben = new Set<string>();
+  const paare: { zeile: IservFreiZeile; wunsch: FerienWunsch }[] = [];
+  const ohne: FerienWunsch[] = [];
+
+  // 1. Am Schlüssel — eine angefangene Zeile nur, wenn sie zum Wunsch passt.
+  for (const wunsch of wuensche) {
+    const zeile = bestehend.find((z) => frei.has(z.id) && wunsch.alleSchluessel.includes(z.iservKey));
+    if (zeile && passt(zeile, wunsch)) {
+      frei.delete(zeile.id);
+      paare.push({ zeile, wunsch });
+    } else {
+      if (zeile) abgeben.add(zeile.id);
+      ohne.push(wunsch);
+    }
+  }
+
+  // 2. An der Überschneidung — nur mit Zeilen, die noch gelten.
+  const neu: FerienWunsch[] = [];
+  for (const wunsch of ohne) {
+    const zeile = bestehend.find(
+      (z) =>
+        frei.has(z.id) &&
+        !vergangen(z) &&
+        z.startsOn <= wunsch.endsOn &&
+        wunsch.startsOn <= z.endsOn &&
+        passt(z, wunsch),
+    );
+    if (zeile) {
+      frei.delete(zeile.id);
+      abgeben.delete(zeile.id);
+      paare.push({ zeile, wunsch });
+    } else {
+      neu.push(wunsch);
+    }
+  }
+
+  const aendern: FerienAenderung[] = [];
+  for (const { zeile, wunsch } of paare) {
+    const startsOn =
+      zeile.startsOn < heute && zeile.startsOn < wunsch.startsOn ? zeile.startsOn : wunsch.startsOn;
+    const endsOn = vergangen(zeile) && zeile.endsOn > wunsch.endsOn ? zeile.endsOn : wunsch.endsOn;
+    const iservKey = wunsch.alleSchluessel.includes(zeile.iservKey) ? zeile.iservKey : wunsch.schluessel;
+    const soll = { id: zeile.id, iservKey, kind: wunsch.kind, title: wunsch.title, startsOn, endsOn };
+
+    if (
+      soll.iservKey !== zeile.iservKey ||
+      soll.kind !== zeile.kind ||
+      soll.title !== zeile.title ||
+      soll.startsOn !== zeile.startsOn ||
+      soll.endsOn !== zeile.endsOn
+    ) {
+      aendern.push(soll);
+    }
+  }
+
+  // 3. Was IServ nicht mehr meldet. Eine Zeile, die ihren Schlüssel abgibt,
+  //    bekommt einen eigenen (Schlüssel@Anfang) — der Index lässt jeden
+  //    Schlüssel nur einmal zu. Die Reihenfolge, in der das geschrieben wird,
+  //    richtet `ohneDoppelteSchluessel()`: Die Abgabe kommt vor der Übernahme.
+  const loeschen: string[] = [];
+  for (const zeile of bestehend) {
+    if (!frei.has(zeile.id)) continue;
+    const iservKey = abgeben.has(zeile.id) ? `${zeile.iservKey}@${zeile.startsOn}` : zeile.iservKey;
+    if (vergangen(zeile)) {
+      if (iservKey !== zeile.iservKey) aendern.push({ ...zeile, iservKey });
+    } else if (zeile.startsOn < heute) {
+      aendern.push({ ...zeile, iservKey, endsOn: gestern });
+    } else {
+      loeschen.push(zeile.id);
+    }
+  }
+
+  return { neu, aendern: ohneDoppelteSchluessel(bestehend, loeschen, aendern), loeschen };
+}
+
+/**
+ * Bringt die Änderungen in eine Reihenfolge, in der nach JEDER einzelnen
+ * kein Schlüssel zweimal dasteht — Postgres prüft den Index
+ * `free_periods_iserv_key_idx` bei jeder Anweisung, nicht erst am Ende der
+ * Transaktion (@/lib/iserv/store, `saveRun`: erst löschen, dann diese
+ * Änderungen der Reihe nach, dann anlegen).
+ *
+ * Der Fall dahinter: IServ vergibt den Schlüssel K ein Jahr später wieder.
+ * Die vergangene Zeile gibt K ab (`K@Anfang`), und die laufende Zeile der
+ * neuen Ferien, an der Überschneidung wiedergefunden, bekommt K. Stünde ihre
+ * Änderung vorn, trügen kurz zwei Zeilen K — und der ganze Lauf scheiterte,
+ * bei jedem Abruf wieder.
+ *
+ * Also kommt eine Änderung erst dran, wenn ihr neuer Schlüssel frei ist. Bei
+ * einem Kreis (zwei Zeilen tauschen ihre Schlüssel) geht eine von ihnen erst
+ * über einen Zwischenschlüssel.
+ */
+function ohneDoppelteSchluessel(
+  bestehend: readonly IservFreiZeile[],
+  loeschen: readonly string[],
+  aendern: readonly FerienAenderung[],
+): FerienAenderung[] {
+  const weg = new Set(loeschen);
+  /** Schlüssel → id der Zeile, die ihn gerade trägt */
+  const traeger = new Map<string, string>();
+  /** id → Schlüssel, den die Zeile gerade trägt */
+  const jetzt = new Map<string, string>();
+  for (const z of bestehend) {
+    if (weg.has(z.id)) continue;
+    traeger.set(z.iservKey, z.id);
+    jetzt.set(z.id, z.iservKey);
+  }
+
+  const schreibe = (a: FerienAenderung) => {
+    const alt = jetzt.get(a.id);
+    if (alt !== undefined && traeger.get(alt) === a.id) traeger.delete(alt);
+    traeger.set(a.iservKey, a.id);
+    jetzt.set(a.id, a.iservKey);
+    ergebnis.push(a);
+  };
+
+  const ergebnis: FerienAenderung[] = [];
+  const offen = [...aendern];
+  while (offen.length > 0) {
+    const i = offen.findIndex((a) => {
+      const t = traeger.get(a.iservKey);
+      return t === undefined || t === a.id;
+    });
+    if (i >= 0) {
+      schreibe(offen.splice(i, 1)[0]);
+      continue;
+    }
+    // Ein Kreis: Die erste wartende Änderung räumt ihren alten Schlüssel über
+    // einen Zwischenschlüssel, den sonst niemand trägt.
+    const a = offen[0];
+    let zwischen = `${jetzt.get(a.id) ?? a.iservKey}@tausch`;
+    while (traeger.has(zwischen)) zwischen += "~";
+    schreibe({ ...a, iservKey: zwischen });
+  }
+  return ergebnis;
+}
+
+/** Hat der Plan etwas zu tun? */
+export function planTutEtwas(plan: FerienPlan): boolean {
+  return plan.neu.length + plan.aendern.length + plan.loeschen.length > 0;
+}

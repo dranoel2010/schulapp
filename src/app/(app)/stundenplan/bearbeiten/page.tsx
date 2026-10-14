@@ -4,7 +4,7 @@ import { SeitenKopf } from "@/components/kombi/form";
 import { TextLine } from "@/components/kombi/seiten/zeilen";
 import { requireUser } from "@/lib/auth";
 import { addDays, formatGerman } from "@/lib/dates";
-import { freeLabel, listFreePeriods } from "@/lib/free-days";
+import { freeLabel, freiQuelleText, listFreePeriods } from "@/lib/free-days";
 import { listSubjects } from "@/lib/subjects";
 import { appTag, jetzt } from "@/lib/tag";
 import { isDefaultPeriods, isoWeekNumber, loadWeek, weekdayOf } from "@/lib/timetable";
@@ -73,7 +73,7 @@ export default async function TimetableEditPage() {
                 period.startsOn === period.endsOn
                   ? formatGerman(period.startsOn, "kurz")
                   : `${formatGerman(period.startsOn, "kurz")} bis ${formatGerman(period.endsOn, "kurz")}`
-              }. Kein Unterricht.`}
+              } (${freiQuelleText(period)}). Kein Unterricht.`}
             </p>
           ))}
 

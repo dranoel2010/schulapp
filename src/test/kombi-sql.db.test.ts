@@ -35,6 +35,7 @@ export const KOMBI_SQL = [
   "kombi-arbeitsblaetter.sql",
   "kombi-arbeitsblaetter-checks.sql",
   "kombi-upload-schluessel.sql",
+  "kombi-iserv-ferien.sql",
 ] as const;
 
 async function basisMitWanderungen(): Promise<PGlite> {

@@ -1,0 +1,74 @@
+-- Ferien aus IServ (12.10.2026): zwei Spalten, ein Index und ein CHECK an
+-- `free_periods`.
+--
+-- Rein additiv. Bestehende Zeilen bekommen `quelle = NULL` und
+-- `iserv_key = NULL` — „von Hand eingetragen“, genau das, was sie heute sind.
+-- Der Ferienabgleich (src/lib/iserv/ferien.ts) fasst NUR Zeilen mit
+-- `quelle = 'iserv'` an; eine von Hand eingetragene Zeile ändert oder löscht
+-- er nie. `iserv_key` ist der stabile Schlüssel aus IServ (uid des Termins
+-- bzw. id im Plugin „holiday“), über den er dieselben Ferien wiederfindet.
+--
+-- Die Anweisungen sind aus `drizzle-kit generate` kopiert, nicht getippt
+-- (generateMigration zwischen dem Schema von modell-23 und src/db/schema.ts).
+-- Die Namen von Index und CHECK sind damit die, die drizzle-kit selbst
+-- vergibt; ein späteres `db:push` oder `generate` sieht keinen Unterschied
+-- (geprüft in src/test/kombi-sql.db.test.ts).
+--
+-- ── Wie sie in die Datenbank kommt ──────────────────────────────────────────
+--
+-- Lokal (Entwicklungsserver AUS, vorher `npm run db:backup`):
+--
+--   npx tsx scripts/sql-einspielen.ts scripts/kombi-iserv-ferien.sql
+--
+-- Auf dem NAS — als achte nach tagesprotokoll, lernblock-uhr, suche,
+-- themen-art, arbeitsblaetter, arbeitsblaetter-checks, upload-schluessel;
+-- genau einmal (nicht wiederholbar: ein zweiter Lauf bricht an der schon
+-- vorhandenen Spalte ab und ändert in seiner Transaktion nichts); ZUERST einspielen,
+-- DANN bauen (ohne die Spalten scheitert jeder Abruf bei IServ und jede
+-- Seite, die freie Tage liest):
+--
+--   sudo docker compose exec -T db \
+--     psql -v ON_ERROR_STOP=1 --single-transaction -U schulapp -d schulapp \
+--     < repo/scripts/kombi-iserv-ferien.sql
+--
+-- ── Vorher zählen (ändert nichts) ───────────────────────────────────────────
+--
+--   SELECT count(*) AS freie_zeitraeume FROM free_periods;
+--
+--   -- Von Hand eingetragene Ferien und freie Tage, die noch kommen (vor
+--   -- dieser Datei sind ALLE Zeilen von Hand eingetragen):
+--   SELECT count(*) AS hand_ferien_kommend FROM free_periods
+--    WHERE kind IN ('ferien', 'frei') AND ends_on >= current_date;
+--   SELECT kind, title, starts_on, ends_on FROM free_periods
+--    WHERE kind IN ('ferien', 'frei') AND ends_on >= current_date
+--    ORDER BY starts_on;
+--
+-- Diese Zeilen bleiben, wie sie sind — der Abgleich fasst sie nie an, und
+-- Lernplan und Abruf nehmen die Tage beider Zeilen zusammen. Im Google
+-- Kalender steht trotzdem jeder Zeitraum nur einmal: Eine Hand-Zeile, deren
+-- Tage eine IServ-Zeile abdeckt (Samstag und Sonntag am Rand zählen nicht),
+-- fällt dort weg, ebenso eine IServ-Zeile, die eine Hand-Zeile abdeckt
+-- (`fuerKalender()` in src/lib/free-days.ts). Nur was sich an Werktagen
+-- teilweise überschneidet, steht zweimal da — der Löschbefehl dafür steht in
+-- EINBAU Schritt 7 (die Ferienseite gibt es nicht mehr). Nach dem ersten
+-- Abruf zeigt dieselbe Abfrage mit `AND quelle IS NULL` die Hand-Zeilen; die
+-- mit IServ-Ferien überlappen, zählt:
+--
+--   SELECT count(*) AS hand_ueberlappt_iserv FROM free_periods h
+--    WHERE h.quelle IS NULL AND h.kind IN ('ferien', 'frei')
+--      AND h.ends_on >= current_date
+--      AND EXISTS (SELECT 1 FROM free_periods i
+--                   WHERE i.user_id = h.user_id AND i.quelle = 'iserv'
+--                     AND i.starts_on <= h.ends_on AND h.starts_on <= i.ends_on);
+--
+-- Danach: dieselbe Zahl; `SELECT count(*) FROM free_periods WHERE quelle IS
+-- NOT NULL OR iserv_key IS NOT NULL` gibt 0. Erst der nächste Abruf bei IServ
+-- (stündlicher Kalender-Cron, höchstens alle drei Stunden) legt Zeilen mit
+-- `quelle = 'iserv'` an.
+--
+-- Danach nachsehen: \d free_periods
+
+ALTER TABLE "free_periods" ADD COLUMN "quelle" text;
+ALTER TABLE "free_periods" ADD COLUMN "iserv_key" text;
+CREATE UNIQUE INDEX "free_periods_iserv_key_idx" ON "free_periods" USING btree ("user_id","iserv_key");
+ALTER TABLE "free_periods" ADD CONSTRAINT "free_periods_quelle_check" CHECK (("free_periods"."quelle" is null and "free_periods"."iserv_key" is null) or ("free_periods"."quelle" = 'iserv' and "free_periods"."iserv_key" is not null));

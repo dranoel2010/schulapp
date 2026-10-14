@@ -28,7 +28,9 @@ import { QUELL_NAMEN, type IservItem, type IservQuelle } from "@/lib/iserv/types
  * Normalfall, und gerade die sollen nicht nach einer einzigen leeren Antwort
  * verschwinden. Der öffentliche Kalender leer ist NIE echt: Ein Schuljahr ohne
  * einen einzigen Schultermin gibt es nicht; das bleibt ein Fehler, so oft es
- * auch kommt.
+ * auch kommt. Dasselbe gilt für Ferien und Feiertage (Plugin „holiday“): Ein
+ * Jahr ohne Ferien und Feiertage gibt es nicht, und an diesem Stand hängen die
+ * freien Tage der App (@/lib/iserv/ferien).
  *
  * ── Eine Quelle, die fehlt, ist keine leere Quelle ──────────────────────────
  *
@@ -168,6 +170,19 @@ export function pruefe(input: {
       neu: null,
       warnung: null,
       satz: "IServ liefert den öffentlichen Kalender leer. Der alte Stand bleibt.",
+    };
+  }
+
+  // Ferien und Feiertage leer ist NIE echt: Im Fenster von 365 Tagen gibt es
+  // immer Ferien und Feiertage. Übernähme der Schutz die leere Liste nach drei
+  // gleichen Antworten, nähme der Ferienabgleich alle künftigen freien Tage
+  // weg, die nur aus dem Plugin kommen.
+  if (quelle === "ferien" && nNeu === 0 && nAlt >= 1) {
+    return {
+      entscheidung: "fehler",
+      neu: null,
+      warnung: null,
+      satz: `IServ liefert Ferien und Feiertage leer. Der alte Stand (${nAlt} Termine) bleibt.`,
     };
   }
 

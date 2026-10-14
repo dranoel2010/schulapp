@@ -80,7 +80,12 @@ export function WocheInhalt({ daten: vomServer }: { daten: WocheDaten }) {
       </div>
       <div hidden ref={ankerRef} />
       <div className="lessons" ref={listRef}>
-        {t.frei ? <p className="free">{t.frei}</p> : null}
+        {t.frei ? (
+          <p className="free">
+            {t.frei}
+            {t.freiHerkunft ? <span className="free-quelle">{` · ${t.freiHerkunft}`}</span> : null}
+          </p>
+        ) : null}
         {t.stunden.map((l) => (
           <div className="lesson" key={`${l.nr}-${l.fachId}`}>
             <time>

@@ -3,6 +3,7 @@ import { getConnection } from "@/lib/calendar/store";
 import { addDays, berlinDay, formatGerman, timeInBerlin } from "@/lib/dates";
 import { listAllFreePeriods, type FreeRange } from "@/lib/free-days";
 import { beurteileEinzeln } from "@/lib/iserv/auswahl";
+import { ferienAusIserv } from "@/lib/iserv/ferien";
 import {
   createIservClient,
   IservFehler,
@@ -23,6 +24,7 @@ import {
   klasseVeraltet,
   parseAufgabenFeed,
   parseEventSources,
+  parseFerienFeed,
   parseKalenderFeed,
 } from "@/lib/iserv/parse";
 import { leseQuellen, STALE_MS, type BlockGrund } from "@/lib/iserv/report";
@@ -35,7 +37,9 @@ import {
   type ErkannteQuelle,
   type IservLaufStatus,
   type IservQuelle,
+  type IservRolle,
 } from "@/lib/iserv/types";
+import { freieTageNachgezogen } from "@/lib/frei-nachlauf";
 import { sendToUser, type PushPayload } from "@/lib/push";
 
 /**
@@ -50,10 +54,16 @@ import { sendToUser, type PushPayload } from "@/lib/push";
  *      freien Tage. Eine kaputte Datenbank soll niemanden bei IServ anmelden.
  *   3. eventsources: Welche Kalender gibt es, welcher ist der der Klasse?
  *   4. Die Feeds, NACHEINANDER (höflich, nicht parallel): öffentlicher
- *      Kalender, Klassenkalender, Aufgaben — im Fenster heute −14 bis +365.
+ *      Kalender, Klassenkalender, Aufgaben, Ferien und Feiertage (Plugin
+ *      „holiday“) — im Fenster heute −14 bis +365.
  *   5. Je Quelle der Schutz (@/lib/iserv/schutz): übernehmen, behalten oder
  *      Fehler.
- *   6. Festhalten, in EINER kurzen Transaktion, nachdem alles Netz vorbei ist.
+ *   6. Festhalten, in EINER kurzen Transaktion, nachdem alles Netz vorbei ist
+ *      — dazu die freien Tage aus IServ (@/lib/iserv/ferien), gerechnet aus
+ *      dem Stand, der nach dem Schutz gilt. Eine leere oder kaputte Antwort
+ *      ändert diesen Stand nicht, und damit auch keinen freien Tag.
+ *   7. Haben sich freie Tage geändert, rücken Lernplan und Abruf von ihnen
+ *      weg (`nachFerien`).
  *
  * Der Abgleich mit Google liest danach nur noch die Snapshots
  * (`iservSource` in @/lib/calendar/sources). Gerufen wird dieser Lauf vom
@@ -91,6 +101,11 @@ export type AbrufDeps = {
   fetch?: typeof fetch;
   speicher: SitzungsSpeicher;
   push(userId: string, payload: PushPayload): Promise<unknown>;
+  /**
+   * Nach geänderten freien Tagen: Lernblöcke und Abruf-Termine von ihnen
+   * wegräumen (@/lib/frei-nachlauf). Fehlt es, bleibt es beim Schreiben.
+   */
+  nachFerien?(userId: string): Promise<void>;
   now?: () => number;
 };
 
@@ -136,6 +151,15 @@ const FEHLT_GRUND: Record<IservQuelle, string> = {
   oeffentlich: "Den öffentlichen Kalender gibt es in IServ nicht mehr.",
   klasse: "Klassenkalender: In IServ ist kein Kalender deiner Klasse mehr zu finden.",
   aufgaben: "Aufgaben: IServ bietet kein Aufgaben-Plugin mehr an.",
+  ferien: "Ferien und Feiertage: IServ bietet das Plugin „holiday“ nicht mehr an.",
+};
+
+/** Welche Rolle aus eventsources zu welcher Quelle gehört. */
+const ROLLE: Record<IservQuelle, IservRolle> = {
+  oeffentlich: "oeffentlich",
+  klasse: "klasse",
+  aufgaben: "aufgaben",
+  ferien: "feiertage",
 };
 
 function echteDeps(config: IservConfig): AbrufDeps {
@@ -145,6 +169,9 @@ function echteDeps(config: IservConfig): AbrufDeps {
     freieZeiten: listAllFreePeriods,
     speicher: sitzungsSpeicher(),
     push: sendToUser,
+    nachFerien: async (userId) => {
+      await freieTageNachgezogen(userId);
+    },
   };
 }
 
@@ -286,8 +313,8 @@ async function abrufen(
     const antworten = new Map<IservQuelle, QuellAntwort>();
     let felder: string[] | null = null;
 
-    for (const quelle of ["oeffentlich", "klasse", "aufgaben"] as const) {
-      const q = erkannt.quellen.find((kandidat) => kandidat.rolle === quelle && kandidat.url);
+    for (const quelle of ["oeffentlich", "klasse", "aufgaben", "ferien"] as const) {
+      const q = erkannt.quellen.find((kandidat) => kandidat.rolle === ROLLE[quelle] && kandidat.url);
       if (!q?.url) {
         // Stimmt die Einstellung der Klasse nicht, ist der Klassenkalender
         // nicht leer, sondern unbekannt: ein Fehler, der alte Stand bleibt.
@@ -306,6 +333,12 @@ async function abrufen(
         if (quelle === "aufgaben") {
           const gelesen = parseAufgabenFeed(json, q.label, zugang.origin);
           if (gelesen.items.length > 0) felder = gelesen.felder;
+          if (gelesen.unlesbar > 0) {
+            warnungen.push(`${gelesen.unlesbar} Einträge von „${QUELL_NAMEN[quelle]}“ unlesbar übersprungen.`);
+          }
+          antworten.set(quelle, { art: "ok", items: gelesen.items, remoteId: q.id, label: q.label });
+        } else if (quelle === "ferien") {
+          const gelesen = parseFerienFeed(json, q.label);
           if (gelesen.unlesbar > 0) {
             warnungen.push(`${gelesen.unlesbar} Einträge von „${QUELL_NAMEN[quelle]}“ unlesbar übersprungen.`);
           }
@@ -358,7 +391,7 @@ async function abrufen(
     const oeffentlich = pruefungen.get("oeffentlich");
     const success = oeffentlich !== undefined && oeffentlich.entscheidung !== "fehler";
     // Der öffentliche Kalender zuerst: Scheitert er, ist er der Grund für „fehler".
-    const fehlerSaetze = (["oeffentlich", "klasse", "aufgaben"] as const)
+    const fehlerSaetze = (["oeffentlich", "klasse", "aufgaben", "ferien"] as const)
       .flatMap((quelle) => {
         const p = pruefungen.get(quelle);
         return p ? [[quelle, p] as const] : [];
@@ -386,7 +419,24 @@ async function abrufen(
     );
     const warnung = warnungen.length > 0 ? warnungen.join(" ") : null;
 
-    await store.saveRun(userId, {
+    // Die freien Tage aus dem Stand, der nach dem Schutz gilt: der alte, wo
+    // nichts übernommen wurde, sonst der neue. Ohne jeden Stand des
+    // öffentlichen Kalenders weiß die App nicht, was frei ist — dann bleiben
+    // die freien Tage, wie sie sind.
+    const stand = new Map(alt);
+    for (const snap of zuSchreiben) stand.set(snap.quelle, snap);
+    const ferien = stand.has("oeffentlich")
+      ? {
+          wuensche: ferienAusIserv({
+            items: [...stand.values()].flatMap((snap) => snap.items),
+            filter,
+            heute,
+          }),
+          heute,
+        }
+      : undefined;
+
+    const gespeichert = await store.saveRun(userId, {
       attemptAt: jetzt,
       success,
       snapshots: zuSchreiben,
@@ -394,7 +444,22 @@ async function abrufen(
       warning: warnung,
       sourcesJson,
       exerciseFields,
+      ferien,
     });
+
+    // 7. Geänderte freie Tage: Lernplan und Abruf räumen sie frei. Scheitert
+    //    das, stehen die freien Tage trotzdem — der Lernplan rückt beim
+    //    nächsten Planen von selbst weg.
+    if (gespeichert.ferienGeaendert) {
+      console.info("IServ: freie Tage aus IServ geändert");
+      if (deps.nachFerien) {
+        try {
+          await deps.nachFerien(userId);
+        } catch (problem) {
+          console.error("IServ: Pläne nach geänderten freien Tagen nicht nachgezogen", errorText(problem));
+        }
+      }
+    }
 
     const zahlen = ISERV_QUELLEN.map((quelle) => {
       const a = antworten.get(quelle);
