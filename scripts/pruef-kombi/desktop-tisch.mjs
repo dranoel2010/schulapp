@@ -1,6 +1,6 @@
 /**
  * Der Tisch am Rechner (desktop.html, „Tisch in Fensterbreite“) bei 1280×800
- * und 1920×1080, hell und dunkel:
+ * und 1920×1080, hell und dunkel, dazu 1024×700 hell (knappe Stufe):
  *
  * - Wiederholen: der Tisch füllt das Fenster, die Karten stehen in einer
  *   Spalte von 600 px in der Mitte, die Frage in 30 px; die Tasten stehen in
@@ -43,6 +43,7 @@ const RESET = process.env.RESET ?? "";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const A4W = (210 * 96) / 25.4;
 const GROESSEN = [
+  { width: 1024, height: 700 },
   { width: 1280, height: 800 },
   { width: 1920, height: 1080 },
 ];
@@ -93,6 +94,7 @@ const tisch = (page) =>
       main: t.querySelector("#tbMain")?.textContent ?? null,
       fach: t.querySelector(".d-side .t-fach")?.textContent ?? null,
       thema: t.querySelector(".d-side .t-thema")?.textContent ?? null,
+      themaH: Math.round(t.querySelector(".d-side .t-thema")?.getBoundingClientRect().height ?? 0),
       lead: t.querySelector(".d-side .d-lead")?.textContent ?? null,
       ende: t.querySelector(".d-side .t-end h2, .tisch > .t-end.on h2")?.textContent ?? document.querySelector(".tisch.open > .t-end.on h2")?.textContent ?? null,
       uhr: t.querySelector(".t-clock")?.textContent ?? null,
@@ -104,7 +106,7 @@ const tisch = (page) =>
 const browser = await browserStarten();
 try {
   for (const g of GROESSEN) {
-    for (const schema of ["light", "dark"]) {
+    for (const schema of g.width === 1024 ? ["light"] : ["light", "dark"]) {
       const w = g.width;
       const vor = `${w} ${schema}`;
       console.log(`${w}×${g.height} ${schema}`);
@@ -201,6 +203,7 @@ try {
       p.ok(b.papiere.length === 2 && !b.fold, `${vor}: in „Wie lief es?“ klappt die Lösungsseite auf`);
       if (w >= 1920) p.ok(b.zwei && b.papiere.every((x) => x >= 560), `${vor}: Aufgaben und Lösungen nebeneinander (${b.papiere.join(", ")})`);
       else p.ok(!b.zwei && b.scroll > 100, `${vor}: untereinander, Ansicht bei der Lösungsseite (scrollTop ${b.scroll})`);
+      p.ok(b.themaH >= 28, `${vor}: das Thema bleibt über „Wie lief es?“ stehen (${b.themaH} px)`);
       await bild(page, "blatt-wertung", w, schema);
       const n = await page.locator(".tisch.open .tb-row").count();
       for (let i = 0; i < n; i++) await page.locator(`.tisch.open .tb-row >> nth=${i} >> button[data-v="${i === 2 ? "false" : "true"}"]`).click();

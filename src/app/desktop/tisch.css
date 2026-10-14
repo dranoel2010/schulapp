@@ -53,6 +53,8 @@
 .d-pages .tb-wait{align-self:stretch;margin-top:40px}
 
 .d-side{min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 40px 32px 8px;display:flex;flex-direction:column;scrollbar-width:thin;scrollbar-color:var(--t-fill-2) transparent}
+/* die Spalte scrollt, wenn sie nicht reicht; nichts darin schrumpft (.t-thema hat overflow:hidden) */
+.d-side > *{flex-shrink:0}
 .d-side .t-thema{white-space:normal;font-size:28px;line-height:1.15;letter-spacing:-.03em;overflow-wrap:break-word}
 .d-side .d-lead{font-size:17px;line-height:1.4;margin-top:8px;opacity:.86}
 .d-side .d-lead.d-hilfe{font-size:15px;margin-top:14px}
