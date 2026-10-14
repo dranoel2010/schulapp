@@ -4,6 +4,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 
 import { blattOeffnenAction, blattStandAction, type ArbeitsblattAntwort } from "@/app/(app)/arbeitsblatt-actions";
 import { lernblockStartenAction, lernblockTischAction, lernblockUhrAction } from "@/app/(app)/lernblock-actions";
+import { tischAufRechner, tischTastenAn, tischZuRechner } from "@/components/kombi/desktop/tisch-tasten";
+import { useDesktop } from "@/components/kombi/desktop/use-desktop";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import {
@@ -154,6 +156,9 @@ export function ArbeitsblattTisch() {
   const oeffnetRef = useRef(false);
   const zaehler = useRef(0);
   const imBlock = optionen?.mode === "block" || Boolean(optionen?.block);
+  /** Ab 1024 px: Seiten links in Lesegröße, Kopf, Wertung und Ende rechts (desktop.html `buildBlatt`) */
+  const desk = useDesktop();
+  useEffect(() => tischTastenAn(), []);
 
   const blatt = useArbeitsblatt(anfang, fehlerToast);
   const { lage, phase } = blatt;
@@ -278,6 +283,8 @@ export function ArbeitsblattTisch() {
     const origin = optionen?.origin;
     if (reduce() || !origin) zeileVerstecken(true);
     else setTimeout(() => offenRef.current && zeileVerstecken(true), 340);
+    // Am Rechner wächst die Fläche per transform aus dem Knopf
+    if (tischAufRechner(tisch, surf, [body, endRef.current], origin)) return;
     [surf, body].forEach((x) => x.getAnimations().forEach((a) => a.cancel()));
     if (reduce()) {
       tisch.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160 });
@@ -317,6 +324,7 @@ export function ArbeitsblattTisch() {
         fertig();
         return;
       }
+      if (tischZuRechner(tisch, surfRef.current, [bodyRef.current, endRef.current], optionen?.origin, fertig)) return;
       if (reduce()) {
         tisch.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, fill: "forwards" }).finished.then(fertig, fertig);
         return;
@@ -421,6 +429,48 @@ export function ArbeitsblattTisch() {
   const alsBlock = imBlock && stand?.block;
   const kopfFach = alsBlock ? `${stand.fach} · Klausur ${kurz(stand.block!.klausurtag)}` : (stand?.fach ?? "");
   const kopfThema = alsBlock ? `Lernblock · ${stand.block!.label}` : (stand?.thema ?? "");
+  // Am Rechner steht der Kopf rechts neben den Seiten: „Mathematik · Lernblock“, darunter das Thema in 28 px
+  const kopfRechner = stand
+    ? {
+        fach: imBlock ? `${stand.fach} · Lernblock` : stand.fach,
+        thema: alsBlock ? stand.block!.label : stand.thema,
+        lead: zaehlerText,
+      }
+    : null;
+  const materialAuf = () => material && kombi.openSheet(<MaterialSheet m={material} />, true);
+
+  const ende =
+    ended && stand ? (
+      <ArbeitsblattEnde
+        stand={stand}
+        auswertung={blatt.auswertung}
+        imBlock={imBlock}
+        knoepfe={
+          !imBlock && naechstes ? (
+            <>
+              <button className="tlink known" type="button" onClick={weiterMit}>
+                <span>{`Weiter mit ${naechstes.fach}`}</span>
+                <span className="s">{`${naechstes.thema}, Arbeitsblatt`}</span>
+              </button>
+              <button className="tlink" type="button" onClick={() => schliessen()}>
+                Für heute aufhören
+              </button>
+            </>
+          ) : (
+            <>
+              {imBlock && material ? (
+                <button className="tlink" type="button" onClick={materialAuf}>
+                  Material ansehen
+                </button>
+              ) : null}
+              <button className={`tlink${imBlock ? " known" : ""}`} type="button" onClick={() => schliessen()}>
+                Fertig
+              </button>
+            </>
+          )
+        }
+      />
+    ) : null;
 
   return (
     <section
@@ -461,7 +511,7 @@ export function ArbeitsblattTisch() {
             {stand ? <Tn text={zaehlerText} /> : null}
           </p>
         </div>
-        {stand && !ended ? (
+        {stand && (!ended || desk) ? (
           <BlattKoerper
             key={anfang?.nr}
             stand={stand}
@@ -475,6 +525,8 @@ export function ArbeitsblattTisch() {
             seitenRef={seitenRef}
             einblenden={optionen?.origin ? 204 : 60}
             einblendenAb={einblendenAb}
+            kopf={kopfRechner}
+            ende={desk ? ende : null}
           />
         ) : null}
         {imBlock && material && !ended ? (
@@ -491,38 +543,8 @@ export function ArbeitsblattTisch() {
         beimOeffnen={lupeAuf}
         beimSchliessen={lupeZu}
       />
-      <div className={`t-end${ended ? " on" : ""}`} id="tEnd" ref={endRef}>
-        {ended && stand ? (
-          <ArbeitsblattEnde
-            stand={stand}
-            auswertung={blatt.auswertung}
-            imBlock={imBlock}
-            knoepfe={
-              !imBlock && naechstes ? (
-                <>
-                  <button className="tlink known" type="button" onClick={weiterMit}>
-                    <span>{`Weiter mit ${naechstes.fach}`}</span>
-                    <span className="s">{`${naechstes.thema}, Arbeitsblatt`}</span>
-                  </button>
-                  <button className="tlink" type="button" onClick={() => schliessen()}>
-                    Für heute aufhören
-                  </button>
-                </>
-              ) : (
-                <>
-                  {imBlock && material ? (
-                    <button className="tlink" type="button" onClick={() => kombi.openSheet(<MaterialSheet m={material} />, true)}>
-                      Material ansehen
-                    </button>
-                  ) : null}
-                  <button className={`tlink${imBlock ? " known" : ""}`} type="button" onClick={() => schliessen()}>
-                    Fertig
-                  </button>
-                </>
-              )
-            }
-          />
-        ) : null}
+      <div className={`t-end${ended && !desk ? " on" : ""}`} id="tEnd" ref={endRef}>
+        {desk ? null : ende}
       </div>
       <DruckSeiten daten={stand ? a4Daten(stand) : null} />
     </section>

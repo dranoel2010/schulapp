@@ -1,5 +1,76 @@
 /* Teil: Tisch (fensterfüllend: Karten in einer Spalte von 600 px, Arbeitsblatt links in Lesegröße, die Lösungsseite
    bis „Wie lief es?“ zugeklappt, danach beide Seiten nebeneinander; .d-cards, .d-blatt, .d-pages, .d-fold, .d-side).
-   Vorbild: desktop.html, Abschnitt „Tisch in Fensterbreite“. Alles ab 1024 px, Hover nur mit feiner Maus. */
+   Vorbild: desktop.html, Abschnitt „Tisch in Fensterbreite“. Alles ab 1024 px, Hover nur mit feiner Maus.
+   Die Tische der App (#tisch, #lbTisch) behalten ihr Markup vom Handy; hier bekommen sie die Gestalt am Rechner.
+   Bewegung und Tasten: src/components/kombi/desktop/tisch-tasten.ts. */
 @media (min-width:1024px){
+
+/* ---------- Fläche und Kopfleiste (.d-tsurf, .d-ttop) ---------- */
+/* die Fläche wächst per transform aus dem Knopf: Ursprung oben links */
+.tisch .t-surface{transform-origin:0 0}
+.tisch .t-body{padding-bottom:0;overflow-x:hidden;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--t-fill-2) transparent}
+.tisch .t-top{position:relative;z-index:3;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:12px;height:76px;padding:0 32px 0 20px}
+.tisch .t-top .tbtn{border-radius:12px}
+/* Schließen links, rechts das Zählwort oder die Uhr; ein verborgenes Zählwort verschiebt nichts */
+.tisch .t-top > :first-child{grid-column:1}
+.tisch .t-top .t-of{grid-column:2;justify-self:end}
+.tisch .t-top > :last-child:not(:first-child){grid-column:3;justify-self:end}
+@media (hover:hover) and (pointer:fine){.tisch .t-top .tbtn:hover,.tisch .t-clock:hover{background:var(--t-fill)}}
+
+/* ---------- Karten: eine Spalte von 600 px in der Mitte (.d-cards) ---------- */
+.tisch .t-head,.tisch .t-ticks,.tisch .t-meta,.tisch .t-stack,.tisch .t-foot,.tisch .t-mat{width:min(600px,calc(100% - 48px))}
+.tisch .t-head{margin-top:4px}
+/* die Karte ist so hoch wie ihr Inhalt (die Höhe setzt der Stapel), die Knöpfe folgen mit Abstand */
+.tisch .t-stack{margin:0}
+.tisch .c-q p{font-size:30px}
+.tisch .t-foot{margin-top:56px;margin-bottom:32px}
+.tisch .t-foot + .t-mat{margin-top:-16px;margin-bottom:32px}
+
+/* Ende eines Themas oder Blocks: der Satz in derselben Spalte, die Knöpfe nebeneinander */
+.tisch > .t-end{left:0;right:0;margin:0 auto;width:min(600px,calc(100% - 48px));padding:0;top:calc(76px + 9vh);bottom:32px}
+.tisch > .t-end .tnext{margin-top:40px;flex-direction:row;flex-wrap:wrap}
+.tisch > .t-end .tnext .tlink{flex:1 1 0;min-width:0}
+.tisch > .t-end .tnext .tnote{flex-basis:100%}
+
+/* Rückfrage („Als erledigt zählen?“) als Dialog in der Mitte statt unten */
+.tisch .t-confirm{inset:0;margin:auto;width:min(480px,calc(100% - 48px));height:fit-content;padding:26px 28px 24px;border-radius:22px;box-shadow:var(--pop-shadow)}
+
+/* ---------- Arbeitsblatt: Seiten links in Lesegröße, Steuerung rechts in einer festen Spalte (.d-blatt) ---------- */
+.tisch.blatt .t-body{overflow:hidden}
+/* Kopf und Zählwort stehen in der Spalte rechts */
+.tisch.blatt .t-head,.tisch.blatt .t-meta{display:none}
+.tisch.blatt .d-blatt{position:relative;flex:1 1 auto;min-height:0;width:100%;display:grid;grid-template-columns:minmax(0,1fr) 400px}
+@media (min-width:1680px){.tisch.blatt .d-blatt{grid-template-columns:minmax(0,1fr) 440px}}
+.d-pages{min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 40px 40px;display:flex;flex-direction:column;align-items:center;gap:28px;scrollbar-width:thin;scrollbar-color:var(--t-fill-2) transparent}
+.d-pages .tb-page{gap:10px}
+.d-pages.two{flex-direction:row;align-items:flex-start;justify-content:center}
+/* Vor dem Bewerten liegt die Lösungsseite zugeklappt: „Erst nach dem Lösen“ */
+.d-fold{display:flex;justify-content:space-between;align-items:center;gap:16px;min-height:52px;padding:0 18px;border-radius:14px;background:var(--t-fill);font-size:15px;line-height:1.3;font-weight:560;color:var(--t-on);flex:none}
+.d-fold span:last-child{opacity:.7;font-weight:450}
+/* in Lesegröße gibt es keine Lupe */
+.d-pages .tb-paper{cursor:default}
+.d-pages .tb-paper:active{transform:none}
+.d-pages .tb-wait{align-self:stretch;margin-top:40px}
+
+.d-side{min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 40px 32px 8px;display:flex;flex-direction:column;scrollbar-width:thin;scrollbar-color:var(--t-fill-2) transparent}
+.d-side .t-thema{white-space:normal;font-size:28px;line-height:1.15;letter-spacing:-.03em;overflow-wrap:break-word}
+.d-side .d-lead{font-size:17px;line-height:1.4;margin-top:8px;opacity:.86}
+.d-side .d-lead.d-hilfe{font-size:15px;margin-top:14px}
+.d-side .tb-wert{margin-top:28px}
+.d-side .tb-row .k{font-size:15px}
+.d-side .t-bfoot{display:block;width:100%;margin-top:auto;padding-top:24px}
+.d-side .t-bfoot[hidden]{display:none}
+.d-side .tb-art{margin:12px 0 0;padding:0}
+.d-side .t-end{position:static;visibility:visible;padding:0;margin-top:28px;display:flex;flex-direction:column}
+.d-side .t-end .tnext{margin-top:32px;padding-top:0}
+
+/* Material zum Block: leise oben in der Mitte, die Seiten bleiben frei */
+.tisch.blatt .t-mat{position:absolute;z-index:4;top:16px;left:0;right:0;margin:0 auto;width:fit-content;max-width:calc(100% - 320px)}
+.tisch.blatt .t-mat span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---------- Hover (nur mit feiner Maus) ---------- */
+@media (hover:hover) and (pointer:fine){
+  .tisch .rb:hover,.tisch .tlink:hover,.tisch .tb-main:not([aria-disabled="true"]):hover,.tisch .t-mat:hover,.tisch .tb-seg button:hover{filter:brightness(1.08)}
+  .tisch .tb-art:hover{opacity:1}
+}
 } /* Ende ab 1024 px */

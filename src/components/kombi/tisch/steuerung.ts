@@ -2,6 +2,8 @@
 
 import { flushSync } from "react-dom";
 
+import { kartenPlatzRechner, tischAufRechner, tischZuRechner } from "@/components/kombi/desktop/tisch-tasten";
+import { istDesktop } from "@/components/kombi/desktop/use-desktop";
 import { blattHolen, blattThemaHolen, blattVorwaermen, laufHolen, wiederholenHolen } from "@/components/kombi/tisch/daten";
 import type { BlattImSheet, FrageKarte, ThemaKurz, ThemaLauf } from "@/components/kombi/tisch/typen";
 import { whSetzen, whZuruecksetzen } from "@/components/kombi/tisch/wh-stand";
@@ -445,6 +447,8 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
   /* Die Karte ist so hoch wie ihr Inhalt und steht oben: vorn Frage und Feld, hinten die Lösung.
      Die Höhe wechselt beim Umdrehen in dem Moment, in dem die Karte hochkant steht. Aufgeklappt darf sie bis zu den Knöpfen wachsen */
   function stackAvail() {
+    const platz = kartenPlatzRechner(tStack);
+    if (platz !== null) return platz;
     const top = tStack.getBoundingClientRect().top;
     const foot = $("tFoot").getBoundingClientRect().top - 16;
     return Math.max(160, foot - top - 30);
@@ -456,11 +460,13 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     const old = tStack.offsetHeight;
     const avail = stackAvail();
     let H: number;
-    if (tisch.classList.contains("typing")) H = Math.min(448, avail);
+    /* am Rechner ohne Deckel: die Karte ist so hoch wie ihr Inhalt (desktop/tisch-tasten) */
+    const deckel = istDesktop() ? Infinity : 448;
+    if (tisch.classList.contains("typing") && deckel === 448) H = Math.min(448, avail);
     else if (top && top.classList.contains("flipped") && top._geloest) {
       const b = top.querySelector<HTMLElement>(".c-back")!;
       const open = top.querySelector('.cb-heft[aria-expanded="true"]');
-      H = Math.min(Math.max(b.scrollHeight, top._frontH || 0, 220), avail, open ? Infinity : 448);
+      H = Math.min(Math.max(b.scrollHeight, top._frontH || 0, 220), avail, open ? Infinity : deckel);
     } else if (top && top.classList.contains("flipped")) {
       H = old;
     } else {
@@ -470,7 +476,7 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
         const f = top.querySelector<HTMLElement>(".c-field")!;
         need = q.scrollHeight + f.offsetHeight + 12;
       }
-      H = Math.min(Math.max(need, 200), avail, 448);
+      H = Math.min(Math.max(need, 200), avail, deckel);
       if (top) top._frontH = H;
     }
     tStack.style.height = `${Math.round(H)}px`;
@@ -1396,6 +1402,8 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
     const ghost = $("tGhost");
     [surf, body, tint, ghost, tisch].forEach((x) => x.getAnimations().forEach((a) => a.cancel()));
     themeColor("table");
+    /* am Rechner: die Fläche wächst aus dem Knopf (desktop/tisch-tasten) */
+    if (tischAufRechner(tisch, surf, [body, $("tEnd")], origin)) return;
     if (reduce()) {
       tisch.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160 });
       return;
@@ -1499,6 +1507,7 @@ export function erzeugeTisch(tisch: HTMLElement, deps: TischDeps) {
       done();
       return;
     }
+    if (tischZuRechner(tisch, surf, [body, end], o, done)) return;
     if (reduce()) {
       tisch.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160 }).finished.then(done, () => {});
       return;

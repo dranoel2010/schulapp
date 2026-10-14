@@ -10,6 +10,7 @@ import {
   lernblockTischAction,
   lernblockUhrAction,
 } from "@/app/(app)/lernblock-actions";
+import { tischAufRechner, tischTastenAn, tischZuRechner } from "@/components/kombi/desktop/tisch-tasten";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import {
@@ -167,6 +168,8 @@ export function LernblockTisch() {
       };
       void kombi.neuLaden();
       if (!tisch || optionen?.sofort) return fertig();
+      // Am Rechner schrumpft die Fläche per transform in den Knopf
+      if (tischZuRechner(tisch, surfRef.current, [bodyRef.current, endRef.current], o, fertig)) return;
       if (reduce()) {
         tisch.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160 }).finished.then(fertig, () => {});
         return;
@@ -320,6 +323,7 @@ export function LernblockTisch() {
   );
 
   useEffect(() => kombi.registriere("lernblock", oeffnen), [kombi, oeffnen]);
+  useEffect(() => tischTastenAn(), []);
 
   // Aufgehen: aus der Pille wachsen (clip-path), Inhalt ab 60 %
   useLayoutEffect(() => {
@@ -329,6 +333,8 @@ export function LernblockTisch() {
     tisch.classList.toggle("rm", reduce());
     const surf = surfRef.current;
     const body = bodyRef.current;
+    // Am Rechner wächst die Fläche per transform aus dem Knopf
+    if (tischAufRechner(tisch, surf, [body, endRef.current], sitzung.origin)) return;
     [surf, body, endRef.current].forEach((x) => x?.getAnimations().forEach((a) => a.cancel()));
     if (reduce()) {
       tisch.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160 });

@@ -6,11 +6,14 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ReactNode,
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 
 import { A4Seite, Mx, type A4Daten } from "@/components/kombi/a4/seite";
+import { perTaste } from "@/components/kombi/desktop/tasten";
+import { useDesktop } from "@/components/kombi/desktop/use-desktop";
 import { Icon } from "@/components/kombi/icon";
 import type { BlattStand } from "@/lib/arbeitsblatt/ablauf";
 import { blattDruckenText } from "@/lib/arbeitsblatt/tisch-text";
@@ -90,10 +93,27 @@ type KoerperProps = {
    * staggerBlatt, Z. 4555).
    */
   einblendenAb?: number | null;
+  /**
+   * Nur am Rechner: der Kopf steht in der Spalte rechts (desktop.html
+   * `buildBlatt`): „Fach · Lernblock“, das Thema in 28 px und das Zählwort.
+   */
+  kopf?: { fach: string; thema: string; lead: string } | null;
+  /** Nur am Rechner: das Ende („Blatt ausgewertet.“) steht in der Spalte rechts, die Seiten bleiben links liegen. */
+  ende?: ReactNode;
 };
 
-/** `.t-blatt` und `.t-bfoot` (Prototyp `renderBlatt`, `buildWertung`, `updateMain`). */
+/**
+ * Am Handy die Vorschau mit Lupe (`BlattHandy`), ab 1024 px der Tisch in
+ * Fensterbreite (`BlattRechner`). Unterhalb der Schwelle und beim ersten
+ * Rendern ist es immer das Handy.
+ */
 export function BlattKoerper(p: KoerperProps) {
+  const desk = useDesktop();
+  return desk ? <BlattRechner {...p} /> : <BlattHandy {...p} />;
+}
+
+/** `.t-blatt` und `.t-bfoot` (Prototyp `renderBlatt`, `buildWertung`, `updateMain`). */
+function BlattHandy(p: KoerperProps) {
   const { stand, phase, wertung } = p;
   const daten = a4Daten(stand);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -357,6 +377,252 @@ export function BlattKoerper(p: KoerperProps) {
         </button>
       </div>
     </>
+  );
+}
+
+/** Zwei Seiten nebeneinander erst, wenn jede mindestens so breit wird (desktop.html `fit`). */
+const ZWEI_MIN = 560;
+const SEITEN_ABSTAND = 28;
+
+/** Lesegröße der Seiten in der linken Fläche: Breite min(A4, Fläche), bei zwei Seiten je die Hälfte. */
+function seitenMass(box: HTMLElement, loesungOffen: boolean): { w: number; cw: number; zwei: boolean } | null {
+  const cs = getComputedStyle(box);
+  const cw = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  if (cw <= 0) return null;
+  const zwei = loesungOffen && cw >= 2 * ZWEI_MIN + SEITEN_ABSTAND;
+  return { w: Math.min(A4W, zwei ? (cw - SEITEN_ABSTAND) / 2 : cw), cw, zwei };
+}
+
+/**
+ * Das Blatt am Rechner (desktop.html `buildBlatt`): links die A4-Seiten in
+ * Lesegröße (so breit, wie die Fläche es zulässt, höchstens Originalgröße,
+ * skaliert per transform), rechts eine feste Spalte mit Kopf, Wertung und
+ * Knopf. Vor dem Bewerten liegt nur die Aufgabenseite offen; die
+ * Lösungsseite ist zugeklappt (`.d-fold`) und steht nicht als Papier im DOM.
+ * Gedruckt werden trotzdem beide (`DruckSeiten`). In „Wie lief es?“ klappt
+ * sie auf: nebeneinander, wenn beide mindestens 560 px breit werden, sonst
+ * darunter, und die Ansicht springt zu ihr.
+ */
+function BlattRechner(p: KoerperProps) {
+  const { stand, phase, wertung } = p;
+  const daten = a4Daten(stand);
+  const seitenBox = useRef<HTMLDivElement>(null);
+  const zustandRef = useRef<HTMLParagraphElement>(null);
+  const werRef = useRef<HTMLDivElement>(null);
+  const n = stand.inhalt?.aufgaben.length ?? 0;
+  const offen = n - Object.keys(wertung).filter((k) => Number(k) <= n).length;
+  const bewerten = phase === "bewerten";
+  const loesungOffen = phase !== "vorschau";
+  const [mass, setMass] = useState({ w: 0, cw: 0, zwei: false });
+
+  // Lesegröße (desktop.html `fit`): Breite min(A4, Fläche), bei zwei Seiten je die Hälfte
+  useLayoutEffect(() => {
+    const box = seitenBox.current;
+    if (!box) return;
+    const messen = () => {
+      const m = seitenMass(box, loesungOffen);
+      if (m) setMass((alt) => (alt.w === m.w && alt.cw === m.cw && alt.zwei === m.zwei ? alt : m));
+    };
+    messen();
+    const ro = new ResizeObserver(messen);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [loesungOffen]);
+
+  // „Wie lief es?“ untereinander: einmal zur Lösungsseite springen (per Taste ohne Bewegung)
+  const gesprungen = useRef(false);
+  useEffect(() => {
+    const box = seitenBox.current;
+    if (!bewerten || !box || gesprungen.current) return;
+    // frisch gemessen: der Stand von eben kennt die aufgeklappte Seite noch nicht
+    const m = seitenMass(box, true);
+    if (!m || m.zwei) return;
+    const p2 = box.children[1] as HTMLElement | undefined;
+    if (!p2 || !p2.querySelector(".tb-paper")) return;
+    gesprungen.current = true;
+    box.scrollTo({ top: p2.offsetTop - 8, behavior: reduce() || perTaste() ? "auto" : "smooth" });
+  }, [bewerten, mass]);
+
+  // Die Wertung kommt Block für Block wie am Handy, nur kürzer
+  const letztePhase = useRef(phase);
+  useLayoutEffect(() => {
+    const vorher = letztePhase.current;
+    letztePhase.current = phase;
+    const wer = werRef.current;
+    if (vorher === phase || phase !== "bewerten" || !wer || reduce() || perTaste()) return;
+    [...wer.children].forEach((c, i) =>
+      c.animate([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], {
+        duration: 180,
+        delay: Math.min(i, 5) * 30,
+        easing: E.out,
+        fill: "backwards",
+      }),
+    );
+  }, [phase]);
+
+  // Das Ende rechts blendet ein; die Seiten bleiben liegen
+  const endeRef = useRef<HTMLDivElement>(null);
+  const mitEnde = !!p.ende;
+  useLayoutEffect(() => {
+    const el = endeRef.current;
+    if (!mitEnde || !el || reduce() || perTaste()) return;
+    el.animate([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 180, easing: E.out });
+  }, [mitEnde]);
+
+  // „Noch 2 von 6 offen“ / „Alle 6 bewertet“ über „Fertig“
+  const zeileText = offen > 0 ? `Noch ${offen} von ${n} offen` : `Alle ${n} bewertet`;
+  const zeileWar = useRef(false);
+  useEffect(() => {
+    const el = zustandRef.current;
+    if (!el) return;
+    if (!bewerten) {
+      zeileWar.current = false;
+      return;
+    }
+    if (!zeileWar.current) {
+      zeileWar.current = true;
+      el.textContent = "";
+    }
+    swapText(el, zeileText);
+  }, [bewerten, zeileText]);
+
+  const ersteOffeneZeigen = useCallback(() => {
+    const zeilen = [...(werRef.current?.querySelectorAll<HTMLElement>(".tb-row") ?? [])];
+    const r = zeilen.find((x) => !(Number(x.dataset.nr) in wertung));
+    if (!r) return;
+    r.scrollIntoView({ block: "nearest", behavior: reduce() ? "auto" : "smooth" });
+    if (!reduce()) r.querySelector(".tb-seg")?.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: 420, easing: "ease-out" });
+  }, [wertung]);
+
+  const fertigGesperrt = bewerten && offen > 0;
+  const ohneInhalt = !daten;
+  const gescheitert = stand.status === "fehlgeschlagen" && ohneInhalt;
+  const mainText = bewerten ? "Fertig" : blattDruckenText(stand);
+  const s = mass.w / A4W;
+  const seiten: (1 | 2)[] = loesungOffen ? [1, 2] : [1];
+
+  return (
+    <div className="d-blatt" id="tBlatt">
+      <div className={`d-pages${mass.zwei ? " two" : ""}`} ref={seitenBox}>
+        {daten && mass.w ? (
+          <>
+            {seiten.map((seite) => (
+              <figure className="tb-page" key={seite}>
+                <figcaption className="tb-cap">
+                  <span>{seite === 1 ? "Seite 1 · Aufgaben" : "Seite 2 · Lösungen"}</span>
+                  <span>A4</span>
+                </figcaption>
+                <div
+                  className="tb-paper"
+                  style={{ width: `${mass.w}px`, height: `${A4H * s}px` }}
+                  ref={(el) => {
+                    p.seitenRef.current[seite - 1] = el;
+                  }}
+                >
+                  <A4Seite daten={daten} seite={seite} style={{ transform: `scale(${s})` }} />
+                </div>
+              </figure>
+            ))}
+            {loesungOffen ? null : (
+              <div className="d-fold" style={{ width: `${Math.min(A4W, mass.cw)}px` }}>
+                <span>Seite 2 · Lösungen</span>
+                <span>Erst nach dem Lösen</span>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="tb-wait">
+            {gescheitert ? "Für dieses Thema ließ sich heute kein Blatt bauen." : ohneInhalt ? "Das Blatt wird gerade gebaut." : ""}
+          </p>
+        )}
+      </div>
+      <div className="d-side">
+        {p.kopf ? (
+          <>
+            <p className="t-fach">{p.kopf.fach}</p>
+            <h2 className="t-thema">{p.kopf.thema}</h2>
+          </>
+        ) : null}
+        {p.ende ? (
+          <div className="t-end on" ref={endeRef}>
+            {p.ende}
+          </div>
+        ) : bewerten && stand.inhalt ? (
+          <div className="tb-wert" id="tbWertung" ref={werRef}>
+            <h2>Wie lief es?</h2>
+            <p>Vergleiche mit dem Lösungsblatt. Dann klick je Aufgabe an, wie es lief.</p>
+            <ol className="tb-rows">
+              {stand.inhalt.aufgaben.map((a, i) => {
+                const nr = i + 1;
+                const v = wertung[nr];
+                return (
+                  <li className="tb-row" key={nr} data-nr={nr}>
+                    <span className="nr">{nr}</span>
+                    <span className="k">
+                      <Mx text={a.kurz} />
+                    </span>
+                    <div className="tb-seg" role="group" aria-label={`Aufgabe ${nr}, ${a.kurz.replace(/[{}]/g, "")}`}>
+                      <button type="button" data-v="true" aria-pressed={v === true} onClick={() => p.onBewerten(nr, true)}>
+                        Richtig
+                      </button>
+                      <button type="button" data-v="false" aria-pressed={v === false} onClick={() => p.onBewerten(nr, false)}>
+                        Falsch
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        ) : p.kopf && daten ? (
+          <>
+            <p className="d-lead">{p.kopf.lead}</p>
+            <p className="d-lead d-hilfe">Drucken, auf Papier lösen, dann hier eintragen, wie es lief.</p>
+          </>
+        ) : null}
+        {p.ende ? null : (
+          <div className="t-bfoot" id="tBFoot" hidden={gescheitert}>
+            <p className="tb-state" id="tbState" hidden={!bewerten} aria-live="polite" ref={zustandRef} />
+            <button
+              className="tb-main"
+              type="button"
+              id="tbMain"
+              data-taste={bewerten ? undefined : "p"}
+              aria-disabled={fertigGesperrt || ohneInhalt}
+              aria-label={fertigGesperrt ? `Fertig, noch ${offen} Aufgaben offen` : bewerten ? mainText : `${mainText} (P)`}
+              onClick={() => {
+                if (ohneInhalt) return;
+                if (!bewerten) {
+                  p.onDrucken();
+                  return;
+                }
+                if (fertigGesperrt) {
+                  ersteOffeneZeigen();
+                  return;
+                }
+                p.onFertig();
+              }}
+            >
+              <TauschText text={mainText} animiert />
+              {bewerten || ohneInhalt ? null : (
+                <span className="d-k" aria-hidden="true">
+                  P
+                </span>
+              )}
+            </button>
+            {bewerten ? (
+              <button className="tb-art" type="button" onClick={p.onDrucken}>
+                Nochmal drucken
+              </button>
+            ) : p.onAbfragen ? (
+              <button className="tb-art" type="button" id="tbArt" onClick={p.onAbfragen}>
+                Dieses Thema lieber abfragen
+              </button>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
