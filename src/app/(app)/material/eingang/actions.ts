@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
+import { jetzt } from "@/lib/tag";
 import { formErrors } from "@/lib/form-errors";
 import { applyProposal } from "@/lib/inbox-apply";
 import {
@@ -156,7 +157,7 @@ export async function markFiledAction(
 ): Promise<void> {
   const user = await requireUser();
 
-  await markFiled(user.id, materialId, filed);
+  await markFiled(user.id, materialId, filed, await jetzt());
 
   revalidateInbox(materialId);
 }
@@ -347,7 +348,7 @@ async function anwenden(
   werte: Parameters<typeof applyProposal>[2],
   ueberholt = 0,
 ): Promise<string | null> {
-  const ergebnis = await applyProposal(userId, materialId, werte);
+  const ergebnis = await applyProposal(userId, materialId, werte, { now: await jetzt() });
   if (!ergebnis) return null;
 
   revalidateInbox(materialId);

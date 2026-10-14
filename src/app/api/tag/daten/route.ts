@@ -1,6 +1,6 @@
 import { ladeTag } from "@/lib/kombi/tag-daten";
 import { getSessionUser } from "@/lib/session";
-import { jetzt } from "@/lib/tag";
+import { jetzt, uhrVersatz } from "@/lib/tag";
 
 /**
  * Die Daten der Startseite als JSON (Plan 2.4, Punkt 1). Die Shell holt sie
@@ -18,5 +18,5 @@ export async function GET() {
   if (!user) {
     return Response.json({ ok: false, error: "Nicht angemeldet." }, { status: 401, headers: HEADERS });
   }
-  return Response.json(await ladeTag(user.id, await jetzt()), { headers: HEADERS });
+  return Response.json(await ladeTag(user.id, await jetzt(), await uhrVersatz()), { headers: HEADERS });
 }

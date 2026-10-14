@@ -4,6 +4,7 @@ import { after } from "next/server";
 import { z } from "zod";
 
 import { requireUser } from "@/lib/auth";
+import { jetzt } from "@/lib/tag";
 import { claudeConfigured } from "@/lib/claude/client";
 import { markFiled } from "@/lib/inbox";
 import {
@@ -42,7 +43,7 @@ export async function blattFachAction(
     capturedOn: blatt.capturedOn,
     note: blatt.note,
   });
-  if (ok) await markFiled(user.id, materialId, true);
+  if (ok) await markFiled(user.id, materialId, true, await jetzt());
   return { ok };
 }
 
@@ -67,7 +68,7 @@ export async function abschreibenAction(
 export async function inDenKorbAction(materialId: string, rein: boolean): Promise<{ ok: boolean }> {
   const user = await requireUser();
   if (!id.safeParse(materialId).success) return { ok: false };
-  const r = await markFiled(user.id, materialId, !rein);
+  const r = await markFiled(user.id, materialId, !rein, await jetzt());
   return { ok: r !== "weg" };
 }
 

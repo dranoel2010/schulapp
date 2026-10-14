@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 
 import { requireUser } from "@/lib/auth";
+import { jetzt, uhrVersatz } from "@/lib/tag";
+import { leserUhrMerken } from "@/lib/leser/uhr";
 import { formErrors } from "@/lib/form-errors";
 import { markFiled } from "@/lib/inbox";
 import { claudeConfigured } from "@/lib/claude/client";
@@ -240,7 +242,7 @@ export async function updateMaterialAction(
     // nicht noch einmal an), und genau dann steht es unten im Satz. Wer bloß
     // eine Notiz an einem längst eingeordneten Blatt richtigstellt, liest
     // deshalb nichts davon.
-    const abgehakt = await markFiled(user.id, id, true);
+    const abgehakt = await markFiled(user.id, id, true, await jetzt());
 
     revalidateMaterial(id);
 
@@ -326,6 +328,7 @@ export async function deletePageAction(
   // App. Nach der Antwort angestoßen, wie beim Hochladen. Gehört das Blatt
   // nicht diesem Nutzer, findet die Prüfung es nicht (`korbblattStand()`).
   if (ergebnis === "geloescht") {
+    leserUhrMerken(user.id, await uhrVersatz());
     after(() => korbblattAnstossen(user.id, materialId));
   }
 

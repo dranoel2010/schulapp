@@ -36,15 +36,20 @@ import { whLeerText } from "@/lib/kombi/wiederholen-text";
 const MO = "2026-10-12";
 
 /**
- * Versuche tragen `created_at` der echten Uhr; „heute“ heißt in diesen Tests
- * aber Mo 12.10. Was nach dessen App-Tag angelegt wurde, rückt auf 17 Uhr am
- * Montag — sonst hingen die Tests am Kalender.
+ * Versuche tragen `created_at` und hier (ohne übergebene Uhr) `answered_at`
+ * der echten Uhr; „heute“ heißt in diesen Tests aber Mo 12.10. Was nach
+ * dessen App-Tag angelegt wurde, rückt auf 17 Uhr am Montag, sonst hingen
+ * die Tests am Kalender.
  */
 async function versucheAufMontag() {
   await testDb
     .update(recallAttempts)
     .set({ createdAt: berlinStunde(MO, 17) })
     .where(gte(recallAttempts.createdAt, berlinStunde("2026-10-13", 4)));
+  await testDb
+    .update(recallAttempts)
+    .set({ answeredAt: berlinStunde(MO, 17) })
+    .where(gte(recallAttempts.answeredAt, berlinStunde("2026-10-13", 4)));
 }
 
 async function fach(nutzer: string, name: string, short: string) {
@@ -431,7 +436,7 @@ describe("eine ganze Runde", () => {
     assert.equal(appTagVon(nacht), MO);
     const v = await versuchFesthalten(nutzer, { scheduleId: f.scheduleId, itemId: f.itemId, answerText: "c" }, "2026-10-13");
     assert.ok(v.ok);
-    await testDb.update(recallAttempts).set({ createdAt: nacht }).where(eq(recallAttempts.id, v.attemptId));
+    await testDb.update(recallAttempts).set({ createdAt: nacht, answeredAt: nacht }).where(eq(recallAttempts.id, v.attemptId));
     const [zeile] = await testDb.select().from(recallAttempts).where(eq(recallAttempts.id, v.attemptId));
     assert.equal(zeile.answeredOn, "2026-10-13");
     const bericht = await themaTagesbericht(nutzer, tFr, MO);

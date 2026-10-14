@@ -20,6 +20,7 @@ import {
 import { titelAusErsterSeite } from "@/lib/leser/abschrift";
 import { claudeAnstossen, claudeZustandMelden } from "@/lib/leser/claude-leser";
 import { nutzerMitLeserArbeit } from "@/lib/leser/laeufe";
+import { leserJetzt } from "@/lib/leser/uhr";
 import {
   JEV_SCHWELLE,
   REGEL_VERSION,
@@ -713,7 +714,8 @@ async function korbblattPruefen(userId: string, materialId: string): Promise<voi
   });
   if (!id) return;
 
-  const eingeordnet = await autoFile(userId, id).catch(
+  // `filed_at` mit der App-Uhr der Anfrage, die den Leser anstieß
+  const eingeordnet = await autoFile(userId, id, leserJetzt(userId)).catch(
     (error: unknown): AutoFileResult => {
       console.error(`Leser ${kurz(materialId)}: Einordnen durch Jev fehlgeschlagen — ${meldung(error)}`);
       return { ok: false, grund: "Jev war nicht erreichbar." };

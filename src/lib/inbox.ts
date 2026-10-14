@@ -1142,6 +1142,8 @@ export async function markFiled(
   userId: string,
   materialId: string,
   filed: boolean,
+  /** Die App-Uhr des Aufrufers (`jetzt()`, mit Testuhr die Testuhr) */
+  now: Date = new Date(),
 ): Promise<"gesetzt" | "unveraendert" | "weg"> {
   if (!isId(materialId)) return "weg";
 
@@ -1158,7 +1160,7 @@ export async function markFiled(
 
   await db
     .update(materials)
-    .set({ filedAt: filed ? new Date() : null })
+    .set({ filedAt: filed ? now : null })
     .where(and(eq(materials.userId, userId), eq(materials.id, materialId)));
 
   return "gesetzt";

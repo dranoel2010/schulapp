@@ -3,9 +3,11 @@ import { after } from "next/server";
 import { abschriftScheitern, blattAnlegen, seiteAnhaengen, uploadSchluessel } from "@/lib/kombi/blatt-aufnahme";
 import { jetztFuerAblauf } from "@/lib/kombi/ablauf-uhr";
 import { blattKurz } from "@/lib/kombi/blaetter";
+import { leserUhrMerken } from "@/lib/leser/uhr";
 import { zuteilungAnstossen } from "@/lib/leser/zuteilung";
 import { readPage } from "@/lib/material-seite";
 import { getSessionUser } from "@/lib/session";
+import { uhrVersatz } from "@/lib/tag";
 
 /**
  * Ein Blatt aufnehmen, ohne Fachwahl (Modell 23, Plan 3.8).
@@ -78,10 +80,12 @@ export async function POST(request: Request) {
   if (ergebnis.wiederholt) {
     // schon angekommen: weder Testweiche noch Zuteilung ein zweites Mal
   } else if (test) {
-    await abschriftScheitern(user.id, ergebnis.id);
+    await abschriftScheitern(user.id, ergebnis.id, now);
   } else {
     // Wer die Seite liest, entscheidet die App, nach der Antwort: die Kamera
-    // wartet nicht auf den Leser.
+    // wartet nicht auf den Leser. Er nimmt die App-Uhr dieser Anfrage mit
+    // (mit Testuhr die Testuhr), etwa für `filed_at`, wenn Jev einordnet.
+    leserUhrMerken(user.id, await uhrVersatz());
     after(() => zuteilungAnstossen(user.id));
   }
 

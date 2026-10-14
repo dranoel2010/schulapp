@@ -115,6 +115,21 @@ export async function jetzt(): Promise<Date> {
   return testuhrLesen(wert) ?? new Date();
 }
 
+/**
+ * Wie weit die App-Uhr dieser Anfrage vor (oder hinter) der Uhr des Rechners
+ * geht, in Millisekunden. Ohne Testuhr 0. Für Arbeit, die nach der Antwort
+ * weiterläuft (der Leser): sie rechnet mit `Date.now() + versatz`, nicht mit
+ * einem festen Zeitpunkt, denn die Testuhr läuft weiter.
+ */
+export async function uhrVersatz(): Promise<number> {
+  if (!testuhrErlaubt()) return 0;
+  const { cookies } = await import("next/headers");
+  const wert = (await cookies()).get(TESTUHR_COOKIE)?.value;
+  const real = Date.now();
+  const testuhr = testuhrLesen(wert, real);
+  return testuhr ? testuhr.getTime() - real : 0;
+}
+
 // ── Schulkalender (rein) ─────────────────────────────────────────────────────
 
 /** Was die Tagesrechnung braucht: Stunden je Wochentag, Raster, freie Tage. */

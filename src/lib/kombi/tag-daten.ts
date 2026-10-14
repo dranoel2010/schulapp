@@ -119,7 +119,7 @@ async function morgenFuer(
   };
 }
 
-export async function ladeTag(userId: string, now: Date): Promise<TagDaten> {
+export async function ladeTag(userId: string, now: Date, uhrVersatz = 0): Promise<TagDaten> {
   const k = await ladeKalender(userId);
   const stand = await ansichtLaden(userId, now, k);
   const tag = stand.tag;
@@ -204,6 +204,7 @@ export async function ladeTag(userId: string, now: Date): Promise<TagDaten> {
   return {
     tag,
     stand: now.toISOString(),
+    uhrVersatz,
     ansicht: stand.ansicht,
     schritt: stand.schritt,
     ablaufStand: stand.stand,

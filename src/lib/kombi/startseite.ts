@@ -83,6 +83,12 @@ export type TagDaten = {
   tag: string;
   /** Zeitpunkt der Berechnung (Uhr des Servers, mit Testuhr), ISO */
   stand: string;
+  /**
+   * Wie weit die App-Uhr vor der Uhr des Rechners geht, in ms (`uhrVersatz()`
+   * in @/lib/tag), ohne Testuhr 0. Die Lernblock-Uhr im Client rechnet damit,
+   * weil `laeuft_seit` mit der App-Uhr geschrieben wird.
+   */
+  uhrVersatz: number;
   ansicht: Ansicht;
   schritt: AblaufSchritt;
   ablaufStand: "erledigt" | "übersprungen" | null;
