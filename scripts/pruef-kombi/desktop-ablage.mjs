@@ -69,7 +69,7 @@ const lage = (page) =>
     lage: document.getElementById("stage")?.dataset.lay ?? null,
     bereich: document.getElementById("stage")?.dataset.v ?? null,
     liste: document.querySelector(".d-split .d-list .p-title")?.textContent ?? null,
-    detail: document.querySelector(".d-split .d-detail .p-title")?.textContent ?? null,
+    detail: document.querySelector(".d-split .d-detail :is(.p-title, .d-h1)")?.textContent ?? null,
     sel: document.querySelector(".d-list .sel")?.getAttribute("data-id") ?? null,
   }));
 
@@ -77,7 +77,7 @@ const lage = (page) =>
 async function bereich(page, v) {
   await page.click(`.rail .r-item[data-v="${v}"]`);
   await page.waitForFunction(
-    (b) => document.getElementById("stage")?.dataset.v === b && !!document.querySelector(".d-split .d-detail .p-title")?.textContent,
+    (b) => document.getElementById("stage")?.dataset.v === b && !!document.querySelector(".d-split .d-detail :is(.p-title, .d-h1)")?.textContent,
     v,
     { timeout: 10000 },
   );
@@ -221,14 +221,16 @@ async function rechner(browser) {
         return {
           da: !!f,
           n: pills.length,
-          eineZeile: tops.size === 1,
+          zeilen: tops.size,
+          alleSichtbar: pills.every((x) => { const b = x.getBoundingClientRect(); return b.left >= r.left - 0.5 && b.right <= r.right + 0.5; }),
           hoehe: pills[0]?.getBoundingClientRect().height ?? 0,
-          wischbar: getComputedStyle(f).overflowX === "auto",
+          umbruch: getComputedStyle(f).flexWrap === "wrap",
           erste: pills[0]?.textContent,
           rechts: r ? r.right <= document.querySelector(".d-list").getBoundingClientRect().right + 0.5 : false,
         };
       });
-      p.ok(fil.da && fil.n >= 3 && fil.eineZeile && fil.hoehe === 36 && fil.wischbar && fil.erste === "Alle", `${w} ${schema}: Fachpillen in einer Zeile, 36 px (${JSON.stringify(fil)})`);
+      // mit der Maus gibt es kein Wischen: die Pillen brechen um, jede steht ganz in der Spalte
+      p.ok(fil.da && fil.n >= 3 && fil.alleSichtbar && fil.umbruch && fil.hoehe === 36 && fil.erste === "Alle", `${w} ${schema}: Fachpillen umgebrochen, alle sichtbar, 36 px (${JSON.stringify(fil)})`);
       const gruppenVor = await page.evaluate(() => document.querySelectorAll(".d-list h3.p-lab").length);
       await page.click(".d-list .d-fil .fp:nth-child(2)");
       await sleep(400);
@@ -257,7 +259,7 @@ async function rechner(browser) {
         };
         const o = document.querySelector(".d-detail .bl-orig")?.getBoundingClientRect();
         const m = document.querySelector(".d-detail .bl-main")?.getBoundingClientRect();
-        const t = document.querySelector(".d-detail .d-in > .p-title")?.getBoundingClientRect();
+        const t = document.querySelector(".d-detail .d-in > :is(.p-title, .d-ober)")?.getBoundingClientRect();
         return {
           spalte: sichtbar(".d-detail .bl-orig"),
           seg: sichtbar(".d-detail .bl-seg"),

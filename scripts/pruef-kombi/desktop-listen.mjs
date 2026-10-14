@@ -4,7 +4,7 @@
  * 1280×800 und 1920×1080, hell und dunkel:
  *
  * - „Hausaufgaben“ öffnet die Liste mit der ersten Aufgabe im Detail
- *   (Fach: Aufgabe, Abgabe, Stunde, Eingetragen, Erledigt/Bearbeiten);
+ *   (Fach als Angabe, Aufgabe als Titel, Abgabe, Stunde, Eingetragen, Erledigt/Bearbeiten);
  * - ↓ wählt die nächste Aufgabe, der Text wählt aus, der Ring hakt ab;
  * - X hakt die gewählte überfällige Aufgabe ab (sie steht unter „Erledigt“),
  *   ein zweites X öffnet sie wieder: sie steht unter „Für ⟨Tag⟩“;
@@ -113,6 +113,7 @@ try {
         erste: zeilen[0]?.dataset.id ?? null,
         gewaehlt: document.querySelector(".d-list .task.sel")?.dataset.id ?? null,
         h1: document.querySelector(".d-aufgabe .d-h1")?.textContent ?? "",
+        fach: document.querySelector(".d-aufgabe .d-ober")?.textContent ?? "",
         fakten: [...document.querySelectorAll(".d-aufgabe .d-fact > span:first-child")].map((x) => x.textContent),
         knoepfe: [...document.querySelectorAll(".d-aufgabe .d-foot .btn")].map((x) => x.textContent),
         archiv: document.querySelector(".d-list .d-arch b")?.textContent ?? null,
@@ -120,7 +121,7 @@ try {
     });
     p.ok(erst.gruppen.includes("Für Donnerstag"), `${vor}: Gruppen wie die App (${erst.gruppen.join(", ")})`);
     p.ok(!!erst.erste && erst.gewaehlt === erst.erste && selVon(page) === erst.erste, `${vor}: ohne Auswahl steht die erste Aufgabe im Detail`);
-    p.ok(/^[^:]+: .+/.test(erst.h1), `${vor}: Überschrift „Fach: Aufgabe“ (${erst.h1})`);
+    p.ok(!!erst.fach && !!erst.h1 && !erst.h1.includes(":"), `${vor}: Fach als Angabe, die Aufgabe als Überschrift (${erst.fach} / ${erst.h1})`);
     p.ok(["Abgabe", "Stunde", "Eingetragen"].every((f) => erst.fakten.includes(f)), `${vor}: Abgabe, Stunde, Eingetragen (${erst.fakten.join(", ")})`);
     p.ok(erst.knoepfe[0]?.startsWith("Erledigt") && erst.knoepfe[1] === "Bearbeiten", `${vor}: Knöpfe Erledigt und Bearbeiten (${erst.knoepfe.join(", ")})`);
     p.ok(erst.archiv === "Archiv", `${vor}: am Ende die Zeile „Archiv“`);

@@ -2,7 +2,7 @@
  * Handy bleibt Handy: Bilder der App unterhalb der Desktop-Schwelle, vor und
  * nach dem Einbau der Rechner-Ansicht, Pixel für Pixel (Toleranz 0).
  *
- * Größen: 360×780 und 390×844 (Handy), 800×900 (die Spalte von 600 bis
+ * Größen: 360×800 und 390×844 (Handy, wie die Regel „360 und 390“), 800×900 (die Spalte von 600 bis
  * 1023 px), je hell und dunkel. Seiten: Start um 16:40 (Ablauf), Überblick,
  * Ablauf, Hausaufgaben, Woche, Klausur, Ablage, Blatt, Einstellungen, Zeile
  * mit Menü, ein offenes Sheet, Tisch mit Karten (über „Wiederholen“), Arbeitsblatt, „Wie lief es?“
@@ -44,7 +44,7 @@ const RESET = process.env.RESET ?? "";
 const NUR = process.env.NUR ? process.env.NUR.split(",") : null;
 
 const GROESSEN = [
-  { name: "360", width: 360, height: 780, mobil: true },
+  { name: "360", width: 360, height: 800, mobil: true },
   { name: "390", width: 390, height: 844, mobil: true },
   { name: "800", width: 800, height: 900, mobil: false },
 ];

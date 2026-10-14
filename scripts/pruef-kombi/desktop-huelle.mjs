@@ -50,7 +50,7 @@ const listeUndDetail = (page) =>
     const d = document.querySelector(".d-split .d-detail");
     return {
       liste: l?.querySelector(".p-title")?.textContent ?? null,
-      detail: d?.querySelector(".p-title")?.textContent ?? null,
+      detail: d?.querySelector(":is(.p-title, .d-h1)")?.textContent ?? null,
       formular: !!d?.querySelector("form"),
       lage: document.getElementById("stage")?.dataset.lay ?? null,
     };
