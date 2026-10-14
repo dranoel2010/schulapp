@@ -93,3 +93,12 @@ describe("Zeile: nur echte Themen", () => {
     assert.ok(v.themenListe.some((t) => t.t === "Quadratische Funktionen"));
   });
 });
+
+describe("Zeile: Hilfsmittel der Probeklausur (Antwort vom 14.10.2026)", () => {
+  it("in Mathematik mit Taschenrechner, in Biologie ohne Hilfsmittel", async () => {
+    const v = await zeilenVorrat(nutzer, JETZT);
+    const probeVon = (id: string) => v.klausuren.find((k) => k.id === id)?.plan.filter((p) => p.art === "Probeklausur").map((p) => p.thema);
+    assert.deepEqual(probeVon(fern), ["mit Taschenrechner"]);
+    assert.deepEqual(probeVon(test), ["ohne Hilfsmittel"]);
+  });
+});

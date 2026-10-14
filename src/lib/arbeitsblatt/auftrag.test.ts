@@ -134,4 +134,22 @@ describe("Arbeitsblatt: Auftrag und Antwort (Plan H)", () => {
     assert.ok(probe.includes("minuten ist 45"));
     assert.ok(!blattAuftrag(vorab).includes("Probeklausur, ein oder zwei Tage"));
   });
+
+  it("Probeklausur in Mathematik und Physik mit Taschenrechner, sonst ohne Hilfsmittel", () => {
+    const vorab = { thema: "Probeklausur", zuletztFalsch: [], probe: true };
+    for (const fach of ["Mathematik", "mathe", "Physik", "PHYSIK"]) {
+      const t = blattAuftrag({ ...vorab, fach, papier: "kaestchen" });
+      assert.ok(t.includes("mit Taschenrechner"), fach);
+      assert.ok(t.includes("Aufgaben dürfen Rechnen mit dem Taschenrechner voraussetzen"), fach);
+      assert.ok(!t.includes("auch ohne Taschenrechner"), fach);
+    }
+    for (const fach of ["Geschichte", "Chemie", "Englisch"]) {
+      const t = blattAuftrag({ ...vorab, fach, papier: "linien" });
+      assert.ok(t.includes("ohne Hilfsmittel"), fach);
+      assert.ok(t.includes("auch ohne Taschenrechner"), fach);
+      assert.ok(!t.includes("voraussetzen"), fach);
+    }
+    // ein Übungsblatt sagt nichts über Hilfsmittel
+    assert.ok(!blattAuftrag({ ...vorab, fach: "Mathematik", papier: "kaestchen", probe: false }).includes("Taschenrechner"));
+  });
 });

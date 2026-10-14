@@ -5,6 +5,7 @@ import {
   KEINE_ANWEISUNG_ABSCHRIFT,
 } from "@/lib/abschrift-regeln";
 import { fristFuerTokens, type ClaudeInhalt } from "@/lib/claude/client";
+import { probeMitTaschenrechner } from "@/lib/probe-hilfsmittel";
 import { UNCERTAIN_CLOSE, UNCERTAIN_OPEN } from "@/lib/transcripts";
 
 import { seiteEinsMesser } from "@/lib/pdf/arbeitsblatt-document";
@@ -77,10 +78,18 @@ export type BlattVorab = {
 /** So lange wie eine Klausur (@/lib/study-plan, PROBE_MINUTEN). */
 const PROBE_MINUTEN_AUFTRAG = 45;
 
-/** Der Absatz, der aus dem Übungsblatt eine Probeklausur macht. */
-export function probeAbsatz(): string {
+/**
+ * Der Absatz, der aus dem Übungsblatt eine Probeklausur macht. In Mathematik
+ * und Physik schreibt er sie mit Taschenrechner (Antwort vom 14.10.2026,
+ * `probeMitTaschenrechner`): dann dürfen Aufgaben Rechnen mit dem
+ * Taschenrechner voraussetzen, sonst geht alles ohne Hilfsmittel.
+ */
+export function probeAbsatz(fach: string): string {
+  const hilfsmittel = probeMitTaschenrechner(fach)
+    ? `Er bearbeitet es mit Taschenrechner, sonst ohne Hilfsmittel und ohne Lösungshinweise, in ${PROBE_MINUTEN_AUFTRAG} Minuten. Aufgaben dürfen Rechnen mit dem Taschenrechner voraussetzen, etwa krumme Zahlen, Wurzeln oder trigonometrische Werte.`
+    : `Er bearbeitet es ohne Hilfsmittel und ohne Lösungshinweise in ${PROBE_MINUTEN_AUFTRAG} Minuten, also auch ohne Taschenrechner: jede Rechnung muss im Kopf oder schriftlich gehen.`;
   return [
-    `Dieses Blatt ist eine Probeklausur, ein oder zwei Tage vor der Klausur. Schreib es im Format einer Klassenarbeit: Aufgaben über den ganzen Stoff aller Abschriften verteilt, nicht nur über einen Teil, gemischt in Art und Schwierigkeit, von leicht nach schwer. Er bearbeitet es ohne Hilfsmittel und ohne Lösungshinweise in ${PROBE_MINUTEN_AUFTRAG} Minuten, deshalb steht in keiner Aufgabenstellung ein Hinweis auf den Lösungsweg.`,
+    `Dieses Blatt ist eine Probeklausur, ein oder zwei Tage vor der Klausur. Schreib es im Format einer Klassenarbeit: Aufgaben über den ganzen Stoff aller Abschriften verteilt, nicht nur über einen Teil, gemischt in Art und Schwierigkeit, von leicht nach schwer. ${hilfsmittel} Deshalb steht in keiner Aufgabenstellung ein Hinweis auf den Lösungsweg.`,
     `teil nennt in wenigen Wörtern den Stoff der Klausur, minuten ist ${PROBE_MINUTEN_AUFTRAG}.`,
   ].join(" ");
 }
@@ -99,7 +108,7 @@ export function blattAuftrag(vorab: BlattVorab): string {
   return [
     `Fach: ${vorab.fach}. Thema: ${vorab.thema}.`,
     "",
-    ...(vorab.probe ? [probeAbsatz(), ""] : []),
+    ...(vorab.probe ? [probeAbsatz(vorab.fach), ""] : []),
     ...(vorab.sprache ? [spracheAbsatz(vorab.sprache, { grammatik: !!vorab.grammatik && !vorab.probe }), ""] : []),
     `1. Unter diesem Auftrag stehen die Abschriften seiner Blätter zu diesem Thema. Das ist der ganze Stoff. Schreib ${MIN_AUFGABEN} bis ${MAX_AUFGABEN} Aufgaben, von leicht nach schwer, im Stil der Aufgaben dort. Keine Aufgabe zu Stoff, der nicht in den Abschriften steht.`,
     "",

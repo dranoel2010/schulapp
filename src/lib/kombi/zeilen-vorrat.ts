@@ -3,6 +3,7 @@ import { and, asc, eq, gte, inArray, isNull, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { examTopics, materialTopics, materials, studyBlocks, subjectTopics } from "@/db/schema";
 import { berlinDay } from "@/lib/dates";
+import { probeHilfsmittel } from "@/lib/probe-hilfsmittel";
 import { planEintragArt, planEintragTitel } from "@/lib/study-plan";
 import { bloeckeAlsBlatt } from "@/lib/arbeitsblatt/quelle";
 import { blattStaende, type BlattStand } from "@/lib/kombi/lernblock-daten";
@@ -150,13 +151,14 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
         blattStaende(userId, planRoh.map((r) => r.block.id)),
       ])
     : [new Set<string>(), new Map<string, BlattStand>()];
-  const planVon = (examId: string): VorratPlanEintrag[] =>
+  // Die Probeklausur nennt ihre Hilfsmittel nach dem Fach (probeHilfsmittel)
+  const planVon = (examId: string, fach: string): VorratPlanEintrag[] =>
     planRoh
       .filter((r) => r.block.examId === examId)
       .map((r) => ({
         tag: r.block.date,
         art: planEintragArt(r.block.kind),
-        thema: r.block.kind === "probe" ? "ohne Hilfsmittel" : (r.topic?.title ?? "Gesamtwiederholung"),
+        thema: r.block.kind === "probe" ? probeHilfsmittel(fach) : (r.topic?.title ?? "Gesamtwiederholung"),
         min: r.block.minutes,
         erledigt: r.block.status === "done",
         alsBlatt: alsBlatt.has(r.block.id) && !blattStand.get(r.block.id)?.fehlgeschlagen,
@@ -167,7 +169,7 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
   // wie in der Liste, auf ihrer Seite und im Archiv (klausurThema)
   const klausuren: VorratKlausur[] = klausurenRoh
     .filter((k) => aktiv.has(k.subjectId) && !klausurImArchiv(k.date, heute))
-    .map((k) => ({ id: k.id, fachId: k.subjectId, datum: k.date, thema: klausurThema({ title: k.title?.trim() || null, kind: k.kind }, klausurThemen.get(k.id) ?? []), plan: planVon(k.id) }));
+    .map((k) => ({ id: k.id, fachId: k.subjectId, datum: k.date, thema: klausurThema({ title: k.title?.trim() || null, kind: k.kind }, klausurThemen.get(k.id) ?? []), plan: planVon(k.id, k.subject.name) }));
   const archivFaecher = [
     ...new Set(klausurenRoh.filter((k) => aktiv.has(k.subjectId) && klausurImArchiv(k.date, heute)).map((k) => k.subjectId)),
   ];

@@ -110,12 +110,16 @@ describe("Probeklausur im Lernplan", () => {
   });
 
   describe("eine Probe, die schon im Plan steht, bleibt an ihrem Tag", () => {
-    /** Klausur am Montag 19.10., Plan vom 12.10.: Probe am Freitag 16.10., Lernen davor erledigt. */
-    async function freitagsProbe(mitBlatt: boolean, gelernt = true) {
-      const id = await neueKlausur("klausur", "2026-10-19");
+    /**
+     * Plan vom 12.10.: Klausur am Montag 19.10. mit Probe am Sonntag 18.10.
+     * (Regel vom 14.10.2026), Klausur am Donnerstag 22.10. mit Probe am
+     * Dienstag 20.10.; mit `gelernt` ist das Lernen davor erledigt.
+     */
+    async function probeImPlan(klausurTag: string, probeTag: string, mitBlatt: boolean, gelernt = true) {
+      const id = await neueKlausur("klausur", klausurTag);
       await generatePlan(nutzer, id, HEUTE);
       const probe = (await bloecke(id)).find((x) => x.kind === "probe")!;
-      assert.equal(probe.date, "2026-10-16");
+      assert.equal(probe.date, probeTag);
       if (gelernt) {
         await testDb
           .update(studyBlocks)
@@ -125,38 +129,39 @@ describe("Probeklausur im Lernplan", () => {
       if (mitBlatt) await blattFuerBlock(nutzer, probe.id);
       return { id, probeId: probe.id };
     }
+    const sonntagsProbe = (mitBlatt: boolean, gelernt = true) => probeImPlan("2026-10-19", "2026-10-18", mitBlatt, gelernt);
     const probeVon = async (id: string) =>
       (await bloecke(id)).filter((x) => x.kind === "probe").map((x) => [x.date, x.status]);
 
-    it("Nachholen am Freitag: die Probe bleibt offen am Freitag", async () => {
-      const { id, probeId } = await freitagsProbe(true);
-      await catchUpMissed(nutzer, id, "2026-10-16");
+    it("Nachholen am Sonntag: die Probe bleibt offen am Sonntag", async () => {
+      const { id, probeId } = await sonntagsProbe(true);
+      await catchUpMissed(nutzer, id, "2026-10-18");
       const [p] = await testDb.select().from(studyBlocks).where(eq(studyBlocks.id, probeId));
-      assert.deepEqual([p.date, p.status], ["2026-10-16", "open"]);
+      assert.deepEqual([p.date, p.status], ["2026-10-18", "open"]);
     });
 
-    it("„Lernplan neu erstellen“ am Freitag: mit Blatt bleibt dieselbe Probe, ohne Blatt kommt sie wieder auf Freitag", async () => {
-      const a = await freitagsProbe(true);
-      await generatePlan(nutzer, a.id, "2026-10-16");
-      assert.deepEqual(await probeVon(a.id), [["2026-10-16", "open"]]);
+    it("„Lernplan neu erstellen“ am Sonntag: mit Blatt bleibt dieselbe Probe, ohne Blatt kommt sie wieder auf Sonntag", async () => {
+      const a = await sonntagsProbe(true);
+      await generatePlan(nutzer, a.id, "2026-10-18");
+      assert.deepEqual(await probeVon(a.id), [["2026-10-18", "open"]]);
       assert.ok((await bloecke(a.id)).some((x) => x.id === a.probeId && x.status === "open"));
 
-      const b = await freitagsProbe(false);
-      await generatePlan(nutzer, b.id, "2026-10-16");
-      assert.deepEqual(await probeVon(b.id), [["2026-10-16", "open"]]);
+      const b = await sonntagsProbe(false);
+      await generatePlan(nutzer, b.id, "2026-10-18");
+      assert.deepEqual(await probeVon(b.id), [["2026-10-18", "open"]]);
       // und noch einmal: keine zweite, keine gestrichene
-      await generatePlan(nutzer, b.id, "2026-10-16");
-      assert.deepEqual(await probeVon(b.id), [["2026-10-16", "open"]]);
+      await generatePlan(nutzer, b.id, "2026-10-18");
+      assert.deepEqual(await probeVon(b.id), [["2026-10-18", "open"]]);
     });
 
-    it("„Lernplan neu erstellen“ am Freitag ohne Erledigtes: die Probe von heute bleibt, das Lernen kommt danach", async () => {
-      const { id } = await freitagsProbe(false, false);
-      await generatePlan(nutzer, id, "2026-10-16");
+    it("„Lernplan neu erstellen“ am Probetag ohne Erledigtes: die Probe von heute bleibt, das Lernen kommt danach", async () => {
+      const { id } = await probeImPlan("2026-10-22", "2026-10-20", false, false);
+      await generatePlan(nutzer, id, "2026-10-20");
       const b = await bloecke(id);
-      assert.deepEqual(await probeVon(id), [["2026-10-16", "open"]]);
-      const offen = b.filter((x) => x.kind !== "probe" && x.date >= "2026-10-16");
+      assert.deepEqual(await probeVon(id), [["2026-10-20", "open"]]);
+      const offen = b.filter((x) => x.kind !== "probe" && x.date >= "2026-10-20");
       assert.ok(offen.some((x) => x.kind === "learn"));
-      assert.ok(offen.every((x) => x.date > "2026-10-16"), "die Probe ist allein an ihrem Tag");
+      assert.ok(offen.every((x) => x.date > "2026-10-20"), "die Probe ist allein an ihrem Tag");
     });
 
     it("Nachholen am Probetag mit weniger als vier Lerntagen: Tag und Status bleiben", async () => {
@@ -204,15 +209,19 @@ describe("Probeklausur im Lernplan", () => {
     });
   });
 
-  it("Nachholen am Sonntag vor der Klausur am Montag: kein Schultag mehr, die Probe fällt weg", async () => {
+  it("eine Probe nach der alten Regel am Freitag vor der Montagsklausur zieht beim Nachholen auf den Sonntag", async () => {
     const id = await neueKlausur("klausur", "2026-10-19");
     await generatePlan(nutzer, id, HEUTE);
     const [probe] = (await bloecke(id)).filter((x) => x.kind === "probe");
-    assert.equal(probe.date, "2026-10-16");
-    await catchUpMissed(nutzer, id, "2026-10-18");
+    assert.equal(probe.date, "2026-10-18");
+    // So stand sie bis zum 14.10.2026 im Plan
+    await testDb.update(studyBlocks).set({ date: "2026-10-16" }).where(eq(studyBlocks.id, probe.id));
+    const zeile = (await blattFuerBlock(nutzer, probe.id))!;
+    await catchUpMissed(nutzer, id, "2026-10-17");
     const [danach] = await testDb.select().from(studyBlocks).where(eq(studyBlocks.id, probe.id));
-    assert.equal(danach.status, "skipped");
-    assert.equal(danach.date, "2026-10-16");
+    assert.deepEqual([danach.date, danach.status], ["2026-10-18", "open"]);
+    const [blatt] = await testDb.select().from(arbeitsblaetter).where(eq(arbeitsblaetter.id, zeile.id));
+    assert.equal(blatt.tag, "2026-10-18", "das wartende Blatt zieht mit");
   });
 
   it("die Probe ist auch im Abfrage-Fach ein Arbeitsblatt, der Lernblock dort nicht", async () => {
@@ -349,6 +358,8 @@ describe("Probeklausur im Lernplan", () => {
     it("kein Tag mehr frei: die Probe wird gestrichen, das Blatt bleibt", async () => {
       const { examId, probeId, blattId } = await mitBlatt(true);
       await verschieben(examId, "2026-10-19"); // Montag, heute Sonntag
+      // Der Sonntag wäre ihr Tag (Regel vom 14.10.2026), ist aber frei
+      await testDb.insert(freePeriods).values({ userId: nutzer, kind: "frei", startsOn: "2026-10-18", endsOn: "2026-10-18" });
       await generatePlan(nutzer, examId, "2026-10-18");
       const [p] = (await bloecke(examId)).filter((x) => x.id === probeId);
       assert.equal(p.status, "skipped");

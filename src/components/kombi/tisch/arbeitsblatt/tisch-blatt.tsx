@@ -22,6 +22,7 @@ import type { MaterialDaten } from "@/lib/kombi/lernblock-daten";
 import type { Auswertung, BlattStand } from "@/lib/arbeitsblatt/ablauf";
 import { falschZeile } from "@/lib/arbeitsblatt/ende-text";
 import { buzz, E, reduce } from "@/lib/kombi/motion";
+import { blattZaehlerText } from "@/lib/arbeitsblatt/tisch-text";
 import { dm, kurz, TAG, uhrzeit, wd } from "@/lib/kombi/text";
 import { themeColor } from "@/lib/kombi/theme-color";
 
@@ -408,13 +409,9 @@ export function ArbeitsblattTisch() {
 
   if (!offen) return null;
 
-  const n = stand?.inhalt?.aufgaben.length ?? 0;
   const gedrucktUm = stand?.gedrucktAm ? uhrzeit(new Date(stand.gedrucktAm)) : null;
-  const zaehlerText = !stand?.inhalt
-    ? "Arbeitsblatt"
-    : phase === "bewerten" && gedrucktUm
-      ? `Arbeitsblatt · gedruckt um ${gedrucktUm}`
-      : `Arbeitsblatt · ${n} Aufgaben, etwa ${stand.inhalt.minuten} Minuten`;
+  // Beim Lernblock „Probeklausur“ heißt es „Probeklausur · 45 Minuten“
+  const zaehlerText = stand ? blattZaehlerText(stand, gedrucktUm, phase === "bewerten") : "Arbeitsblatt";
 
   // Der Kopf folgt dem Weg, nicht dem Blatt: dasselbe Blatt ist beim Wiederholen das Thema, im Lernblock der Block
   const alsBlock = imBlock && stand?.block;
