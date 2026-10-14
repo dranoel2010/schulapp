@@ -1,0 +1,5 @@
+/* Teil: Woche (Raster Mo bis Fr: oben Abgeben und Lernen ohne Uhrzeit, darunter die Stunden; .wk, .mt, .ml).
+   Vorbild: desktop.html, Abschnitt „Woche“. Trennstriche nur in den engen Rasterzellen.
+   Alles ab 1024 px, Hover nur mit feiner Maus. Gemeinsames steht in grund.css. */
+@media (min-width:1024px){
+} /* Ende ab 1024 px */

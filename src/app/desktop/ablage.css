@@ -1,0 +1,5 @@
+/* Teil: Ablage, Fächer, Noten, Einstellungen (Blatt mit Original ab 1440 px, Filter .d-fil, .keys, Ablegen per Ziehen).
+   Vorbild: desktop.html, Abschnitte „Ablage und Blatt“, „Noten“, „Einstellungen“.
+   Alles ab 1024 px, Hover nur mit feiner Maus. Gemeinsames (auch .d-drop, .d-dlg) steht in grund.css. */
+@media (min-width:1024px){
+} /* Ende ab 1024 px */

@@ -24,6 +24,7 @@ export const ICON_PFADE = {
   arrow_back: <path d="M19.5 12h-15M10.5 6l-6 6 6 6" />,
   arrow_forward: <path d="M4.5 12h15M13.5 6l6 6-6 6" />,
   chevron_right: <path d="M9.5 6l6 6-6 6" />,
+  chevron_left: <path d="M14.5 6l-6 6 6 6" />,
   expand_more: <path d="M6 9.5l6 6 6-6" />,
   camera: (
     <>
@@ -32,6 +33,13 @@ export const ICON_PFADE = {
     </>
   ),
   pause: <path d="M9 6.5v11M15 6.5v11" />,
+  /* Hochladen statt Kamera: am Rechner liegt das Blatt als Datei vor (desktop.html) */
+  upload: (
+    <>
+      <path d="M12 15.5V4.5M7.5 9L12 4.5 16.5 9" />
+      <path d="M4.5 14.5v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof ICON_PFADE;

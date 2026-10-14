@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter, useSelectedLayoutSegments } from "next/navigation";
+import { usePathname, useRouter, useSearchParams, useSelectedLayoutSegments } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -12,6 +12,14 @@ import {
 } from "react";
 
 import { AblaufEbene } from "@/components/kombi/ablauf";
+import { zielFuerArt, type Bereich } from "@/components/kombi/desktop/bereiche";
+import { Buehne, heuteGezeigt, zielVon, type BuehnenEintrag } from "@/components/kombi/desktop/buehne";
+import { dialogAuf, dialogZu } from "@/components/kombi/desktop/dialog";
+import { dateienAblegen } from "@/components/kombi/desktop/hochladen";
+import { datenNeu } from "@/components/kombi/desktop/liste-detail";
+import { Seitenleiste } from "@/components/kombi/desktop/seitenleiste";
+import { useTasten } from "@/components/kombi/desktop/tasten";
+import { istDesktop, useDesktop } from "@/components/kombi/desktop/use-desktop";
 import { Startseite } from "@/components/kombi/home/startseite";
 import { KameraEbene } from "@/components/kombi/kamera";
 import { appUhrStellen } from "@/components/kombi/lernblock/uhr";
@@ -187,6 +195,13 @@ export function KombiShell({ children }: { children: ReactNode }) {
   const segmente = useSelectedLayoutSegments();
   const segKey = segmente.join("/");
   const istStart = segmente.length === 0;
+  /** Ab 1024 px: Bereiche statt Stapel, Dialog statt Sheet (nur Verhalten; das Aussehen macht src/app/desktop/) */
+  const desktop = useDesktop();
+  const suche = useSearchParams()?.toString() ?? "";
+  const istStartRef = useRef(istStart);
+  useEffect(() => {
+    istStartRef.current = istStart;
+  }, [istStart]);
 
   const [tagDaten, setTagDaten] = useState<TagDaten | null>(null);
   // Die Lernblock-Uhr zählt mit der App-Uhr (mit Testuhr die Testuhr)
@@ -245,10 +260,11 @@ export function KombiShell({ children }: { children: ReactNode }) {
   // ── History ───────────────────────────────────────────────────────────────
 
   const pushStapel = useCallback(
-    (stapel: StapelEintrag[], url: string) => {
+    (stapel: StapelEintrag[], url: string, ersetzenWunsch = false) => {
       const s = stateJetzt();
-      // Menü und Sheet ersetzt die Seite; Tisch und Lupe bleiben darunter stehen
-      const ersetzen = s.overlay === "menu" || s.overlay === "sheet";
+      // Menü und Sheet ersetzt die Seite; Tisch und Lupe bleiben darunter stehen.
+      // Am Rechner ersetzt eine andere Auswahl im selben Bereich den Eintrag.
+      const ersetzen = ersetzenWunsch || s.overlay === "menu" || s.overlay === "sheet";
       const state: KombiState = { kombi: 1, stapel, idx: (ersetzen ? idx.current : idx.current + 1), ladung: LADUNG };
       idx.current = state.idx;
       // Ein offenes Menü (oder Sheet) hat einen eigenen Eintrag: den ersetzt
@@ -306,7 +322,8 @@ export function KombiShell({ children }: { children: ReactNode }) {
         : z?.classList.contains("hide")
           ? 16
           : (z ? parseFloat(getComputedStyle(z).bottom) || 16 : 16) + 52 + 10;
-      el.style.bottom = `${Math.round(bottom)}px`;
+      // Am Rechner steht der Toast per CSS über der Zeile in der Bühne
+      el.style.bottom = istDesktop() && !camTop ? "" : `${Math.round(bottom)}px`;
       toastTextRef.current.textContent = text;
       const t = toastZustand.current;
       t.fn = fn ?? null;
@@ -400,6 +417,26 @@ export function KombiShell({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     const app = appRef.current;
     if (!app) return;
+    if (istDesktop()) {
+      // Am Rechner steht immer nur die oberste Seite auf der Bühne: nichts
+      // fährt ein oder aus, eine gehende Seite ist sofort weg.
+      for (const e of ebenen) {
+        if (!e.geht) {
+          animiert.current.add(e.key);
+          continue;
+        }
+        if (animiert.current.has(`weg:${e.key}`)) continue;
+        animiert.current.add(`weg:${e.key}`);
+        freigelegtNachladen(e.key);
+        queueMicrotask(() => {
+          animiert.current.delete(e.key);
+          animiert.current.delete(`weg:${e.key}`);
+          elemente.current.delete(e.key);
+          setzeEbenen((alt) => alt.filter((x) => x.key !== e.key));
+        });
+      }
+      return;
+    }
     const W = app.clientWidth;
     for (const e of ebenen) {
       const el = elemente.current.get(e.key);
@@ -523,9 +560,15 @@ export function KombiShell({ children }: { children: ReactNode }) {
 
   // für „Erneut“ im Fehler-Toast: openPage ruft sich selbst wieder auf
   const openPageRef = useRef<(art: string, params?: Record<string, string>) => void>(() => {});
+  const zeigeBereichRef = useRef<KombiApi["zeigeBereich"]>(() => {});
 
   const openPage = useCallback(
     (art: string, params: Record<string, string> = {}, optionen?: OeffnenOptionen) => {
+      if (istDesktop()) {
+        zuletztMerken(art, params, optionen?.zuletzt);
+        zeigeBereichRef.current(art, params);
+        return;
+      }
       clearTimeout(ausPopTimer.current);
       // „Zuletzt geöffnet“ im Menü der Zeile (Prototyp `remember`)
       zuletztMerken(art, params, optionen?.zuletzt);
@@ -586,6 +629,116 @@ export function KombiShell({ children }: { children: ReactNode }) {
     openPageRef.current = openPage;
   }, [openPage]);
 
+  // ── Am Rechner: Bereiche statt Stapel (desktop.html `go`) ───────────────────
+
+  /** Die Startseite: Stapel zu, ohne die Ansicht zu wechseln; der Ablauf kommt am Rechner nicht von selbst. */
+  const heuteZeigen = useCallback(() => {
+    const flowAn = !!document.getElementById("flow")?.classList.contains("on");
+    if (!istStartRef.current || ebenenRef.current.some((e) => e.typ === "route" && !e.geht)) {
+      navigiereEcht("/");
+    } else if (ebenenRef.current.some((e) => !e.geht)) {
+      setzeEbenen(() => []);
+      animiert.current.clear();
+      elemente.current.clear();
+      pushStapel([], "/");
+    }
+    if (homeRef.current) {
+      homeRef.current.getAnimations().forEach((a) => a.cancel());
+      homeRef.current.style.transform = "";
+      homeRef.current.style.opacity = "";
+    }
+    if (flowAn) handler.current.get("ansicht")?.({ ansicht: "ueberblick", anim: false });
+  }, [navigiereEcht, setzeEbenen, pushStapel]);
+
+  const zeigeBereich = useCallback<KombiApi["zeigeBereich"]>(
+    (art, params = {}, optionen = {}) => {
+      if (!istDesktop()) {
+        if (art === "heute") handler.current.get("ansicht")?.({ ansicht: "ueberblick" });
+        else openPageRef.current(art, params);
+        return;
+      }
+      clearTimeout(ausPopTimer.current);
+      ausPop.current = false;
+      zeileRef.current?.schliessen({ ausHistory: true });
+      hideToast(true);
+      if (art === "heute") {
+        heuteZeigen();
+        return;
+      }
+      const s = seitenArt(art);
+      if (!s) {
+        const route = ROUTE_STATT_STAPEL[art]?.(params);
+        if (route) navigiereEcht(route);
+        return;
+      }
+      const oben = obersteEbene();
+      if (oben?.typ === "stapel" && gleich(oben, { art, params })) return;
+      const alt = zielVon(oben as BuehnenEintrag | null, window.location.pathname, window.location.search.slice(1));
+      const neu = zielFuerArt(art, params);
+      // Eine andere Auswahl im selben Bereich ersetzt den Eintrag; ein anderer Bereich kommt dazu
+      const ersetzen = optionen.ersetzen ?? (neu.lage === "split" && alt.lage === "split" && alt.bereich === neu.bereich);
+      const key = keyFuer(art);
+      let gezeigt = false;
+      let erledigt = false;
+      const zeigen = (daten: unknown, ausCache: string | null) => {
+        if (daten !== undefined) {
+          const zl = s.zuletzt?.(params, daten);
+          if (zl) zuletztMerken(art, params, zl);
+        }
+        if (gezeigt) {
+          setzeEbenen((liste) => liste.map((e) => (e.key === key && e.typ === "stapel" ? { ...e, daten, ausCache, ohneNetz: false } : e)));
+          return;
+        }
+        gezeigt = true;
+        // Die Stapelseiten gehen, Routen bleiben darunter (Zurück findet sie wieder)
+        setzeEbenen((liste) => [...liste.filter((e) => e.typ === "route"), { key, typ: "stapel", art, params, daten, ausCache }]);
+        pushStapel(stapelJetzt(), s.url(params), ersetzen);
+        themeColor("paper");
+      };
+      // Bleibt die Liste stehen, wechselt das Detail sofort; sonst wie openPage nach 150 ms auch ohne Daten
+      const timer = setTimeout(
+        () => {
+          if (!erledigt) zeigen(undefined, null);
+        },
+        ersetzen ? 0 : 150,
+      );
+      holen(art, params).then(
+        (antwort) => {
+          erledigt = true;
+          clearTimeout(timer);
+          zeigen(antwort.daten, antwort.ausCache);
+        },
+        () => {
+          erledigt = true;
+          clearTimeout(timer);
+          if (gezeigt) setzeEbenen((liste) => liste.map((e) => (e.key === key && e.typ === "stapel" ? { ...e, ohneNetz: true } : e)));
+          toast("Keine Verbindung", () => zeigeBereichRef.current(art, params), "Keine Verbindung", "Erneut");
+        },
+      );
+    },
+    [hideToast, heuteZeigen, navigiereEcht, obersteEbene, setzeEbenen, pushStapel, stapelJetzt, holen, toast],
+  );
+
+  useEffect(() => {
+    zeigeBereichRef.current = zeigeBereich;
+  }, [zeigeBereich]);
+
+  /** Zuletzt gewählt je Bereich: ein Klick in der Seitenleiste kehrt dorthin zurück (desktop.html `ui.sel`). */
+  const gewaehlt = useRef(new Map<Bereich, StapelEintrag>());
+
+  const bereichWechseln = useCallback(
+    (b: Bereich) => {
+      if (b === "heute") return zeigeBereich("heute");
+      const g = gewaehlt.current.get(b);
+      if (g) zeigeBereich(g.art, g.params);
+      else zeigeBereich(b);
+    },
+    [zeigeBereich],
+  );
+
+  // Hochladen statt Kamera: die Dateiauswahl liegt in der Bühne
+  const dateiRef = useRef<HTMLInputElement>(null);
+
   /** Stapel an einen Zielzustand angleichen (Zurück, Vor, Neuladen). */
   const stapelAngleichen = useCallback(
     (ziel: StapelEintrag[]) => {
@@ -644,6 +797,8 @@ export function KombiShell({ children }: { children: ReactNode }) {
   }, [obersteEbene, router]);
 
   const neuLaden = useCallback(async () => {
+    // am Rechner: Liste und Detail, die die Bühne selbst geholt hat
+    datenNeu();
     const auftraege: Promise<unknown>[] = [
       fetch("/api/tag/daten", { headers: { accept: "application/json" } })
         .then((r) => (r.ok ? (r.json() as Promise<TagDaten>) : null))
@@ -686,6 +841,17 @@ export function KombiShell({ children }: { children: ReactNode }) {
   const sheetSchliessen = useCallback((ausHistory = false) => {
     const el = sheetRef.current;
     if (!el || !el.classList.contains("open")) return;
+    if (el.classList.contains("on")) {
+      // am Rechner: der Dialog in der Mitte
+      void dialogZu(el, sheetScrimRef.current).then(() => {
+        if (!el.classList.contains("open")) setSheet(null);
+      });
+      if (!ausHistory && stateJetzt().overlay === "sheet") {
+        ignorierePop.current += 1;
+        window.history.back();
+      }
+      return;
+    }
     sheetScrimRef.current?.classList.remove("on");
     const a = reduce()
       ? el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160 })
@@ -714,6 +880,11 @@ export function KombiShell({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     const el = sheetRef.current;
     if (!sheet || !el || el.classList.contains("open")) return;
+    if (istDesktop()) {
+      // ab 1024 px als Dialog in der Mitte (desktop/dialog.tsx)
+      dialogAuf(el, sheetScrimRef.current);
+      return;
+    }
     el.classList.add("open");
     sheetScrimRef.current?.classList.add("on");
     sheetScrimRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: reduce() ? 160 : 320, easing: "ease" });
@@ -1274,7 +1445,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
       if (e.key !== "Escape" || e.defaultPrevented) return;
       if (sheetRef.current?.classList.contains("open")) sheetSchliessen();
       else if (zeileRef.current?.istOffen()) zeileRef.current.schliessen();
-      else if (obersteEbene()) popPage();
+      else if (obersteEbene() && !istDesktop()) popPage();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -1349,6 +1520,17 @@ export function KombiShell({ children }: { children: ReactNode }) {
         // die Ebene `flow` (Abschnitt C) zeigt oder verbirgt den Ablauf
         handler.current.get("ablauf")?.({ ansicht, ...o });
       },
+      zeigeBereich,
+      onHochladen: (dateien) => {
+        if (!dateien) {
+          dateiRef.current?.click();
+          return;
+        }
+        if (!dateien.length) return;
+        const h = handler.current.get("hochladen");
+        if (h) h({ dateien });
+        else void dateienAblegen(dateien.map((f) => [f]), { tag: tagDaten?.tag ?? null, toast, openPage, neuLaden });
+      },
       openZeile: (kontext) => zeileRef.current?.oeffnen(kontext),
       undoJetzt: () => {
         const t = toastZustand.current;
@@ -1364,7 +1546,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
       ebeneAuf,
       ebeneZu,
     }),
-    [openPage, vorladen, popPage, toast, hideToast, fehlerToast, openSheet, sheetSchliessen, navigiereEcht, pathname, setzeEbenen, pushStapel, tagDaten, merkeTagDaten, neuLaden, registriere, ebeneAuf, ebeneZu],
+    [openPage, zeigeBereich, vorladen, popPage, toast, hideToast, fehlerToast, openSheet, sheetSchliessen, navigiereEcht, pathname, setzeEbenen, pushStapel, tagDaten, merkeTagDaten, neuLaden, registriere, ebeneAuf, ebeneZu],
   );
 
   // Nur mit SCHULAPP_TESTUHR (data-pruefung am <html>): die API für die
@@ -1377,8 +1559,29 @@ export function KombiShell({ children }: { children: ReactNode }) {
   // Nur die oberste lebende Route-Ebene zeigt die `children` (2.4, Punkt 5)
   const routeMitInhalt = [...ebenen].reverse().find((e) => e.typ === "route" && !e.geht)?.key;
 
+  // Am Rechner: die oberste Seite auf der Bühne, ihr Bereich in der Seitenleiste
+  const oben = desktop ? ([...ebenen].reverse().find((e) => !e.geht) ?? null) : null;
+  const ziel = desktop ? zielVon(oben, pathname, suche) : null;
+  useTasten(desktop, () => zeileRef.current?.oeffnen(), bereichWechseln);
+  useEffect(() => {
+    if (ziel?.bereich && oben?.typ === "stapel" && ziel.lage === "split") gewaehlt.current.set(ziel.bereich, { art: oben.art, params: oben.params });
+  }, [ziel?.bereich, ziel?.lage, oben]);
+  // Heute wieder vorn: die Startseite blendet ein wie jeder Bereich
+  const heuteVorn = ziel?.lage === "heute";
+  useLayoutEffect(() => {
+    if (heuteVorn) heuteGezeigt(homeRef.current);
+  }, [heuteVorn]);
+
   return (
     <KombiKontext.Provider value={api}>
+      {/*
+        Am Handy sind #desk und .stage gewöhnliche Hüllen ohne eigene Fläche
+        (alles darin ist fixed), die Seitenleiste ist `hidden`. Ab 1024 px macht
+        src/app/desktop/grund.css daraus Seitenleiste und Bühne.
+      */}
+      <div id="desk">
+      <Seitenleiste daten={tagDaten} aktiv={ziel?.bereich ?? null} onBereich={bereichWechseln} />
+      <main className="stage" id="stage" data-lay={ziel ? (ziel.lage === "heute" ? "scroll" : ziel.lage) : undefined} data-v={ziel?.bereich ?? undefined}>
       <div id="app" ref={appRef}>
         <div className="layer on" id="home" ref={homeRef}>
           {istStart ? children : <Startseite daten={tagDaten} />}
@@ -1399,7 +1602,18 @@ export function KombiShell({ children }: { children: ReactNode }) {
             }
           }}
         >
-          {ebenen.map((e) =>
+          {desktop ? (
+            oben ? (
+              <Buehne
+                eintrag={oben}
+                ziel={ziel ?? zielVon(oben, pathname, suche)}
+                pfad={pathname}
+                onZurueck={popPage}
+              >
+                {oben.typ === "route" && !istStart && oben.key === routeMitInhalt ? children : null}
+              </Buehne>
+            ) : null
+          ) : ebenen.map((e) =>
             e.typ === "route" ? (
               <Seite
                 key={e.key}
@@ -1430,6 +1644,19 @@ export function KombiShell({ children }: { children: ReactNode }) {
       </div>
 
       <Zeile handleRef={zeileRef} onOffen={menuOffen} />
+      <input
+        ref={dateiRef}
+        type="file"
+        id="fileUp"
+        accept="image/*,application/pdf"
+        multiple
+        hidden
+        onChange={(e) => {
+          const dateien = [...(e.target.files ?? [])];
+          e.target.value = "";
+          api.onHochladen(dateien);
+        }}
+      />
 
       <div className="toast" id="toast" role="status" ref={toastRef}>
         <span id="toastText" ref={toastTextRef} />
@@ -1447,10 +1674,12 @@ export function KombiShell({ children }: { children: ReactNode }) {
           Rückgängig
         </button>
       </div>
+      </main>
+      </div>
 
       <div className="scrim sheet-scrim" id="sheetScrim" ref={sheetScrimRef} onClick={() => sheetSchliessen()} />
       <section
-        className={`sheet${sheet?.aufDemTisch ? " on-table" : ""}`}
+        className={`sheet d-dlg${sheet?.aufDemTisch ? " on-table" : ""}`}
         id="sheet"
         aria-label="Blatt"
         role="dialog"

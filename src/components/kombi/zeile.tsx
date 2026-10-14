@@ -19,6 +19,7 @@ import {
   eintragenZuruecknehmenAction,
 } from "@/app/(app)/zeile-actions";
 import { ablaufAusMenuMerken, ablaufStore } from "@/components/kombi/ablauf/ablauf-store";
+import { istDesktop, useDesktop } from "@/components/kombi/desktop/use-desktop";
 import { Icon, type IconName } from "@/components/kombi/icon";
 import { warmCamera } from "@/components/kombi/kamera/stream";
 import { useKombi } from "@/components/kombi/kontext";
@@ -174,6 +175,8 @@ export function Zeile({
   const kombi = useKombi();
   const router = useRouter();
   const pathname = usePathname();
+  /** Ab 1024 px: die Pille unten in der Bühne, das Menü als Popover nach oben, Hochladen statt Kamera */
+  const desktop = useDesktop();
   const [offen, setOffen] = useState(false);
   /** Tokens und Pillen bleiben bis zum Ende der Schließ-Bewegung stehen */
   const [sichtbar, setSichtbar] = useState(false);
@@ -345,6 +348,16 @@ export function Zeile({
     const menu = menuRef.current;
     const dock = dockRef.current;
     if (!menu || !dock) return;
+    if (istDesktop()) {
+      // Popover über der Pille (desktop.html `.d-menu`): höchstens 62 % der Höhe, bis 540 px
+      const mx = Math.round(Math.min(window.innerHeight * 0.62, 540));
+      menu.style.maxHeight = `${mx}px`;
+      if (Z.current.maxH > mx) {
+        Z.current.maxH = mx;
+        menu.style.minHeight = `${mx}px`;
+      }
+      return;
+    }
     const vv = window.visualViewport;
     const top = (vv ? vv.offsetTop : 0) + 44;
     const dockB = dock.getBoundingClientRect().bottom + sb();
@@ -413,6 +426,13 @@ export function Zeile({
         setSichtbar(false);
       };
       if (!menu) return fertig();
+      if (menu.classList.contains("on")) {
+        // am Rechner blendet das Popover per CSS aus (150/180 ms)
+        animRef.current?.cancel();
+        menu.classList.remove("on");
+        window.setTimeout(fertig, reduce() ? 120 : 180);
+        return;
+      }
       const H = menu.offsetHeight;
       const cur = getComputedStyle(menu).clipPath;
       animRef.current?.cancel();
@@ -1158,7 +1178,11 @@ export function Zeile({
       queueMicrotask(weiter);
     }
 
-    if (ersteMal) {
+    if (ersteMal && istDesktop()) {
+      // Popover: Einblenden per CSS-Übergang (.d-menu.on), kein Wachsen aus der Pille
+      animRef.current?.cancel();
+      menu.classList.add("on");
+    } else if (ersteMal) {
       const H = menu.offsetHeight;
       animRef.current?.cancel();
       animRef.current = reduce()
@@ -1353,9 +1377,9 @@ export function Zeile({
   return (
     <>
       <div className={`scrim${offen ? " on" : ""}`} id="scrim" onClick={() => schliessen({ keepText: true })} />
-      <div className={`zeile${offen ? " menu-on" : ""}${versteckt ? " hide" : ""}`} id="zeile" ref={zeileRef}>
+      <div className={`zeile d-zeile${offen ? " menu-on" : ""}${versteckt ? " hide" : ""}`} id="zeile" ref={zeileRef}>
         <div
-          className="menu"
+          className="menu d-menu"
           id="menu"
           ref={menuRef}
           aria-label="Eintragen oder suchen"
@@ -1411,7 +1435,7 @@ export function Zeile({
           </div>
         </div>
         <form
-          className={`dock${intent !== "suchen" ? " ctx" : ""}`}
+          className={`dock${intent !== "suchen" ? " ctx" : ""}${text ? " typing" : ""}`}
           id="dock"
           ref={dockRef}
           autoComplete="off"
@@ -1497,20 +1521,38 @@ export function Zeile({
               }
             }}
           />
+          {/* am Rechner: das Tastenkästchen „/“ (display:none überstimmt grund.css ab 1024 px) */}
+          <span className="dkbd" aria-hidden="true" style={{ display: "none" }}>
+            /
+          </span>
           <button className={`send${vt ? " on" : ""}`} id="send" type="submit" aria-label={intent === "suchen" ? "Zeigen" : intent === "aendern" ? "Ändern" : "Eintragen"}>
             <Icon name={sendName} id="sendIcon" />
           </button>
           <span className="dsep" aria-hidden="true" />
-          <button
-            className="camb"
-            id="camBtn"
-            type="button"
-            aria-label="Blatt aufnehmen"
-            onPointerDown={() => void warmCamera()}
-            onClick={() => nachSchliessen(() => kombi.openCam({ ziel: "zeile" }))}
-          >
-            <Icon name="camera" />
-          </button>
+          {desktop ? (
+            // Am Rechner macht das Handy die Fotos: hier wird hochgeladen
+            <button
+              className="camb"
+              id="camBtn"
+              type="button"
+              aria-label="Blatt hochladen"
+              title="Blatt hochladen"
+              onClick={() => nachSchliessen(() => kombi.onHochladen())}
+            >
+              <Icon name="upload" />
+            </button>
+          ) : (
+            <button
+              className="camb"
+              id="camBtn"
+              type="button"
+              aria-label="Blatt aufnehmen"
+              onPointerDown={() => void warmCamera()}
+              onClick={() => nachSchliessen(() => kombi.openCam({ ziel: "zeile" }))}
+            >
+              <Icon name="camera" />
+            </button>
+          )}
         </form>
       </div>
     </>

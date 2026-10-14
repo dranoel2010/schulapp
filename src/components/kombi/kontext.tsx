@@ -21,14 +21,29 @@ export type OeffnenOptionen = {
 };
 
 /** Ebenen, die spätere Abschnitte in die Shell hängen (C: Kamera und Ablauf, E: Tisch, F: Lernblock, H: Blatt im Lernblock). */
-export type EbenenName = "kamera" | "tisch" | "lernblock" | "arbeitsblatt" | "ansicht" | "ablauf";
+export type EbenenName = "kamera" | "tisch" | "lernblock" | "arbeitsblatt" | "ansicht" | "ablauf" | "hochladen";
 export type EbenenHandler = (optionen?: Record<string, unknown>) => void;
 /** Ebenen mit eigenem Eintrag in der History, die Zurück der Reihe nach schließt */
 export type UeberEbene = "tisch" | "lupe" | "bestaetigung";
 
 export type KombiApi = {
-  /** Nachschlage-Seite öffnen (Prototyp `openPage`); unbekannte Arten navigieren zur Route */
+  /** Nachschlage-Seite öffnen (Prototyp `openPage`); unbekannte Arten navigieren zur Route. Am Rechner wie `zeigeBereich`. */
   openPage: (art: string, params?: Record<string, string>, optionen?: OeffnenOptionen) => void;
+  /**
+   * Am Rechner (ab 1024 px): eine Seite in ihrem Bereich zeigen, statt sie zu
+   * stapeln (desktop.html `go`). Sie ersetzt die Seite auf der Bühne und
+   * schreibt dieselbe URL wie `openPage` per pushState, damit Direktaufruf und
+   * Zurück gehen; innerhalb desselben Bereichs (andere Auswahl) per
+   * replaceState. `"heute"` zeigt die Startseite. Am Handy ist es `openPage`.
+   */
+  zeigeBereich: (art: string, params?: Record<string, string>, optionen?: { ersetzen?: boolean }) => void;
+  /**
+   * Am Rechner statt der Kamera: Dateien ablegen (Knopf der Zeile, Ziehen ins
+   * Fenster). Ohne Dateien öffnet es die Dateiauswahl. Hängt sich eine Ebene
+   * „hochladen“ ein (Teil Ablage: „ein Blatt oder mehrere“), bekommt sie die
+   * Dateien als `{ dateien }`; sonst wird jede Datei ein Blatt.
+   */
+  onHochladen: (dateien?: File[]) => void;
   /** Daten einer Seite schon holen (bei `pointerdown`), Plan 2.4, Punkt 6 */
   vorladen: (art: string, params?: Record<string, string>) => void;
   /** Oberste Ebene schließen (Zurück-Pfeil, Randwisch, Android-Zurück) */

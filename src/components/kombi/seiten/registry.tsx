@@ -10,6 +10,7 @@ import { HausaufgabenInhalt } from "@/components/kombi/seiten/hausaufgaben";
 import { KlausurenInhalt, KlausurInhalt, klausurTitel, klausurUntertitel } from "@/components/kombi/seiten/klausur";
 import { NotenfachInhalt, NotenInhalt } from "@/components/kombi/seiten/noten";
 import { ProbeInhalt, probeTitel } from "@/components/kombi/seiten/probe";
+import { BEREICH_JE_ART, type BereichAngabe } from "@/components/kombi/desktop/bereiche";
 import { zuletztAngabe } from "@/components/kombi/zeile/zuletzt-angabe";
 import { WocheInhalt, wocheSub } from "@/components/kombi/seiten/woche";
 import type { AblageDaten, BlattDaten } from "@/lib/seiten/ablage";
@@ -44,6 +45,12 @@ export type SeitenArt = {
    */
   zuletzt?: (params: Record<string, string>, daten: unknown) => { label: string; sub?: string | null } | null;
   Inhalt: ComponentType<SeitenInhaltProps>;
+  /**
+   * Am Rechner (ab 1024 px): in welchem Bereich die Seite steht und ob sie
+   * die Liste ist oder ein Detail neben ihr (desktop/bereiche.ts). Ohne
+   * Angabe steht sie als Spalte auf der Bühne.
+   */
+  bereich?: BereichAngabe;
 };
 
 const mitQuery = (pfad: string, q: Record<string, string | undefined>) => {
@@ -62,36 +69,43 @@ export const SEITEN: Record<string, SeitenArt | undefined> = {
   },
   woche: {
     url: (p) => mitQuery("/stundenplan", { tag: p.tag }),
+    bereich: BEREICH_JE_ART.woche,
     titel: () => "Woche",
     untertitel: (_p, d) => wocheSub(d as WocheDaten),
     Inhalt: inhalt(WocheInhalt),
   },
   hausaufgaben: {
-    url: () => "/hausaufgaben",
+    // `sel`: die gewählte Aufgabe am Rechner (am Handy nie gesetzt)
+    url: (p) => mitQuery("/hausaufgaben", { sel: p.sel }),
+    bereich: BEREICH_JE_ART.hausaufgaben,
     titel: () => "Hausaufgaben",
     Inhalt: inhalt(HausaufgabenInhalt),
   },
   // Abschnitt F
   klausuren: {
-    url: () => "/klausuren",
+    url: (p) => mitQuery("/klausuren", { sel: p.sel }),
+    bereich: BEREICH_JE_ART.klausuren,
     titel: () => "Klausuren",
     Inhalt: KlausurenInhalt as ComponentType<SeitenInhaltProps>,
   },
   klausur: {
     zuletzt: (_p, d) => zuletztAngabe("klausur", d),
     url: (p) => `/klausuren/${enc(p.id ?? "")}`,
+    bereich: BEREICH_JE_ART.klausur,
     titel: klausurTitel,
     untertitel: klausurUntertitel,
     Inhalt: KlausurInhalt as ComponentType<SeitenInhaltProps>,
   },
   noten: {
-    url: () => "/noten",
+    url: (p) => mitQuery("/noten", { sel: p.sel }),
+    bereich: BEREICH_JE_ART.noten,
     titel: () => "Noten",
     Inhalt: inhalt(NotenInhalt),
   },
   notenfach: {
     zuletzt: (_p, d) => zuletztAngabe("notenfach", d),
     url: (p) => `/noten/fach/${enc(p.id ?? "")}`,
+    bereich: BEREICH_JE_ART.notenfach,
     titel: (_p, d) => {
       const n = (d as NotenfachDaten | undefined)?.name;
       return n ? `Noten ${n}` : "Noten";
@@ -99,7 +113,8 @@ export const SEITEN: Record<string, SeitenArt | undefined> = {
     Inhalt: inhalt(NotenfachInhalt),
   },
   ablage: {
-    url: (p) => mitQuery("/material", { fach: p.fach, thema: p.thema }),
+    url: (p) => mitQuery("/material", { fach: p.fach, thema: p.thema, sel: p.sel }),
+    bereich: BEREICH_JE_ART.ablage,
     titel: () => "Ablage",
     untertitel: (_p, d) => ablageSub(d as AblageDaten),
     Inhalt: inhalt(AblageInhalt),
@@ -107,30 +122,35 @@ export const SEITEN: Record<string, SeitenArt | undefined> = {
   blatt: {
     zuletzt: (_p, d) => zuletztAngabe("blatt", d),
     url: (p) => `/material/${enc(p.id ?? "")}`,
+    bereich: BEREICH_JE_ART.blatt,
     titel: (_p, d) => (d as BlattDaten | undefined)?.titel ?? "",
     untertitel: (_p, d) => blattSub(d as BlattDaten),
     Inhalt: inhalt(BlattInhalt),
   },
   faecher: {
-    url: () => "/faecher",
+    url: (p) => mitQuery("/faecher", { sel: p.sel }),
+    bereich: BEREICH_JE_ART.faecher,
     titel: () => "Fächer",
     Inhalt: inhalt(FaecherInhalt),
   },
   fach: {
     zuletzt: (_p, d) => zuletztAngabe("fach", d),
     url: (p) => `/faecher/${enc(p.id ?? "")}`,
+    bereich: BEREICH_JE_ART.fach,
     titel: (_p, d) => (d as FachDaten | undefined)?.name ?? "",
     untertitel: (_p, d) => (d as FachDaten).sub,
     Inhalt: inhalt(FachInhalt),
   },
   einstellungen: {
-    url: () => "/einstellungen",
+    url: (p) => mitQuery("/einstellungen", { sel: p.sel }),
+    bereich: BEREICH_JE_ART.einstellungen,
     titel: () => "Einstellungen",
     Inhalt: inhalt(EinstellungenInhalt),
   },
   // Antwort 11: Vergangenes nach zwei Wochen
   archiv: {
     url: () => "/archiv",
+    bereich: BEREICH_JE_ART.archiv,
     titel: () => "Archiv",
     Inhalt: inhalt(ArchivInhalt),
   },

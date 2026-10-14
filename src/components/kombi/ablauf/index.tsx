@@ -17,6 +17,7 @@ import {
   fachAendernAction,
 } from "@/app/(app)/ablauf-actions";
 import { ablaufAusMenuNehmen, ablaufStore, ablaufTagSetzen } from "@/components/kombi/ablauf/ablauf-store";
+import { istDesktop } from "@/components/kombi/desktop/use-desktop";
 import { AufgabeZeile } from "@/components/kombi/ablauf/aufgabe";
 import { BlattZeile, type BlattAnzeige } from "@/components/kombi/ablauf/blatt-zeile";
 import { blattFertig } from "@/components/kombi/ablauf/status-texte";
@@ -372,7 +373,8 @@ export function AblaufEbene() {
       // aus der Zeit vor dem Neuladen nicht (Kriterium 11).
       const state = window.history.state as { stapel?: unknown[] } | null;
       const stapelLeer = !state?.stapel?.length;
-      if (d.ansichtAblauf && window.location.pathname === "/" && stapelLeer && !z.current.gestartet) {
+      // Am Rechner kommt der Ablauf nicht von selbst (EINBAU.md „Am Rechner“)
+      if (d.ansichtAblauf && window.location.pathname === "/" && stapelLeer && !z.current.gestartet && !istDesktop()) {
         z.current.gestartet = true;
         setView("ablauf", { anim: false });
       }
@@ -392,7 +394,7 @@ export function AblaufEbene() {
         z.current.live = d.ansichtAblauf;
         if (document.body.classList.contains("cam-offen") || document.querySelector(".tisch.open")) return;
         // nur beim Zurückkommen, nie während der Bildschirm sichtbar ist (V2 3.2)
-        if (d.ansichtAblauf && alt === false && !z.current.sichtbar && window.location.pathname === "/") setView("ablauf");
+        if (d.ansichtAblauf && alt === false && !z.current.sichtbar && window.location.pathname === "/" && !istDesktop()) setView("ablauf");
       });
     };
     document.addEventListener("visibilitychange", onVis);

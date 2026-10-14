@@ -5,6 +5,13 @@ import { RegisterServiceWorker } from "@/components/pwa/register-service-worker"
 
 import "./globals.css";
 import "./kombi.css";
+// Am Rechner ab 1024 px (desktop.html): jede Datei ganz in @media (min-width:1024px), nach kombi.css
+import "./desktop/grund.css";
+import "./desktop/heute.css";
+import "./desktop/listen.css";
+import "./desktop/woche.css";
+import "./desktop/ablage.css";
+import "./desktop/tisch.css";
 
 /**
  * Die Schriften von Modell 23: Schibsted Grotesk für alles, Newsreader nur

@@ -1,0 +1,171 @@
+/* Teil: Grundgerüst am Rechner (Shell, Seitenleiste, Bühne, Liste und Detail, Zeile, Dialog, Ablegen).
+   Wörtlich aus entwurf-modelle/23-kombi-v2/desktop.html (Block „ab 1024 px“), dazu die Anpassungen an die
+   echten Bausteine der App (.zeile, .menu, .sheet, #app). Tokens und Handyklassen: src/app/kombi.css.
+   Alles gilt erst ab 1024 px; darunter ändert diese Datei nichts. Hover nur mit feiner Maus. */
+@media (min-width:1024px){
+/* Stufen: 1024 bis 1279 knapp, 1280 bis 1439 normal, ab 1440 steht beim Blatt das Original neben der Abschrift,
+   ab 1680 breit (Liste 392, Rand 64, Inhalt bis 1320). */
+:root{--rail:224px;--list:328px;--dpad:40px;--dtop:28px}
+@media (min-width:1280px){:root{--rail:244px;--list:360px;--dpad:48px}}
+@media (min-width:1680px){:root{--list:392px;--dpad:64px;--dtop:36px}}
+
+#desk{position:fixed;inset:0;display:grid;grid-template-columns:var(--rail) minmax(0,1fr);background:var(--bg)}
+button{-webkit-user-select:none;user-select:none}
+.d-scroll,.d-list,.d-detail{scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+/* #app ist am Handy die Spalte bis --col; am Rechner füllt es die Bühne */
+.stage > #app{position:absolute;inset:0;max-width:none;margin:0}
+
+/* ---------- Seitenleiste ---------- */
+/* gerendert mit style="display:none": am Handy unsichtbar, hier sichtbar */
+.rail{display:flex !important}
+.rail{position:relative;flex-direction:column;min-height:0;padding:var(--dtop) 12px 14px;border-right:1px solid var(--line)}
+.r-when{display:flex;align-items:center;gap:7px;height:44px;padding:0 10px;font-size:15px;line-height:1.3;color:var(--ink-2);white-space:nowrap}
+.r-when .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}
+.r-when b{color:var(--ink);font-weight:560}
+.r-nav{display:flex;flex-direction:column;gap:2px;margin-top:12px}
+.r-item{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:8px;width:100%;height:40px;padding:0 10px;border-radius:10px;
+  font-size:15px;line-height:1;font-weight:560;color:var(--ink-2);transition:background-color 120ms ease,color 120ms ease,transform 140ms var(--ease-out)}
+.r-item .n{font-size:13px;font-weight:560;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.r-item[aria-current="page"]{background:var(--raise);color:var(--ink);font-weight:650}
+.r-item[aria-current="page"] .n{color:var(--ink-2)}
+.r-item:active{transform:scale(.98)}
+@media (hover:hover) and (pointer:fine){.r-item:not([aria-current="page"]):hover{background:var(--quiet);color:var(--ink)}}
+.r-sep{height:1px;background:var(--line);margin:10px 10px}
+.r-foot{margin-top:auto;display:flex;flex-direction:column;gap:2px}
+.r-item .ic{width:18px;height:18px;color:var(--ink-3)}
+
+/* ---------- Bühne ---------- */
+.stage{position:relative;min-width:0;min-height:0;overflow:hidden;--wide:1180px;
+  /* Mitte der Zeile: unter dem Inhalt, nicht unter der Bühne */
+  --zc:calc(var(--dpad) + min(var(--wide), 100% - 2 * var(--dpad)) / 2);--zw:min(600px, calc(100% - 2 * var(--dpad)))}
+.stage[data-lay="split"]{--zc:calc(var(--list) + (100% - var(--list)) / 2);--zw:min(600px, calc(100% - var(--list) - 2 * var(--dpad)))}
+/* Seiten ohne Bereich stehen als Spalte in der Mitte, die Zeile darunter */
+.stage[data-lay="spalte"]{--zc:50%;--zw:min(600px, calc(100% - 2 * var(--dpad)))}
+@media (min-width:1680px){.d-wide{max-width:1320px}.stage{--wide:1320px}}
+.d-scroll{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;padding:var(--dtop) var(--dpad) 128px}
+.d-split{position:absolute;inset:0;display:grid;grid-template-columns:var(--list) minmax(0,1fr)}
+.d-list{position:relative;min-height:0;overflow-y:auto;overflow-x:hidden;border-right:1px solid var(--line);padding:var(--dtop) 22px 128px 24px}
+.d-detail{position:relative;min-height:0;overflow-y:auto;overflow-x:hidden;padding:var(--dtop) var(--dpad) 128px}
+.d-in{max-width:760px}
+.d-wide{max-width:1180px}
+.d-head{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:44px}
+.d-h1{font-size:28px;line-height:1.12;font-weight:650;letter-spacing:-.03em;text-wrap:balance}
+.d-sub{font-size:15px;line-height:1.35;color:var(--ink-2);margin-top:4px}
+.d-list .p-title{min-height:44px;display:flex;align-items:center;margin:0}
+.d-lede{font-size:17px;line-height:1.4;margin-top:14px}
+.d-foot{display:flex;gap:10px;margin-top:28px}
+.d-foot .btn{flex:none;min-width:168px}
+/* Bereichsseiten haben keinen Zurück-Pfeil; Seiten ohne Bereich (Spalte) behalten ihn */
+.d-bereich .p-top{display:none}
+.page.d-spalte{left:0;right:0;margin:0 auto;max-width:var(--col)}
+/* Die Startseite, solange der Teil „Heute“ sie nicht gestaltet: dieselben Ränder wie die Bühne */
+#homeScroll{padding:var(--dtop) var(--dpad) 128px}
+#homeScroll > *{max-width:var(--wide)}
+/* Der Ablauf kommt am Rechner nicht von selbst; ausdrücklich geöffnet steht er als Spalte bis --col */
+.stage #flow{left:0;right:0;margin:0 auto;max-width:var(--col)}
+
+/* Liste am Rechner: dieselbe Zeile wie am Handy, die Auswahl als leise Fläche */
+.d-list .lrow{position:relative;margin:0 -12px;width:calc(100% + 24px);padding:10px 12px;border-radius:10px;border-bottom:0;min-height:60px;transition:background-color 120ms ease}
+.d-list .lrow + .lrow::before{content:"";position:absolute;left:12px;right:12px;top:0;height:1px;background:var(--line)}
+.d-list .lrow.sel{background:var(--raise)}
+.d-list .lrow.sel::before,.d-list .lrow.sel + .lrow::before{opacity:0}
+.d-list .lrow:active{opacity:1}
+@media (hover:hover) and (pointer:fine){.d-list .lrow:not(.sel):hover{background:var(--quiet);opacity:1}.d-list .lrow:hover::before,.d-list .lrow:hover + .lrow::before{opacity:0}}
+.d-list .lrow .mini{width:30px}
+.d-list .p-lab:first-of-type{margin-top:16px}
+/* Aufgabenzeile in der Liste: Text wählt aus, der Ring hakt ab */
+.task .t-front{cursor:default}
+.d-list .task .t-text{cursor:pointer}
+.d-list .task.sel .t-front{background:var(--raise);border-radius:10px;margin:0 0}
+.d-list .task.sel::after,.d-list .task.sel + .task::after{opacity:0}
+.d-list .task .t-front::before{inset:0}
+@media (hover:hover) and (pointer:fine){.d-list .task:not(.sel) .t-front:hover{background:var(--quiet);border-radius:10px}}
+.ring{cursor:pointer}
+@media (hover:hover) and (pointer:fine){.check:hover .ring{border-color:var(--ink-2)}}
+
+/* Detail: Angaben als Haarlinienzeilen */
+.d-facts{margin-top:22px;border-top:1px solid var(--line)}
+.d-fact{display:grid;grid-template-columns:132px minmax(0,1fr);column-gap:16px;align-items:baseline;min-height:48px;padding:12px 0;border-bottom:1px solid var(--line);font-size:17px;line-height:1.35}
+.d-fact > span:first-child{font-size:15px;color:var(--ink-2)}
+.d-fact em{font-style:normal;color:var(--ink-2);font-size:15px}
+.d-pane{animation:none}
+
+/* Umbruch: Titel und Listen haben Platz, dort nur im Notfall umbrechen, ohne Trennstrich.
+   Trennstriche (hyphens:auto) setzen nur die Teile in ihren engen Rasterzellen (Woche, Lernplan). */
+.d-h1,.d-fact,.d-list .lrow b,.d-list .lrow .s{overflow-wrap:break-word}
+
+/* ---------- Knöpfe und Tasten ---------- */
+.icb{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--ink-2);transition:background-color 120ms ease,transform 140ms var(--ease-out)}
+.icb .ic{width:20px;height:20px}
+.icb:active{transform:scale(.94)}
+@media (hover:hover) and (pointer:fine){.icb:hover{background:var(--quiet);color:var(--ink)}}
+.kbd{display:inline-grid;place-items:center;min-width:28px;height:26px;padding:0 8px;border-radius:7px;font-size:13px;line-height:1;font-weight:600;color:var(--ink-2);
+  box-shadow:inset 0 0 0 1px var(--line-strong);font-variant-numeric:tabular-nums}
+.kbd + .kbd{margin-left:4px}
+/* Tastenkästchen in Knöpfen (nicht .k: das gibt es am Handy schon in .tb-row) */
+.d-k{display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 6px;margin-left:10px;border-radius:6px;font-size:13px;font-weight:600;vertical-align:1px;box-shadow:inset 0 0 0 1px currentColor;opacity:.5}
+
+/* ---------- Zeile am Rechner: dieselbe dunkle Pille, unten in der Bühne ---------- */
+.d-zeile{position:absolute;z-index:40;left:var(--zc);bottom:20px;width:var(--zw);translate:-50% 0}
+.zeile.d-zeile{right:auto;max-width:none;margin:0}
+.zeile.d-zeile::before{display:none}
+.d-zeile .dock{margin:0}
+/* das Kästchen „/“ ist am Handy per style="display:none" aus */
+.dock .dkbd{display:inline-grid !important}
+.dock .dkbd{place-items:center;min-width:26px;height:26px;padding:0 7px;margin-right:8px;border-radius:7px;font-size:13px;font-weight:600;color:var(--dock-muted);box-shadow:inset 0 0 0 1px var(--dock-line);flex:none}
+.dock.typing .dkbd{display:none !important}
+.d-zeile .camb{color:var(--dock-text)}
+.d-menu{position:absolute;left:0;right:0;bottom:62px;max-height:min(62vh,540px);overflow-y:auto;padding:6px;border-radius:16px;background:var(--sheet);color:var(--ink);box-shadow:var(--pop-shadow);
+  transform-origin:50% 100%;opacity:0;transform:translateY(6px) scale(.98);pointer-events:none;visibility:hidden;
+  transition:opacity 150ms ease-out,transform 180ms var(--ease-out),visibility 0s linear 180ms}
+.d-menu.on{opacity:1;transform:none;pointer-events:auto;visibility:visible;transition:opacity 150ms ease-out,transform 180ms var(--ease-out),visibility 0s}
+.d-menu .opt{min-height:48px}
+.d-menu .opt .o-end{font-size:13px;color:var(--ink-3)}
+.d-menu .m-gl{padding:10px 16px 4px}
+/* das Menü der App ist ein Bogen mit Griff: als Popover ohne Griff, die Liste scrollt in sich */
+.menu.d-menu{overflow:hidden;clip-path:none}
+.d-menu .m-grab{display:none}
+.d-menu .m-scroll{padding:0}
+/* kein abgedunkelter Hintergrund; ein Klick daneben schließt das Popover trotzdem */
+.stage #scrim{background:transparent}
+
+/* Toast in der Bühne über der Zeile */
+#desk .toast{position:absolute;left:var(--zc);bottom:84px;max-width:var(--zw);translate:-50% 0}
+
+/* Ablegen: ein Blatt aus dem Ordner ins Fenster ziehen */
+.d-drop{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity 160ms ease}
+.d-drop.on{opacity:1;pointer-events:auto}
+.d-drop-in{width:min(420px,calc(100% - 48px));padding:28px 28px 26px;border-radius:22px;background:var(--sheet);box-shadow:var(--pop-shadow);transform:scale(.97);transition:transform 200ms var(--ease-out)}
+.d-drop.on .d-drop-in{transform:none}
+.d-drop-in b{display:block;font-size:22px;line-height:1.2;font-weight:650;letter-spacing:-.02em}
+.d-drop-in p{font-size:15px;line-height:1.4;color:var(--ink-2);margin-top:6px}
+
+/* Sheet am Rechner: derselbe Bogen, als Dialog in der Mitte */
+.d-dlg{position:fixed;z-index:72;left:50%;top:50%;width:min(560px,calc(100% - 48px));max-height:min(80vh,640px);overflow-y:auto;padding:26px 28px 24px;border-radius:22px;background:var(--sheet);color:var(--ink);box-shadow:var(--pop-shadow);
+  opacity:0;transform:translate(-50%,-50%) scale(.97);visibility:hidden;pointer-events:none;transition:opacity 160ms ease-out,transform 200ms var(--ease-out),visibility 0s linear 200ms}
+/* translate:-50% -50% wie im Entwurf ginge verloren: der CSS-Bündler streicht es neben transform */
+.d-dlg.on{opacity:1;transform:translate(-50%,-50%);visibility:visible;pointer-events:auto;transition:opacity 160ms ease-out,transform 200ms var(--ease-out),visibility 0s}
+.d-dlg h2{font-size:22px;line-height:1.2;font-weight:650;letter-spacing:-.02em}
+.d-dlg p{font-size:15px;line-height:1.4;color:var(--ink-2);margin-top:6px}
+.d-dlg .d-foot{margin-top:22px}
+.d-dlg .d-foot .btn{flex:1;min-width:0}
+/* die Sheet-Komponente der Shell als Dialog: ohne Griff, ohne eigenen Rand unten */
+.sheet.d-dlg{right:auto;bottom:auto;margin:0;max-width:none;display:block}
+.sheet.d-dlg:not(.on){visibility:hidden}
+.sheet.d-dlg .grab{display:none}
+.sheet.d-dlg .sh-body{overflow:visible;padding:0}
+.d-form{margin-top:18px;display:flex;flex-direction:column;gap:18px}
+.d-form label{display:block;font-size:15px;line-height:1.3;color:var(--ink-2);margin-bottom:8px}
+.d-inp{display:block;width:100%;height:52px;padding:0 16px;border:0;border-radius:14px;background:var(--raise);font-size:17px;outline:none}
+.d-inp:focus-visible{box-shadow:0 0 0 2px var(--ink)}
+.d-form .refile{display:flex;flex-wrap:wrap;gap:6px}
+
+/* Tisch und Kamera füllen das Fenster (die Gestalt des Tisches macht der Teil „Tisch“) */
+.tisch,.cam{max-width:none}
+
+@media (prefers-reduced-motion: reduce){
+  .d-menu,.d-drop,.d-drop-in,.d-dlg{transition-duration:120ms}
+  .d-menu,.d-drop-in{transform:none}
+  .d-dlg{transform:translate(-50%,-50%)}
+}
+} /* Ende ab 1024 px */

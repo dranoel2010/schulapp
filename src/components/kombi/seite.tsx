@@ -18,15 +18,18 @@ export function Seite({
   children,
   elRef,
   dataKey,
+  className,
 }: {
   label: string;
   onZurueck: () => void;
   children: ReactNode;
   elRef?: Ref<HTMLElement>;
   dataKey?: string;
+  /** zusätzliche Klasse, am Rechner etwa `d-spalte` */
+  className?: string;
 }) {
   return (
-    <section className="page" role="region" aria-label={label} ref={elRef} data-ebene={dataKey}>
+    <section className={className ? `page ${className}` : "page"} role="region" aria-label={label} ref={elRef} data-ebene={dataKey}>
       <div className="p-top">
         <button className="pback" type="button" aria-label="Zurück" onClick={onZurueck}>
           <Icon name="arrow_back" />

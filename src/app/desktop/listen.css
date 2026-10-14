@@ -1,0 +1,5 @@
+/* Teil: Hausaufgaben und Klausuren (Liste und Detail, Aufgabe im Detail, Lernplan als Wochenstreifen .lp, .two).
+   Vorbild: desktop.html, Abschnitte „Hausaufgaben“ und „Klausur“. Knapp (1024 bis 1279): der Lernplan eine Zeile je Tag.
+   Alles ab 1024 px, Hover nur mit feiner Maus. Gemeinsames steht in grund.css. */
+@media (min-width:1024px){
+} /* Ende ab 1024 px */

@@ -13,6 +13,7 @@ import { Datumszeile } from "@/components/kombi/home/datumszeile";
 import { Morgens } from "@/components/kombi/home/morgens";
 import { Ueberblick } from "@/components/kombi/home/ueberblick";
 import { Ueberschrift, type UeberschriftApi } from "@/components/kombi/home/ueberschrift";
+import { istDesktop } from "@/components/kombi/desktop/use-desktop";
 import { useKombi } from "@/components/kombi/kontext";
 import { RUECKSPRUNG_MS, TOAST_MS } from "@/lib/kombi/aktion";
 import { buzz, E, flip, reduce } from "@/lib/kombi/motion";
@@ -57,6 +58,14 @@ const ORDER: Record<Ansicht, number> = { morgens: 0, ablauf: 1, ueberblick: 2, f
 
 /** Gibt es den Ablauf schon (Abschnitt C)? */
 const ablaufDa = () => typeof document !== "undefined" && !!document.querySelector("#flow .steps");
+
+/**
+ * Kommt der Ablauf von selbst? Am Rechner nie (EINBAU.md „Am Rechner“: Fotos
+ * macht das Handy, die Startseite zeigt auch nach der Schule den Überblick).
+ * Wer ihn über die Zeile ausdrücklich öffnet, bekommt ihn trotzdem. Die
+ * Weiche greift erst nach dem Mount (`istDesktop` gibt es nur im Browser).
+ */
+const ablaufVonSelbst = () => ablaufDa() && !istDesktop();
 
 /** Die zuletzt gezeigte Ansicht — überlebt, wenn die Startseite unter einer Route neu entsteht. */
 let gemerkt: { tag: string; view: Ansicht } | null = null;
@@ -486,7 +495,7 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
     if (viewRef.current == null) {
       // Auch hier gilt der Ablauf nach dem Malen: wer über eine Stapel-URL
       // (Push-Erinnerung, Lesezeichen) einsteigt, sieht ihn beim Zurück
-      const ablauf = d.ansicht === "ablauf" && !(gemerkt && gemerkt.tag === d.tag) && ablaufDa();
+      const ablauf = d.ansicht === "ablauf" && !(gemerkt && gemerkt.tag === d.tag) && ablaufVonSelbst();
       setView(ablauf ? "ablauf" : (startAnsicht(d) ?? "ueberblick"), { anim: false });
     }
   }, [d, setView]);
@@ -494,7 +503,7 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
   // Der Ablauf nach dem Malen (Abschnitt C), wenn der Server ihn nennt
   useEffect(() => {
     const dd = dRef.current;
-    if (dd && dd.ansicht === "ablauf" && viewRef.current !== "ablauf" && !gemerkt && ablaufDa()) {
+    if (dd && dd.ansicht === "ablauf" && viewRef.current !== "ablauf" && !gemerkt && ablaufVonSelbst()) {
       setView("ablauf", { anim: false });
     }
   }, [setView]);
@@ -527,7 +536,7 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
     if (live.stand === k.stand || live.ansicht === k.ansicht || (k.stand && istAelter(live, { stand: k.stand }))) return;
     kaltstart.current = null;
     if (document.querySelector("#tisch.open, #cam.open, #lbTisch.open")) return;
-    setView(live.ansicht === "ablauf" && !ablaufDa() ? "ueberblick" : live.ansicht, { anim: false });
+    setView(live.ansicht === "ablauf" && !ablaufVonSelbst() ? "ueberblick" : live.ansicht, { anim: false });
   }, [live, setView]);
 
   // Nur beim Zurückkommen aus dem Hintergrund, nie während der Bildschirm sichtbar ist (V2 3.2)
@@ -557,13 +566,13 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
       if (document.querySelector("#tisch.open, #cam.open")) return;
       // Solange der Ablauf fehlt, steht statt seiner der Überblick: beide
       // Seiten gleich abbilden, sonst bliebe der Abend morgens stehen.
-      const eff = (x: Ansicht | null) => (x === "ablauf" && !ablaufDa() ? "ueberblick" : x);
+      const eff = (x: Ansicht | null) => (x === "ablauf" && !ablaufVonSelbst() ? "ueberblick" : x);
       // Gewechselt wird, wenn der Server eine andere Ansicht oder einen neuen
       // Tag nennt; verglichen wird mit der gezeigten Ansicht, nicht mit der
       // zuletzt gemeldeten: nach „Fertig“ oder „Überspringen“ steht der
       // Überblick da, obwohl der Server zuletzt „ablauf“ sagte
       const geaendert = eff(neu) !== eff(alt) || (!!tagNeu && !!tagAlt && tagNeu !== tagAlt);
-      if (geaendert && eff(neu) !== viewRef.current) setView(neu);
+      if (geaendert && eff(neu) !== viewRef.current) setView(eff(neu) ?? neu);
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);

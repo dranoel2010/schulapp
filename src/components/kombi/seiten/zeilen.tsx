@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import { useAuswahl } from "@/components/kombi/desktop/auswahl";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import { dm } from "@/lib/kombi/text";
@@ -42,7 +43,11 @@ export function RowBtn({
   vorbei?: boolean;
 }) {
   const kombi = useKombi();
-  const klasse = `lrow plain${vorbei ? " vorbei" : ""}`;
+  // Am Rechner in der Liste: welche Zeile das ist (↑/↓) und ob sie gewählt ist
+  const auswahl = useAuswahl();
+  const id = auswahl ? (ziel.params?.id ?? ziel.params?.sel ?? (ziel.href ? ziel.href.split("?")[0].split("/").filter(Boolean).pop() : undefined)) : undefined;
+  const gewaehlt = !!id && auswahl?.sel === id;
+  const klasse = `lrow plain${vorbei ? " vorbei" : ""}${gewaehlt ? " sel" : ""}`;
   const inhalt = (
     <>
       <span>
@@ -56,13 +61,13 @@ export function RowBtn({
     const download = "download" in ziel && ziel.download;
     if (download) {
       return (
-        <a className={klasse} href={ziel.href} download aria-label={ariaLabel}>
+        <a className={klasse} href={ziel.href} download aria-label={ariaLabel} data-id={id}>
           {inhalt}
         </a>
       );
     }
     return (
-      <Link className={klasse} href={ziel.href} aria-label={ariaLabel}>
+      <Link className={klasse} href={ziel.href} aria-label={ariaLabel} data-id={id} aria-current={gewaehlt ? "true" : undefined}>
         {inhalt}
       </Link>
     );
@@ -72,6 +77,8 @@ export function RowBtn({
       className={klasse}
       type="button"
       aria-label={ariaLabel}
+      data-id={id}
+      aria-current={gewaehlt ? "true" : undefined}
       onPointerDown={ziel.seite ? () => kombi.vorladen(ziel.seite!, ziel.params ?? {}) : undefined}
       onClick={() => {
         if (ziel.seite) kombi.openPage(ziel.seite, ziel.params ?? {});
@@ -85,10 +92,14 @@ export function RowBtn({
 
 export function BlattRow({ b }: { b: BlattZeile }) {
   const kombi = useKombi();
+  const auswahl = useAuswahl();
+  const gewaehlt = auswahl?.sel === b.id;
   return (
     <button
-      className="lrow"
+      className={gewaehlt ? "lrow sel" : "lrow"}
       type="button"
+      data-id={auswahl ? b.id : undefined}
+      aria-current={gewaehlt ? "true" : undefined}
       onPointerDown={() => kombi.vorladen("blatt", { id: b.id })}
       onClick={() => kombi.openPage("blatt", { id: b.id })}
     >

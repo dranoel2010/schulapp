@@ -1,0 +1,5 @@
+/* Teil: Heute (Startseite am Rechner: links die Startseite des Handys, rechts der nächste Schultag als Packhilfe,
+   darunter „Zuletzt abgelegt“ über die volle Breite). Vorbild: desktop.html, Abschnitt „Heute“ (.h-grid, .h-col, .d-thumbs …).
+   Alles ab 1024 px, Hover nur mit feiner Maus. Gemeinsames steht in grund.css. */
+@media (min-width:1024px){
+} /* Ende ab 1024 px */

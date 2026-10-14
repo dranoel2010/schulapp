@@ -1,0 +1,5 @@
+/* Teil: Tisch (fensterfüllend: Karten in einer Spalte von 600 px, Arbeitsblatt links in Lesegröße, die Lösungsseite
+   bis „Wie lief es?“ zugeklappt, danach beide Seiten nebeneinander; .d-cards, .d-blatt, .d-pages, .d-fold, .d-side).
+   Vorbild: desktop.html, Abschnitt „Tisch in Fensterbreite“. Alles ab 1024 px, Hover nur mit feiner Maus. */
+@media (min-width:1024px){
+} /* Ende ab 1024 px */
