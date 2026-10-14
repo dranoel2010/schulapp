@@ -1415,6 +1415,8 @@ export function KombiShell({ children }: { children: ReactNode }) {
           document.getElementById("whenrow"),
           document.getElementById("h1"),
           ...Array.from(document.querySelectorAll<HTMLElement>("#home .modes > .mode.on > *")),
+          // am Rechner dazu Packhilfe und „Zuletzt abgelegt“ (am Handy aus, die Bewegung trifft dort nichts Sichtbares)
+          ...Array.from(document.querySelectorAll<HTMLElement>("#home .h-ein")),
         ].filter((x): x is HTMLElement => !!x);
         els.forEach((el, i) =>
           el.animate([{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], {
