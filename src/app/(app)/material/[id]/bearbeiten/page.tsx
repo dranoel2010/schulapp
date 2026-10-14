@@ -7,7 +7,7 @@ import { SeiteDazu } from "@/components/kombi/seiten/blatt";
 import { requireUser } from "@/lib/auth";
 import { claudeLiestGerade } from "@/lib/leser/claude-zustand";
 import { formatGerman, todayInBerlin } from "@/lib/dates";
-import { MAX_PAGES, formatBytes } from "@/lib/images";
+import { formatBytes } from "@/lib/images";
 import { blaetterStand, getMaterial, listMaterialTranscripts } from "@/lib/materials";
 import { listTopicsForSubjects } from "@/lib/subject-topics";
 import { listSubjects } from "@/lib/subjects";
@@ -62,7 +62,6 @@ export default async function MaterialEditPage({ params }: PageProps<"/material/
 
   const today = todayInBerlin();
   const totalBytes = item.pages.reduce((sum, page) => sum + page.byteSize, 0);
-  const full = item.pages.length >= MAX_PAGES;
   const liestGerade = claudeLiestGerade(item.id);
 
   return (
@@ -105,13 +104,8 @@ export default async function MaterialEditPage({ params }: PageProps<"/material/
         }))}
       />
 
-      {full ? (
-        <p className="p-sub">
-          {`Dieses Blatt ist mit ${MAX_PAGES} Seiten voll. Was noch dazugehört, fotografierst du als neues Blatt ab.`}
-        </p>
-      ) : null}
-
-      {full ? null : <SeiteDazu id={item.id} seiten={item.pages.map((page) => page.id)} />}
+      {/* Bei vollem Blatt steht dort der Satz „Dieses Blatt ist mit 12 Seiten voll …“ */}
+      <SeiteDazu id={item.id} seiten={item.pages.map((page) => page.id)} />
 
       <MaterialDangerZone
         materialLabel={`${item.subject.name} · ${item.title}`}

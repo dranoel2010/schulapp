@@ -305,7 +305,7 @@ export default async function InboxPage({
         // füllte — angeboten wird der Weg zurück in die Ablage.
         <EmptyState
           title="Alles durchgesehen"
-          description="Im Korb liegt nichts: jedes Blatt ist angesehen, und kein Vorschlag wartet auf eine Entscheidung. Genau so soll es hier meistens aussehen."
+          description="Nichts im Korb."
           action={
             <ButtonLink href="/material" variant="secondary">
               Zur Ablage

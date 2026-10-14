@@ -477,6 +477,7 @@ body.toast-on .scroll{padding-bottom:calc(var(--foot-space) + 54px)}
 .cs-add .ic{width:18px;height:18px}
 .cs-add:active{transform:scale(.96)}
 .cs-add[aria-pressed="true"]{background:#F2F0EA;color:#0B0B0C}
+.cs-add[aria-disabled="true"]{color:rgba(228,226,220,.45)}
 .ablegen{justify-self:end;height:48px;padding:0 20px;border-radius:999px;background:#F2F0EA;color:#0B0B0C;font-size:15px;font-weight:650;visibility:hidden;transition:transform 140ms var(--ease-out)}
 .ablegen.on{visibility:visible}
 .ablegen:active{transform:scale(.96)}

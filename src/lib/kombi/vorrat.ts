@@ -43,6 +43,8 @@ export type VorratPlanEintrag = {
   thema: string;
   min: number;
   erledigt: boolean;
+  /** Lernblock zu einem Übungsthema (Prototyp `blockAlsBlatt`): „Lernblock mit Arbeitsblatt“ */
+  alsBlatt: boolean;
 };
 
 export type VorratKlausur = {

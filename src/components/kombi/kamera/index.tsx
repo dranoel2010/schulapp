@@ -6,9 +6,11 @@ import { flushSync } from "react-dom";
 import {
   blaetterStore,
   blattHochladen,
+  blattNachAblehnung,
   landen,
   seitenDazu,
   testweicheLesen,
+  ueberlaufHoeren,
   vorLandungAusloesen,
   type Aufnahme,
 } from "@/components/kombi/ablauf/blaetter-store";
@@ -16,6 +18,7 @@ import { ablaufTagLesen } from "@/components/kombi/ablauf/ablauf-store";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import { prepareCanvas, prepareFile } from "@/components/material/prepare-page";
+import { BLATT_VOLL_TOAST, MAX_PAGES, UEBERLAUF_TOAST } from "@/lib/images";
 import { E, buzz, moveTo, reduce } from "@/lib/kombi/motion";
 import { cap, zahl } from "@/lib/kombi/text";
 import { themeColor } from "@/lib/kombi/theme-color";
@@ -47,6 +50,12 @@ type Blatt = { key: string; pages: Aufnahme[]; target: Ziel0 | null };
 type OeffnenMit = { ziel?: Ziel | { kind?: string }; attach?: Ziel0; origin?: HTMLElement | null };
 
 let kz = 0;
+
+/** Wie viele Seiten das Blatt im Streifen nach dem Ablegen hat: vorhandene und neue. */
+const seitenVon = (b: Blatt): number => (b.target ? b.target.seiten : 0) + b.pages.length;
+
+/** Das letzte Blatt im Streifen ist voll: „Seite dazu“ geht nicht mehr (Abnahmerunde 19). */
+const letztesVoll = (liste: Blatt[]): boolean => liste.length > 0 && seitenVon(liste[liste.length - 1]) >= MAX_PAGES;
 
 /** Ein kleines JPEG (360px breit, A4-Format) für Streifen und Liste (Prototyp `grab`, Z. 3451). */
 function grab(src: CanvasImageSource, w: number, hgt: number): string {
@@ -237,7 +246,7 @@ export function KameraEbene() {
         // erneut versucht“) und geht von selbst weiter. Lehnt der Server ab,
         // bleiben die Seiten hier im Speicher: „Erneut“ schickt sie noch einmal.
         const senden = (): Promise<boolean> =>
-          seitenDazu(t.id, pages).then(
+          seitenDazu(t.id, pages, ablaufTagLesen() ?? appTag).then(
             (kurz) => {
               if (kurz) blaetterStore.setzen(blaetterStore.get().find((x) => x.id === t.id)?.key ?? "", { kurz, seiten: kurz.seiten });
               return true;
@@ -275,7 +284,8 @@ export function KameraEbene() {
       neu.push({ key: eintrag.key, from });
       uploads.push(
         blattHochladen(eintrag.key, b.pages, s.ziel).catch((e: unknown) => {
-          blaetterStore.weg(eintrag.key);
+          // was schon ankam, bleibt in der Liste
+          blattNachAblehnung(eintrag.key);
           toast(e instanceof Error ? e.message : "Nicht gespeichert");
         }),
       );
@@ -323,13 +333,15 @@ export function KameraEbene() {
       s.denied = false;
       s.ziel = (typeof o.ziel === "string" ? o.ziel : o.ziel?.kind) === "liste" ? "liste" : "zeile";
       s.origin = o.origin && o.origin.isConnected && o.origin.offsetParent ? o.origin : null;
-      const start: Blatt[] = o.attach ? [{ key: `c${++kz}`, pages: [], target: o.attach }] : [];
+      // An ein volles Blatt kommt keine Seite: dann wird das Foto ein neues Blatt
+      const attach = o.attach && o.attach.seiten < MAX_PAGES ? o.attach : undefined;
+      const start: Blatt[] = attach ? [{ key: `c${++kz}`, pages: [], target: attach }] : [];
       s.blaetter = start;
       flushSync(() => {
         setOffen(true);
         setBlaetter(start);
-        setArmed(!!o.attach);
-        st.current.armed = !!o.attach;
+        setArmed(!!attach);
+        st.current.armed = !!attach;
         setMeldung({ text: "Kamera startet", knopf: false });
         setBereit(false);
       });
@@ -405,6 +417,9 @@ export function KameraEbene() {
 
   useEffect(() => registriere("kamera", (o) => openCam((o ?? {}) as OeffnenMit)), [registriere, openCam]);
 
+  // Seiten, die der Server nicht mehr an ihr Blatt nahm, wurden ein neues Blatt
+  useEffect(() => ueberlaufHoeren(() => toast(UEBERLAUF_TOAST)), [toast]);
+
   // Android-Zurück: das Kamera-Sheet zuerst, dann die Kamera (Plan 1.4)
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
@@ -438,6 +453,11 @@ export function KameraEbene() {
   const addShot = useCallback((auf: Aufnahme) => {
     const s = st.current;
     let ziel = s.armed && s.blaetter.length ? s.blaetter[s.blaetter.length - 1] : null;
+    if (ziel && seitenVon(ziel) >= MAX_PAGES) {
+      // voll: das Foto wird ein neues Blatt, nicht die dreizehnte Seite
+      ziel = null;
+      toast(BLATT_VOLL_TOAST);
+    }
     const neu = !ziel;
     const wasOn = s.blaetter.some((b) => b.pages.length);
     let liste: Blatt[];
@@ -490,7 +510,7 @@ export function KameraEbene() {
         m.style.visibility = "";
       },
     );
-  }, []);
+  }, [toast]);
 
   const ausloesen = useCallback(() => {
     const video = videoRef.current;
@@ -619,7 +639,7 @@ export function KameraEbene() {
         <p className="cs-empty">Jedes Foto ist ein Blatt.</p>
         <div className="cs-row" id="csRow" ref={csRowRef}>
           {blaetter.map((b, i) => {
-            const n = (b.target ? b.target.seiten : 0) + b.pages.length;
+            const n = seitenVon(b);
             const img = b.target ? b.target.bild : b.pages[0]?.bild;
             return (
               <button
@@ -643,8 +663,13 @@ export function KameraEbene() {
               type="button"
               id="csAdd"
               aria-pressed={armed}
+              aria-disabled={letztesVoll(blaetter) || undefined}
               aria-label={armed ? "Nächstes Foto kommt als Seite an das letzte Blatt" : "Seite an das letzte Blatt dazu"}
               onClick={() => {
+                if (!st.current.armed && letztesVoll(st.current.blaetter)) {
+                  toast(BLATT_VOLL_TOAST);
+                  return;
+                }
                 st.current.armed = !st.current.armed;
                 setArmed(st.current.armed);
               }}

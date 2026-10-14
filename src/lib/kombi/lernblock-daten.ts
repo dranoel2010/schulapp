@@ -19,6 +19,7 @@ import { klausurNamen, type VerpasstEintrag } from "@/lib/kombi/verpasst";
 import { planEintragArt, planEintragTitel } from "@/lib/study-plan";
 import { missedBlocks } from "@/lib/exams";
 import { ersteVersucheImBlock, fragenFuerLernblock } from "@/lib/lernblock";
+import { bloeckeAlsBlatt } from "@/lib/arbeitsblatt/quelle";
 
 /**
  * Was die Oberfläche vom Lernblock wissen muss (Modell 23, Abschnitt F):
@@ -51,6 +52,11 @@ export type BlockDaten = {
   minutenGelernt: number | null;
   /** Das Arbeitsblatt des Blocks (Abschnitt H), falls eins gebaut wird */
   blatt: BlattStand | null;
+  /**
+   * Der Block ist nach der Art seines Themas ein Arbeitsblatt (`blockAlsBlatt`),
+   * auch bevor das Blatt gebaut ist: Zusatz „mit Arbeitsblatt“ (Prototyp `lbDauer`).
+   */
+  alsBlatt: boolean;
 };
 
 export type BlattStand = {
@@ -68,7 +74,7 @@ export function blockTitel(art: string, thema: string | null): string {
 
 type BlockZeile = StudyBlock & { topic: ExamTopic | null };
 
-export function blockDaten(block: BlockZeile, blatt: BlattStand | null = null): BlockDaten {
+export function blockDaten(block: BlockZeile, blatt: BlattStand | null = null, alsBlatt = false): BlockDaten {
   const art = block.kind === "review" || block.kind === "probe" ? block.kind : "learn";
   const status = block.status === "done" || block.status === "skipped" ? block.status : "open";
   return {
@@ -85,7 +91,15 @@ export function blockDaten(block: BlockZeile, blatt: BlattStand | null = null): 
     pauseMs: block.pauseMs,
     minutenGelernt: block.minutenGelernt,
     blatt,
+    alsBlatt,
   };
+}
+
+/** `blockDaten` für mehrere Blöcke, mit Blattstand und Art aus je einer Abfrage. */
+export async function blockDatenLaden(userId: string, bloecke: BlockZeile[]): Promise<BlockDaten[]> {
+  const ids = bloecke.map((b) => b.id);
+  const [staende, alsBlatt] = await Promise.all([blattStaende(userId, ids), bloeckeAlsBlatt(userId, bloecke)]);
+  return bloecke.map((b) => blockDaten(b, staende.get(b.id) ?? null, alsBlatt.has(b.id)));
 }
 
 /** Der Stand der Arbeitsblätter je Block, in einer Abfrage. */
@@ -210,8 +224,7 @@ export async function lernblockUeberblick(
     // Mehrere Blöcke heute: der erste offene, sonst der erste
     const ph = vonHeute.find((b) => b.status === "open") ?? vonHeute[0];
     if (ph) {
-      const staende = await blattStaende(userId, [ph.id]);
-      heute = blockDaten(ph, staende.get(ph.id) ?? null);
+      [heute] = await blockDatenLaden(userId, [ph]);
     } else {
       const nx = bloecke.find((b) => b.date > tag && b.status === "open");
       if (nx) naechster = { tag: nx.date, art: planEintragArt(nx.kind) };
@@ -358,15 +371,15 @@ export async function lernblockTisch(
     .limit(1);
   if (!zeile) return null;
 
-  const [staende, fragen, material, erste] = await Promise.all([
-    blattStaende(userId, [blockId]),
+  const [[block], fragen, material, erste] = await Promise.all([
+    blockDatenLaden(userId, [{ ...zeile.block, topic: zeile.topic ?? null }]),
     fragenFuerLernblock(userId, blockId, heute),
     materialFuerLernblock(userId, zeile.block),
     ersteVersucheImBlock(userId, blockId, heute),
   ]);
 
   return {
-    block: blockDaten({ ...zeile.block, topic: zeile.topic ?? null }, staende.get(blockId) ?? null),
+    block,
     fach: zeile.fach,
     klausurDatum: zeile.datum,
     fragen: fragen.map((f) => ({

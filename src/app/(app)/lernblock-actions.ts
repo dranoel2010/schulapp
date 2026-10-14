@@ -19,8 +19,7 @@ import {
   type BlockEnde,
 } from "@/lib/lernblock";
 import {
-  blattStaende,
-  blockDaten,
+  blockDatenLaden,
   lernblockTisch,
   materialDaten,
   type BlockDaten,
@@ -68,8 +67,8 @@ async function blockLesen(userId: string, blockId: string): Promise<BlockDaten |
     .where(eq(studyBlocks.id, blockId))
     .limit(1);
   if (!zeile) return null;
-  const staende = await blattStaende(userId, [blockId]);
-  return blockDaten({ ...zeile.block, topic: zeile.topic ?? null }, staende.get(blockId) ?? null);
+  const [block] = await blockDatenLaden(userId, [{ ...zeile.block, topic: zeile.topic ?? null }]);
+  return block;
 }
 
 /** Was der Tisch im Block braucht: Kopf, Uhr, Fragen (ohne Lösung), Material. */

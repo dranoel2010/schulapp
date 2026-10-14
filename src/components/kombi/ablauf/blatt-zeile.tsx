@@ -3,6 +3,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 
 import { statusTexts, wartet, type BlattAnzeige } from "@/components/kombi/ablauf/status-texte";
+import { MAX_PAGES } from "@/lib/images";
 import { E, reduce, swapText } from "@/lib/kombi/motion";
 
 export type { AnzeigeStatus, BlattAnzeige } from "@/components/kombi/ablauf/status-texte";
@@ -114,6 +115,8 @@ export function BlattZeile({
           <button
             className="add-page"
             type="button"
+            // ein volles Blatt nimmt keine Seite mehr (MAX_PAGES); das nächste Foto ist ein neues Blatt
+            hidden={b.seiten >= MAX_PAGES}
             aria-label="Seite dazu fotografieren"
             onPointerDown={onWarm}
             onClick={() => onSeiteDazu(b)}

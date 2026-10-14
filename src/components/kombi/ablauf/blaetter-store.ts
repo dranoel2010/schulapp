@@ -93,9 +93,21 @@ class UploadFehler extends Error {
   constructor(
     message: string,
     readonly netz: boolean,
+    /** Das Blatt hat schon zwölf Seiten (409 `voll`) */
+    readonly voll = false,
   ) {
     super(message);
   }
+}
+
+/**
+ * Wer hören will, dass Seiten nicht mehr an ihr Blatt passten und ein neues
+ * Blatt wurden (die Kamera zeigt dann den Satz des Servers als Toast).
+ */
+const ueberlaufHoerer = new Set<(text: string) => void>();
+export function ueberlaufHoeren(f: (text: string) => void): () => void {
+  ueberlaufHoerer.add(f);
+  return () => ueberlaufHoerer.delete(f);
 }
 
 async function senden(seite: PreparedPage, felder: Record<string, string>): Promise<BlattKurz> {
@@ -112,9 +124,9 @@ async function senden(seite: PreparedPage, felder: Record<string, string>): Prom
   } catch {
     throw new UploadFehler("Keine Verbindung", true);
   }
-  const json = (await antwort.json().catch(() => null)) as (BlattKurz & { message?: string }) | null;
+  const json = (await antwort.json().catch(() => null)) as (BlattKurz & { message?: string; voll?: boolean }) | null;
   if (!antwort.ok || !json) {
-    throw new UploadFehler(json?.message ?? "Nicht gespeichert", antwort.status >= 500 || antwort.status === 0);
+    throw new UploadFehler(json?.message ?? "Nicht gespeichert", antwort.status >= 500 || antwort.status === 0, json?.voll === true);
   }
   return json;
 }
@@ -207,7 +219,19 @@ type Hochladen = {
   fehler: string | null;
   /** Anzeige: hochladen, hängt, oder die erste Antwort des Servers */
   stand: (teil: Partial<LokalesBlatt>) => void;
+  /** App-Tag für ein Blatt, das aus einem Überlauf entsteht */
+  tag?: string | null;
 };
+
+/**
+ * Die Felder für eine Seite, die nicht mehr an ihr Blatt passte: ohne
+ * `attach`, sie legt ein neues Blatt an, das die übrigen `n` Seiten bekommt.
+ * Dieselbe Kennung wie vorher: der Server hatte die Seite abgelehnt, nicht
+ * gespeichert, und eine Wiederholung findet das neue Blatt.
+ */
+export function ueberlaufFelder(a: { uid: string; i: number; n: number; ziel: "liste" | "zeile" }): Record<string, string> {
+  return { seiten: String(a.n), ziel: a.ziel, aufnahme: a.uid, seite: String(a.i) };
+}
 
 /**
  * Die Formularfelder zur Seite `i` von `n`: ohne Blatt legt die Seite eines
@@ -254,11 +278,38 @@ async function hochladenAb(h: Hochladen): Promise<BlattKurz | null> {
   };
   let kurz: BlattKurz | null = null;
   let blattId = h.id;
+  // Nach einem Überlauf gehen die übrigen Seiten an das neue Blatt; dessen Zeile steht hier
+  let ueber: { key: string; kurz: BlattKurz } | null = null;
   try {
     for (let i = ab; i < fassungen.length; i++) {
-      const felder = seitenFelder({ uid, i, n: fassungen.length, blattId, dazu, ziel, fehler });
-      const k = await versuch(() => senden(fassungen[i], felder));
-      kurz = k;
+      const felder = seitenFelder({ uid, i, n: fassungen.length, blattId, dazu: dazu && !ueber, ziel, fehler });
+      let k: BlattKurz;
+      try {
+        k = await versuch(() => senden(fassungen[i], felder));
+      } catch (e) {
+        // Das Blatt ist voll (Abnahmerunde 19): diese und die übrigen Seiten
+        // werden ein neues Blatt, statt verloren zu gehen
+        if (!(e instanceof UploadFehler) || !e.voll || !blattId || ueber) throw e;
+        const rest = fassungen.length - i;
+        k = await versuch(() => senden(fassungen[i], ueberlaufFelder({ uid, i, n: rest, ziel })));
+        const eintrag = blaetterStore.neu({
+          id: k.id,
+          lokal: i + 1 < fassungen.length ? "hochladen" : null,
+          bild: URL.createObjectURL(fassungen[i].thumb),
+          seiten: rest,
+          // das jüngste Blatt steht oben, über dem vollen
+          order: Math.max(Date.now(), ...blaetterStore.get().map((x) => x.order + 1)),
+          kurz: k,
+          tag: h.tag ?? null,
+        });
+        ueber = { key: eintrag.key, kurz: k };
+        blattId = k.id;
+        ueberlaufHoerer.forEach((f) => f(e.message));
+        await aufnahmeFortschritt(uid, i + 1, blattId);
+        continue;
+      }
+      if (ueber) ueber.kurz = k;
+      else kurz = k;
       if (!blattId) {
         blattId = k.id;
         stand({ id: k.id, kurz: k, lokal: i + 1 < fassungen.length ? "hochladen" : null });
@@ -268,11 +319,24 @@ async function hochladenAb(h: Hochladen): Promise<BlattKurz | null> {
   } catch (e) {
     // Der Server hat abgelehnt (kein Netzfehler): nicht bei jedem Start erneut
     await aufnahmeVergessen(uid);
+    if (ueber) blaetterStore.setzen(ueber.key, { kurz: ueber.kurz, lokal: null });
     throw e;
   }
   await aufnahmeVergessen(uid);
+  if (ueber) blaetterStore.setzen(ueber.key, { kurz: ueber.kurz, seiten: ueber.kurz.seiten, lokal: null });
   if (kurz) stand({ kurz, lokal: null });
   return kurz;
+}
+
+/**
+ * Der Server hat eine Seite abgelehnt. Ist das Blatt schon angelegt (die
+ * ersten Seiten kamen an), bleibt seine Zeile in der Liste, nur ohne
+ * „Wird hochgeladen“; sonst ist da nichts, und die Zeile geht.
+ */
+export function blattNachAblehnung(key: string): void {
+  const b = blaetterStore.get().find((x) => x.key === key);
+  if (b?.id) blaetterStore.setzen(key, { lokal: null });
+  else blaetterStore.weg(key);
 }
 
 /** Ein Upload dieses Fensters (gegen doppeltes Fortsetzen beim Ereignis „online“). */
@@ -320,7 +384,7 @@ export async function blattHochladen(
   if (!gesichert) ungesichertZaehlen(1);
   try {
     const kurz = await gesperrt(uid, false, () =>
-      hochladenAb({ uid, fassungen, ziel, ab: 0, id: null, dazu: false, fehler, stand: (t) => blaetterStore.setzen(key, t) }),
+      hochladenAb({ uid, fassungen, ziel, ab: 0, id: null, dazu: false, fehler, stand: (t) => blaetterStore.setzen(key, t), tag: eintrag?.tag ?? null }),
       true,
     );
     if (!kurz) throw new UploadFehler("Nicht gespeichert", false);
@@ -331,7 +395,7 @@ export async function blattHochladen(
 }
 
 /** Eine Aufnahme mit „Seite dazu“ senden: Stand an der Blattzeile, danach weg. */
-async function dazuSenden(a: { uid: string; id: string; fassungen: PreparedPage[]; ab: number }): Promise<BlattKurz | null> {
+async function dazuSenden(a: { uid: string; id: string; fassungen: PreparedPage[]; ab: number; tag: string | null }): Promise<BlattKurz | null> {
   dazuStore.neu({ uid: a.uid, id: a.id, lokal: "hochladen", seiten: a.fassungen.length - a.ab });
   let angekommen = false;
   try {
@@ -346,6 +410,7 @@ async function dazuSenden(a: { uid: string; id: string; fassungen: PreparedPage[
       stand: (t) => {
         if (t.lokal) dazuStore.setzen(a.uid, t.lokal);
       },
+      tag: a.tag,
     });
     angekommen = true;
     if (kurz) {
@@ -381,7 +446,7 @@ async function fortsetzen(melden: (text: string) => void): Promise<void> {
     if (laufendeUids.has(a.uid)) continue;
     if (a.dazu && a.id) {
       const id = a.id;
-      void gesperrt(a.uid, true, () => dazuSenden({ uid: a.uid, id, fassungen: a.seiten, ab: a.gesendet })).catch((e: unknown) =>
+      void gesperrt(a.uid, true, () => dazuSenden({ uid: a.uid, id, fassungen: a.seiten, ab: a.gesendet, tag: a.tag })).catch((e: unknown) =>
         melden(e instanceof Error ? e.message : "Nicht gespeichert"),
       );
       continue;
@@ -406,11 +471,12 @@ async function fortsetzen(melden: (text: string) => void): Promise<void> {
           dazu: false,
           fehler: null,
           stand: (t) => blaetterStore.setzen(eintrag.key, t),
+          tag: a.tag,
         });
         // alles war schon da: die Liste vom Server kennt das Blatt
         if (!kurz) blaetterStore.weg(eintrag.key);
       } catch (e) {
-        blaetterStore.weg(eintrag.key);
+        blattNachAblehnung(eintrag.key);
         melden(e instanceof Error ? e.message : "Nicht gespeichert");
       }
       return null;
@@ -424,14 +490,14 @@ async function fortsetzen(melden: (text: string) => void): Promise<void> {
  * „Hängt, wird erneut versucht“) und geht weiter, sobald das Gerät online
  * ist, auch nach einem Neuladen. Wirft nur, wenn der Server ablehnt.
  */
-export async function seitenDazu(materialId: string, seiten: Aufnahme[]): Promise<BlattKurz | null> {
+export async function seitenDazu(materialId: string, seiten: Aufnahme[], tag: string | null = null): Promise<BlattKurz | null> {
   const fassungen = await Promise.all(seiten.map((s) => s.fassungen));
   const uid = neueUid();
   laufendeUids.add(uid);
   const gesichert = await aufnahmeMerken({
     uid,
     ziel: "zeile",
-    tag: null,
+    tag,
     bild: seiten[0]?.bild ?? "",
     order: Date.now(),
     seiten: fassungen,
@@ -441,7 +507,7 @@ export async function seitenDazu(materialId: string, seiten: Aufnahme[]): Promis
   });
   if (!gesichert) ungesichertZaehlen(1);
   try {
-    return await gesperrt(uid, false, () => dazuSenden({ uid, id: materialId, fassungen, ab: 0 }), true);
+    return await gesperrt(uid, false, () => dazuSenden({ uid, id: materialId, fassungen, ab: 0, tag }), true);
   } finally {
     if (!gesichert) ungesichertZaehlen(-1);
   }

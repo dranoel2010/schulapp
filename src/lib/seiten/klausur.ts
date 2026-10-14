@@ -9,7 +9,7 @@ import { gradeLabel } from "@/lib/grade-scale";
 import { gradesBySubject } from "@/lib/grades";
 import { appTag, jetzt } from "@/lib/tag";
 import { klausurListe } from "@/lib/kombi/archiv";
-import { blattStaende, blockDaten, type BlockDaten } from "@/lib/kombi/lernblock-daten";
+import { blockDatenLaden, type BlockDaten } from "@/lib/kombi/lernblock-daten";
 import { buildPlan, type PlanWarning } from "@/lib/study-plan";
 import { lessonsForWeekday, weekdayOf } from "@/lib/timetable";
 
@@ -88,21 +88,40 @@ export function warnungText(warnings: PlanWarning[]): string | null {
   return null;
 }
 
+/** Ein gespeicherter Block, so weit `planWarnungen` ihn braucht. */
+export type PlanBlockStand = {
+  date: string;
+  kind: string;
+  status: string;
+  topicId: string | null;
+};
+
 /**
  * Die Warnungen des neu gerechneten Plans, gegen den gespeicherten Plan
- * geprüft: „nur ein Lerntag“ ist falsch, wenn jeder verbleibende Lerntag schon
- * einer Probeklausur gehört. Dann zeigt der Plan darunter die Probe und keine
- * Themen, und die Warnung spräche von etwas, das nicht da ist.
+ * geprüft. „Nur ein Lerntag, alle Themen an diesem Tag, keine Wiederholung“
+ * steht nur, wenn der gezeigte Plan genau so aussieht: ab heute bis vor die
+ * Prüfung liegen nur offene Lernblöcke, alle an einem Tag, und sie bringen
+ * jedes Thema unter. Liegt dort eine Wiederholung oder Probeklausur, ist ein
+ * Block erledigt, oder ist ab heute gar nichts mehr geplant (gestrichen oder
+ * schon gelernt), entfällt die Warnung.
  */
 export function planWarnungen(
   warnings: PlanWarning[],
-  studyDays: string[],
-  probeTage: Iterable<string>,
+  bloecke: readonly PlanBlockStand[],
+  heute: string,
+  klausurTag: string,
+  themen: number,
 ): PlanWarning[] {
   if (!warnings.includes("tight")) return warnings;
-  const proben = new Set(probeTage);
-  if (studyDays.length === 0 || !studyDays.every((tag) => proben.has(tag))) return warnings;
-  return warnings.filter((w) => w !== "tight");
+  const ab = bloecke.filter((b) => b.status !== "skipped" && b.date >= heute && b.date < klausurTag);
+  const tage = new Set(ab.map((b) => b.date));
+  const themenAmTag = new Set(ab.map((b) => b.topicId).filter((t): t is string => t !== null));
+  const passt =
+    ab.length > 0 &&
+    tage.size === 1 &&
+    ab.every((b) => b.kind === "learn" && b.status === "open") &&
+    themenAmTag.size >= themen;
+  return passt ? warnings : warnings.filter((w) => w !== "tight");
 }
 
 export async function klausurSeite(
@@ -116,8 +135,8 @@ export async function klausurSeite(
   const heute = appTag(await jetzt());
 
   const geplant = blocks.filter((b) => b.status !== "skipped");
-  const [staende, freieTage, noten, stunden, blaetter] = await Promise.all([
-    blattStaende(userId, geplant.map((b) => b.id)),
+  const [bloeckeDaten, freieTage, noten, stunden, blaetter] = await Promise.all([
+    blockDatenLaden(userId, geplant),
     freeDatesFrom(userId, heute),
     gradesBySubject(userId),
     lessonsForWeekday(userId, weekdayOf(exam.date)),
@@ -153,18 +172,15 @@ export async function klausurSeite(
     thema: exam.title ?? (topics.length ? topics.map((t) => t.title).join(", ") : null),
     stunde,
     themen: topics.length,
-    bloecke: geplant.map((b) => blockDaten(b, staende.get(b.id) ?? null)),
+    bloecke: bloeckeDaten,
     erledigt: geplant.filter((b) => b.status === "done").length,
     gestrichen: blocks.length - geplant.length,
     minutenProTag: exam.minutesPerDay,
     vorlauf: exam.leadDays,
-    warnung: topics.length > 0 && tageBis > 0 ? warnungText(
-            planWarnungen(
-              plan.warnings,
-              plan.studyDays,
-              geplant.filter((b) => b.kind === "probe").map((b) => b.date),
-            ),
-          ) : null,
+    warnung:
+      topics.length > 0 && tageBis > 0
+        ? warnungText(planWarnungen(plan.warnings, blocks, heute, exam.date, topics.length))
+        : null,
     verpasst:
       verpassteBloecke.length && exam.date > heute
         ? {

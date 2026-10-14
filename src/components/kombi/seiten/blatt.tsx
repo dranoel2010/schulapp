@@ -11,6 +11,7 @@ import {
 import { dazuAn, dazuStore } from "@/components/kombi/ablauf/blaetter-store";
 import { useKombi } from "@/components/kombi/kontext";
 import { formatGerman } from "@/lib/dates";
+import { BLATT_VOLL_HINWEIS, MAX_PAGES } from "@/lib/images";
 import { dm, fliesstext } from "@/lib/kombi/text";
 import type { AblageDaten, BlattDaten } from "@/lib/seiten/ablage";
 
@@ -68,6 +69,8 @@ function Abschrift({ text }: { text: string }) {
 export function SeiteDazu({ id, seiten }: { id: string; seiten: string[] }) {
   const kombi = useKombi();
   const dazu = dazuAn(useSyncExternalStore(dazuStore.subscribe, dazuStore.get, dazuStore.leer), id);
+  // Ein volles Blatt nimmt keine Seite mehr: derselbe Satz wie unter „Blatt bearbeiten“
+  if (seiten.length >= MAX_PAGES && !dazu) return <p className="p-sub">{BLATT_VOLL_HINWEIS}</p>;
   return (
     <RowBtn
       titel="Seite dazu"

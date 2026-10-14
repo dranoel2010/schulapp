@@ -30,7 +30,7 @@ export const relTage = (heute: string, datum: string): string => {
 
 /** „25 Minuten“, beim Block mit Arbeitsblatt „25 Minuten mit Arbeitsblatt“ (Prototyp `lbDauer`). */
 export const lbDauer = (b: BlockDaten): string =>
-  `${b.minuten} Minuten${b.blatt && !b.blatt.fehlgeschlagen ? " mit Arbeitsblatt" : ""}`;
+  `${b.minuten} Minuten${b.alsBlatt && !b.blatt?.fehlgeschlagen ? " mit Arbeitsblatt" : ""}`;
 
 export function KlausurBlock({ daten, heute }: { daten: LernblockUeberblick; heute: string }) {
   const kombi = useKombi();

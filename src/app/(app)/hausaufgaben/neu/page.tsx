@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import { ButtonLink } from "@/components/kombi/form";
 import { EmptyState } from "@/components/kombi/form";
 import { requireUser } from "@/lib/auth";
-import { addDays, todayInBerlin } from "@/lib/dates";
+import { addDays } from "@/lib/dates";
+import { appTag, jetzt } from "@/lib/tag";
 import { freeDatesFrom } from "@/lib/free-days";
 import { listSubjects } from "@/lib/subjects";
 import {
@@ -66,7 +67,7 @@ function nextLessonPerSubject(
 
 export default async function NewHomeworkPage() {
   const user = await requireUser();
-  const today = todayInBerlin();
+  const today = appTag(await jetzt());
 
   const [subjects, lessons, freeDays] = await Promise.all([
     listSubjects(user.id),

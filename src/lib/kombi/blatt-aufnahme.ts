@@ -5,7 +5,7 @@ import { leserLaeufe, materialPages, materials } from "@/db/schema";
 import { markFiled } from "@/lib/inbox";
 import { appTagVon } from "@/lib/kombi/tag-daten";
 import { addPage, createMaterialWithPage, defaultMaterialTitle, getMaterial, type NewPage } from "@/lib/materials";
-import { MAX_PAGES } from "@/lib/images";
+import { BLATT_VOLL, MAX_PAGES } from "@/lib/images";
 import { protokollieren } from "@/lib/protokoll";
 import { listSubjects } from "@/lib/subjects";
 import { ensurePeriods, lessonsForWeekday, weekdayOf } from "@/lib/timetable";
@@ -54,8 +54,14 @@ export async function vorlaeufigesFach(userId: string, now: Date): Promise<strin
   return aktiv[0].id;
 }
 
-/** `wiederholt`: diese Seite war schon angekommen, nichts wurde neu angelegt. */
-export type AblageErgebnis = { ok: true; id: string; wiederholt?: boolean } | { ok: false; status: number; message: string };
+/**
+ * `wiederholt`: diese Seite war schon angekommen, nichts wurde neu angelegt.
+ * `voll`: das Blatt hat schon `MAX_PAGES` Seiten; die Kamera legt die Seite
+ * dann als neues Blatt ab, statt sie zu verwerfen.
+ */
+export type AblageErgebnis =
+  | { ok: true; id: string; wiederholt?: boolean }
+  | { ok: false; status: number; message: string; voll?: boolean };
 
 /**
  * Der Schlüssel einer Seite aus der Kamera (`material_pages.upload_key`):
@@ -155,7 +161,7 @@ async function seiteDran(
   const material = await getMaterial(userId, materialId);
   if (!material) return { ok: false, status: 404, message: "Dieses Blatt gibt es nicht mehr." };
   if (material.pages.length >= MAX_PAGES) {
-    return { ok: false, status: 409, message: `An ein Blatt passen ${MAX_PAGES} Seiten. Was mehr ist, ist ein zweites Blatt.` };
+    return { ok: false, status: 409, message: BLATT_VOLL, voll: true };
   }
   const neu = await addPage(userId, material.id, page);
   if (!neu) return { ok: false, status: 500, message: "Das Blatt konnte nicht gespeichert werden. Versuch es noch einmal." };

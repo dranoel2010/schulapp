@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { ButtonLink } from "@/components/kombi/form";
 import { EmptyState } from "@/components/kombi/form";
 import { requireUser } from "@/lib/auth";
-import { todayInBerlin } from "@/lib/dates";
+import { appTag, jetzt } from "@/lib/tag";
 import { listSubjects } from "@/lib/subjects";
 
 import { createGradeAction } from "../actions";
@@ -75,7 +75,7 @@ export default async function NewGradePage({
       <GradeForm
         action={createGradeAction}
         subjects={subjects}
-        defaultDate={todayInBerlin()}
+        defaultDate={appTag(await jetzt())}
         defaultSubjectId={wanted?.id}
         submitLabel="Note eintragen"
       />

@@ -50,7 +50,7 @@ describe("Antworten beim Tippen (Wortlaut wie im Prototyp)", () => {
     assert.equal(a.inhalt.kopf, "Quadratische Funktionen, in 4 Tagen");
     assert.deepEqual(
       a.inhalt.zeilen.map((z) => `${z.time} | ${z.b} | ${z.em}`),
-      ["Heute | Scheitelpunktform | Lernblock, 25 Minuten", "Mi | Wiederholung | Alles bis Scheitelpunktform"],
+      ["Heute | Scheitelpunktform | Lernblock mit Arbeitsblatt, 25 Minuten", "Mi | Wiederholung | Alles bis Scheitelpunktform"],
     );
   });
 

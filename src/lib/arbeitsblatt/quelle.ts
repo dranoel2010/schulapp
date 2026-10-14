@@ -202,7 +202,7 @@ export async function blockZiel(userId: string, blockId: string): Promise<BlockZ
  * verknüpfte Klausurthema ist `ueben`, und es gibt mindestens eins. Die
  * Probeklausur ist immer ein Blatt.
  */
-export function blockAlsBlatt(ziel: BlockZiel): boolean {
+export function blockAlsBlatt(ziel: Pick<BlockZiel, "kind" | "subjectTopicId" | "klausurThemen">): boolean {
   // Die Probeklausur ist immer ein Blatt, in jedem Fach (Antwort 4 vom 13.10.2026)
   if (ziel.kind === "probe") return true;
   if (ziel.subjectTopicId) {
@@ -210,6 +210,54 @@ export function blockAlsBlatt(ziel: BlockZiel): boolean {
     return t?.art === "ueben";
   }
   return ziel.klausurThemen.length > 0 && ziel.klausurThemen.every((t) => t.art === "ueben");
+}
+
+/**
+ * `blockAlsBlatt` für viele Blöcke in einer Abfrage: die IDs der Blöcke, die
+ * nach der Art ihres Themas ein Arbeitsblatt sind, ob das Blatt schon gebaut
+ * ist oder nicht (Prototyp `blockAlsBlatt(k)` über `istUeben`). Daraus kommt
+ * der Zusatz „mit Arbeitsblatt“ in Plan, Startseite und Zeile.
+ */
+export async function bloeckeAlsBlatt(
+  userId: string,
+  bloecke: readonly { id: string; examId: string; topicId: string | null; kind: string }[],
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  const examIds = [...new Set(bloecke.map((b) => b.examId))];
+  if (examIds.length === 0) return out;
+  const zeilen = await db
+    .select({
+      examId: examTopics.examId,
+      id: examTopics.id,
+      subjectTopicId: examTopics.subjectTopicId,
+      stTitle: subjectTopics.title,
+      stArt: subjectTopics.art,
+      fach: subjects.name,
+    })
+    .from(examTopics)
+    .innerJoin(exams, and(eq(exams.id, examTopics.examId), eq(exams.userId, userId)))
+    .innerJoin(subjects, eq(subjects.id, exams.subjectId))
+    .leftJoin(subjectTopics, eq(subjectTopics.id, examTopics.subjectTopicId))
+    .where(inArray(examTopics.examId, examIds));
+  const jeKlausur = new Map<string, typeof zeilen>();
+  for (const z of zeilen) jeKlausur.set(z.examId, [...(jeKlausur.get(z.examId) ?? []), z]);
+  for (const b of bloecke) {
+    const themen = jeKlausur.get(b.examId) ?? [];
+    const eigenes = b.topicId ? themen.find((t) => t.id === b.topicId) : undefined;
+    const alsBlatt = blockAlsBlatt({
+      kind: b.kind,
+      subjectTopicId: eigenes?.subjectTopicId ?? null,
+      klausurThemen: themen
+        .filter((t) => t.subjectTopicId !== null && t.stTitle !== null)
+        .map((t) => ({
+          subjectTopicId: t.subjectTopicId!,
+          title: t.stTitle!,
+          art: themaArt({ title: t.stTitle!, art: t.stArt ?? null }, { name: t.fach }),
+        })),
+    });
+    if (alsBlatt) out.add(b.id);
+  }
+  return out;
 }
 
 /**

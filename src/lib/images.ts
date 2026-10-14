@@ -150,6 +150,18 @@ export const MAX_THUMB_BYTES = 400_000;
  */
 export const MAX_PAGES = 12;
 
+/** Der Satz, wenn ein Blatt voll ist: Toast der Kamera und Antwort des Servers. */
+export const BLATT_VOLL = `An ein Blatt passen ${MAX_PAGES} Seiten. Was mehr ist, ist ein zweites Blatt.`;
+
+/** Kurz für den einzeiligen Toast der Kamera: „Seite dazu“ an einem vollen Blatt. */
+export const BLATT_VOLL_TOAST = `${MAX_PAGES} Seiten, das Blatt ist voll`;
+
+/** Kurz für den Toast, wenn der Server eine Seite nicht mehr annahm und sie ein neues Blatt wurde. */
+export const UEBERLAUF_TOAST = "Blatt voll, neues Blatt angelegt";
+
+/** Der Satz an einem vollen Blatt statt „Seite dazu“ (Blattseite, Blatt bearbeiten). */
+export const BLATT_VOLL_HINWEIS = `Dieses Blatt ist mit ${MAX_PAGES} Seiten voll. Was noch dazugehört, fotografierst du als neues Blatt ab.`;
+
 /**
  * Was die App als Bild annimmt.
  *

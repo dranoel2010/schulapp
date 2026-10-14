@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { examTopics, materialTopics, materials, studyBlocks, subjectTopics } from "@/db/schema";
 import { berlinDay } from "@/lib/dates";
 import { planEintragArt, planEintragTitel } from "@/lib/study-plan";
+import { bloeckeAlsBlatt } from "@/lib/arbeitsblatt/quelle";
+import { blattStaende, type BlattStand } from "@/lib/kombi/lernblock-daten";
 import { blocksForDay, examTopicTitles, listExams } from "@/lib/exams";
 import { listFreePeriods } from "@/lib/free-days";
 import { gradeLabel } from "@/lib/grade-scale";
@@ -140,6 +142,14 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
         .where(and(inArray(studyBlocks.examId, bald), gte(studyBlocks.date, heute), ne(studyBlocks.status, "skipped")))
         .orderBy(asc(studyBlocks.date), asc(studyBlocks.sortOrder))
     : [];
+  // Der Zusatz „mit Arbeitsblatt“ kommt aus der Art des Themas, nicht aus einem
+  // schon gebauten Blatt; nur ein fehlgeschlagenes Blatt nimmt ihn zurück
+  const [alsBlatt, blattStand] = planRoh.length
+    ? await Promise.all([
+        bloeckeAlsBlatt(userId, planRoh.map((r) => r.block)),
+        blattStaende(userId, planRoh.map((r) => r.block.id)),
+      ])
+    : [new Set<string>(), new Map<string, BlattStand>()];
   const planVon = (examId: string): VorratPlanEintrag[] =>
     planRoh
       .filter((r) => r.block.examId === examId)
@@ -149,6 +159,7 @@ export async function zeilenVorrat(userId: string, now: Date): Promise<ZeilenVor
         thema: r.block.kind === "probe" ? "ohne Hilfsmittel" : (r.topic?.title ?? "Gesamtwiederholung"),
         min: r.block.minutes,
         erledigt: r.block.status === "done",
+        alsBlatt: alsBlatt.has(r.block.id) && !blattStand.get(r.block.id)?.fehlgeschlagen,
       }));
   // Was im Archiv steht (ab Tag 15 nach dem Klausurtag), findet die Zeile nicht
   // mehr, wie die Liste „Klausuren“ und die Seite eines Fachs (klausurListe);

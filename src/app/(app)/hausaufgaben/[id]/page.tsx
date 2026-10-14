@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
-import { addDays, formatGerman, todayInBerlin } from "@/lib/dates";
+import { addDays, formatGerman } from "@/lib/dates";
+import { appTag, jetzt } from "@/lib/tag";
 import { getHomework } from "@/lib/homework";
 import { listSubjects } from "@/lib/subjects";
 
@@ -40,7 +41,7 @@ export default async function HomeworkPage({
     ? active
     : [item.subject, ...active];
 
-  const today = todayInBerlin();
+  const today = appTag(await jetzt());
 
   return (
     <div className="kf-seite">

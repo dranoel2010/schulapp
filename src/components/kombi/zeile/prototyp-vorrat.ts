@@ -53,8 +53,8 @@ export function prototypVorrat(jetzt = Date.UTC(2026, 9, 12, 14, 40)): ZeilenVor
         datum: "2026-10-16",
         thema: "Quadratische Funktionen",
         plan: [
-          { tag: "2026-10-12", art: "Lernblock", thema: "Scheitelpunktform", min: 25, erledigt: false },
-          { tag: "2026-10-14", art: "Wiederholung", thema: "Alles bis Scheitelpunktform", min: 25, erledigt: false },
+          { tag: "2026-10-12", art: "Lernblock", thema: "Scheitelpunktform", min: 25, erledigt: false, alsBlatt: true },
+          { tag: "2026-10-14", art: "Wiederholung", thema: "Alles bis Scheitelpunktform", min: 25, erledigt: false, alsBlatt: false },
         ],
       },
     ],

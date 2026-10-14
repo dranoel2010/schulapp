@@ -27,6 +27,8 @@ import { getSessionUser } from "@/lib/session";
  * - `fehler=abschrift`: Testweiche, nur mit `SCHULAPP_TESTUHR=1`.
  *
  * Antwort: das Blatt in Kurzform (`BlattKurz`), oder `{message}` mit Status.
+ * Ist das Blatt voll, 409 mit `voll: true`: die Kamera schickt die Seite dann
+ * ohne `attach` und legt so aus dem Rest ein neues Blatt an.
  */
 const HEADERS = { "Cache-Control": "private, no-store" };
 
@@ -66,7 +68,12 @@ export async function POST(request: Request) {
     console.error("Blatt ablegen fehlgeschlagen", fehler);
     return Response.json({ message: "Das Blatt konnte nicht gespeichert werden. Versuch es noch einmal." }, { status: 500, headers: HEADERS });
   }
-  if (!ergebnis.ok) return Response.json({ message: ergebnis.message }, { status: ergebnis.status, headers: HEADERS });
+  if (!ergebnis.ok) {
+    return Response.json(
+      { message: ergebnis.message, ...(ergebnis.voll ? { voll: true } : {}) },
+      { status: ergebnis.status, headers: HEADERS },
+    );
+  }
 
   if (ergebnis.wiederholt) {
     // schon angekommen: weder Testweiche noch Zuteilung ein zweites Mal

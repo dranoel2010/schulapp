@@ -77,7 +77,7 @@ function planUnterzeile(b: BlockDaten): string {
   const erledigt = b.status === "done" ? ", erledigt" : "";
   if (b.art === "review") return `${b.thema ?? "Alle Themen"}, ${b.minuten} Minuten${erledigt}`;
   if (b.art === "probe") return `ohne Hilfsmittel, ${b.minuten} Minuten${erledigt}`;
-  return `${b.blatt && !b.blatt.fehlgeschlagen ? "Lernblock mit Arbeitsblatt" : "Lernblock"}, ${b.minuten} Minuten${erledigt}`;
+  return `${b.alsBlatt && !b.blatt?.fehlgeschlagen ? "Lernblock mit Arbeitsblatt" : "Lernblock"}, ${b.minuten} Minuten${erledigt}`;
 }
 
 type Schalten = { id: string; status: "open" | "done" };

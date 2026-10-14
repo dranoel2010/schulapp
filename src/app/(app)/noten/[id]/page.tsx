@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
-import { formatGerman, todayInBerlin } from "@/lib/dates";
+import { formatGerman } from "@/lib/dates";
+import { appTag, jetzt } from "@/lib/tag";
 import { gradeLabel } from "@/lib/grade-scale";
 import { getGrade } from "@/lib/grades";
 import { listSubjects } from "@/lib/subjects";
@@ -72,7 +73,7 @@ export default async function GradePage({ params }: PageProps<"/noten/[id]">) {
         subjects={subjects}
         // Beim Bearbeiten gilt der gespeicherte Tag; heute ist nur der Rückfall,
         // falls das Feld leer geräumt wird.
-        defaultDate={todayInBerlin()}
+        defaultDate={appTag(await jetzt())}
         item={item}
         submitLabel="Speichern"
       />

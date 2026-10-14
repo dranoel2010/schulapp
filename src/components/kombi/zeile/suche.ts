@@ -183,7 +183,7 @@ function notenAnswer(v: ZeilenVorrat, fid: string): NotenInhalt {
   return { art: "noten", noten: list, leer: list.length ? null : `Keine Noten in ${F(v, fid).name}` };
 }
 
-function klausurAnswer(v: ZeilenVorrat, k: VorratKlausur): KlausurInhalt {
+export function klausurAnswer(v: ZeilenVorrat, k: VorratKlausur): KlausurInhalt {
   return {
     art: "klausur",
     kopf: `${k.thema}, ${relTage(v.heute, k.datum)}`,
@@ -192,7 +192,7 @@ function klausurAnswer(v: ZeilenVorrat, k: VorratKlausur): KlausurInhalt {
       .map((p) => ({
         time: p.tag === v.heute ? "Heute" : TK[wd(p.tag)],
         b: p.art === "Lernblock" ? p.thema : p.art,
-        em: p.art === "Lernblock" ? `Lernblock, ${p.min} Minuten` : p.thema,
+        em: p.art === "Lernblock" ? `${p.alsBlatt ? "Lernblock mit Arbeitsblatt" : "Lernblock"}, ${p.min} Minuten` : p.thema,
       })),
   };
 }
