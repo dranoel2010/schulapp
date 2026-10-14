@@ -3,7 +3,18 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 
-import { appJetzt, appUhrStellen, blockLesen, blockVomServer, gelernt, gestartet, restMs } from "@/components/kombi/lernblock/uhr";
+import {
+  appJetzt,
+  appUhrStellen,
+  blockLesen,
+  blockVomServer,
+  fmtRest,
+  gelernt,
+  gestartet,
+  pausiert,
+  restMs,
+  zeitUm,
+} from "@/components/kombi/lernblock/uhr";
 import type { BlockDaten } from "@/lib/kombi/lernblock-daten";
 
 /**
@@ -69,5 +80,40 @@ describe("Lernblock-Uhr mit der App-Uhr", () => {
       assert.doesNotMatch(code, /const jetztMs = Date\.now\(\)/, datei);
       assert.doesNotMatch(code, /blockMerken\(r\.block\)/, datei);
     }
+  });
+
+  it("Testuhr hinter dem Gerät: Versatz nach dem Mount gesetzt, Block gestartet, keine Zeit-um-Frage", () => {
+    // der Tisch rendert zuerst ohne Versatz: sein letzter Takt ist die Uhr des Geräts
+    const alterTakt = appJetzt();
+    appUhrStellen(-35 * MIN);
+    const b = gestartet(block({ minuten: 25 }), appJetzt());
+    // mit dem alten Takt wäre die Zeit sofort um (das war der Fehler)
+    assert.equal(restMs(b, alterTakt), 0);
+    // mit der App-Uhr nicht
+    assert.equal(zeitUm(b), false);
+    assert.ok(restMs(b, appJetzt()) > 24 * MIN);
+    // und nach Ablauf schon
+    const frueher = gestartet(block({ minuten: 25 }), appJetzt() - 26 * MIN);
+    assert.equal(zeitUm(frueher), true);
+  });
+
+  it("pausiert hängt die Restzeit nicht vom letzten Takt ab", () => {
+    const start = Date.parse("2026-10-14T14:00:00Z");
+    const b = gestartet(block({ minuten: 25 }), start);
+    // angehalten 6,2 s nach dem Start; der letzte Takt des Tischs lag bei 5,0 s
+    const p = pausiert(b, start + 6200);
+    const tisch = restMs(p, start + 5000);
+    const startseite = restMs(p, start + 60_000);
+    assert.equal(tisch, startseite);
+    assert.equal(fmtRest(tisch), "24:54");
+    // ein pausierter Block ist nie zeit-um
+    assert.equal(zeitUm(pausiert(gestartet(block(), appJetzt() - 20 * MIN), appJetzt())), false);
+  });
+
+  it("der Tisch fragt „Zeit um“ über die App-Uhr, useSekunde gleicht beim Anlaufen ab", () => {
+    const tisch = readFileSync(join(process.cwd(), "src", "components", "kombi", "tisch", "lernblock-tisch.tsx"), "utf8");
+    assert.match(tisch, /!zeitUm\(block\)\) return;/);
+    const uhr = readFileSync(join(process.cwd(), "src", "components", "kombi", "lernblock", "uhr.ts"), "utf8");
+    assert.match(uhr, /useLayoutEffect\(\(\) => \{[\s\S]*?if \(aktiv\) setJetzt\(appJetzt\(\)\);\s*\}, \[aktiv, v\]\)/);
   });
 });

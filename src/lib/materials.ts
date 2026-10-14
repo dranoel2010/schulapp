@@ -707,6 +707,7 @@ export async function createMaterialWithPage(
   userId: string,
   input: MaterialInput,
   page: NewPage,
+  { now }: { now?: Date } = {},
 ): Promise<string> {
   if (!(await ownsSubject(userId, input.subjectId))) {
     throw new Error("Dieses Fach gibt es nicht mehr.");
@@ -723,6 +724,8 @@ export async function createMaterialWithPage(
         title: input.title,
         capturedOn: input.capturedOn,
         note: input.note,
+        // mit der Uhr des Aufrufers (Testuhr), sonst der Default der Datenbank
+        ...(now ? { createdAt: now } : {}),
       })
       .returning({ id: materials.id });
 

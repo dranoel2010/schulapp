@@ -132,6 +132,8 @@ async function blattNeu(userId: string, now: Date, page: NewPage, { seiten, ziel
     userId,
     { subjectId, title: defaultMaterialTitle(tag), capturedOn: tag, note: null },
     page,
+    // created_at mit derselben Uhr wie captured_on: `blaetterVomTag` sucht darüber
+    { now },
   );
   await protokollieren(userId, tag, "blatt_abgelegt", id, { n: Math.max(1, Math.min(MAX_PAGES, seiten)), row: ziel });
   return { ok: true, id };

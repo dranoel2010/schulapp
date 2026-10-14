@@ -9,6 +9,11 @@
  *
  *   BASIS=http://localhost:3380 node scripts/pruef-kombi/lernblock-testuhr.mjs [2026-10-14T21:10] [lang]
  *
+ * Auch mit Testuhr HINTER dem Gerät prüfen (etwa 35 Minuten zurück, und mit
+ * einem Block ohne Fragen): „Starten“ darf nicht sofort „Zeit um. Als
+ * erledigt zählen?“ fragen. Der Tisch rechnete vorher mit dem Takt vom
+ * ersten Rendern, noch ohne Versatz.
+ *
  * Saat: ein offener Lernblock am App-Tag der Testuhr mit mindestens einer
  * fälligen Frage (etwa scripts/pruef-kombi/saat-startseite.mts und dazu eine
  * Frage an der Mathe-Klausur, fällig am 14.10.). Braucht SCHULAPP_TESTUHR=1.
@@ -49,6 +54,8 @@ const sekunden = async () => {
 const a = await sekunden();
 await page.waitForTimeout(6000);
 const b = await sekunden();
+const zeitUm = (await page.locator(".t-confirm.on").first().innerText().catch(() => "")).replace(/\n+/g, " | ");
+p.ok(!/Zeit um/.test(zeitUm), `keine Frage „Zeit um“ gleich nach dem Start ${JSON.stringify(zeitUm)}`);
 p.ok(a !== null && a > 0, `Tisch mit Uhr, nicht abgelaufen (${a} s übrig)`);
 p.ok(a !== null && b !== null && a - b >= 4 && a - b <= 8, `die Uhr läuft: nach 6 s ${a} → ${b}`);
 

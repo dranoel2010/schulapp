@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 
 import type { BlockDaten } from "@/lib/kombi/lernblock-daten";
 
@@ -34,12 +34,16 @@ export function zustand(b: Uhr): Zustand {
 
 export const gesamtMs = (b: Pick<Uhr, "minuten">): number => b.minuten * 60_000;
 
+/**
+ * Gelaufene Zeit. Pausiert zählt sie bis `pausiertSeit` und hängt nicht von
+ * „jetzt“ ab: Tisch (letzter Takt vor dem Anhalten) und Startseite (frisch
+ * geladen) zeigen dieselbe Restzeit.
+ */
 export function gelaufenMs(b: Uhr, jetzt: number): number {
   const start = ms(b.laeuftSeit);
   if (start === null) return 0;
-  const pause = ms(b.pausiertSeit);
-  const offen = pause === null ? 0 : Math.max(0, jetzt - pause);
-  return Math.max(0, jetzt - start - b.pauseMs - offen);
+  const bis = ms(b.pausiertSeit) ?? jetzt;
+  return Math.max(0, bis - start - b.pauseMs);
 }
 
 /** Restzeit, nie unter 0; ein erledigter Block steht. */
@@ -74,6 +78,16 @@ export function fortgesetzt(b: BlockDaten, jetzt: number): BlockDaten {
   const p = ms(b.pausiertSeit);
   if (zustand(b) !== "pausiert" || p === null) return b;
   return { ...b, pausiertSeit: null, pauseMs: b.pauseMs + Math.max(0, jetzt - p) };
+}
+
+/**
+ * Ist die Zeit eines laufenden Blocks um? Gerechnet mit `appJetzt()`, nicht
+ * mit dem zuletzt gerenderten Takt: der kann von vor dem Setzen des Versatzes
+ * stammen, und mit zurückgestellter Testuhr stünde der Rest sonst beim
+ * Starten sofort auf 0.
+ */
+export function zeitUm(b: Uhr): boolean {
+  return zustand(b) === "laeuft" && restMs(b, appJetzt()) <= 0;
 }
 
 // ── Speicher: ein Block, überall derselbe Stand ─────────────────────────────
@@ -114,6 +128,8 @@ export function appUhrStellen(ms: number): void {
   melden();
 }
 
+const versatzLesen = () => versatz;
+
 /** „Jetzt“ der App in ms: mit Testuhr die Testuhr, sonst die Uhr des Geräts. */
 export function appJetzt(): number {
   return Date.now() + versatz;
@@ -148,6 +164,14 @@ export function useBlock(vomServer: BlockDaten | null): BlockDaten | null {
  */
 export function useSekunde(aktiv: boolean): number {
   const [jetzt, setJetzt] = useState(appJetzt);
+  const v = useSyncExternalStore(abonnieren, versatzLesen, () => 0);
+  // Beim Anlaufen und wenn der Versatz kommt: sofort die App-Uhr, noch vor
+  // dem Zeichnen (der Anfangswert stammt vom ersten Rendern, oft lange her
+  // und ohne Versatz).
+  useLayoutEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Abgleich mit der App-Uhr, einmal je Anlauf
+    if (aktiv) setJetzt(appJetzt());
+  }, [aktiv, v]);
   useEffect(() => {
     if (!aktiv) return;
     let raf = 0;

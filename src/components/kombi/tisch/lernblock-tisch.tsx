@@ -25,11 +25,13 @@ import {
   restMs,
   useBlock,
   useSekunde,
+  zeitUm,
   zustand,
 } from "@/components/kombi/lernblock/uhr";
 import { Abschrift } from "@/components/kombi/abschrift";
 import { BlockKarten, blockKartenErgebnis, type BlockKartenDeps } from "@/components/kombi/tisch/block-karten";
 import { LernblockUhr } from "@/components/kombi/tisch/lernblock-uhr";
+import { mitErneut } from "@/components/kombi/tisch/mit-erneut";
 import type { BlockDaten, LernblockTischDaten, MaterialDaten } from "@/lib/kombi/lernblock-daten";
 import { buzz, E, reduce } from "@/lib/kombi/motion";
 import { kurz } from "@/lib/kombi/text";
@@ -97,6 +99,8 @@ export function LernblockTisch() {
   const jaRef = useRef<HTMLButtonElement>(null);
   const offenRef = useRef(false);
   const zeitGefragt = useRef(false);
+  /** zählt jedes Öffnen: ein spätes „Erneut“ trifft nur die eigene Sitzung */
+  const sitzungNr = useRef(0);
   const ignorierePop = useRef(0);
   const zeileTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -205,6 +209,8 @@ export function LernblockTisch() {
       kombi.closeSheet();
       offenRef.current = true;
       zeitGefragt.current = false;
+      const nr = ++sitzungNr.current;
+      const dabei = () => offenRef.current && sitzungNr.current === nr;
       const origin = o?.origin instanceof HTMLElement ? o.origin : null;
       setSitzung({
         blockId,
@@ -223,18 +229,26 @@ export function LernblockTisch() {
         blockMerken(neu);
         setStartBlock(neu);
       }
+      let startFehlt = false;
       const starten = (): Promise<void> =>
         lernblockStartenAction(blockId).then(
           (r) => {
+            startFehlt = false;
             if (r.ok) blockVomServer(r);
           },
-          () => kombi.fehlerToast("Nicht gespeichert", () => void starten(), "Erneut"),
+          () => {
+            startFehlt = true;
+            kombi.fehlerToast("Nicht gespeichert", () => void starten(), "Erneut");
+          },
         );
       const gestartetP = starten();
 
-      lernblockTischAction(blockId).then(
+      // Scheitert das Laden, lädt „Erneut“ die Fragen nach (und holt das
+      // Starten nach, falls es auch gescheitert ist)
+      mitErneut(
+        () => lernblockTischAction(blockId),
         (r) => {
-          if (!offenRef.current) return;
+          if (!dabei()) return;
           if (!r.ok) {
             kombi.toast(r.fehler);
             return;
@@ -280,8 +294,17 @@ export function LernblockTisch() {
             }
           }
         },
-        () => {
-          if (offenRef.current) kombi.fehlerToast("Keine Verbindung", () => {}, "Erneut");
+        (erneut) => {
+          if (!dabei()) return;
+          kombi.fehlerToast(
+            "Keine Verbindung",
+            () => {
+              if (!dabei()) return;
+              if (startFehlt) void starten();
+              erneut();
+            },
+            "Erneut",
+          );
         },
       );
 
@@ -408,9 +431,11 @@ export function LernblockTisch() {
     [block, kombi, schliessen],
   );
 
-  // Zeit um (einmal je Öffnen): „Zeit um. Als erledigt zählen?“
+  // Zeit um (einmal je Öffnen): „Zeit um. Als erledigt zählen?“ `rest` stößt
+  // nur an; ob die Zeit um ist, entscheidet die App-Uhr (`zeitUm`), nicht der
+  // gerenderte Takt.
   useEffect(() => {
-    if (!sitzung || !block || z !== "laeuft" || rest > 0 || frage || zeitGefragt.current) return;
+    if (!sitzung || !block || z !== "laeuft" || rest > 0 || frage || zeitGefragt.current || !zeitUm(block)) return;
     zeitGefragt.current = true;
     buzz();
     const min = Math.round(block.minuten);
@@ -475,12 +500,15 @@ export function LernblockTisch() {
           kombi.openSheet(<MaterialSheet m={material} />, true);
           return;
         }
-        lernblockBlattAction(materialId).then(
+        mitErneut(
+          () => lernblockBlattAction(materialId),
           (r) => {
             if (r.ok && offenRef.current) kombi.openSheet(<MaterialSheet m={r.blatt} />, true);
             else if (!r.ok) kombi.toast(r.fehler);
           },
-          () => kombi.fehlerToast("Keine Verbindung", () => {}, "Erneut"),
+          (erneut) => {
+            if (offenRef.current) kombi.fehlerToast("Keine Verbindung", erneut, "Erneut");
+          },
         );
       },
     }),
