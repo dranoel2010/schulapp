@@ -14,6 +14,7 @@ import {
 import { AblaufEbene } from "@/components/kombi/ablauf";
 import { Startseite } from "@/components/kombi/home/startseite";
 import { KameraEbene } from "@/components/kombi/kamera";
+import { appUhrStellen } from "@/components/kombi/lernblock/uhr";
 import {
   KombiKontext,
   type EbenenHandler,
@@ -188,6 +189,10 @@ export function KombiShell({ children }: { children: ReactNode }) {
   const istStart = segmente.length === 0;
 
   const [tagDaten, setTagDaten] = useState<TagDaten | null>(null);
+  // Die Lernblock-Uhr zählt mit der App-Uhr (mit Testuhr die Testuhr)
+  useEffect(() => {
+    if (tagDaten) appUhrStellen(tagDaten.uhrVersatz);
+  }, [tagDaten]);
   const [ebenen, setEbenen] = useState<Ebene[]>(() =>
     istStart ? [] : [{ key: "route", typ: "route", still: true }],
   );

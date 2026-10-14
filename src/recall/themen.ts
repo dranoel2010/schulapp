@@ -127,13 +127,19 @@ export function appTagVon(zeitpunkt: Date): string {
   return berlinDay(new Date(zeitpunkt.getTime() - 4 * 3600_000));
 }
 
-/** Die Versuche eines App-Tags (siehe Dateikopf), älteste zuerst. */
+/**
+ * Die Versuche eines App-Tags (siehe Dateikopf), älteste zuerst. Der Tag
+ * kommt aus `answered_at`, das der Aufrufer mit der App-Uhr schreibt (mit
+ * Testuhr nicht die Uhr der Datenbank). `createdAt` bleibt im Ergebnis für
+ * den Vergleich mit `tagesprotokoll.created_at`: beide setzt die Datenbank.
+ */
 export async function versucheDesTages(userId: string, heute: string) {
   return db
     .select({
       id: recallAttempts.id,
       itemId: recallAttempts.itemId,
       correct: recallAttempts.correct,
+      answeredAt: recallAttempts.answeredAt,
       createdAt: recallAttempts.createdAt,
     })
     .from(recallAttempts)
@@ -141,11 +147,11 @@ export async function versucheDesTages(userId: string, heute: string) {
       and(
         eq(recallAttempts.userId, userId),
         inArray(recallAttempts.answeredOn, [heute, addDays(heute, 1)]),
-        gte(recallAttempts.createdAt, berlinStunde(heute, 4)),
-        lt(recallAttempts.createdAt, berlinStunde(addDays(heute, 1), 4)),
+        gte(recallAttempts.answeredAt, berlinStunde(heute, 4)),
+        lt(recallAttempts.answeredAt, berlinStunde(addDays(heute, 1), 4)),
       ),
     )
-    .orderBy(asc(recallAttempts.createdAt));
+    .orderBy(asc(recallAttempts.answeredAt), asc(recallAttempts.createdAt));
 }
 
 /**

@@ -30,6 +30,8 @@ before(async () => {
   fach = f.id;
 });
 
+const ohneKommentare = (code: string) => code.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+
 function quellen(): string[] {
   const dateien: string[] = [];
   const lauf = (dir: string) => {
@@ -91,5 +93,12 @@ describe("Schreibwege mit der App-Uhr", () => {
       assert.doesNotMatch(code, /new Date\(\)/, datei);
       if (datei !== join("abruf", "actions.ts")) assert.doesNotMatch(code, /todayInBerlin\(\)/, datei);
     }
+  });
+
+  it("Jev ordnet mit der Uhr des Aufrufers ein", () => {
+    const aufrufe = quellen().flatMap((d) => [...ohneKommentare(readFileSync(d, "utf8")).matchAll(/\bautoFile\(([^)]*)\)/g)].map((t) => [d, t[1]] as const));
+    const echte = aufrufe.filter(([d]) => !d.endsWith("auto-file.ts"));
+    assert.ok(echte.length >= 2);
+    for (const [d, args] of echte) assert.equal(args.split(",").length, 3, `${d}: autoFile(${args})`);
   });
 });

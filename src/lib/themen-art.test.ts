@@ -82,6 +82,11 @@ describe("themaArt (Plan 3.6)", () => {
     assert.ok(hatGrammatikStichwort("Futur I und II", DEUTSCH));
     assert.ok(!hatGrammatikStichwort("Futur I und II", ENGLISCH));
     assert.equal(artAbgeleitet({ title: "Futur II" }, DEUTSCH), "ueben");
+    // mit den üblichen Endungen
+    for (const titel of ["Futurformen", "Die Futurform", "Bildung des Futurs"])
+      assert.equal(artAbgeleitet({ title: titel }, DEUTSCH), "ueben", titel);
+    assert.equal(artAbgeleitet({ title: "Les futurs" }, FRANZ), "ueben");
+    assert.ok(!hatGrammatikStichwort("Futurformen", ENGLISCH));
     assert.ok(!hatGrammatikStichwort("Future plans", FRANZ));
     // will-future und going-to-future bleiben Englisch-Grammatik
     assert.equal(artAbgeleitet({ title: "will-future and going-to-future" }, ENGLISCH), "ueben");

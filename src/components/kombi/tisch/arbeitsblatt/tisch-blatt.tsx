@@ -7,8 +7,11 @@ import { lernblockStartenAction, lernblockTischAction, lernblockUhrAction } from
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import {
+  appJetzt,
+  appUhrStellen,
   blockLesen,
   blockMerken,
+  blockVomServer,
   fortgesetzt,
   gestartet,
   pausiert,
@@ -209,11 +212,11 @@ export function ArbeitsblattTisch() {
         const bid = opt.block;
         setBlockId(bid);
         const vorher = blockLesen(bid);
-        if (vorher && zustand(vorher) !== "erledigt") blockMerken(gestartet(vorher, Date.now()));
+        if (vorher && zustand(vorher) !== "erledigt") blockMerken(gestartet(vorher, appJetzt()));
         const starten = () =>
           lernblockStartenAction(bid).then(
             (r) => {
-              if (r.ok) blockMerken(r.block);
+              if (r.ok) blockVomServer(r);
             },
             () => fehlerToast("Nicht gespeichert", () => void starten(), "Erneut"),
           );
@@ -221,6 +224,7 @@ export function ArbeitsblattTisch() {
         setMaterial(null);
         lernblockTischAction(bid).then(
           (r) => {
+            if (r.ok) appUhrStellen(r.uhrVersatz);
             if (r.ok && offenRef.current) setMaterial(r.daten.material);
           },
           () => {},
@@ -245,13 +249,13 @@ export function ArbeitsblattTisch() {
     const z = zustand(uhrBlock);
     const was = z === "laeuft" ? "pause" : z === "pausiert" ? "weiter" : null;
     if (!was) return;
-    const jetztMs = Date.now();
+    const jetztMs = appJetzt();
     blockMerken(was === "pause" ? pausiert(uhrBlock, jetztMs) : fortgesetzt(uhrBlock, jetztMs));
     const vorher = uhrBlock;
     const senden = () =>
       lernblockUhrAction(vorher.id, was).then(
         (r) => {
-          if (r.ok) blockMerken(r.block);
+          if (r.ok) blockVomServer(r);
         },
         () => {
           fehlerToast("Nicht gespeichert", () => void senden(), "Erneut");

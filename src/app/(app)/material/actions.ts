@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 
 import { requireUser } from "@/lib/auth";
-import { jetzt } from "@/lib/tag";
+import { jetzt, uhrVersatz } from "@/lib/tag";
+import { leserUhrMerken } from "@/lib/leser/uhr";
 import { formErrors } from "@/lib/form-errors";
 import { markFiled } from "@/lib/inbox";
 import { claudeConfigured } from "@/lib/claude/client";
@@ -327,6 +328,7 @@ export async function deletePageAction(
   // App. Nach der Antwort angestoßen, wie beim Hochladen. Gehört das Blatt
   // nicht diesem Nutzer, findet die Prüfung es nicht (`korbblattStand()`).
   if (ergebnis === "geloescht") {
+    leserUhrMerken(user.id, await uhrVersatz());
     after(() => korbblattAnstossen(user.id, materialId));
   }
 

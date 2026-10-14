@@ -17,6 +17,7 @@ const leerMorgen = (tag: string): MorgenT => ({ tag, stunden: [], klausur: null 
 function daten(teil: Partial<TagDaten> & Pick<TagDaten, "tag" | "naechsterSchultag">): TagDaten {
   return {
     stand: "2026-10-12T17:30:00.000Z",
+    uhrVersatz: 0,
     ansicht: "ueberblick",
     schritt: "blaetter",
     ablaufStand: null,

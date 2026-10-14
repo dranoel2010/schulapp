@@ -144,8 +144,13 @@ const STICHWORT_MUSTER = GRAMMATIK_STICHWORTE.map(
     ),
 );
 
-/** „Futur“ als ganzes Wort, mit „Futur I“, „Futur II“, „le futur“. */
-const FUTUR_MUSTER = /(^|[^a-z0-9])futur($|[^a-z0-9])/;
+/**
+ * „Futur“ als Wort mit den Endungen der Stichworte („Futurformen“, „Die
+ * Futurform“, „les futurs“), mit „Futur I“, „Futur II“, „le futur“. Ohne die
+ * Endung „e“: „future“ ist auch in Französisch kein Grammatikthema („Future
+ * plans“, „la vie future“).
+ */
+const FUTUR_MUSTER = /(^|[^a-z0-9])futur(en|n|s|es|er|form|formen)?($|[^a-z0-9])/;
 
 /** Fächer, in denen das nackte „Futur“ Grammatik ist. Englisch nicht. */
 const FUTUR_FAECHER = new Set(["fr", "de"]);

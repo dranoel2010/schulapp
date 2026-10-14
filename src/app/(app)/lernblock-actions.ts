@@ -26,7 +26,7 @@ import {
   type LernblockTischDaten,
   type MaterialDaten,
 } from "@/lib/kombi/lernblock-daten";
-import { appTag, jetzt } from "@/lib/tag";
+import { appTag, jetzt, uhrVersatz } from "@/lib/tag";
 import {
   lernblockEintraegeAbnehmen,
   lernblockEintraegeZurueck,
@@ -51,12 +51,28 @@ import { urteilFesthalten, versuchFesthalten } from "@/recall/sessions";
  * 4 Uhr denselben Tag meinen. Nur die Schreibwege des Abrufkerns
  * (`versuchFesthalten`, `neuPlanen`) bleiben beim Berliner Kalendertag.
  * Die Uhr ist überall `jetzt()`: ohne Testuhr `new Date()`, mit Testuhr die
- * Testuhr, auch für die Lernblock-Uhr und `answered_at`.
+ * Testuhr, auch für die Lernblock-Uhr und `answered_at`. Weil der Tisch die
+ * Uhr im Gerät weiterzählt, geben die Uhr-Actions den Versatz der App-Uhr
+ * zur Uhr des Rechners mit (`uhrVersatz`, ohne Testuhr 0).
  */
 
 const id = z.uuid();
 
 type Antwort<T> = ({ ok: true } & T) | { ok: false; fehler: string };
+
+/** Ein Block mit dem Versatz der App-Uhr, für die Uhr im Tisch. */
+type MitUhr<T> = Antwort<T & { uhrVersatz: number }>;
+
+async function blockAntwort<T extends object>(
+  userId: string,
+  blockId: string,
+  mehr: T,
+): Promise<MitUhr<T & { block: BlockDaten }>> {
+  const block = await blockLesen(userId, blockId);
+  return block
+    ? { ok: true, ...mehr, block, uhrVersatz: await uhrVersatz() }
+    : { ok: false, fehler: "Diesen Lernblock gibt es nicht." };
+}
 
 async function blockLesen(userId: string, blockId: string): Promise<BlockDaten | null> {
   const [zeile] = await db
@@ -74,11 +90,11 @@ async function blockLesen(userId: string, blockId: string): Promise<BlockDaten |
 /** Was der Tisch im Block braucht: Kopf, Uhr, Fragen (ohne Lösung), Material. */
 export async function lernblockTischAction(
   blockId: string,
-): Promise<Antwort<{ daten: LernblockTischDaten }>> {
+): Promise<MitUhr<{ daten: LernblockTischDaten }>> {
   const user = await requireUser();
   const daten = await lernblockTisch(user.id, id.parse(blockId), appTag(await jetzt()));
   if (!daten) return { ok: false, fehler: "Diesen Lernblock gibt es nicht." };
-  return { ok: true, daten };
+  return { ok: true, daten, uhrVersatz: await uhrVersatz() };
 }
 
 /** „Blatt ansehen“ auf der Rückseite einer Karte: das Blatt als Sheet auf dem Tisch. */
@@ -163,26 +179,24 @@ export async function lernblockZurueckziehenAction(itemId: string): Promise<{ ok
 // ── Uhr ──────────────────────────────────────────────────────────────────────
 
 /** Starten oder, wenn pausiert, fortsetzen (Prototyp `openTisch` im Block). */
-export async function lernblockStartenAction(blockId: string): Promise<Antwort<{ block: BlockDaten }>> {
+export async function lernblockStartenAction(blockId: string): Promise<MitUhr<{ block: BlockDaten }>> {
   const user = await requireUser();
   const now = await jetzt();
   await blockStarten(user.id, id.parse(blockId), now, appTag(now));
-  const block = await blockLesen(user.id, blockId);
-  return block ? { ok: true, block } : { ok: false, fehler: "Diesen Lernblock gibt es nicht." };
+  return blockAntwort(user.id, blockId, {});
 }
 
 /** Die Uhr antippen: anhalten oder weiterlaufen lassen. */
 export async function lernblockUhrAction(
   blockId: string,
   was: "pause" | "weiter",
-): Promise<Antwort<{ block: BlockDaten }>> {
+): Promise<MitUhr<{ block: BlockDaten }>> {
   const user = await requireUser();
   const now = await jetzt();
   const tag = appTag(now);
   if (z.enum(["pause", "weiter"]).parse(was) === "pause") await blockPausieren(user.id, id.parse(blockId), now, tag);
   else await blockFortsetzen(user.id, id.parse(blockId), now, tag);
-  const block = await blockLesen(user.id, blockId);
-  return block ? { ok: true, block } : { ok: false, fehler: "Diesen Lernblock gibt es nicht." };
+  return blockAntwort(user.id, blockId, {});
 }
 
 /**
@@ -191,23 +205,21 @@ export async function lernblockUhrAction(
  */
 export async function lernblockBeendenAction(
   blockId: string,
-): Promise<Antwort<{ ende: BlockEnde; block: BlockDaten }>> {
+): Promise<MitUhr<{ ende: BlockEnde; block: BlockDaten }>> {
   const user = await requireUser();
   const now = await jetzt();
   const ende = await blockBeenden(user.id, id.parse(blockId), now, appTag(now));
-  const block = await blockLesen(user.id, blockId);
-  return block ? { ok: true, ende, block } : { ok: false, fehler: "Diesen Lernblock gibt es nicht." };
+  return blockAntwort(user.id, blockId, { ende });
 }
 
 /** „Als erledigt zählen?“ → Ja. */
 export async function lernblockErledigtAction(
   blockId: string,
   minuten: number,
-): Promise<Antwort<{ block: BlockDaten }>> {
+): Promise<MitUhr<{ block: BlockDaten }>> {
   const user = await requireUser();
   await blockErledigt(user.id, id.parse(blockId), z.number().int().min(0).max(600).parse(minuten), appTag(await jetzt()));
-  const block = await blockLesen(user.id, blockId);
-  return block ? { ok: true, block } : { ok: false, fehler: "Diesen Lernblock gibt es nicht." };
+  return blockAntwort(user.id, blockId, {});
 }
 
 // ── Lernplan auf der Klausurseite ────────────────────────────────────────────

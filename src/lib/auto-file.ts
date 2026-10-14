@@ -222,6 +222,12 @@ export function onlyTranscribesAttachedPages(
 export async function autoFile(
   userId: string,
   proposalId: string,
+  /**
+   * Die App-Uhr der Anfrage, die das Einordnen auslöste (mit Testuhr die
+   * Testuhr), für `filed_at`. Nur ein Lauf ohne Anfrage bleibt bei der Uhr
+   * des Rechners.
+   */
+  now: Date = new Date(),
 ): Promise<AutoFileResult> {
   const found = await getProposal(userId, proposalId);
   if (!found) return { ok: false, grund: "Den Vorschlag gibt es nicht mehr." };
@@ -235,7 +241,7 @@ export async function autoFile(
   // `abschriftNachreichen()`. Das kommt deshalb auch VOR der Frage, ob Jev
   // eingerichtet ist: für diesen Weg braucht es Jev nicht.
   if (material.filedAt !== null) {
-    return abschriftNachreichen(userId, proposal, material, pages);
+    return abschriftNachreichen(userId, proposal, material, pages, now);
   }
 
   if (!jevConfigured()) {
@@ -329,6 +335,7 @@ export async function autoFile(
   // vorhandene — vor allem keine, die Docling geschrieben hat.
   const applied = await applyProposal(userId, material.id, werte, {
     nurUngelesene: true,
+    now,
   });
   if (!applied) return { ok: false, grund: "Das Blatt gibt es nicht mehr." };
 
@@ -380,6 +387,7 @@ async function abschriftNachreichen(
   proposal: ProposalDetail,
   material: MaterialDetail,
   pages: MaterialPageTranscript[],
+  now: Date,
 ): Promise<AutoFileResult> {
   if (!onlyTranscribesUnreadPages(proposal, pages)) {
     return { ok: false, grund: "Das Blatt ist schon eingeordnet." };
@@ -410,6 +418,7 @@ async function abschriftNachreichen(
     nurUngelesene: true,
     nurVorschlag: proposal.id,
     nurAbschrift: true,
+    now,
   });
   if (!applied) return { ok: false, grund: "Das Blatt gibt es nicht mehr." };
 

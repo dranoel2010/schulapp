@@ -13,8 +13,11 @@ import {
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import {
+  appJetzt,
+  appUhrStellen,
   blockLesen,
   blockMerken,
+  blockVomServer,
   fortgesetzt,
   gelernt,
   gestartet,
@@ -214,7 +217,7 @@ export function LernblockTisch() {
       setFrage(null);
 
       // Die Uhr läuft sofort; der Server bestätigt
-      const jetztMs = Date.now();
+      const jetztMs = appJetzt();
       if (vorher) {
         const neu = gestartet(vorher, jetztMs);
         blockMerken(neu);
@@ -223,7 +226,7 @@ export function LernblockTisch() {
       const starten = (): Promise<void> =>
         lernblockStartenAction(blockId).then(
           (r) => {
-            if (r.ok) blockMerken(r.block);
+            if (r.ok) blockVomServer(r);
           },
           () => kombi.fehlerToast("Nicht gespeichert", () => void starten(), "Erneut"),
         );
@@ -236,6 +239,7 @@ export function LernblockTisch() {
             kombi.toast(r.fehler);
             return;
           }
+          appUhrStellen(r.uhrVersatz);
           // Wurden heute schon Fragen des Blocks beantwortet, ist er nicht leer:
           // das Ende nennt sie (auch nach einem Neuladen)
           // Die Probeklausur ist nur ein Blatt (Prototyp): hierher kommt sie
@@ -255,7 +259,7 @@ export function LernblockTisch() {
               void gestartetP.then(() =>
                 lernblockBeendenAction(blockId).then(
                   (b) => {
-                    if (b.ok) blockMerken(b.block);
+                    if (b.ok) blockVomServer(b);
                   },
                   () => {},
                 ),
@@ -391,7 +395,7 @@ export function LernblockTisch() {
       const senden = () =>
         lernblockErledigtAction(block.id, min).then(
           (r) => {
-            if (r.ok) blockMerken(r.block);
+            if (r.ok) blockVomServer(r);
             void kombi.neuLaden();
           },
           () => {
@@ -420,14 +424,14 @@ export function LernblockTisch() {
 
   const blockBeenden = useCallback(() => {
     if (!block) return;
-    const min = gelernt(block, Date.now());
+    const min = gelernt(block, appJetzt());
     if (min < 1) {
       // Unter einer Minute: keine Rückfrage, keine Zählung, keine Spur
       blockMerken({ ...block, laeuftSeit: null, pausiertSeit: null, pauseMs: 0 });
       schliessen();
       lernblockBeendenAction(block.id).then(
         (r) => {
-          if (r.ok) blockMerken(r.block);
+          if (r.ok) blockVomServer(r);
           void kombi.neuLaden();
         },
         () => kombi.fehlerToast("Nicht gespeichert", () => void lernblockBeendenAction(block.id), "Erneut"),
@@ -444,7 +448,7 @@ export function LernblockTisch() {
 
   const uhrTippen = useCallback(() => {
     if (!block) return;
-    const jetztMs = Date.now();
+    const jetztMs = appJetzt();
     const was = zustand(block) === "laeuft" ? "pause" : zustand(block) === "pausiert" ? "weiter" : null;
     if (!was) return;
     const vorher = block;
@@ -452,7 +456,7 @@ export function LernblockTisch() {
     const senden = () =>
       lernblockUhrAction(vorher.id, was).then(
         (r) => {
-          if (r.ok) blockMerken(r.block);
+          if (r.ok) blockVomServer(r);
         },
         () => {
           kombi.fehlerToast("Nicht gespeichert", () => void senden(), "Erneut");

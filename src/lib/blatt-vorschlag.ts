@@ -102,6 +102,8 @@ export type BlattVorschlagErgebnis =
 export async function blattVorschlagen(
   userId: string,
   eingabe: BlattVorschlagEingabe,
+  /** Die App-Uhr des Aufrufers, für `filed_at`, wenn Jev gleich einordnet */
+  now: Date = new Date(),
 ): Promise<BlattVorschlagErgebnis> {
   const transcripts: { pageId: string; text: string }[] = [];
   const verworfen: Verworfen[] = [];
@@ -194,7 +196,7 @@ export async function blattVorschlagen(
   // Scheitert das Einordnen — kein Schlüssel, Jev nicht erreichbar, nichts
   // lesbar —, bleibt der Vorschlag im Korb. Ein Fehler hier darf den eben
   // angelegten Vorschlag nicht mitreißen.
-  const eingeordnet = await autoFile(userId, id).catch(
+  const eingeordnet = await autoFile(userId, id, now).catch(
     (error): AutoFileResult => {
       console.error("Einordnen durch Jev fehlgeschlagen", error);
       return { ok: false, grund: "Jev war nicht erreichbar." };

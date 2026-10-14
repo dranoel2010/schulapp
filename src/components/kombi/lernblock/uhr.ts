@@ -13,6 +13,11 @@ import type { BlockDaten } from "@/lib/kombi/lernblock-daten";
  * Klausurseite und Tisch lesen denselben Block aus einem kleinen Speicher,
  * damit „Starten“, „Weiter“, die Restzeit und „Erledigt“ überall gleich
  * stehen — auch zwischen Action und Antwort des Servers (optimistisch).
+ *
+ * Gezählt wird mit der App-Uhr (`appJetzt()`), nicht mit der Uhr des Geräts
+ * allein: der Server schreibt `laeuft_seit` mit `jetzt()`, mit Testuhr also
+ * mit der Testuhr. Den Versatz bringen die Tagesdaten und jede Antwort der
+ * Lernblock-Actions mit (`uhrVersatz()` in @/lib/tag, ohne Testuhr 0).
  */
 
 export type Zustand = "ruhe" | "laeuft" | "pausiert" | "erledigt";
@@ -88,8 +93,30 @@ export function blockMerken(b: BlockDaten): void {
   melden();
 }
 
+/** Ein Stand vom Server, mit dem Versatz seiner Uhr. */
+export function blockVomServer(r: { block: BlockDaten; uhrVersatz: number }): void {
+  appUhrStellen(r.uhrVersatz);
+  blockMerken(r.block);
+}
+
 export function blockLesen(id: string): BlockDaten | undefined {
   return bloecke.get(id);
+}
+
+// ── App-Uhr: Uhr des Geräts plus Versatz zur Uhr des Servers ───────────────
+
+let versatz = 0;
+
+/** Versatz der App-Uhr zur Uhr des Geräts setzen (ms, vom Server). */
+export function appUhrStellen(ms: number): void {
+  if (!Number.isFinite(ms) || ms === versatz) return;
+  versatz = ms;
+  melden();
+}
+
+/** „Jetzt“ der App in ms: mit Testuhr die Testuhr, sonst die Uhr des Geräts. */
+export function appJetzt(): number {
+  return Date.now() + versatz;
 }
 
 function abonnieren(h: () => void) {
@@ -120,13 +147,13 @@ export function useBlock(vomServer: BlockDaten | null): BlockDaten | null {
  * Leerlauf).
  */
 export function useSekunde(aktiv: boolean): number {
-  const [jetzt, setJetzt] = useState(() => Date.now());
+  const [jetzt, setJetzt] = useState(appJetzt);
   useEffect(() => {
     if (!aktiv) return;
     let raf = 0;
     let letzte = -1;
     const schritt = () => {
-      const t = Date.now();
+      const t = appJetzt();
       const s = Math.floor(t / 1000);
       if (s !== letzte) {
         letzte = s;

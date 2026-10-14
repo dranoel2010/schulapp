@@ -5,7 +5,7 @@ import { Startseite } from "@/components/kombi/home/startseite";
 import { vorabBauen } from "@/lib/arbeitsblatt/bauen";
 import { requireUser } from "@/lib/auth";
 import { ladeTag } from "@/lib/kombi/tag-daten";
-import { jetzt } from "@/lib/tag";
+import { jetzt, uhrVersatz } from "@/lib/tag";
 
 /**
  * Die Startseite (Modell 23): Datumszeile, Überschrift und die Ansicht der
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 export default async function HomePage() {
   const user = await requireUser();
   const now = await jetzt();
-  const daten = await ladeTag(user.id, now);
+  const daten = await ladeTag(user.id, now, await uhrVersatz());
   // Arbeitsblätter für heute und morgen vorab bauen (Plan H)
   after(() => vorabBauen(user.id, now));
   return <Startseite daten={daten} vomServer />;

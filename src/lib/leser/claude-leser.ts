@@ -56,6 +56,7 @@ import {
   letzterLauf,
   vorschlagStand,
 } from "./laeufe";
+import { leserJetzt } from "./uhr";
 
 /**
  * Der Abschreiber: die App ruft Opus selbst, für jede Seite, die Docling nicht
@@ -384,7 +385,7 @@ async function durchDieTuer(
   | { art: "fehler"; grund: string }
 > {
   try {
-    return { art: "ok", tuer: await blattVorschlagen(userId, eingabe) };
+    return { art: "ok", tuer: await blattVorschlagen(userId, eingabe, leserJetzt(userId)) };
   } catch (error) {
     return { art: "fehler", grund: `Der Vorschlag ließ sich nicht speichern: ${ersteZeile(meldung(error))}` };
   }

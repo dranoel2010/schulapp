@@ -171,7 +171,7 @@ describe("Lernblock gegen die Datenbank", () => {
     const zurueck = await frage("zurückgezogen?", quadrat, null);
     await testDb.update(recallItems).set({ retiredAt: plus(0) }).where(eq(recallItems.id, zurueck));
     const versuch = (itemId: string, correct: boolean, ms: number, answeredOn = TAG) =>
-      testDb.insert(recallAttempts).values({ userId: nutzer, itemId, answeredOn, gapDays: 0, answerText: "x", correct, createdAt: plus(ms) });
+      testDb.insert(recallAttempts).values({ userId: nutzer, itemId, answeredOn, gapDays: 0, answerText: "x", correct, answeredAt: plus(ms), createdAt: plus(ms) });
 
     assert.deepEqual(await ersteVersucheImBlock(nutzer, block.id, TAG), {});
     await versuch(a, false, 1 * MIN);
@@ -180,7 +180,7 @@ describe("Lernblock gegen die Datenbank", () => {
     await versuch(fremd, true, 4 * MIN);
     await versuch(zurueck, true, 5 * MIN);
     // gestern zählt nicht
-    await testDb.insert(recallAttempts).values({ userId: nutzer, itemId: b, answeredOn: "2026-10-11", gapDays: 0, answerText: "x", correct: false, createdAt: new Date("2026-10-11T15:00:00.000Z") });
+    await testDb.insert(recallAttempts).values({ userId: nutzer, itemId: b, answeredOn: "2026-10-11", gapDays: 0, answerText: "x", correct: false, answeredAt: new Date("2026-10-11T15:00:00.000Z"), createdAt: new Date("2026-10-11T15:00:00.000Z") });
 
     assert.deepEqual(await ersteVersucheImBlock(nutzer, block.id, TAG), { [a]: false, [b]: true });
   });
