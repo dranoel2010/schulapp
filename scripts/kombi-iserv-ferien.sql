@@ -50,7 +50,7 @@
 -- fällt dort weg, ebenso eine IServ-Zeile, die eine Hand-Zeile abdeckt
 -- (`fuerKalender()` in src/lib/free-days.ts). Nur was sich an Werktagen
 -- teilweise überschneidet, steht zweimal da — der Löschbefehl dafür steht in
--- EINBAU Schritt 7 (die Ferienseite gibt es nicht mehr). Nach dem ersten
+-- EINBAU Schritt 8 (die Ferienseite gibt es nicht mehr). Nach dem ersten
 -- Abruf zeigt dieselbe Abfrage mit `AND quelle IS NULL` die Hand-Zeilen; die
 -- mit IServ-Ferien überlappen, zählt:
 --

@@ -1469,7 +1469,7 @@ die Leser-Dateien, in einer Transaktion und mit Abbruch beim ersten Fehler:
 sudo sh -c 'cd /volume1/docker/schulapp && /usr/local/bin/docker compose exec -T db sh -c "exec psql -X -v ON_ERROR_STOP=1 --single-transaction -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -f -" < repo/scripts/kombi-tagesprotokoll.sql'
 ```
 
-`nas.sh hoch` hält an, wenn eine Pflichtspalte der Dateien 1, 2, 4, 5 oder 7
+`nas.sh hoch` hält an, wenn eine Pflichtspalte der Dateien 1, 2, 4, 5, 7 oder 8
 fehlt, und eigens, wenn `leser_laeufe_art_check` die Art `'arbeitsblatt'`
 nicht kennt (Datei 6). Die Indizes aus Datei 3 prüft es nicht.
 
@@ -2167,7 +2167,7 @@ abdeckt. Samstag und Sonntag am Rand zählen dabei nicht mit: Von Hand Mo
 26.10.–So 8.11. und aus IServ Sa 24.10.–Sa 7.11. sind dieselben Ferien, in
 Google steht nur „Herbstferien“ aus IServ. Was sich an Werktagen nur
 teilweise überschneidet, bleibt doppelt — sonst fehlten Tage; weil es die
-Ferienseite nicht mehr gibt, nennt EINBAU Schritt 7 den Befehl, solche
+Ferienseite nicht mehr gibt, nennt EINBAU Schritt 8 den Befehl, solche
 Hand-Zeilen zu löschen. Eine Klassenfahrt bleibt immer. Gezählt wird das mit
 den Zeilen im Kopf von `scripts/kombi-iserv-ferien.sql`.
 

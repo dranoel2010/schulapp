@@ -73,7 +73,7 @@ Ablauf im Ganzen:
 
 1. `modell-23` in `main` mischen und pushen. `nas.sh hoch` holt nur `main`.
 2. Auf dem NAS das Repo aktualisieren, damit die SQL-Dateien unter `repo/scripts/` liegen.
-3. Sichern. Dann die von Hand eingetragenen Ferien zählen, die noch kommen (seit dem 4.10. gab es die Ferienseite, für die Herbstferien steht also wahrscheinlich schon eine Zeile da). Das geht nur **vor** `kombi-iserv-ferien.sql`, danach heißen diese Zeilen `quelle IS NULL`:
+3. Sichern. Dann die von Hand eingetragenen Ferien zählen, die noch kommen (seit dem 4.10. gab es die Ferienseite, für die Herbstferien steht also wahrscheinlich schon eine Zeile da). Vor dem Einspielen sind alle Zeilen von Hand eingetragen. Nach dem ersten Abruf findet man sie mit `AND quelle IS NULL`:
    ```sql
    SELECT kind, title, starts_on, ends_on FROM free_periods
     WHERE kind IN ('ferien', 'frei') AND ends_on >= current_date ORDER BY starts_on;

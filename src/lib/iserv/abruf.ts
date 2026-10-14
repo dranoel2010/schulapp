@@ -1,3 +1,4 @@
+import { appTag } from "@/lib/tag";
 import { errorText } from "@/lib/calendar/error-text";
 import { getConnection } from "@/lib/calendar/store";
 import { addDays, berlinDay, formatGerman, timeInBerlin } from "@/lib/dates";
@@ -104,8 +105,9 @@ export type AbrufDeps = {
   /**
    * Nach geänderten freien Tagen: Lernblöcke und Abruf-Termine von ihnen
    * wegräumen (@/lib/frei-nachlauf). Fehlt es, bleibt es beim Schreiben.
+   * `jetzt` ist die Uhr des Laufs, daraus kommt der App-Tag.
    */
-  nachFerien?(userId: string): Promise<void>;
+  nachFerien?(userId: string, jetzt: Date): Promise<void>;
   now?: () => number;
 };
 
@@ -169,8 +171,8 @@ function echteDeps(config: IservConfig): AbrufDeps {
     freieZeiten: listAllFreePeriods,
     speicher: sitzungsSpeicher(),
     push: sendToUser,
-    nachFerien: async (userId) => {
-      await freieTageNachgezogen(userId);
+    nachFerien: async (userId, jetzt) => {
+      await freieTageNachgezogen(userId, appTag(jetzt));
     },
   };
 }
@@ -454,7 +456,7 @@ async function abrufen(
       console.info("IServ: freie Tage aus IServ geändert");
       if (deps.nachFerien) {
         try {
-          await deps.nachFerien(userId);
+          await deps.nachFerien(userId, jetzt);
         } catch (problem) {
           console.error("IServ: Pläne nach geänderten freien Tagen nicht nachgezogen", errorText(problem));
         }
