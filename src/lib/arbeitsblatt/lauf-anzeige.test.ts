@@ -15,9 +15,9 @@ const LAUF = {
 
 describe("Lauf-Anzeige kennt die Art „arbeitsblatt“ (Plan 3.6)", () => {
   it("ein gebautes Blatt heißt „Arbeitsblatt gebaut“", () => {
-    assert.match(laufAnzeige({ ...LAUF, ergebnis: "vorschlag" }), /: Arbeitsblatt gebaut — 6 Aufgaben · /);
+    assert.match(laufAnzeige({ ...LAUF, ergebnis: "vorschlag" }), /: Arbeitsblatt gebaut: 6 Aufgaben · /);
   });
   it("zu wenig Aufgaben heißt „kein Arbeitsblatt“", () => {
-    assert.match(laufAnzeige({ ...LAUF, ergebnis: "kein-vorschlag", grund: "3 quellgebundene Aufgaben" }), /: kein Arbeitsblatt — 3 quellgebundene/);
+    assert.match(laufAnzeige({ ...LAUF, ergebnis: "kein-vorschlag", grund: "3 quellgebundene Aufgaben" }), /: kein Arbeitsblatt: 3 quellgebundene/);
   });
 });

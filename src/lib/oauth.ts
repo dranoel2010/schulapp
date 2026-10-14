@@ -467,7 +467,7 @@ export function checkRegistration(
         ok: false,
         error: "invalid_redirect_uri",
         description:
-          "Eine Rückadresse muss https sein — oder http auf dem eigenen Rechner.",
+          "Eine Rückadresse muss https sein, oder http auf dem eigenen Rechner.",
       };
     }
 

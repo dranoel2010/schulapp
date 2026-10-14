@@ -65,7 +65,7 @@ export default async function EingangPage({
               ? `, ${abgewaehlt.length} hast du abgewählt`
               : ""}
             {abgewiesen.length > 0
-              ? `, ${abgewiesen.length} ${abgewiesen.length === 1 ? "hat" : "haben"} die Quellbindung abgewiesen`
+              ? `, ${abgewiesen.length} ${abgewiesen.length === 1 ? "wurde" : "wurden"} abgewiesen, weil das Zitat nicht passt`
               : ""}
             .
           </p>

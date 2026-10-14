@@ -68,8 +68,7 @@ export default async function NewGradePage({
       <header className="space-y-1">
         <h2 className="p-title">Neue Note</h2>
         <p className="text-[15px] text-ink-2">
-          Eingetragen ist sie für heute — das Datum kannst du ändern, wenn du
-          sie nachträgst.
+          Eingetragen für heute. Das Datum lässt sich ändern.
         </p>
       </header>
 

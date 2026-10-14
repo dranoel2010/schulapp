@@ -45,7 +45,7 @@ export default async function BausteinePage({ searchParams }: PageProps<"/abruf/
         titel={gefiltert ? `Bausteine ${gefiltert.name}` : "Bausteine"}
         sub={
           aktive.length === 0
-            ? "Noch keine. Ein Baustein ist eine Frage, ihre Musterlösung und ein Satz dazu, womit man sie verwechselt — alle drei aus einer Seite, die schon abgeschrieben ist."
+            ? "Noch keine. Ein Baustein ist eine Frage mit Musterlösung und dem, womit man sie verwechselt."
             : `${aktive.length} ${aktive.length === 1 ? "Baustein" : "Bausteine"} im Bestand.`
         }
       />
@@ -54,7 +54,7 @@ export default async function BausteinePage({ searchParams }: PageProps<"/abruf/
         const still = b.retiredAt !== null;
         const stand =
           b.role === "messung"
-            ? "Messvorrat — wird nie geübt"
+            ? "nur zum Prüfen"
             : still
               ? "zurückgezogen"
               : `${b.offeneTermine} ${b.offeneTermine === 1 ? "Termin" : "Termine"} offen`;

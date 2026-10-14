@@ -71,7 +71,7 @@ describe("pruefe", () => {
       const p = lauf("oeffentlich", alt, ok([]));
       assert.equal(p.entscheidung, "fehler", `Mal ${mal}`);
       assert.equal(p.neu, null);
-      assert.match(p.satz ?? "", /leer — alter Stand bleibt/);
+      assert.match(p.satz ?? "", /leer\. Der alte Stand bleibt/);
       alt = p.neu ?? alt;
     }
   });
@@ -83,7 +83,7 @@ describe("pruefe", () => {
     assert.equal(eins.entscheidung, "behalten");
     assert.equal(eins.neu?.items.length, 12, "der alte Stand bleibt");
     assert.equal(eins.neu?.ausstehend?.anzahl, 1);
-    assert.match(eins.warnung ?? "", /0 statt 12 Termine — alter Stand bleibt, bis es 3-mal so kommt \(1 von 3\)/);
+    assert.match(eins.warnung ?? "", /0 statt 12 Termine\. Der alte Stand bleibt, bis es 3-mal so kommt \(1 von 3\)/);
     alt = eins.neu!;
 
     const zwei = lauf("klasse", alt, ok([]), new Date(JETZT.getTime() + 3 * 3_600_000));
@@ -96,7 +96,7 @@ describe("pruefe", () => {
     assert.equal(drei.entscheidung, "uebernehmen");
     assert.equal(drei.neu?.items.length, 0);
     assert.equal(drei.neu?.ausstehend, null);
-    assert.match(drei.warnung ?? "", /nach 3 gleichen Antworten übernommen — jetzt 0 statt 12/);
+    assert.match(drei.warnung ?? "", /nach 3 gleichen Antworten übernommen, jetzt 0 statt 12/);
   });
 
   it("fängt bei einem anderen Fingerprint von vorn an", () => {

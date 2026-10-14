@@ -450,7 +450,7 @@ function einordnenOhneKosten(
   if (fehler instanceof AuthenticationError || fehler instanceof PermissionDeniedError) {
     return {
       art: "pause",
-      grund: `Der API-Schlüssel wurde abgewiesen (${fehler.status}) — fehlt, falsch oder ohne Recht auf dieses Modell.`,
+      grund: `Der API-Schlüssel wurde abgewiesen (${fehler.status}): fehlt, falsch oder ohne Recht auf dieses Modell.`,
     };
   }
   if (fehler instanceof RateLimitError) {
@@ -562,7 +562,7 @@ export function antwortEinordnen<T>(
       if (!gewechselt && typeof empfohlen === "string" && empfohlen.trim() !== "") {
         return {
           art: "spaeter",
-          grund: `Abgelehnt (${kategorie}); der Rückfall auf ${empfohlen.trim().slice(0, 60)} war gerade ausgelastet — später noch einmal.`,
+          grund: `Abgelehnt (${kategorie}); der Rückfall auf ${empfohlen.trim().slice(0, 60)} war gerade ausgelastet. Später noch einmal.`,
         };
       }
       return {

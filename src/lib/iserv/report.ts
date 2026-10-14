@@ -38,7 +38,7 @@ export const BLOCK_TEXT: Record<BlockGrund, string> = {
   abgelehnt:
     "IServ hat die Anmeldung abgelehnt (Benutzername oder Passwort falsch?). Die App versucht es nicht noch einmal, damit dein Konto nicht gesperrt wird. Passwort auf dem NAS neu eintragen (sudo bash /volume1/docker/schulapp/repo/scripts/iserv-einrichten.sh --neues-passwort), dann hier „Erneut versuchen“.",
   "zweiter-faktor":
-    "IServ verlangt einen zweiten Faktor — den kann die App nicht. Entweder die Zwei-Faktor-Anmeldung für dieses Konto abschalten oder IServ in der App wieder ausschalten (ISERV_* aus der .env nehmen).",
+    "IServ verlangt einen zweiten Faktor, den kann die App nicht. Entweder die Zwei-Faktor-Anmeldung für dieses Konto abschalten oder IServ in der App wieder ausschalten (ISERV_* aus der .env nehmen).",
   gesperrt:
     "IServ meldet das Konto als gesperrt oder zu viele Fehlversuche. Abwarten bzw. von der Schule entsperren lassen, dann „Erneut versuchen“.",
   captcha:

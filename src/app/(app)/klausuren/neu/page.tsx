@@ -60,7 +60,7 @@ export default async function NewExamPage() {
       <header className="space-y-1">
         <h2 className="p-title">Neue Klausur</h2>
         <p className="text-[15px] text-ink-2">
-          Termin und Themen eintragen — den Lernplan baut die App daraus selbst.
+          Termin und Themen eintragen. Den Lernplan baut die App daraus.
         </p>
       </header>
 

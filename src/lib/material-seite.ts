@@ -87,7 +87,7 @@ export async function readPage(
   }
 
   if (image.size > MAX_PAGE_BYTES) {
-    return { ok: false, message: "Das Bild ist zu groß — höchstens 3 MB je Seite." };
+    return { ok: false, message: "Das Bild ist zu groß. Höchstens 3 MB je Seite." };
   }
 
   // Lesefassung und Vorschau haben ihre eigene, viel engere Grenze: alle drei
@@ -98,14 +98,14 @@ export async function readPage(
   if (reading.size > MAX_READING_BYTES) {
     return {
       ok: false,
-      message: "Die Lesefassung ist zu groß — höchstens 400 KB.",
+      message: "Die Lesefassung ist zu groß. Höchstens 400 KB.",
     };
   }
 
   if (thumb.size > MAX_THUMB_BYTES) {
     return {
       ok: false,
-      message: "Die Vorschau ist zu groß — höchstens 400 KB.",
+      message: "Die Vorschau ist zu groß. Höchstens 400 KB.",
     };
   }
 

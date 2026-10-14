@@ -99,8 +99,7 @@ export default async function NewHomeworkPage() {
       <header className="space-y-1">
         <h2 className="p-title">Neue Aufgabe</h2>
         <p className="text-[15px] text-ink-2">
-          Fällig ist sie vorgeschlagen zur nächsten Stunde in dem Fach — ändern
-          kannst du das jederzeit.
+          Fällig zur nächsten Stunde im Fach. Das lässt sich ändern.
         </p>
       </header>
 

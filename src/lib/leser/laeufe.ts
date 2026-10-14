@@ -392,7 +392,7 @@ export async function laufAbschliessen(id: string, abschluss: LaufAbschluss): Pr
         ...werte,
         ergebnis: "spaeter",
         abbruch: null,
-        grund: vermerkText(`Für diesen Stand stand schon ein Ergebnis da — dieser Lauf war doppelt (${abschluss.ergebnis}). ${abschluss.grund}`),
+        grund: vermerkText(`Für diesen Stand stand schon ein Ergebnis da, dieser Lauf war doppelt (${abschluss.ergebnis}). ${abschluss.grund}`),
       })
       .where(nurLaufend);
     return false;
@@ -401,7 +401,7 @@ export async function laufAbschliessen(id: string, abschluss: LaufAbschluss): Pr
 
 /** Der Grund an der Spur eines verworfenen Vorschlags — so steht er am Blatt („Zuletzt …“). */
 export const VERWORFEN_GRUND =
-  "Ein Vorschlag von außen (Chat oder Postbote) wurde verworfen — dieser Stand gilt damit als gelesen; noch einmal lesen: „Abschreiben lassen“.";
+  "Ein Vorschlag von außen (Chat oder Postbote) wurde verworfen. Dieser Stand gilt damit als gelesen. Noch einmal lesen: „Abschreiben lassen“.";
 
 /**
  * Vermerkt, dass ein Mensch einen Vorschlag eines Agenten verworfen hat, der

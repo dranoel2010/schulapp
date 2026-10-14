@@ -301,8 +301,8 @@ export function SubjectDangerZone({
       <h3 className="p-lab">{archived ? "Wieder mitmachen" : "Nicht mehr im Alltag"}</h3>
       <p className="p-sub">
         {archived
-          ? `${subjectName} ist archiviert: es zählt nicht mehr im Schnitt und wird nirgends mehr vorgeschlagen. Alles, was daran hängt — Noten, Termine, Stunden und Blätter —, ist weiter da und sichtbar.`
-          : `Archivieren blendet ${subjectName} aus dem Alltag aus — Noten, Termine und Blätter bleiben erhalten. Das ist der richtige Weg für ein abgewähltes Fach.`}
+          ? `${subjectName} ist archiviert und zählt nicht im Schnitt. Noten, Termine, Stunden und Blätter sind weiter da.`
+          : `Archivieren blendet ${subjectName} aus. Noten, Termine und Blätter bleiben erhalten.`}
       </p>
       <form
         action={async () => {
@@ -320,13 +320,9 @@ export function SubjectDangerZone({
               sein: mit den Klausuren gehen auch ihre Abruf-Bausteine, mit den
               Blättern ihre Aufnahmen (cascade über das Fach). */}
           <p className="p-sub" style={{ color: "var(--ink)" }}>
-            {subjectName} wirklich löschen? Damit ist das Fach weg — und mit ihm
-            sofort alle Klausuren samt Lernplan, alle Stundenplan-Einträge, alle
-            Hausaufgaben, alle Noten und alle Blätter, die daran hängen. Mit den
-            Klausuren gehen auch die Bausteine des Abrufs, die zu ihnen gebaut
-            wurden, samt ihren Terminen. Mit den Blättern gehen auch ihre
-            Aufnahmen, und ein zweites Mal abfotografieren lässt sich eine Tafel
-            von letzter Woche nicht. Rückgängig geht das nicht. Wer nur ein
+            {subjectName} wirklich löschen? Mit dem Fach gehen sofort alle
+            Klausuren samt Lernplan und Fragen, Stunden, Hausaufgaben, Noten und
+            Blätter samt Fotos. Rückgängig geht das nicht. Wer nur ein
             abgewähltes Fach loswerden will, archiviert es: dann bleiben die
             Noten für den Schnitt vergangener Halbjahre da.
           </p>

@@ -172,7 +172,7 @@ export function GradeForm({
       <Field
         id="kind"
         label="Art"
-        hint="Wie stark schriftlich und mündlich zueinander zählen, steht am Fach — nicht an der einzelnen Note."
+        hint="Wie stark schriftlich und mündlich zählen, steht am Fach."
         error={state.errors?.kind}
       >
         {(control) => (
@@ -236,7 +236,7 @@ export function GradeForm({
         id="title"
         label="Wofür"
         optional
-        hint="Das Fach steht schon daneben — hier steht der Anlass."
+        hint="Der Anlass, etwa „Vokabeltest“."
         error={state.errors?.title}
       >
         {(control) => (

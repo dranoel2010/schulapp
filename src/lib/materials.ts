@@ -209,7 +209,7 @@ export const transcriptSchema = z
   .trim()
   .max(
     MATERIAL_TRANSCRIPT_MAX,
-    "Die Abschrift einer Seite ist zu lang — höchstens 8000 Zeichen.",
+    "Die Abschrift einer Seite ist zu lang. Höchstens 8000 Zeichen.",
   );
 
 export const materialInputSchema = z.object({
@@ -220,7 +220,7 @@ export const materialInputSchema = z.object({
     .min(1, "Wie soll das Blatt heißen?")
     .max(
       MATERIAL_TITLE_MAX,
-      "Der Titel ist zu lang — höchstens 80 Zeichen.",
+      "Der Titel ist zu lang. Höchstens 80 Zeichen.",
     ),
   capturedOn: z
     .string("Von wann ist das Blatt?")
@@ -234,7 +234,7 @@ export const materialInputSchema = z.object({
     ),
   note: optionalText(
     MATERIAL_NOTE_MAX,
-    "Die Notiz ist zu lang — höchstens 500 Zeichen.",
+    "Die Notiz ist zu lang. Höchstens 500 Zeichen.",
   ),
 });
 
@@ -1191,7 +1191,7 @@ export async function setMaterialTranscripts(
     if (!parsed.success) {
       throw new Error(
         parsed.error.issues[0]?.message ??
-          "Die Abschrift einer Seite ist zu lang — höchstens 8000 Zeichen.",
+          "Die Abschrift einer Seite ist zu lang. Höchstens 8000 Zeichen.",
       );
     }
 
@@ -2897,15 +2897,15 @@ function pageValues(page: NewPage): {
   thumb: Uint8Array<ArrayBuffer>;
 } {
   if (page.image.byteLength > MAX_PAGE_BYTES) {
-    throw new Error("Das Bild ist zu groß — höchstens 3 MB je Seite.");
+    throw new Error("Das Bild ist zu groß. Höchstens 3 MB je Seite.");
   }
 
   if (page.reading.byteLength > MAX_READING_BYTES) {
-    throw new Error("Die Lesefassung ist zu groß — höchstens 400 KB je Seite.");
+    throw new Error("Die Lesefassung ist zu groß. Höchstens 400 KB je Seite.");
   }
 
   if (page.thumb.byteLength > MAX_THUMB_BYTES) {
-    throw new Error("Die Vorschau ist zu groß — höchstens 400 KB je Seite.");
+    throw new Error("Die Vorschau ist zu groß. Höchstens 400 KB je Seite.");
   }
 
   if (

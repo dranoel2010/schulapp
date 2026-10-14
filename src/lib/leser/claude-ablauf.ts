@@ -444,7 +444,7 @@ function einordnenPlan(stand: BlattStand, laufArt: AbschreibModus): Plan {
   // Leser eines Altblattes im Korb nur von Hand (siehe `auswaehlen()`).
   const seiten = nummeriert(stand, laufArt === "von-hand" ? fuerClaude : claudeZugeteilt);
   if (seiten.length === 0) {
-    return { art: "kein-lauf", grund: "Keine Seite für Claude — jede ist gelesen oder gehört Docling." };
+    return { art: "kein-lauf", grund: "Keine Seite für Claude. Jede ist gelesen oder gehört Docling." };
   }
 
   return {
@@ -516,14 +516,14 @@ export function planen(
   if (stand.vorschlaege > 0) {
     return {
       art: "kein-lauf",
-      grund: "Am Blatt liegt schon ein Vorschlag — erst über den im Eingangskorb entscheiden.",
+      grund: "Am Blatt liegt schon ein Vorschlag. Erst über den im Eingangskorb entscheiden.",
     };
   }
   if (!stand.eingeordnet) return einordnenPlan(stand, "von-hand");
 
   const seiten = nummeriert(stand, fuerClaude);
   if (seiten.length === 0) {
-    return { art: "kein-lauf", grund: "Keine Seite für Claude — jede ist gelesen oder gehört Docling." };
+    return { art: "kein-lauf", grund: "Keine Seite für Claude. Jede ist gelesen oder gehört Docling." };
   }
 
   const genannt = new Set(stand.nachgereicht);
@@ -644,7 +644,7 @@ export function tuerErgebnis(
       const e = tuer.eingeordnet;
 
       if (e.ok && e.art === "jev") {
-        teile.push(`eingeordnet: ${e.subjectName}${e.topics.length > 0 ? ` — ${e.topics.join(", ")}` : ""}`);
+        teile.push(`eingeordnet: ${e.subjectName}${e.topics.length > 0 ? `: ${e.topics.join(", ")}` : ""}`);
       } else if (e.ok) {
         teile.push(`Abschrift von ${seitenZahl(e.seiten)} übernommen`);
       } else {
@@ -658,7 +658,7 @@ export function tuerErgebnis(
     case "leer":
       return {
         ergebnis: "kein-vorschlag",
-        grund: "Nur Abschriften zu Seiten, die schon gelesen sind oder die die App selbst liest — nichts angelegt.",
+        grund: "Nur Abschriften zu Seiten, die schon gelesen sind oder die die App selbst liest. Nichts angelegt.",
       };
     case "abgewiesen":
       switch (tuer.grund) {
@@ -667,14 +667,14 @@ export function tuerErgebnis(
         case "fremde-seiten":
           return {
             ergebnis: "spaeter",
-            grund: "Die Tür kannte eine Seite nicht mehr — eben gelöscht? Nicht gemerkt.",
+            grund: "Eine Seite gibt es nicht mehr. Nicht gemerkt.",
           };
         case "ungueltig":
           return { ergebnis: "nichts", grund: `Die Tür hat den Vorschlag abgewiesen: ${tuer.meldungen.join(" ")}` };
         case "nicht-angelegt":
           return {
             ergebnis: "spaeter",
-            grund: "Der Vorschlag ließ sich nicht anlegen — Blatt oder Seite eben gelöscht? Nicht gemerkt.",
+            grund: "Der Vorschlag ließ sich nicht anlegen, Blatt oder Seite fehlt. Nicht gemerkt.",
           };
       }
   }
@@ -788,7 +788,7 @@ export function laufAnzeige(lauf: LaufZeile): string {
         ? " · bezahlt, Betrag unbekannt"
         : "";
 
-  return `Zuletzt ${wann}${wer}: ${was}${grund ? ` — ${grund}` : ""}${kosten}`;
+  return `Zuletzt ${wann}${wer}: ${was}${grund ? `: ${grund}` : ""}${kosten}`;
 }
 
 /**

@@ -176,7 +176,7 @@ export function ItemForm({
                 <mark
                   key={i}
                   className="rounded-sm bg-raise px-0.5 text-ink"
-                  title="Beim Abschreiben unsicher — darauf lässt sich keine Frage bauen"
+                  title="Beim Abschreiben unsicher. Darauf lässt sich keine Frage bauen."
                 >
                   {teil.text}
                 </mark>
@@ -186,9 +186,8 @@ export function ItemForm({
             )}
           </div>
           <p className="text-[13px] text-ink-3">
-            Hervorgehobenes war schon beim Abschreiben unsicher. Ein Zitat aus
-            einer dieser Stellen wird abgewiesen — auch dann, wenn du die
-            Klammern nicht mitkopierst.
+            Hervorgehobenes war beim Abschreiben unsicher. Ein Zitat daraus
+            wird abgewiesen.
           </p>
         </div>
       ) : null}
@@ -196,7 +195,7 @@ export function ItemForm({
       <Field
         id="sourceQuote"
         label="Zitat"
-        hint="Die Stelle wörtlich aus dem Text oben — sie muss Zeichen für Zeichen darin vorkommen."
+        hint="Die Stelle wörtlich aus dem Text oben."
         error={state.errors?.sourceQuote}
       >
         {(control) => (
@@ -213,7 +212,7 @@ export function ItemForm({
       <Field
         id="promptFree"
         label="Frage"
-        hint="Offen gestellt, nicht zum Ankreuzen — so wie sie in der Klausur stünde."
+        hint="Offen gestellt, so wie in der Klausur."
         error={state.errors?.promptFree}
       >
         {(control) => (
@@ -246,7 +245,7 @@ export function ItemForm({
       <Field
         id="misconception"
         label="Womit man das verwechselt"
-        hint="Ein bis zwei Sätze. Ohne sie wird der Baustein nicht ausgeliefert — dieser Teil ist der Unterschied zwischen halber und ganzer Wirkung."
+        hint="Ein bis zwei Sätze. Ohne sie wird der Baustein nicht gezeigt."
         error={state.errors?.misconception}
       >
         {(control) => (
@@ -263,7 +262,7 @@ export function ItemForm({
       <Field
         id="materialKind"
         label="Art"
-        hint="Entscheidet später, was miteinander gemischt werden darf — Begriffe werden vom Mischen schlechter, Anschauungen besser."
+        hint="Entscheidet, was beim Üben gemischt wird."
         error={state.errors?.materialKind}
       >
         {(control) => (
@@ -285,7 +284,7 @@ export function ItemForm({
       <Field
         id="role"
         label="Wofür"
-        hint="Der Messvorrat wird NIE geübt. Er ist die einzige Möglichkeit, später ehrlich zu messen, ob das Üben etwas gebracht hat — an Fragen, die der Schüler nie gesehen hat. Nachträglich lässt sich das nicht herstellen."
+        hint="Fragen nur zum Prüfen werden nie geübt. Nur so lässt sich später messen, ob das Üben etwas gebracht hat."
         error={state.errors?.role}
       >
         {(control) => (
@@ -297,7 +296,7 @@ export function ItemForm({
           >
             <option value="uebung">Zum Üben</option>
             <option value="messung">
-              Messvorrat — nie üben, nur zum Prüfen
+              Nur zum Prüfen, nie üben
             </option>
           </Select>
         )}

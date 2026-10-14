@@ -297,7 +297,7 @@ export function ExamForm({
   const topicHint =
     topics.length === 0
       ? "Aus jedem Thema werden zwei Lernblöcke: einmal durcharbeiten, einmal wiederholen. Vier bis zehn Themen funktionieren gut."
-      : `${topics.length} ${topics.length === 1 ? "Thema" : "Themen"} — daraus baut die App den Lernplan. Vier bis zehn funktionieren gut.`;
+      : `${topics.length} ${topics.length === 1 ? "Thema" : "Themen"}. Vier bis zehn funktionieren gut.`;
 
   return (
     <form action={formAction} className="kf-form" noValidate>
@@ -489,7 +489,7 @@ export function ExamForm({
           {start ? (
             <p className="text-[15px] text-ink-2">
               {start.iso < today
-                ? `Rechnerisch ginge es am ${start.label} los — das ist vorbei, geplant wird ab heute.`
+                ? `Rechnerisch ginge es am ${start.label} los. Geplant wird ab heute.`
                 : `Die Lernphase beginnt am ${start.label}.`}
             </p>
           ) : null}
@@ -500,7 +500,7 @@ export function ExamForm({
         id="notes"
         label="Notizen"
         optional
-        hint="Erlaubte Hilfsmittel, Raum, Umfang — was sonst noch wichtig ist."
+        hint="Hilfsmittel, Raum, Umfang."
         error={state.errors?.notes}
       >
         {(control) => (
@@ -591,8 +591,7 @@ export function ExamDangerZone({
                 {offeneTermine > 0
                   ? ` mit ${offeneTermine} offenen ${offeneTermine === 1 ? "Termin" : "Terminen"}`
                   : ""}
-                . Was du daran schon geübt hast, bleibt im Protokoll stehen —
-                die Fragen selbst sind weg.
+                . Was du geübt hast, bleibt im Protokoll. Die Fragen sind weg.
               </>
             ) : null}{" "}
             Rückgängig geht das nicht.

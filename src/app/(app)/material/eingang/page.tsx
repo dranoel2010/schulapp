@@ -199,10 +199,8 @@ export default async function InboxPage({
       <header className="space-y-1">
         <h2 className="p-title">Eingangskorb</h2>
         <p className="text-[15px] text-ink-2">
-          Hier liegt, was noch eine Entscheidung braucht: frisch aufgenommene
-          Blätter, die niemand durchgesehen hat, und Vorschläge, über die noch
-          niemand entschieden hat. Ein Vorschlag ändert von sich aus nichts —
-          am Blatt steht erst dann etwas anderes, wenn du ihn übernimmst.
+          Neue Blätter und Vorschläge, die eine Entscheidung brauchen. Ein
+          Vorschlag ändert erst etwas, wenn du ihn übernimmst.
         </p>
 
         {/* Steht an einer Zeile schon „liest die App gerade“, reicht das. */}
@@ -224,7 +222,7 @@ export default async function InboxPage({
           className="space-y-2"
         >
           <p className="text-[15px] text-ink">
-            {`Übernommen: „${confirmed.title}“ steht jetzt so da, wie du es bestätigt hast — durchgesehen und aus dem Korb heraus.`}
+            {`Übernommen: „${confirmed.title}“ ist durchgesehen und aus dem Korb.`}
           </p>
 
           {/* Die Abschrift ist das einzige Übernommene, das vorher nirgends
@@ -237,8 +235,8 @@ export default async function InboxPage({
           {abschrift > 0 ? (
             <p className="text-[15px] text-ink-2">
               {abschrift === 1
-                ? "Die Abschrift einer Seite ist damit ans Blatt geschrieben — sie steht dort unter der Aufnahme, zu der sie gehört."
-                : `Die Abschrift von ${abschrift} Seiten ist damit ans Blatt geschrieben — sie steht dort jeweils unter der Aufnahme, zu der sie gehört.`}
+                ? "Die Abschrift einer Seite steht jetzt am Blatt."
+                : `Die Abschrift von ${abschrift} Seiten steht jetzt am Blatt.`}
             </p>
           ) : null}
 
@@ -250,8 +248,8 @@ export default async function InboxPage({
           {ueberholt > 0 ? (
             <p className="text-[15px] text-ink-2">
               {ueberholt === 1
-                ? "An einer Seite hat inzwischen jemand anders geschrieben, meist die App — sie wurde nicht überschrieben. Am Blatt steht, was wirklich an ihr steht."
-                : `An ${ueberholt} Seiten hat inzwischen jemand anders geschrieben, meist die App — sie wurden nicht überschrieben. Am Blatt steht, was wirklich an ihnen steht.`}
+                ? "Eine Seite wurde inzwischen anders beschrieben, meist von der App. Sie blieb, wie sie war."
+                : `${ueberholt} Seiten wurden inzwischen anders beschrieben, meist von der App. Sie blieben, wie sie waren.`}
             </p>
           ) : null}
 
@@ -261,8 +259,8 @@ export default async function InboxPage({
           {weitere > 0 ? (
             <p className="text-[15px] text-ink-2">
               {weitere === 1
-                ? "Ein weiterer Vorschlag zu diesem Blatt ist damit weggefallen — er galt einem Stand, den es nicht mehr gibt."
-                : `${weitere} weitere Vorschläge zu diesem Blatt sind damit weggefallen — sie galten einem Stand, den es nicht mehr gibt.`}
+                ? "Ein älterer Vorschlag zu diesem Blatt ist damit weggefallen."
+                : `${weitere} ältere Vorschläge zu diesem Blatt sind damit weggefallen.`}
             </p>
           ) : null}
 
@@ -282,8 +280,8 @@ export default async function InboxPage({
           {andereSchreibweise > 0 ? (
             <p className="text-[15px] text-ink-2">
               {andereSchreibweise === 1
-                ? "Ein Thema führt das Fach schon unter einer anderen Schreibweise — die gilt, und so steht es jetzt am Blatt."
-                : `${andereSchreibweise} Themen führt das Fach schon unter anderen Schreibweisen — die gelten, und so stehen sie jetzt am Blatt.`}
+                ? "Ein Thema steht im Fach schon anders geschrieben. So steht es jetzt am Blatt."
+                : `${andereSchreibweise} Themen stehen im Fach schon anders geschrieben. So stehen sie jetzt am Blatt.`}
             </p>
           ) : null}
 
@@ -339,7 +337,7 @@ export default async function InboxPage({
               zum Leeren da, nicht zum Blättern. */}
           {atLimit ? (
             <p className="text-[15px] text-ink-2">
-              {`Hier stehen ${INBOX_LIMIT} Blätter aus dem Korb. Liegen mehr darin, zeigt diese Liste die älteren nicht — arbeite von oben ab, dann rücken sie nach.`}
+              {`Hier stehen ${INBOX_LIMIT} Blätter. Ältere rücken nach, wenn du oben abarbeitest.`}
             </p>
           ) : null}
         </div>
@@ -402,7 +400,7 @@ function InboxRow({
         <p className="text-[15px] text-ink-2">
           {`${stand.maschinellPages} von ${item.pageCount} ${
             item.pageCount === 1 ? "Seite" : "Seiten"
-          } maschinell gelesen (Docling) — von niemandem gegengelesen.`}
+          } maschinell gelesen (Docling), nicht gegengelesen.`}
         </p>
       ) : null}
 
@@ -413,8 +411,7 @@ function InboxRow({
           Falsches behaupten. */}
       {filed ? (
         <p className="text-[15px] text-ink-2">
-          Durchgesehen — im Korb liegt es nur noch, weil ein Vorschlag dazu auf
-          eine Entscheidung wartet.
+          Durchgesehen. Ein Vorschlag dazu wartet noch.
         </p>
       ) : null}
 

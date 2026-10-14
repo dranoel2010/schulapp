@@ -94,7 +94,7 @@ export function TargetSentence({
   if (outcome.status === "sicher") {
     return (
       <>
-        Ein Schnitt von {goal} ist{where} nicht mehr zu verlieren — selbst eine{" "}
+        Ein Schnitt von {goal} ist{where} nicht mehr zu verlieren. Selbst eine{" "}
         {gradeLabel(WORST_GRADE)} {next} ändert daran nichts.
       </>
     );
@@ -103,8 +103,8 @@ export function TargetSentence({
   if (outcome.status === "unmoeglich") {
     return (
       <>
-        Ein Schnitt von {goal} ist{where} mit einer Note nicht mehr zu schaffen
-        — nicht einmal eine {gradeLabel(BEST_GRADE)} {next} reicht dafür.
+        Ein Schnitt von {goal} ist{where} mit einer Note nicht mehr zu schaffen.
+        Nicht einmal eine {gradeLabel(BEST_GRADE)} {next} reicht dafür.
       </>
     );
   }

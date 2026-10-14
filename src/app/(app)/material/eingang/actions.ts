@@ -69,8 +69,7 @@ const SAVE_FAILED = "Das hat nicht geklappt. Versuch es noch einmal.";
  * Vorgang auf dem Bildschirm stehen.
  */
 const GONE =
-  "Diesen Vorschlag gibt es nicht mehr — er ist wohl schon übernommen oder " +
-  "verworfen worden.";
+  "Diesen Vorschlag gibt es nicht mehr.";
 
 /**
  * Die Feldnamen, unter denen an diesen beiden Formularen eine Meldung stehen
@@ -216,8 +215,7 @@ export async function createProposalAction(
       return {
         saves: state.saves,
         message:
-          "Dazu lässt sich kein Vorschlag anlegen — das Blatt oder das " +
-          "vorgeschlagene Fach gibt es nicht mehr.",
+          "Das Blatt oder das Fach gibt es nicht mehr.",
       };
     }
 
@@ -276,8 +274,7 @@ export async function updateProposalAction(
       return {
         saves: state.saves,
         message:
-          "Das ließ sich nicht ändern — den Vorschlag oder das " +
-          "vorgeschlagene Fach gibt es nicht mehr.",
+          "Den Vorschlag oder das Fach gibt es nicht mehr.",
       };
     }
 

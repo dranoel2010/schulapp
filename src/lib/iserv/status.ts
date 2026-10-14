@@ -43,7 +43,7 @@ export async function loadIservStatus(userId: string): Promise<IservStatus> {
 
   const verbindung = await getConnection(userId);
   const ruhtGrund = !verbindung?.refreshTokenEnc
-    ? "IServ ruht, solange der Google Kalender nicht verbunden ist — die Termine hätten kein Ziel."
+    ? "IServ ruht, solange der Google Kalender nicht verbunden ist."
     : verbindung.blockedAt
       ? "IServ ruht, solange die Verbindung zum Google Kalender unterbrochen ist (Karte darüber)."
       : null;

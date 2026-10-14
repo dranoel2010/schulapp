@@ -103,7 +103,7 @@ export async function renameTopicAction(
   const title = text(formData, "title");
 
   if (!title) {
-    return fail("Ohne Titel geht es nicht — tipp erst einen ein.");
+    return fail("Der Titel fehlt.");
   }
 
   const topic = (await topicsOf(user.id, subjectId)).find(
@@ -171,7 +171,7 @@ export async function mergeTopicsAction(
   // ohne die Liste erreichbar ist.
   if (from.mergedInto) {
     return fail(
-      `„${from.title}“ ist selbst eine Schreibweise — trenn sie erst ab.`,
+      `„${from.title}“ ist selbst eine Schreibweise. Trenn sie erst ab.`,
     );
   }
   if (into.mergedInto) {
@@ -267,7 +267,7 @@ export async function createTopicAction(
 
   if (!topic) {
     return fail(
-      `Aus „${title}“ wird kein Thema — darin steckt kein Fachwort. Titel wie „Übungen“ oder „Arbeitsblatt 3“ zeigen auf eine Fundstelle und nicht auf den Stoff; schreib dazu, worum es dabei ging.`,
+      `Aus „${title}“ wird kein Thema, darin steckt kein Fachwort. Schreib dazu, worum es ging.`,
     );
   }
 
@@ -281,7 +281,7 @@ export async function createTopicAction(
   // das Thema, auf das sie zeigt, und nicht das Getippte. Das gehört gesagt.
   return topic.title === title
     ? done(`„${topic.title}“ gibt es in diesem Fach schon.`)
-    : done(`„${title}“ meint „${topic.title}“ — das gibt es schon.`);
+    : done(`„${title}“ meint „${topic.title}“, das gibt es schon.`);
 }
 
 /** „12 Themen“, „1 Thema“ — der Satz soll an beiden Rändern stimmen. */
@@ -296,7 +296,7 @@ function seedSentence({
   umgehaengt,
 }: SeedResult): string {
   if (angelegt === 0 && verknuepft === 0 && umgehaengt === 0) {
-    return "Nichts Neues — jedes Thema deiner Klausuren steht schon im Vokabular.";
+    return "Nichts Neues. Jedes Thema deiner Klausuren ist schon da.";
   }
 
   const parts = [

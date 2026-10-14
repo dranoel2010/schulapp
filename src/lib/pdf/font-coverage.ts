@@ -221,7 +221,7 @@ function readCmap(view: DataView, cmapAt: number): CoverageRange[] {
 
   if (bestAt < 0) {
     throw new Error(
-      "die cmap trägt keine Untertabelle in Format 4 oder 12 — nur damit lässt sich sagen, welche Zeichen die Schrift kann",
+      "die cmap trägt keine Untertabelle in Format 4 oder 12. Nur damit lässt sich sagen, welche Zeichen die Schrift kann",
     );
   }
 

@@ -185,7 +185,7 @@ export async function convertPage(
       throw antwortFehler(
         poll.status,
         poll.status === 404
-          ? "Docling kennt die Aufgabe nicht mehr (404) — vermutlich neu gestartet."
+          ? "Docling kennt die Aufgabe nicht mehr (404), vermutlich neu gestartet."
           : `Docling antwortet beim Nachfragen mit ${poll.status}.`,
       );
     }

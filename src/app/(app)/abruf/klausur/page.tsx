@@ -146,19 +146,18 @@ export default async function KlausurStoffPage({
             <p className="text-[15px] text-ink-2">
               {gewaehlt.themen.length === 0 ? (
                 <>
-                  Die Themen sind der Schlüssel zum Stoff: Sie sagen, welche
-                  Blätter dazugehören. Häng sie unter{" "}
+                  Die Themen sagen, welche Blätter dazugehören. Trag sie unter{" "}
                   <Link
                     href={`/klausuren/${gewaehlt.examId}`}
                     className="kf-inline underline underline-offset-2"
                   >
                     Klausuren
                   </Link>{" "}
-                  an, dann führt der Weg von hier zu den Seiten.
+                  ein.
                 </>
-              ) : (
-                "Daraus entstehen die Fragen — jede mit einem wörtlichen Zitat aus dem Heft."
-              )}
+              ) : gewaehlt.seitenGesamt.length > 0 ? (
+                "Daraus entstehen die Fragen, jede mit einem wörtlichen Zitat aus dem Heft."
+              ) : null}
             </p>
           </CardContent>
         </Card>
@@ -191,14 +190,13 @@ export default async function KlausurStoffPage({
                 </>
               ) : !konfiguriert ? (
                 <p className="text-[15px] text-ink-2">
-                  Auf diesem Server ist kein API-Schlüssel eingerichtet — es
-                  fehlt <code>ANTHROPIC_API_KEY</code>. Fragen lassen sich
-                  deshalb nur von Hand anlegen.
+                  Auf diesem Server fehlt <code>ANTHROPIC_API_KEY</code>.
+                  Fragen gehen deshalb nur von Hand.
                 </p>
               ) : "wieviele" in stand.was ? (
                 <>
                   <p className="text-[15px] text-ink-2">
-                    {`Claude kann aus diesem Stoff ${stand.was.wieviele} ${stand.was.wieviele === 1 ? "Frage" : "Fragen"} bauen, über alle Themen verteilt. Sie landen als ein Vorschlag im Eingang; übernommen wird nur, was du auswählst, und jedes Zitat wird dabei gegen die Abschrift geprüft. Ein Lauf kostet Geld vom API-Schlüssel, und was er gekostet hat, steht danach hier.`}
+                    {`Claude baut aus diesem Stoff ${stand.was.wieviele} ${stand.was.wieviele === 1 ? "Frage" : "Fragen"}. Sie landen als Vorschlag im Eingang. Übernommen wird nur, was du auswählst. Was der Lauf gekostet hat, steht danach hier.`}
                   </p>
                   <form
                     action={fragenBauenLassenAction.bind(null, gewaehlt.examId)}
@@ -235,16 +233,16 @@ export default async function KlausurStoffPage({
                 mit keinem Blatt verbunden
               </p>
               <p className="text-[15px] text-ink-2">
-                {ohneVerknuepfung.map((t) => t.title).join(", ")} — auf der
-                Klausur steht nur der Text, nicht die Vokabel des Fachs. Von
-                dort führt kein Weg zu Blättern. Das lässt sich unter{" "}
+                {ohneVerknuepfung.map((t) => t.title).join(", ")}{" "}
+                {ohneVerknuepfung.length === 1 ? "ist" : "sind"} mit keinem
+                Thema des Fachs verbunden. Unter{" "}
                 <Link
                   href={`/klausuren/${gewaehlt.examId}`}
                   className="kf-inline underline underline-offset-2"
                 >
                   Klausuren
                 </Link>{" "}
-                beheben.
+                lässt sich das beheben.
               </p>
             </CardContent>
           </Card>
@@ -259,10 +257,9 @@ export default async function KlausurStoffPage({
                 abgeschriebenes Blatt
               </p>
               <p className="text-[15px] text-ink-2">
-                {ohneSeiten.map((t) => t.title).join(", ")} — entweder ist noch
-                kein Blatt dazu abfotografiert, oder es ist noch nicht
-                abgeschrieben. Prüf auch, ob das Thema im richtigen Fach hängt;
-                ein Thema im falschen Fach findet seine Blätter nicht.
+                {ohneSeiten.map((t) => t.title).join(", ")}: Kein Blatt dazu
+                fotografiert oder noch nicht abgeschrieben. Oder das Thema hängt
+                im falschen Fach.
               </p>
             </CardContent>
           </Card>
@@ -335,7 +332,7 @@ export default async function KlausurStoffPage({
       {klausuren.length === 0 ? (
         <EmptyState
           title="Keine Klausur eingetragen"
-          description="Der Stoff hängt an den Themen einer Klausur. Trag eine ein, häng die Themen dran, dann steht hier, welche Blätter dazu passen."
+          description="Der Stoff hängt an den Themen einer Klausur. Trag eine mit Themen ein."
           action={
             <ButtonLink href="/klausuren/neu">Klausur eintragen</ButtonLink>
           }
@@ -353,8 +350,7 @@ export default async function KlausurStoffPage({
               <CardContent className="space-y-1">
                 <p className="text-ink">Keine Klausur steht an.</p>
                 <p className="text-[15px] text-ink-2">
-                  Der Stoff der geschriebenen bleibt trotzdem erreichbar — die
-                  Themen sind dieselben, und die Blätter auch.{" "}
+                  Der Stoff vergangener Klausuren bleibt erreichbar.{" "}
                   <Link
                     href="/klausuren/neu"
                     className="kf-inline underline underline-offset-2"

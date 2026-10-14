@@ -86,7 +86,7 @@ export default async function NeuerBausteinPage({
       {blaetter.length === 0 ? (
         <EmptyState
           title="Kein Blatt mit Abschrift"
-          description="Ein Foto allein genügt nicht — eine Frage braucht den Text. Sobald ein Blatt abgeschrieben ist, steht es hier."
+          description="Eine Frage braucht den abgeschriebenen Text. Abgeschriebene Blätter stehen hier."
           action={<ButtonLink href="/material">Zur Ablage</ButtonLink>}
         />
       ) : (

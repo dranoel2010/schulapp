@@ -25,7 +25,7 @@ export async function createAccount(
 ): Promise<User> {
   // Absichtlich ungecacht: cache() würde hier einen Stand von vorhin liefern.
   if (await findOnlyUser()) {
-    throw new Error("Es gibt schon ein Konto — die App ist für eine Person.");
+    throw new Error("Es gibt schon ein Konto. Die App ist für eine Person.");
   }
 
   const passwordHash = await hashPassword(password);

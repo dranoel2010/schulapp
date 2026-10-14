@@ -300,7 +300,7 @@ export async function buildSubjectPdf(
     // Dateinamens.
     displayTitle: true,
     info: {
-      Title: `${input.subject.name} — Blätter`,
+      Title: `${input.subject.name} · Blätter`,
       Creator: "Schulapp",
       CreationDate: new Date(),
     },
@@ -355,7 +355,7 @@ export async function buildSubjectPdf(
   await withDeadline(
     fertig,
     FINISH_DEADLINE_MS,
-    "Das Fach-PDF wurde nicht fertig — vermutlich ist pdfkit an einem Foto hängengeblieben.",
+    "Das Fach-PDF wurde nicht fertig, vermutlich ist pdfkit an einem Foto hängengeblieben.",
   );
 
   // Ein eigenes Uint8Array statt `Buffer.concat`: das kopiert genauso oft, und
@@ -483,7 +483,7 @@ function drawHeader(state: DrawState, input: SubjectPdfInput): void {
   // erste Seite und nicht ans Ende. Wer ein PDF ausdruckt, liest Seite 1.
   drawRich(
     state,
-    "Blätter ohne Abschrift stehen nicht in diesem PDF — sie hätten hier nichts zu lesen.",
+    "Blätter ohne Abschrift stehen nicht in diesem PDF.",
     { size: SIZE.meta, color: SUBTLE },
   );
 
@@ -500,7 +500,7 @@ function drawHeader(state: DrawState, input: SubjectPdfInput): void {
     drawNotice(
       state,
       letzte
-        ? `Dieses PDF fasst höchstens ${input.sheets.length} Blätter, und so viele sind es geworden. Das letzte hier ist vom ${formatGerman(letzte.capturedOn)} — ob danach noch welche kommen, sagt dieses Dokument nicht.`
+        ? `Dieses PDF fasst höchstens ${input.sheets.length} Blätter, und so viele sind es geworden. Das letzte hier ist vom ${formatGerman(letzte.capturedOn)}.`
         : `Dieses PDF fasst höchstens ${input.sheets.length} Blätter, und so viele sind es geworden.`,
     );
   }
@@ -630,7 +630,7 @@ async function drawPhoto(
     // Knapp, weil dieser Satz ab dem Erschöpfen des Budgets an JEDER weiteren
     // Seite steht — bei fünfzig Blättern fünfzigmal. Was er bedeutet, steht
     // einmal ausführlich im Schlussblock.
-    drawAside(state, "Foto weggelassen — die Grenze für Bilddaten ist erreicht.");
+    drawAside(state, "Foto weggelassen, die Grenze für Bilddaten ist erreicht.");
     return;
   }
 
@@ -654,7 +654,7 @@ async function drawPhoto(
     // wahr sein, und „weder JPEG noch PNG" wäre bei einem kaputten PNG gelogen.
     drawAside(
       state,
-      "Foto weggelassen — diese Bilddaten lassen sich in kein PDF einbetten.",
+      "Foto weggelassen, es lässt sich in kein PDF einbetten.",
     );
     return;
   }
@@ -709,7 +709,7 @@ async function drawPhoto(
     // danach nie fertig wurde. Dagegen steht nicht dieser catch, sondern die
     // Prüfung in ./image-info oben und die Frist an `fertig`.
     state.imagesSkippedForFormat += 1;
-    drawAside(state, "Foto weggelassen — es ließ sich nicht einbetten.");
+    drawAside(state, "Foto weggelassen, es ließ sich nicht einbetten.");
     return;
   }
 
@@ -728,7 +728,7 @@ function drawTranscript(state: DrawState, page: PdfPageEntry): void {
   }
 
   if (page.transcript.length === 0) {
-    drawAside(state, "Gelesen — auf dieser Seite stand nichts.");
+    drawAside(state, "Gelesen. Auf dieser Seite stand nichts.");
     return;
   }
 
@@ -794,7 +794,7 @@ function drawClosing(state: DrawState, input: SubjectPdfInput): void {
 
   if (input.cutOff) {
     saetze.push(
-      "Dieses PDF ist an seiner Grenze für Blätter angekommen — der Hinweis dazu steht auf der ersten Seite.",
+      "Dieses PDF ist an seiner Grenze für Blätter angekommen. Mehr dazu auf der ersten Seite.",
     );
   }
 

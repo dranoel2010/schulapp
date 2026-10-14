@@ -224,10 +224,8 @@ export function ProposalForm({
       ) : null}
 
       <p className="text-[15px] text-ink-2">
-        Sag nur, was du sagen willst. Jedes Feld darf leer bleiben — leer heißt
-        überall „dazu sage ich nichts“, und dann bleibt am Blatt stehen, was
-        dort schon steht. Löschen kann ein Vorschlag nichts; was hier grau im
-        Feld steht, ist der heutige Stand des Blattes.
+        Jedes Feld darf leer bleiben. Dann bleibt am Blatt, was dort steht.
+        Grau steht der heutige Stand.
       </p>
 
       {/* Der Schlüssel setzt die Felder nach dem Speichern auf den Stand des
@@ -280,7 +278,7 @@ export function ProposalForm({
                     an erster Stelle und nennt das Fach des Blattes gleich mit
                     — ein „—" allein sagte nicht, worauf es hinausläuft. */}
                 <option value="">
-                  {`— Fach des Blattes bleibt (${sheet.subjectName})`}
+                  {`Fach bleibt (${sheet.subjectName})`}
                 </option>
 
                 {subjects.map((subject) => (
@@ -362,7 +360,7 @@ export function ProposalForm({
           optional
           hint={
             sheet.note === null
-              ? "Am Blatt steht noch keine Notiz — was hier steht, käme dazu."
+              ? "Am Blatt steht noch keine Notiz."
               : undefined
           }
           error={state.errors?.note}

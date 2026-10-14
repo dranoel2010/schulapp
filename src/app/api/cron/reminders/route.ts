@@ -171,7 +171,7 @@ function dailyMessage(blocks: PlannedBlock[]): PushPayload {
   const total = blocks.reduce((sum, block) => sum + block.minutes, 0);
 
   return {
-    title: blocks.length === 1 ? "Heute lernen" : `Heute lernen — ${total} min`,
+    title: blocks.length === 1 ? "Heute lernen" : `Heute lernen · ${total} min`,
     body: blocks.map(blockLine).join("\n"),
     url: zielHeuteLernen(blocks),
     tag: "schulapp-lernen",
@@ -188,7 +188,7 @@ function blockLine(block: PlannedBlock): string {
       : block.topic.title
     : "Gesamtwiederholung";
 
-  return `${block.minutes} min ${block.subject.name} — ${topic}`;
+  return `${block.minutes} min ${block.subject.name} · ${topic}`;
 }
 
 function countdownMessage(exams: UpcomingExam[], today: string): PushPayload {
@@ -197,7 +197,7 @@ function countdownMessage(exams: UpcomingExam[], today: string): PushPayload {
     const when = formatGerman(exam.date);
 
     return {
-      title: `${examLabel(exam)} — ${formatCountdown(today, exam.date)}`,
+      title: `${examLabel(exam)} · ${formatCountdown(today, exam.date)}`,
       body: exam.title ? `${exam.title} · ${when}` : when,
       url: zielCountdown(exams),
       tag: "schulapp-countdown",
@@ -207,7 +207,7 @@ function countdownMessage(exams: UpcomingExam[], today: string): PushPayload {
   return {
     title: `${exams.length} Prüfungen stehen an`,
     body: exams
-      .map((exam) => `${examLabel(exam)} — ${formatCountdown(today, exam.date)}`)
+      .map((exam) => `${examLabel(exam)} · ${formatCountdown(today, exam.date)}`)
       .join("\n"),
     url: zielCountdown(exams),
     tag: "schulapp-countdown",

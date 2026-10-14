@@ -134,7 +134,7 @@ export function bedarf(
   if (stoff.topics.length === 0) {
     return {
       nichts:
-        "diese Prüfung hat noch keine Themen — ohne sie führt kein Weg zu den Blättern",
+        "diese Prüfung hat noch keine Themen",
     };
   }
 
@@ -143,7 +143,7 @@ export function bedarf(
     return {
       nichts:
         ohneBlatt > 0
-          ? `keine abgeschriebene Seite (${ohneBlatt} von ${stoff.topics.length} Themen hängen an keiner Vokabel des Fachs — vielleicht im falschen Fach einsortiert)`
+          ? `keine abgeschriebene Seite (${ohneBlatt} von ${stoff.topics.length} Themen sind mit keinem Thema des Fachs verbunden)`
           : "keine abgeschriebene Seite zu den Themen dieser Prüfung",
     };
   }
@@ -156,7 +156,7 @@ export function bedarf(
   // übergeht, gibt es mit Absicht nicht; Fragen von Hand anlegen geht immer.
   if (stoff.stock.items === 0 && stoff.stock.discardedQuestions > 0) {
     return {
-      nichts: `${stoff.stock.discardedQuestions} ${stoff.stock.discardedQuestions === 1 ? "Frage hat" : "Fragen hat"} der Mensch schon abgelehnt, übernommen ist keine — aus demselben Stoff käme dasselbe heraus`,
+      nichts: `${stoff.stock.discardedQuestions} ${stoff.stock.discardedQuestions === 1 ? "Frage hast" : "Fragen hast"} du schon abgelehnt, aus demselben Stoff käme dasselbe heraus`,
     };
   }
 
@@ -511,7 +511,7 @@ export function fragenEingabe(antwort: FragenAntwort): FragenEingabe {
  */
 const ABWEISUNG_SATZ: Record<VorschlagAbweisung, string> = {
   "keine-klausur": "Die Klausur gibt es nicht mehr.",
-  "keine-fragen": `Mehr als ${FRAGEN_MAX} Fragen — so viele nimmt der Eingang in einem Vorschlag nicht.`,
+  "keine-fragen": `Mehr als ${FRAGEN_MAX} Fragen nimmt der Eingang in einem Vorschlag nicht.`,
   "zu-lang": "Die Notiz oder eine Frage war zu lang für den Eingang.",
   "zu-kurz": "Eine Frage war zu kurz für den Eingang.",
   "fremde-seiten": "Keine der Fragen nannte eine Seite aus dem Stoff dieser Klausur.",

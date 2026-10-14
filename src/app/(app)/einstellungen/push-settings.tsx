@@ -189,7 +189,7 @@ export function PushSettings({ vapidPublicKey }: PushSettingsProps) {
 
     if (!hasWorker) {
       setError(
-        "Der Dienst im Hintergrund läuft hier nicht — deshalb kann sich das Gerät nicht anmelden. Das klappt nur in der gebauten App.",
+        "Der Dienst im Hintergrund läuft hier nicht. Das klappt nur in der gebauten App.",
       );
       return;
     }
@@ -363,9 +363,8 @@ export function PushSettings({ vapidPublicKey }: PushSettingsProps) {
       {status === "denied" ? (
         <div className="space-y-2 text-[15px] text-ink-2">
           <p>
-            Du hast Benachrichtigungen für diese Seite abgelehnt. Von hier aus
-            lässt sich das nicht zurücknehmen — das geht nur in den
-            Browser-Einstellungen.
+            Du hast Benachrichtigungen abgelehnt. Das lässt sich nur in den
+            Browser-Einstellungen zurücknehmen.
           </p>
           <p>
             In Chrome: in der Adresszeile auf das Schloss tippen →

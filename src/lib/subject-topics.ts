@@ -349,7 +349,7 @@ export async function renameTopic(
 
   const matchKey = vocabularyKey(cleaned);
   if (!matchKey) {
-    throw new Error(`Aus „${cleaned}" wird kein Thema — es fehlt ein Fachwort.`);
+    throw new Error(`Aus „${cleaned}" wird kein Thema, es fehlt ein Fachwort.`);
   }
 
   if (cleaned === topic.title && matchKey === topic.matchKey) return;
@@ -358,12 +358,12 @@ export async function renameTopic(
   if (clash && clash.id !== topic.id) {
     if (clash.id === topic.mergedInto) {
       throw new Error(
-        `Diese Schreibweise zeigt schon auf „${clash.title}" — genauso heißen kann sie nicht. Trenn sie erst wieder ab.`,
+        `Diese Schreibweise zeigt schon auf „${clash.title}". Trenn sie erst wieder ab.`,
       );
     }
 
     throw new Error(
-      `„${clash.title}" gibt es in diesem Fach schon — leg die beiden lieber zusammen.`,
+      `„${clash.title}" gibt es in diesem Fach schon. Leg die beiden zusammen.`,
     );
   }
 

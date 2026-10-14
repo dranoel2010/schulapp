@@ -124,10 +124,10 @@ export function klassenProblem(
   const K = cfg.klasse;
 
   if (cfg.klassenkalender && !quellen.some((q) => q.rolle === "klasse")) {
-    return "Den Kalender aus ISERV_KLASSENKALENDER gibt es in IServ nicht — der Kalender deiner Klasse wird nicht gelesen.";
+    return "Den Kalender aus ISERV_KLASSENKALENDER gibt es in IServ nicht. Der Kalender deiner Klasse wird nicht gelesen.";
   }
   if (quellen.some((q) => q.rolle === "mehrdeutig")) {
-    return `Mehrere Kalender passen zu Klasse ${K} — der Kalender deiner Klasse wird nicht gelesen, bis ISERV_KLASSENKALENDER gesetzt ist (welche, steht in der Karte IServ).`;
+    return `Mehrere Kalender passen zu Klasse ${K}. Der Kalender deiner Klasse wird erst gelesen, wenn ISERV_KLASSENKALENDER gesetzt ist (welche, steht in der Karte IServ).`;
   }
   if (klasseVeraltet(quellen, K, cfg.klassenkalender)) {
     return `ISERV_KLASSE=${K} ist womöglich vom letzten Schuljahr: In IServ gibt es einen Kalender für Klasse ${K + 1}, aber keinen für ${K}. Bis ISERV_KLASSE angehoben ist (iserv-einrichten.sh --neue-klasse), kommt kein Termin mit Klasse ${K} in den Kalender.`;
@@ -181,25 +181,25 @@ export function parseEventSources(
     const abo = eintrag.subscription === true;
 
     let rolle: IservRolle = "andere";
-    let grund = "anderer Kalender — nicht übernommen";
+    let grund = "anderer Kalender: nicht übernommen";
 
     if (abo) {
       rolle = "abo";
-      grund = "abonnierter Kalender — nicht übernommen";
+      grund = "abonnierter Kalender: nicht übernommen";
     } else if (typ === "cal" && id === PUBLIC_CAL_ID && !quellen.some((q) => q.rolle === "oeffentlich")) {
       rolle = "oeffentlich";
-      grund = "öffentlicher Schulkalender — gefiltert nach Klasse";
+      grund = "öffentlicher Schulkalender: gefiltert nach Klasse";
     } else if (typ === "cal") {
-      grund = "weiterer Gruppenkalender — nicht übernommen";
+      grund = "weiterer Gruppenkalender: nicht übernommen";
     } else if (typ === "plugin" && id === "exercise" && !quellen.some((q) => q.rolle === "aufgaben")) {
       rolle = "aufgaben";
-      grund = "deine Aufgaben — ganz übernommen";
+      grund = "deine Aufgaben: ganz übernommen";
     } else if (typ === "plugin" && id === "exam-plan") {
       rolle = "klausurplan";
-      grund = "Klausurplan vorhanden — noch nicht übernommen";
+      grund = "Klausurplan vorhanden: noch nicht übernommen";
     } else if (typ === "plugin" && id === "holiday") {
       rolle = "feiertage";
-      grund = "gesetzliche Feiertage — betreffen keine Klasse";
+      grund = "gesetzliche Feiertage: betreffen keine Klasse";
     }
 
     roh.push({ id, url: eintrag.url, typ, abo });
@@ -215,7 +215,7 @@ export function parseEventSources(
     const index = quellen.findIndex((q, i) => istGruppe(i) && q.id === cfg.klassenkalender);
     if (index >= 0) {
       quellen[index].rolle = "klasse";
-      quellen[index].grund = "Kalender deiner Klasse (ISERV_KLASSENKALENDER) — ganz übernommen";
+      quellen[index].grund = "Kalender deiner Klasse (ISERV_KLASSENKALENDER): ganz übernommen";
     } else {
       hinweise.push(`ISERV_KLASSENKALENDER=${cfg.klassenkalender} steht nicht in der Liste der Kalender.`);
     }
@@ -226,20 +226,20 @@ export function parseEventSources(
 
     if (kandidaten.length === 1) {
       kandidaten[0].q.rolle = "klasse";
-      kandidaten[0].q.grund = `Kalender deiner Klasse ${K} — ganz übernommen`;
+      kandidaten[0].q.grund = `Kalender deiner Klasse ${K}: ganz übernommen`;
     } else if (kandidaten.length > 1) {
       for (const { q } of kandidaten) {
         q.rolle = "mehrdeutig";
-        q.grund = `passt zu Klasse ${K}, aber nicht als einziger — nicht übernommen`;
+        q.grund = `passt zu Klasse ${K}, aber nicht als einziger: nicht übernommen`;
       }
       hinweise.push(
-        `Passend zu Klasse ${K}: ${kandidaten.map(({ q }) => q.id).join(", ")} — einen davon in ISERV_KLASSENKALENDER setzen.`,
+        `Passend zu Klasse ${K}: ${kandidaten.map(({ q }) => q.id).join(", ")}. Einen davon in ISERV_KLASSENKALENDER setzen.`,
       );
     } else if (klasseVeraltet(quellen, K, null)) {
       for (const [i, q] of quellen.entries()) {
         if (istGruppe(i) && passtZurKlasse(q.id, q.label, K + 1)) {
           q.rolle = "naechste-klasse";
-          q.grund = `passt zu Klasse ${K + 1} — neues Schuljahr? ISERV_KLASSE anheben`;
+          q.grund = `passt zu Klasse ${K + 1}. Neues Schuljahr? ISERV_KLASSE anheben`;
         }
       }
     } else {

@@ -511,7 +511,7 @@ describe("tuerErgebnis", () => {
     });
     assert.deepEqual(jev, {
       ergebnis: "vorschlag",
-      grund: "eingeordnet: Mathe — Kettenregel; 1 Seite verworfen (gelesen oder Docling)",
+      grund: "eingeordnet: Mathe: Kettenregel; 1 Seite verworfen (gelesen oder Docling)",
     });
 
     const korb = tuerErgebnis({
@@ -586,7 +586,7 @@ describe("laufAnzeige", () => {
         fristRestMs: null,
         createdAt: new Date("2026-10-11T12:03:00Z"),
       }),
-      "Zuletzt So, 11.10., 14:03 Uhr: nicht fertig geworden — Die Frist dieses Laufs ist abgelaufen. · bezahlt, Betrag unbekannt",
+      "Zuletzt So, 11.10., 14:03 Uhr: nicht fertig geworden: Die Frist dieses Laufs ist abgelaufen. · bezahlt, Betrag unbekannt",
     );
   });
 
@@ -609,7 +609,7 @@ describe("laufAnzeige", () => {
         kostenUsd: 0.1234,
         createdAt: new Date("2026-10-11T12:03:00Z"),
       }),
-      "Zuletzt So, 11.10., 14:03 Uhr (von Hand angestoßen): ohne Ergebnis — Abgelehnt (bio), auch nach dem Rückfall. · 0,123 $",
+      "Zuletzt So, 11.10., 14:03 Uhr (von Hand angestoßen): ohne Ergebnis: Abgelehnt (bio), auch nach dem Rückfall. · 0,123 $",
     );
   });
 
@@ -638,7 +638,7 @@ describe("laufAnzeige", () => {
         kostenUsd: 0.5,
         createdAt: new Date("2026-10-11T12:03:00Z"),
       }),
-      "Zuletzt So, 11.10., 14:03 Uhr: Fragen vorgeschlagen — 12 Fragen liegen im Eingang · 0,500 $",
+      "Zuletzt So, 11.10., 14:03 Uhr: Fragen vorgeschlagen: 12 Fragen liegen im Eingang · 0,500 $",
     );
     assert.match(
       laufAnzeige({
@@ -649,7 +649,7 @@ describe("laufAnzeige", () => {
         kostenUsd: null,
         createdAt: new Date("2026-10-11T12:03:00Z"),
       }),
-      /: kein Vorschlag — nur Überschriften$/,
+      /: kein Vorschlag: nur Überschriften$/,
     );
   });
 });

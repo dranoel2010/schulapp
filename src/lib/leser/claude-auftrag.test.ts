@@ -248,7 +248,7 @@ describe("abschriftenSieben", () => {
     assert.equal(hinweise.length, 3);
     assert.match(hinweise.join(" "), /Seite 1 doppelt/);
     assert.match(hinweise.join(" "), /nicht im Auftrag stand \(33333333\)/);
-    assert.match(hinweise.join(" "), /Seite 2 länger als 8000 Zeichen — weggelassen, bleibt ungelesen/);
+    assert.match(hinweise.join(" "), /Seite 2 länger als 8000 Zeichen, weggelassen und ungelesen/);
   });
 
   it("zählt Leerraum am Rand nicht mit — die Tür trimmt ihn ohnehin", () => {
@@ -268,7 +268,7 @@ describe("abschriftenSieben", () => {
       new Set([B]),
     );
     assert.deepEqual(bleiben, [{ page: B, text: "Rückseite" }]);
-    assert.deepEqual(hinweise, ["Seite 1 während des Laufs gelöscht — ihre Abschrift verworfen"]);
+    assert.deepEqual(hinweise, ["Seite 1 während des Laufs gelöscht, ihre Abschrift verworfen"]);
   });
 });
 
@@ -297,7 +297,7 @@ describe("einordnenEingabe", () => {
       { page: A, text: "Vorderseite" },
       { page: B, text: "" },
     ]);
-    assert.match(ergebnis.hinweise.join(" "), /2 Themen genannt — nur das erste genommen/);
+    assert.match(ergebnis.hinweise.join(" "), /2 Themen genannt, nur das erste genommen/);
   });
 
   it("verwirft einen Titel, wenn die erste Seite fehlte oder er zu lang ist — nur ihn", () => {
@@ -309,7 +309,7 @@ describe("einordnenEingabe", () => {
     if (lang.art !== "vorschlag") return;
     assert.equal(lang.eingabe.title, null);
     assert.equal(lang.eingabe.transcripts?.length, 2);
-    assert.match(lang.hinweise.join(" "), /Titel verworfen — zu lang/);
+    assert.match(lang.hinweise.join(" "), /Titel verworfen, zu lang/);
   });
 
   it("nimmt einen Tag nur, wenn er abweicht, ein echtes Datum ist und schon war", () => {

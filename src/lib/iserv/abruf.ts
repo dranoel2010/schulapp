@@ -504,8 +504,8 @@ export async function runIservCron(connectedIds: readonly string[], start: numbe
           ergebnis = {
             status: "fehler",
             satz: zustand.lastSuccessAt
-              ? `IServ seit über 24 Stunden nicht gelesen — Kalender „Schule“ zeigt den Stand von ${zeitpunkt(zustand.lastSuccessAt)}.`
-              : "IServ seit über 24 Stunden nicht gelesen — im Kalender „Schule“ steht noch nichts aus IServ.",
+              ? `IServ seit über 24 Stunden nicht gelesen. Kalender „Schule“ zeigt den Stand von ${zeitpunkt(zustand.lastSuccessAt)}.`
+              : "IServ seit über 24 Stunden nicht gelesen. Im Kalender „Schule“ steht noch nichts aus IServ.",
             warnung: ergebnis.warnung,
           };
         }

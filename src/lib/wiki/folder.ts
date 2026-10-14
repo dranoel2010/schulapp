@@ -200,7 +200,7 @@ export async function writeHandover(input: {
     }
 
     throw new Error(
-      `Kein freier Übergabeordner für ${input.date} — ${MAX_FOLDER_ATTEMPTS} Namen sind vergeben.`,
+      `Kein freier Übergabeordner für ${input.date}, ${MAX_FOLDER_ATTEMPTS} Namen sind vergeben.`,
     );
   } catch (fehler) {
     // Der unfertige Ordner ist ohne den Umzug wertlos. Er wird weggeräumt,
@@ -225,7 +225,7 @@ export async function assertHandoverRoot(root: string): Promise<void> {
     eintrag = await stat(root);
   } catch {
     throw new Error(
-      `Den Übergabeordner gibt es nicht: ${root}. Er wird absichtlich nicht angelegt — ` +
+      `Den Übergabeordner gibt es nicht: ${root}. Er wird absichtlich nicht angelegt: ` +
         "ein fehlender Ordner heißt meistens, dass der Vault gerade nicht eingehängt ist.",
     );
   }

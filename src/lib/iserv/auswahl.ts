@@ -134,7 +134,7 @@ export function beurteileEinzeln(
     return {
       genommen: item.fest.genommen,
       regel: item.fest.regel,
-      grund: "vergangen — so stehen geblieben, wie zuletzt entschieden",
+      grund: "vergangen, so wie zuletzt entschieden",
       knapp: false,
       zweifel: false,
       frei: false,
@@ -164,7 +164,7 @@ export function beurteileEinzeln(
     return {
       genommen: false,
       regel: "freie-tage",
-      grund: "Ferien oder frei — die App kennt diese Tage schon als frei",
+      grund: "Ferien oder frei, die App kennt diese Tage schon",
       knapp: false,
       zweifel: false,
       frei: true,

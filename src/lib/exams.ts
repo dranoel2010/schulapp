@@ -68,7 +68,7 @@ function optionalText(maxLength: number, tooLong: string) {
 
 export const examInputSchema = z.object({
   subjectId: z.uuid("Zu welchem Fach gehört die Prüfung?"),
-  title: optionalText(80, "Der Titel ist zu lang — höchstens 80 Zeichen."),
+  title: optionalText(80, "Der Titel ist zu lang. Höchstens 80 Zeichen."),
   kind: z.enum(EXAM_KINDS, "Diese Art von Prüfung kennt die App nicht."),
   date: z
     .string("Wann ist die Prüfung?")
@@ -90,7 +90,7 @@ export const examInputSchema = z.object({
     .int("Die Lernzeit muss eine ganze Zahl sein.")
     .min(10, "Mindestens 10 Minuten pro Tag.")
     .max(240, "Höchstens 240 Minuten pro Tag."),
-  notes: optionalText(2000, "Die Notiz ist zu lang — höchstens 2000 Zeichen."),
+  notes: optionalText(2000, "Die Notiz ist zu lang. Höchstens 2000 Zeichen."),
 });
 
 export type ExamInput = z.infer<typeof examInputSchema>;

@@ -397,7 +397,7 @@ async function abschriftNachreichen(
     return {
       ok: false,
       grund:
-        "Das Blatt ist schon eingeordnet, und die Abschrift betrifft Seiten, die nicht nachgereicht sind — darüber entscheidet ein Mensch.",
+        "Das Blatt ist schon eingeordnet, und die Abschrift betrifft Seiten, die nicht nachgereicht sind. Darüber entscheidest du.",
     };
   }
 

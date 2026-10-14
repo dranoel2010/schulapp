@@ -79,7 +79,7 @@ describe("parseEventSources", () => {
 
     assert.ok(!quellen.some((q) => q.rolle === "klasse"));
     assert.equal(quellen.filter((q) => q.rolle === "mehrdeutig").length, 2);
-    assert.match(hinweise[0], /\/klasse\.10b\/calendar — einen davon in ISERV_KLASSENKALENDER setzen/);
+    assert.match(hinweise[0], /\/klasse\.10b\/calendar\. Einen davon in ISERV_KLASSENKALENDER setzen/);
     assert.match(problem ?? "", /^Mehrere Kalender passen zu Klasse 10/);
     assert.ok(!(problem ?? "").includes("/klasse.10b"), "kein Text aus IServ im festen Satz");
   });
@@ -111,7 +111,7 @@ describe("parseEventSources", () => {
 
     assert.equal(neu.quellen[0].rolle, "naechste-klasse");
     assert.equal(neu.quellen[0].url, null, "der Kalender der nächsten Klasse wird nicht gelesen");
-    assert.match(neu.quellen[0].grund, /Klasse 11 — neues Schuljahr\? ISERV_KLASSE anheben/);
+    assert.match(neu.quellen[0].grund, /Klasse 11\. Neues Schuljahr\? ISERV_KLASSE anheben/);
     assert.match(neu.problem ?? "", /^ISERV_KLASSE=10 ist womöglich vom letzten Schuljahr/);
     assert.deepEqual(neu.hinweise, []);
 

@@ -54,14 +54,14 @@ export default function DatenschutzPage() {
           aus dem IServ der Schule dorthin, die deine Klasse betreffen: aus dem
           Kalender deiner Klasse, deine Aufgaben und die Termine des
           Schulkalenders, die deine Klasse nennen oder für alle den Unterricht
-          betreffen — mit Titel, Tag, Uhrzeit, Ort und Beschreibung, wie sie in
+          betreffen, mit Titel, Tag, Uhrzeit, Ort und Beschreibung, wie sie in
           IServ stehen (darin können Kürzel von Lehrkräften vorkommen).
           Ersteller und Teilnehmer eines Termins übernimmt sie nicht.
         </p>
         <p>
           Die App fragt dafür nur nach der Berechtigung{" "}
           <code className="text-[15px]">calendar.app.created</code>. Damit sieht
-          sie ausschließlich den Kalender, den sie selbst angelegt hat — keine
+          sie ausschließlich den Kalender, den sie selbst angelegt hat, keine
           anderen Kalender, keine Termine darin und keine anderen Daten deines
           Google-Kontos. Aus dem Kalender „Schule“ liest sie nur, ob ihre
           eigenen Termine noch da sind.
@@ -72,8 +72,8 @@ export default function DatenschutzPage() {
         <h3>Was mit deinem IServ-Konto passiert</h3>
         <p>
           Nur wenn es auf dem Server eingerichtet ist: Die App meldet sich mit
-          deinem IServ-Benutzernamen und Passwort bei IServ an — in der Regel
-          höchstens alle drei Stunden zwischen 6 und 21 Uhr — und liest dort
+          deinem IServ-Benutzernamen und Passwort bei IServ an, in der Regel
+          höchstens alle drei Stunden zwischen 6 und 21 Uhr, und liest dort
           nur; sie sendet,
           ändert und gibt nichts ab. Jede Anmeldung steht in deinen „Letzten
           Anmeldungen“ bei IServ. Benutzername und Passwort stehen nur in der

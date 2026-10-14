@@ -152,7 +152,7 @@ export const iservSource: CalendarSource = {
 
     if (!snaps.has("oeffentlich")) {
       throw new Error(
-        "Noch kein Stand aus IServ — der erste Abruf steht aus oder ist gescheitert (Einstellungen → IServ).",
+        "Noch kein Stand aus IServ. Der erste Abruf steht aus oder ist gescheitert (Einstellungen → IServ).",
       );
     }
 

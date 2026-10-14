@@ -12,7 +12,7 @@ export default function OfflinePage() {
     <main className="solo">
       <div className="solo-in">
         <h1 className="hl">Keine Verbindung</h1>
-        <p className="q-sub">Dein Gerät ist gerade offline. Was du vorher schon geöffnet hattest, kannst du weiter lesen — neue Seiten und Änderungen brauchen Netz.</p>
+        <p className="q-sub">Geöffnete Seiten bleiben lesbar. Neues braucht Netz.</p>
         <div className="foot">
           <Link className="btn primary" href="/">
             Nochmal versuchen

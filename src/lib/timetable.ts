@@ -270,11 +270,11 @@ export const lessonInputSchema = z.object({
   subjectId: z.uuid("Welches Fach ist in dieser Stunde?"),
   room: optionalText(
     ROOM_MAX_LENGTH,
-    `Der Raum ist zu lang — höchstens ${ROOM_MAX_LENGTH} Zeichen.`,
+    `Der Raum ist zu lang. Höchstens ${ROOM_MAX_LENGTH} Zeichen.`,
   ),
   note: optionalText(
     NOTE_MAX_LENGTH,
-    `Die Notiz ist zu lang — höchstens ${NOTE_MAX_LENGTH} Zeichen.`,
+    `Die Notiz ist zu lang. Höchstens ${NOTE_MAX_LENGTH} Zeichen.`,
   ),
 });
 
@@ -611,12 +611,20 @@ export function parseSlotKeys(
  * Gibt zurück, wie viele Felder wirklich umgetragen wurden. Die Zahl kann
  * kleiner sein als die Zahl der Haken, und genau das soll die Oberfläche
  * sagen dürfen.
+ *
+ * `seit` ist der Augenblick des Wechsels und landet in `created_at` der
+ * umgetragenen Stunden. `created_at` heißt bei einer Stunde: seit wann dieses
+ * Feld sein Fach trägt (saveLesson legt ein geändertes Feld neu an). Daraus
+ * liest die App „Epoche seit …“; ohne neuen Zeitstempel stünde dort nach
+ * jedem Wechsel weiter der Tag, an dem der Plan angelegt wurde. Die Zeit
+ * kommt von außen, weil diese Datei keine Systemuhr liest.
  */
 export async function switchEpoch(
   userId: string,
   fromSubjectId: string,
   toSubjectId: string,
   slots: readonly Slot[],
+  seit: Date,
 ): Promise<number> {
   if (slots.length === 0) return 0;
 
@@ -639,7 +647,7 @@ export async function switchEpoch(
 
   const treffer = await db
     .update(lessons)
-    .set({ subjectId: toSubjectId })
+    .set({ subjectId: toSubjectId, createdAt: seit })
     .where(
       and(
         eq(lessons.userId, userId),

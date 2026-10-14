@@ -112,9 +112,9 @@ export const FEHLER_SAETZE: Record<IservFehlerArt, (ort: string) => string> = {
   format: (ort) => `IServ antwortet in einem unerwarteten Format${ort}.`,
   verweigert: (ort) => `IServ verweigert den Zugriff${ort}.`,
   fehlt: (ort) => `Diesen Teil gibt es in IServ nicht${ort}.`,
-  voruebergehend: (ort) => `IServ war nicht erreichbar${ort} — der nächste Lauf versucht es wieder.`,
-  budget: () => "Die Zeit für diesen Lauf war um, bevor IServ fertig gelesen war — der nächste Lauf versucht es wieder.",
-  "fremde-adresse": () => "IServ leitet auf eine fremde Adresse um — die App folgt dem nicht.",
+  voruebergehend: (ort) => `IServ war nicht erreichbar${ort}. Der nächste Lauf versucht es wieder.`,
+  budget: () => "Die Zeit für diesen Lauf war um, bevor IServ fertig gelesen war. Der nächste Lauf versucht es wieder.",
+  "fremde-adresse": () => "IServ leitet auf eine fremde Adresse um. Die App folgt dem nicht.",
   "zu-gross": (ort) => `Die Antwort von IServ ist größer als 2 MB${ort}.`,
 };
 

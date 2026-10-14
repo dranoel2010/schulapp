@@ -291,7 +291,7 @@ const transcriptInputSchema = z.object({
     .trim()
     .max(
       PROPOSAL_TRANSCRIPT_MAX,
-      "Die Abschrift ist zu lang — höchstens 8000 Zeichen je Seite.",
+      "Die Abschrift ist zu lang. Höchstens 8000 Zeichen je Seite.",
     ),
 });
 
@@ -344,7 +344,7 @@ export const proposalInputSchema = z
       ),
     title: optionalText(
       MATERIAL_TITLE_MAX,
-      "Der Titel ist zu lang — höchstens 80 Zeichen.",
+      "Der Titel ist zu lang. Höchstens 80 Zeichen.",
     ),
     capturedOn: z
       .string()
@@ -366,7 +366,7 @@ export const proposalInputSchema = z
       ),
     note: optionalText(
       MATERIAL_NOTE_MAX,
-      "Die Notiz ist zu lang — höchstens 500 Zeichen.",
+      "Die Notiz ist zu lang. Höchstens 500 Zeichen.",
     ),
     /**
      * Freier Text, kein Verweis ins Vokabular — der Grund dafür steht an
@@ -403,7 +403,7 @@ export const proposalInputSchema = z
       .array(transcriptInputSchema)
       .max(
         MAX_PAGES,
-        `Ein Blatt hat höchstens ${MAX_PAGES} Seiten — so viele Abschriften kann es nicht geben.`,
+        `Ein Blatt hat höchstens ${MAX_PAGES} Seiten.`,
       )
       .nullish()
       .transform((value) => normalizeTranscripts(value ?? [])),
@@ -1377,7 +1377,7 @@ export function prefillFromProposal(
 }
 
 /** Das Zeichen für „hier steht nichts", überall dasselbe. */
-const EMPTY_VALUE = "—";
+const EMPTY_VALUE = "leer";
 
 /**
  * Die Felder eines Blattes im Korb: dieselben wie in der Ablage, plus

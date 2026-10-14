@@ -239,8 +239,8 @@ export function ProposalSummary({
       feld: "Abschrift",
       wert:
         proposal.transcriptCount === 1
-          ? "eine Seite — sie steht auf der Vorschlagsseite"
-          : `${proposal.transcriptCount} Seiten — sie stehen auf der Vorschlagsseite`,
+          ? "eine Seite, auf der Vorschlagsseite"
+          : `${proposal.transcriptCount} Seiten, auf der Vorschlagsseite`,
     });
   }
 
@@ -254,10 +254,8 @@ export function ProposalSummary({
   if (parts.length === 0) {
     return (
       <p className="text-[15px] text-ink-2">
-        Dieser Vorschlag sagt nichts mehr. Das passiert, wenn er nur ein Fach
-        vorgeschlagen hat und genau dieses Fach gelöscht wurde — dann bleibt
-        die Zeile stehen und die Angabe fällt weg. Zu übernehmen gibt es hier
-        nichts mehr; verwerfen kannst du ihn.
+        Dieser Vorschlag sagt nichts mehr, sein Fach wurde gelöscht. Du kannst
+        ihn verwerfen.
       </p>
     );
   }

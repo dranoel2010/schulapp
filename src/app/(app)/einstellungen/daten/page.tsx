@@ -31,10 +31,10 @@ export default async function DatenPage() {
       : null,
     jevConfigured() ? "die Abschrift eines Blattes geht zum Einordnen an Jev (TypeSafe)" : null,
     claude
-      ? "Fotos von Seiten, die Docling nicht sicher liest, gehen zum Abschreiben an Claude (Anthropic) — nur die Fotos, nie etwas aus IServ"
+      ? "Fotos von Seiten, die Docling nicht sicher liest, gehen zum Abschreiben an Claude (Anthropic), nur die Fotos und nichts aus IServ"
       : null,
     claude
-      ? "drückst du an einer Klausur „Fragen bauen lassen“, geht ihr Stoff — die Abschriften der Blätter zu ihren Themen — an Claude (Anthropic)"
+      ? "drückst du an einer Klausur „Fragen bauen lassen“, gehen die Abschriften ihrer Blätter an Claude (Anthropic)"
       : null,
     claude
       ? "für ein Arbeitsblatt zum Üben gehen die Abschriften der Blätter seines Themas an Claude (Anthropic)"

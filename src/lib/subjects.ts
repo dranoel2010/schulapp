@@ -29,7 +29,7 @@ export const subjectInputSchema = z.object({
     .string("Wie heißt das Fach?")
     .trim()
     .min(1, "Wie heißt das Fach?")
-    .max(60, "Der Name ist zu lang — höchstens 60 Zeichen."),
+    .max(60, "Der Name ist zu lang. Höchstens 60 Zeichen."),
   short: z
     .string("Ein Kürzel fehlt noch.")
     .trim()

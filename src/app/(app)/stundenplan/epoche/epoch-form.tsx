@@ -236,12 +236,10 @@ export function EpochForm({
       </div>
 
       <p className="text-[15px] text-ink-2">
-        Umgetragen wird nur der Stundenplan. Noten, Hausaufgaben und Blätter
-        behalten ihr Fach —{" "}
+        Umgetragen wird nur der Stundenplan.{" "}
         <span className="text-ink">
-          was du in der Mathe-Epoche gesammelt hast, bleibt bei Mathematik
+          Noten, Hausaufgaben und Blätter behalten ihr Fach.
         </span>
-        .
       </p>
     </form>
   );

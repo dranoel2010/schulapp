@@ -235,7 +235,7 @@ export function CaptureButton({
       </p>
     ) : saved && !error && !pending ? (
       <p className="text-[15px] text-ink-2">
-        Angekommen — das nächste kann gleich kommen.{" "}
+        Angekommen.{" "}
         <Link
           href={`/material/${saved}`}
           className="text-ink underline underline-offset-2"
@@ -307,8 +307,8 @@ export function CaptureButton({
       <div className={cn("space-y-3", className)}>
         <p className="text-[15px] text-ink-2">
           {allArchived
-            ? "Ein Blatt gehört immer in ein Fach. Deine Fächer sind alle archiviert — solange keins wieder aktiv ist, gibt es nichts, wohin die Aufnahme könnte."
-            : "Ein Blatt gehört immer in ein Fach. Solange keins angelegt ist, gibt es nichts, wohin die Aufnahme könnte."}
+            ? "Ein Blatt gehört in ein Fach. Deine Fächer sind alle archiviert."
+            : "Ein Blatt gehört in ein Fach. Leg erst eins an."}
         </p>
         <ButtonLink
           href={allArchived ? "/faecher" : "/faecher/neu"}
@@ -470,7 +470,7 @@ export function CaptureButton({
         // ist. Ohne `remaining` ist `capacity` die volle Grenze, und dann sagt
         // der allgemeine Satz die Wahrheit.
         materialId && remaining !== undefined
-          ? `An dieses Blatt ${capacity === 1 ? "passt nur noch eine Seite" : `passen nur noch ${capacity} Seiten`}, ausgewählt sind ${files.length}. Nimm erst so viele, wie hineinpassen — der Rest wird ein neues Blatt.`
+          ? `An dieses Blatt ${capacity === 1 ? "passt nur noch eine Seite" : `passen nur noch ${capacity} Seiten`}, ausgewählt sind ${files.length}. Nimm erst so viele, wie hineinpassen.`
           : `An ein Blatt passen ${MAX_PAGES} Seiten. Nimm den Rest als zweites Blatt auf.`,
       );
       return;

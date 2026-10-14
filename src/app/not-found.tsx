@@ -15,7 +15,7 @@ export default function NotFound() {
     <main className="solo">
       <div className="solo-in">
         <h1 className="hl">Hier ist nichts</h1>
-        <p className="q-sub">Diese Seite gibt es nicht — vielleicht hast du ein Fach gelöscht, das noch als Lesezeichen herumliegt.</p>
+        <p className="q-sub">Diese Seite gibt es nicht.</p>
         <div className="foot">
           <Link className="btn primary" href="/">
             Zur Startseite

@@ -67,7 +67,7 @@ export default async function VerbindenPage({
     return (
       <Absage
         titel="Diesen Zugang gibt es nicht"
-        satz="Das Programm, das dich hierher geschickt hat, ist bei dieser App nicht angemeldet. Versuch es in dem Programm noch einmal — es meldet sich dann neu an."
+        satz="Das Programm ist bei dieser App nicht angemeldet. Versuch es dort noch einmal."
       />
     );
   }
@@ -149,8 +149,8 @@ export default async function VerbindenPage({
 
       <h3 className="p-lab">Lesen darf es</h3>
       <p className="p-sub">
-        Fächer und Themen, den Stundenplan, Hausaufgaben, Klausuren samt Lernplan, Noten, die Blätter in der Ablage —
-        auch die Fotos — und den Eingangskorb.
+        Fächer und Themen, den Stundenplan, Hausaufgaben, Klausuren samt Lernplan, Noten, die Blätter samt Fotos
+        und den Eingangskorb.
       </p>
       <h3 className="p-lab">Schreiben darf es</h3>
       <p className="p-sub">
@@ -158,7 +158,7 @@ export default async function VerbindenPage({
       </p>
       <h3 className="p-lab">Nicht möglich ist</h3>
       <p className="p-sub">
-        etwas anzulegen, zu ändern oder zu löschen — und auch nicht, einen Vorschlag selbst zu übernehmen.
+        etwas anzulegen, zu ändern, zu löschen oder einen Vorschlag zu übernehmen.
       </p>
 
       <form action={decideAction} className="foot" style={{ flexDirection: "column", alignItems: "stretch" }}>

@@ -398,18 +398,18 @@ export function abschriftenSieben(
       continue;
     }
     if (gesehen.has(page)) {
-      hinweise.push(`Seite ${nummer} doppelt — der erste Eintrag zählt`);
+      hinweise.push(`Seite ${nummer} doppelt, der erste Eintrag zählt`);
       continue;
     }
     gesehen.add(page);
 
     if (vorhanden && !vorhanden.has(page)) {
-      hinweise.push(`Seite ${nummer} während des Laufs gelöscht — ihre Abschrift verworfen`);
+      hinweise.push(`Seite ${nummer} während des Laufs gelöscht, ihre Abschrift verworfen`);
       continue;
     }
 
     if (eintrag.text.trim().length > PROPOSAL_TRANSCRIPT_MAX) {
-      hinweise.push(`Seite ${nummer} länger als ${PROPOSAL_TRANSCRIPT_MAX} Zeichen — weggelassen, bleibt ungelesen`);
+      hinweise.push(`Seite ${nummer} länger als ${PROPOSAL_TRANSCRIPT_MAX} Zeichen, weggelassen und ungelesen`);
       continue;
     }
 
@@ -448,16 +448,16 @@ export function einordnenEingabe(
     // Der Auftrag sagt es; gehalten wird es hier. Die Überschrift steht auf
     // einer Seite, die das Modell nicht gesehen hat, und den Titel nimmt die
     // App dann aus Doclings erster Seite (@/lib/auto-file).
-    hinweise.push("Titel verworfen — die erste Seite war nicht dabei");
+    hinweise.push("Titel verworfen, die erste Seite war nicht dabei");
     title = null;
   }
   if (title !== null && !felder.title.safeParse(title).success) {
-    hinweise.push("Titel verworfen — zu lang");
+    hinweise.push("Titel verworfen, zu lang");
     title = null;
   }
 
   const themen = antwort.topics.map((thema) => thema.trim()).filter((thema) => thema !== "");
-  if (themen.length > 1) hinweise.push(`${themen.length} Themen genannt — nur das erste genommen`);
+  if (themen.length > 1) hinweise.push(`${themen.length} Themen genannt, nur das erste genommen`);
 
   let capturedOn = textOderNull(antwort.captured_on);
   if (capturedOn === vorab.capturedOn) capturedOn = null;

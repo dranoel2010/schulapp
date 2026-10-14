@@ -183,14 +183,14 @@ const bausteinSchema = z.object({
     .min(LOESUNG_MIN, "Ohne Musterlösung ist die Aufgabe nicht auslieferbar.")
     .max(
       LOESUNG_MAX,
-      `Die Musterlösung ist zu lang — höchstens ${LOESUNG_MAX} Zeichen.`,
+      `Die Musterlösung ist zu lang. Höchstens ${LOESUNG_MAX} Zeichen.`,
     ),
   misconception: z
     .string()
     .trim()
     .min(
       VERWECHSLUNG_MIN,
-      "Der Satz zur Verwechslung fehlt — ohne ihn wird nicht ausgeliefert.",
+      "Der Satz zur Verwechslung fehlt.",
     )
     .max(VERWECHSLUNG_MAX, "Ein bis zwei Sätze genügen."),
   sourceQuote: z
@@ -226,15 +226,15 @@ const bausteinSchema = z.object({
 const A5_MELDUNGEN: Record<AnlageFehler, string> = {
   "keine-seite": "Diese Seite gibt es nicht mehr.",
   "kein-fach":
-    "Das Fach ist weggekommen — lade die Seite neu und wähle die Quelle noch einmal.",
+    "Das Fach gibt es nicht mehr. Lade die Seite neu.",
   "keine-abschrift":
-    "Diese Seite hat noch keine Abschrift — ohne Wortlaut lässt sich keine Frage daran binden.",
+    "Diese Seite hat noch keine Abschrift.",
   "zitat-leer":
-    "Ohne Zitat geht es nicht — markiere die Stelle in der Abschrift, auf die die Frage sich stützt.",
+    "Das Zitat fehlt. Kopiere die Stelle aus der Abschrift.",
   "zitat-nicht-gefunden":
-    "Dieses Zitat steht so nicht in der Abschrift. Kopiere die Stelle wörtlich heraus, statt sie nachzuerzählen.",
+    "Dieses Zitat steht so nicht in der Abschrift. Kopiere die Stelle wörtlich.",
   "zitat-unsicher":
-    "Dieses Zitat stammt aus einer hervorgehobenen Stelle — dort war schon das Abschreiben unsicher. Es genügt dafür eine einzelne ⟨spitze Klammer⟩ im Zitat, und es genügt auch, den Text INNERHALB der Hervorhebung zu nehmen, ohne die Klammern mitzukopieren. Eine Frage darauf zu bauen hieße, eine Vermutung abzufragen; wähle eine Stelle außerhalb der Hervorhebung oder berichtige zuerst die Abschrift.",
+    "Dieses Zitat stammt aus einer hervorgehobenen Stelle, die beim Abschreiben unsicher war. Wähle eine andere Stelle oder berichtige zuerst die Abschrift.",
 };
 
 /** Einen Baustein anlegen. Die Termine entstehen dabei gleich mit. */
@@ -298,22 +298,22 @@ function anlageSatz(ergebnis: {
   warnungen: readonly string[];
 }): string {
   if (ergebnis.vorKlausur === 0 && ergebnis.nachKlausur === 0) {
-    return "Angelegt. Termine gibt es keine: Bausteine des Messvorrats werden nie geübt.";
+    return "Angelegt. Ohne Termine, denn Fragen nur zum Prüfen werden nie geübt.";
   }
 
   if (ergebnis.warnungen.includes("keine-tage")) {
-    return `Angelegt — aber bis zur Klausur bleibt kein Tag mehr, an dem dieser Baustein drankäme. Die ${ergebnis.nachKlausur} geplanten Termine liegen alle danach.`;
+    return `Angelegt. Vor der Klausur kommt er nicht mehr dran, die ${ergebnis.nachKlausur} Termine liegen danach.`;
   }
 
   if (ergebnis.warnungen.includes("zu-knapp")) {
-    return `Angelegt — aber es reicht nur für ${ergebnis.vorKlausur} ${ergebnis.vorKlausur === 1 ? "Abruf" : "Abrufe"} vor der Klausur statt der vier, die nötig wären. Dafür ist es zu spät; beim nächsten Mal früher.`;
+    return `Angelegt. Vor der Klausur reicht es nur für ${ergebnis.vorKlausur} ${ergebnis.vorKlausur === 1 ? "Abruf" : "Abrufe"} statt vier.`;
   }
 
   if (ergebnis.warnungen.includes("kein-termin")) {
-    return `Angelegt — ${ergebnis.vorKlausur} Termine im Grundtakt. In diesem Fach steht keine Klausur an; sobald du eine einträgst, rechne die Termine neu.`;
+    return `Angelegt mit ${ergebnis.vorKlausur} Terminen. In diesem Fach steht keine Klausur an.`;
   }
 
-  return `Angelegt — ${ergebnis.vorKlausur} ${ergebnis.vorKlausur === 1 ? "Abruf" : "Abrufe"} vor der Klausur, danach ${ergebnis.nachKlausur} zum Behalten.`;
+  return `Angelegt: ${ergebnis.vorKlausur} ${ergebnis.vorKlausur === 1 ? "Abruf" : "Abrufe"} vor der Klausur, danach ${ergebnis.nachKlausur} zum Behalten.`;
 }
 
 /**

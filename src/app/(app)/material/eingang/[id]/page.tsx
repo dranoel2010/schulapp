@@ -282,27 +282,20 @@ export default async function ProposalPage({
 
         {proposal.origin === "agent" ? (
           <p className="text-[15px] text-ink">
-            Dieser Vorschlag ist aus dem Inhalt eines Blattes abgeleitet — also
-            aus etwas, das diese App nicht geschrieben hat, sondern jemand
-            anderes auf Papier gedruckt oder an eine Tafel geschrieben hat. Lies
-            ihn, bevor du ihn übernimmst. Genau dafür steht diese Seite zwischen
-            dem Vorschlag und deinem Bestand.
+            Dieser Vorschlag ist aus dem Inhalt eines Blattes abgeleitet. Lies
+            ihn, bevor du ihn übernimmst.
           </p>
         ) : proposal.origin === "app" ? (
           <p className="text-[15px] text-ink">
-            Diesen Vorschlag hat die App selbst angelegt, weil Docling alle
-            Seiten dieses Blattes maschinell gelesen hat — die Abschriften
-            stehen schon am Blatt, gekennzeichnet und von niemandem
-            gegengelesen. Der Titel ist wörtlich die erste Überschrift der
-            ersten Seite, gekürzt, wo sie zu lang war; stand dort keine, ist es
-            der bisherige Titel. Hier liegt er, weil das Einordnen mit Jev
-            nicht ging, und Fach und Themen schlägt er deshalb nicht vor. Lies
-            ihn, bevor du ihn übernimmst.
+            Diesen Vorschlag hat die App angelegt. Docling hat alle Seiten
+            gelesen, die Abschriften stehen schon am Blatt. Der Titel ist die
+            erste Überschrift. Fach und Themen fehlen, weil das Einordnen mit
+            Jev nicht ging. Lies ihn, bevor du ihn übernimmst.
           </p>
         ) : (
           <p className="text-[15px] text-ink-2">
-            Diesen Vorschlag hast du selbst angelegt. Geändert hat er am Blatt
-            trotzdem nichts — auch er geht durch das Formular unten.
+            Diesen Vorschlag hast du selbst angelegt. Am Blatt ändert er erst
+            etwas mit dem Formular unten.
           </p>
         )}
       </section>
@@ -324,11 +317,9 @@ export default async function ProposalPage({
              nichts, ändert aber auch nichts — verwerfen ist der kürzere Weg,
              und deshalb steht er im Satz. */
           <p className="text-[15px] text-ink-2">
-            Nichts an den Angaben des Blattes. Dieser Vorschlag sagt nur, was
-            dort schon so steht. Übernehmen tut trotzdem etwas: es hakt das
-            Blatt ab und räumt alle weiteren Vorschläge dazu weg. Willst du nur
-            diesen einen loswerden, verwirfst du ihn ganz unten — dann bleibt
-            alles andere, wie es ist.
+            Nichts an den Angaben des Blattes. Übernehmen hakt das Blatt ab und
+            räumt weitere Vorschläge dazu weg. Nur diesen einen loswerden: ganz
+            unten verwerfen.
           </p>
         ) : (
           <dl className="space-y-2">
@@ -373,10 +364,8 @@ export default async function ProposalPage({
             Übernehmen
           </h2>
           <p className="text-[15px] text-ink-2">
-            Das ist das Formular des Blattes, vorbelegt mit dem, was der
-            Vorschlag sagt. Ändere darin, was nicht stimmt — geschrieben wird
-            erst mit dem Knopf darunter, und geschrieben wird genau das, was
-            hier steht.
+            Das Formular des Blattes, vorbelegt mit dem Vorschlag. Ändere, was
+            nicht stimmt. Gespeichert wird erst mit dem Knopf darunter.
           </p>
 
           {/* Der Satz steht nur da, wenn eine Abschrift dabei ist. Er nennt
@@ -387,8 +376,8 @@ export default async function ProposalPage({
           {prefillTranscripts.size > 0 ? (
             <p className="text-[15px] text-ink-2">
               {prefillTranscripts.size === 1
-                ? "Dazu kommt diesmal die Abschrift einer Seite: was darauf steht, wörtlich. Sie steht unten im Formular, neben dem Bild dieser Seite."
-                : `Dazu kommt diesmal die Abschrift von ${prefillTranscripts.size} Seiten: was darauf steht, wörtlich. Sie stehen unten im Formular — je Seite eine Zeile, die sich neben ihrem Bild aufklappen lässt.`}
+                ? "Dazu kommt die Abschrift einer Seite. Sie steht unten im Formular."
+                : `Dazu kommt die Abschrift von ${prefillTranscripts.size} Seiten. Sie stehen unten im Formular, je Seite eine Zeile.`}
             </p>
           ) : null}
 
@@ -398,8 +387,8 @@ export default async function ProposalPage({
               einen harmlosen Vorschlag übernimmt, verlöre dabei einen zweiten,
               der etwas zu sagen hatte. */}
           <p className="text-[15px] text-ink-2">
-            Damit gilt das Blatt als durchgesehen, und weitere Vorschläge dazu
-            fallen weg — sie gälten einem Stand, den es dann nicht mehr gibt.
+            Damit gilt das Blatt als durchgesehen. Weitere Vorschläge dazu
+            fallen weg.
           </p>
         </div>
 
@@ -549,9 +538,8 @@ export default async function ProposalPage({
 
         <div className="space-y-3 border-t border-line p-4 sm:p-5">
           <p className="text-[15px] text-ink-2">
-            Hier änderst du den <strong>Vorschlag</strong>, nicht das Blatt. Am
-            Blatt steht danach immer noch, was jetzt dort steht — geschrieben
-            wird es erst mit „Vorschlag übernehmen“ weiter oben.
+            Hier änderst du den <strong>Vorschlag</strong>, nicht das Blatt. Ans
+            Blatt kommt er erst mit „Vorschlag übernehmen“ weiter oben.
           </p>
 
           <ProposalForm
@@ -595,9 +583,7 @@ export default async function ProposalPage({
         </form>
 
         <p className="text-[15px] text-ink-2">
-          Damit ist nur der Vorschlag weg. Das Blatt bleibt, wie es ist — jede
-          Aufnahme, jedes Thema, jede Zeile. Verloren geht nichts, was du
-          aufgeschrieben hättest.
+          Damit ist nur der Vorschlag weg. Das Blatt bleibt, wie es ist.
         </p>
       </section>
     </div>

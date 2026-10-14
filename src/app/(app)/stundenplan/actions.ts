@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { requireUser } from "@/lib/auth";
 import { listSubjects } from "@/lib/subjects";
+import { jetzt } from "@/lib/tag";
 import {
   clearSlot,
   lessonInputSchema,
@@ -157,7 +158,7 @@ export async function savePeriodsAction(
 
   if (starts.length === 0) {
     return {
-      message: "Eine Stunde muss bleiben — ohne Raster gibt es keinen Plan.",
+      message: "Eine Stunde muss bleiben.",
     };
   }
 
@@ -239,7 +240,7 @@ export async function switchEpochAction(
 
   if (fromSubjectId === toSubjectId) {
     return {
-      errors: { toSubjectId: "Das ist dasselbe Fach — dann gibt es nichts umzutragen." },
+      errors: { toSubjectId: "Das ist dasselbe Fach." },
     };
   }
 
@@ -269,12 +270,13 @@ export async function switchEpochAction(
     fromSubjectId,
     toSubjectId,
     slots,
+    await jetzt(),
   );
 
   if (umgetragen === 0) {
     return {
       message:
-        "Keine dieser Stunden trägt noch das alte Fach. Vermutlich wurde der Plan nebenher geändert — sieh im Wochenraster nach.",
+        "Keine dieser Stunden trägt noch das alte Fach. Sieh im Wochenraster nach.",
     };
   }
 

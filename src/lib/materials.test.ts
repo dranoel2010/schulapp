@@ -171,7 +171,7 @@ describe("materialInputSchema", () => {
     );
     assert.deepEqual(
       issuesFor("title", form({ title: "a".repeat(MATERIAL_TITLE_MAX + 1) })),
-      ["Der Titel ist zu lang — höchstens 80 Zeichen."],
+      ["Der Titel ist zu lang. Höchstens 80 Zeichen."],
     );
   });
 
@@ -243,7 +243,7 @@ describe("materialInputSchema", () => {
     );
     assert.deepEqual(
       issuesFor("note", form({ note: "n".repeat(MATERIAL_NOTE_MAX + 1) })),
-      ["Die Notiz ist zu lang — höchstens 500 Zeichen."],
+      ["Die Notiz ist zu lang. Höchstens 500 Zeichen."],
     );
   });
 
@@ -319,7 +319,7 @@ describe("transcriptSchema", () => {
     assert.ok(!zuLang.success);
     assert.deepEqual(
       zuLang.error.issues.map((issue) => issue.message),
-      ["Die Abschrift einer Seite ist zu lang — höchstens 8000 Zeichen."],
+      ["Die Abschrift einer Seite ist zu lang. Höchstens 8000 Zeichen."],
     );
   });
 

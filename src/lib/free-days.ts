@@ -92,7 +92,7 @@ export const freePeriodInputSchema = z
     title: z
       .string()
       .trim()
-      .max(60, "Der Name ist zu lang — höchstens 60 Zeichen.")
+      .max(60, "Der Name ist zu lang. Höchstens 60 Zeichen.")
       .transform((value) => (value === "" ? null : value))
       .nullish(),
     startsOn: z

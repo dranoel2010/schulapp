@@ -278,7 +278,7 @@ export async function blattAbschreiben(
   if (erinnerung.laeuftNochMs !== null) {
     return {
       gelaufen: false,
-      grund: `An diesem Blatt läuft gerade ein Aufruf — noch höchstens ${Math.ceil(erinnerung.laeuftNochMs / 60_000)} min.`,
+      grund: `An diesem Blatt läuft gerade ein Aufruf, noch höchstens ${Math.ceil(erinnerung.laeuftNochMs / 60_000)} min.`,
     };
   }
   if (modus !== "von-hand" && erledigt(erinnerung)) {
@@ -286,7 +286,7 @@ export async function blattAbschreiben(
       gelaufen: false,
       grund: erinnerung.gemerkt
         ? "In diesem Stand schon gelesen."
-        : `${SPAETER_HOECHSTENS}-mal bezahlt abgebrochen — bis morgen nur von Hand.`,
+        : `${SPAETER_HOECHSTENS}-mal bezahlt abgebrochen. Bis morgen nur von Hand.`,
     };
   }
 
@@ -340,7 +340,7 @@ export async function blattAbschreiben(
     return false;
   });
 
-  const zeile = `Claude ${kurz(materialId)} (${plan.laufArt}, ${seitenZahl(fotos.length)}): ${ausgang.ergebnis}${ausgang.grund ? ` — ${ausgang.grund}` : ""}`;
+  const zeile = `Claude ${kurz(materialId)} (${plan.laufArt}, ${seitenZahl(fotos.length)}): ${ausgang.ergebnis}${ausgang.grund ? `: ${ausgang.grund}` : ""}`;
   if (ausgang.ergebnis === "pause" || ausgang.ergebnis === "nichts") console.warn(zeile);
   else console.info(zeile);
   console.info(

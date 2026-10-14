@@ -115,7 +115,7 @@ export const gradeInputSchema = z.object({
   title: z
     .string()
     .trim()
-    .max(120, "Das ist zu lang — höchstens 120 Zeichen.")
+    .max(120, "Das ist zu lang. Höchstens 120 Zeichen.")
     .nullish()
     .transform((value) => (value && value.length > 0 ? value : null)),
 });
@@ -406,7 +406,7 @@ async function checkedValues(
 
   const title = input.title?.trim();
   if (title && title.length > MAX_TITLE_LENGTH) {
-    throw new Error("Der Titel ist zu lang — höchstens 120 Zeichen.");
+    throw new Error("Der Titel ist zu lang. Höchstens 120 Zeichen.");
   }
 
   return {

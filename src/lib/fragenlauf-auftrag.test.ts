@@ -69,7 +69,7 @@ describe("bedarf — wann gar nicht gefragt wird", () => {
   it("nicht ohne abgeschriebene Seite — mit dem Hinweis auf das falsche Fach", () => {
     const frei = [{ ...EIN_THEMA[0], linked: false, subjectTopicId: null, pages: [] }];
     const was = bedarf({ topics: [...frei, { ...EIN_THEMA[0], pages: [] }], pages: [], stock: STOCK });
-    assert.match("nichts" in was ? was.nichts : "", /1 von 2 Themen hängen an keiner Vokabel/);
+    assert.match("nichts" in was ? was.nichts : "", /1 von 2 Themen sind mit keinem Thema des Fachs verbunden/);
     assert.deepEqual(bedarf({ topics: [{ ...EIN_THEMA[0], pages: [] }], pages: [], stock: STOCK }), {
       nichts: "keine abgeschriebene Seite zu den Themen dieser Prüfung",
     });
@@ -77,7 +77,7 @@ describe("bedarf — wann gar nicht gefragt wird", () => {
 
   it("nicht, wenn der Mensch schon Nein gesagt und nichts übernommen hat", () => {
     const was = bedarf({ topics: EIN_THEMA, pages: EINE_SEITE, stock: { ...STOCK, discardedQuestions: 5 } });
-    assert.match("nichts" in was ? was.nichts : "", /5 Fragen hat der Mensch schon abgelehnt/);
+    assert.match("nichts" in was ? was.nichts : "", /5 Fragen hast du schon abgelehnt/);
     // Hat er etwas übernommen, war das Nein keines zum ganzen Stoff.
     assert.deepEqual(
       bedarf({ topics: EIN_THEMA, pages: EINE_SEITE, stock: { ...STOCK, items: 2, discardedQuestions: 5 } }),

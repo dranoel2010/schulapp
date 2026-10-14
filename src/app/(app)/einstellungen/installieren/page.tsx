@@ -7,7 +7,7 @@ import { SeitenKopf } from "@/components/kombi/form";
 export const metadata: Metadata = { title: "Als App installieren" };
 
 const SCHRITTE = [
-  "Oben rechts das Menü öffnen — die drei Punkte.",
+  "Oben rechts die drei Punkte antippen.",
   "„App installieren“ antippen. Steht dort stattdessen „Zum Startbildschirm hinzufügen“, ist das dasselbe.",
   "Bestätigen.",
 ];

@@ -315,7 +315,7 @@ describe("runIservFetch", () => {
     leer = true;
     const ergebnis = await lauf(spaeter(3));
     assert.equal(ergebnis.status, "gelesen");
-    assert.match(ergebnis.warnung ?? "", /Klassenkalender: 0 statt 4 Termine — alter Stand bleibt/);
+    assert.match(ergebnis.warnung ?? "", /Klassenkalender: 0 statt 4 Termine\. Der alte Stand bleibt/);
     assert.equal((await store.readSnapshots()).get("klasse")?.items.length, 4);
     assert.equal((await store.readSnapshots()).get("klasse")?.ausstehend?.anzahl, 1);
   });
@@ -400,7 +400,7 @@ describe("runIservFetch", () => {
 
     leer = true;
     const ergebnis = await lauf(spaeter(3));
-    assert.match(ergebnis.warnung ?? "", /Klassenkalender: 0 statt 2 Termine — alter Stand bleibt/);
+    assert.match(ergebnis.warnung ?? "", /Klassenkalender: 0 statt 2 Termine\. Der alte Stand bleibt/);
     assert.equal((await store.readSnapshots()).get("klasse")?.items.length, 2);
   });
 

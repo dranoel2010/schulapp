@@ -40,17 +40,14 @@ export default async function PeriodsPage() {
       <div className="space-y-1">
         <h2 className="p-title">Stundenzeiten</h2>
         <p className="text-[15px] text-ink-2">
-          Wann deine Stunden anfangen und aufhören. Im Wochenraster stehen die
-          Zeiten nicht — gebraucht werden sie für den Tagesplan auf der
-          Startseite, der deinen Tag von morgens nach abends sortiert.
+          Wann deine Stunden anfangen und aufhören. Danach richtet sich der
+          Tag auf der Startseite.
         </p>
       </div>
 
       {untouched ? (
         <p className="p-sub">
-          Das ist noch die Vorgabe der App — die Pausenordnung eines gedachten
-          Gymnasiums. Stell sie auf deine Schule um, sonst steht der Tagesplan
-          zur falschen Zeit.
+          Das sind noch die Zeiten der Vorgabe. Stell sie auf deine Schule um.
         </p>
       ) : null}
 

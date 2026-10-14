@@ -167,7 +167,7 @@ export function pruefe(input: {
       entscheidung: "fehler",
       neu: null,
       warnung: null,
-      satz: "IServ liefert den öffentlichen Kalender leer — alter Stand bleibt.",
+      satz: "IServ liefert den öffentlichen Kalender leer. Der alte Stand bleibt.",
     };
   }
 
@@ -182,7 +182,7 @@ export function pruefe(input: {
 
   if (ausstehend.anzahl >= BESTAETIGUNGEN) {
     return uebernehmen(
-      `${name}: nach ${BESTAETIGUNGEN} gleichen Antworten übernommen — jetzt ${nNeu} statt ${nAlt} Termine.`,
+      `${name}: nach ${BESTAETIGUNGEN} gleichen Antworten übernommen, jetzt ${nNeu} statt ${nAlt} Termine.`,
     );
   }
 
@@ -191,7 +191,7 @@ export function pruefe(input: {
     neu: { ...alt, gesehenAm: jetzt, ausstehend },
     warnung: [
       warnung,
-      `${name}: ${nNeu} statt ${nAlt} Termine — alter Stand bleibt, bis es ${BESTAETIGUNGEN}-mal so kommt (${ausstehend.anzahl} von ${BESTAETIGUNGEN}).`,
+      `${name}: ${nNeu} statt ${nAlt} Termine. Der alte Stand bleibt, bis es ${BESTAETIGUNGEN}-mal so kommt (${ausstehend.anzahl} von ${BESTAETIGUNGEN}).`,
     ]
       .filter(Boolean)
       .join(" "),

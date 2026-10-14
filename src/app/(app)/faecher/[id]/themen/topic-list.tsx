@@ -357,8 +357,7 @@ function TopicItemRow({
             </div>
           ) : (
             <p className="text-[15px] text-ink-2">
-              Zum Zusammenlegen braucht es ein zweites Thema in diesem Fach —
-              noch gibt es keines.
+              Zum Zusammenlegen braucht es ein zweites Thema in diesem Fach.
             </p>
           )}
         </div>
@@ -436,9 +435,8 @@ function AliasRow({
             </form>
 
             <p className="text-[15px] text-ink-2">
-              Trennen macht daraus wieder ein eigenes Thema. Zurückgenommen
-              wird dieser eine Schritt — Schreibweisen, die dabei damals
-              mitgekommen sind, bleiben bei „{parent}“.
+              Trennen macht daraus wieder ein eigenes Thema. Schreibweisen, die
+              damals mitkamen, bleiben bei „{parent}“.
             </p>
           </div>
 
@@ -496,7 +494,7 @@ export function TopicList({
         {rows.length === 0 ? (
           <EmptyState
             title="Noch keine Themen"
-            description="Themen entstehen aus den Themen deiner Klausuren und aus dem, was du an ein abfotografiertes Blatt schreibst. Der Knopf liest jede eingetragene Klausur — die aller Fächer, nicht nur die dieses einen — und legt daraus das Vokabular an."
+            description="Themen entstehen aus deinen Klausuren und Blättern. Der Knopf liest die Klausuren aller Fächer und legt die Themen an."
             action={seedBlock}
           />
         ) : (
@@ -553,10 +551,8 @@ export function TopicList({
               Vokabular aus den Klausuren aufbauen
             </h2>
             <p className="text-[15px] text-ink-2">
-              Liest jede eingetragene Klausur und legt daraus die fehlenden
-              Themen an. Der Knopf betrifft <strong>alle Fächer</strong>, nicht
-              nur dieses — er geht über den ganzen Bestand. Mehrmals drücken
-              schadet nicht: was schon da ist, entsteht kein zweites Mal.
+              Liest jede Klausur und legt fehlende Themen an, für{" "}
+              <strong>alle Fächer</strong>. Mehrmals drücken schadet nicht.
             </p>
           </div>
 

@@ -351,7 +351,7 @@ export function AutoRefresh({ stand, inArbeit, leseZeile }: AutoRefreshProps) {
               </>
             ) : (
               <span className="py-2.5 pr-2.5">
-                Neuer Stand da — er erscheint, sobald du gespeichert hast.
+                Neuer Stand da. Er erscheint nach dem Speichern.
               </span>
             )}
           </div>

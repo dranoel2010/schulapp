@@ -210,7 +210,7 @@ export async function GET(request: Request) {
     return Response.json(
       {
         ok: false,
-        error: `${WIKI_EXPORT_DIR_ENV} ist nicht gesetzt — ohne den Pfad zum Übergabeordner gibt es nichts zu schreiben. Er gehört in die Umgebung des Containers, und der Ordner muss dort eingehängt sein.`,
+        error: `${WIKI_EXPORT_DIR_ENV} ist nicht gesetzt. Der Pfad zum Übergabeordner gehört in die Umgebung des Containers, und der Ordner muss dort eingehängt sein.`,
       },
       { status: 500 },
     );
@@ -327,6 +327,6 @@ export function handoverFailure(summary: WikiRunSummary): string | null {
   return (
     `Kein Übergabeordner geschrieben: Bei ${konten} ist das Zusammentragen gescheitert. ` +
     "Heute ist nichts im Vault angekommen. Woran es lag, steht im Protokoll des " +
-    'Containers — „sudo docker compose logs app | grep Wiki-Übergabe".'
+    'Containers: „sudo docker compose logs app | grep Wiki-Übergabe".'
   );
 }

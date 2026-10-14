@@ -116,7 +116,7 @@ export function Viewfinder({
   const status = startError
     ? startError
     : closing && busy
-      ? "Noch unterwegs — gleich fertig …"
+      ? "Gleich fertig …"
       : error
         ? error
         : full

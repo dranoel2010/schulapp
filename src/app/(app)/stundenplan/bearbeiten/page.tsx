@@ -71,7 +71,7 @@ export default async function TimetableEditPage() {
                 period.startsOn === period.endsOn
                   ? formatGerman(period.startsOn, "kurz")
                   : `${formatGerman(period.startsOn, "kurz")} bis ${formatGerman(period.endsOn, "kurz")}`
-              } — an diesen Tagen fällt der Unterricht aus.`}
+              }. Kein Unterricht.`}
             </p>
           ))}
 

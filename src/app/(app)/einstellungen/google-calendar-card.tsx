@@ -34,7 +34,7 @@ const TIME_ZONE = "Europe/Berlin";
 const NOTICES: Record<string, { tone: "success" | "danger"; text: string }> = {
   verbunden: {
     tone: "success",
-    text: "Verbunden. Der Kalender „Schule“ füllt sich gerade — lade die Seite in einer Minute neu.",
+    text: "Verbunden. Der Kalender „Schule“ füllt sich gerade. Lade die Seite in einer Minute neu.",
   },
   abgelehnt: {
     tone: "danger",
@@ -42,11 +42,11 @@ const NOTICES: Record<string, { tone: "success" | "danger"; text: string }> = {
   },
   ungueltig: {
     tone: "danger",
-    text: "Die Anmeldung bei Google ist abgelaufen oder kam nicht in diesem Browser zurück. Bitte noch einmal verbinden — im Browser (Safari oder Chrome), nicht aus der installierten App vom Home-Bildschirm.",
+    text: "Die Anmeldung bei Google ist abgelaufen. Verbinde noch einmal im Browser, nicht in der installierten App.",
   },
   berechtigung: {
     tone: "danger",
-    text: "Google hat die Erlaubnis für den Kalender nicht erteilt — ohne sie kann die App nichts eintragen. Beim Verbinden den Haken beim Kalender setzen.",
+    text: "Google hat den Kalender nicht freigegeben. Beim Verbinden den Haken beim Kalender setzen.",
   },
   zugangsdaten: {
     tone: "danger",
@@ -74,7 +74,7 @@ const NOTICES: Record<string, { tone: "success" | "danger"; text: string }> = {
   },
   "getrennt-ohne-widerruf": {
     tone: "danger",
-    text: "Getrennt — die App hat den Zugang vergessen, aber Google hat den Widerruf nicht bestätigt. Bei Google gilt er womöglich noch: Entferne ihn selbst unter myaccount.google.com/permissions (dort die App auswählen und den Zugriff entfernen). Der Kalender „Schule“ bleibt in Google stehen.",
+    text: "Getrennt. Google hat den Widerruf nicht bestätigt. Entferne den Zugriff selbst unter myaccount.google.com/permissions.",
   },
   "neu-angelegt": {
     tone: "success",
@@ -82,7 +82,7 @@ const NOTICES: Record<string, { tone: "success" | "danger"; text: string }> = {
   },
   "neu-anlegen-gescheitert": {
     tone: "danger",
-    text: "Der neue Kalender ließ sich nicht anlegen — der Grund steht unten unter „Letzter Fehler“.",
+    text: "Der neue Kalender ließ sich nicht anlegen. Der Grund steht unter „Letzter Fehler“.",
   },
 };
 
@@ -148,11 +148,11 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 
 const BLOCKED_TEXT = {
   zugang: (since: string) =>
-    `Verbindung unterbrochen seit ${since}. Google lässt die App nicht mehr in den Kalender — der Zugang wurde entzogen oder ist abgelaufen. Steht das Cloud-Projekt noch auf „Testing“, läuft der Zugang nach sieben Tagen ab; dort auf „In production“ stellen. Neu verbinden: Der Kalender „Schule“ und alles darin bleibt.`,
+    `Verbindung unterbrochen seit ${since}. Der Zugang wurde entzogen oder ist abgelaufen. Steht das Cloud-Projekt auf „Testing“, dort auf „In production“ stellen. Dann neu verbinden.`,
   schluessel: () =>
-    "Der gespeicherte Zugang lässt sich nicht mehr entschlüsseln — GOOGLE_TOKEN_KEY auf dem Server hat sich geändert. Neu verbinden behebt es.",
+    "Der gespeicherte Zugang lässt sich nicht entschlüsseln, GOOGLE_TOKEN_KEY hat sich geändert. Neu verbinden behebt es.",
   kalender: () =>
-    "Den Kalender „Schule“ gibt es in Google nicht mehr. Die App legt ihn nicht von selbst neu an — vielleicht war das Absicht.",
+    "Den Kalender „Schule“ gibt es in Google nicht mehr. Die App legt ihn nicht von selbst neu an.",
 } as const;
 
 export function GoogleCalendarCard({
@@ -172,14 +172,9 @@ export function GoogleCalendarCard({
         titel="Google Kalender"
         sub={
           <>
-              Klausuren, offene Hausaufgaben und freie Tage erscheinen als
-              Termine in einem eigenen Kalender „Schule“ in deinem Google
-              Kalender — ganztägig, denn die App kennt dafür keine Uhrzeit — und,
-              wenn IServ eingerichtet ist, Termine deiner Klasse aus IServ (mit
-              Uhrzeit, wenn IServ eine nennt). Die App trägt dort ein, ändert und
-              löscht — an deine anderen Kalender kommt sie nicht heran. Was du in
-              Google löschst, trägt sie nicht wieder ein. Lernblöcke kommen nicht
-              hinein.
+              Klausuren, offene Hausaufgaben, freie Tage und Termine aus IServ
+              stehen in einem eigenen Kalender „Schule“. An deine anderen
+              Kalender kommt die App nicht heran.
           </>
         }
       />
@@ -199,11 +194,8 @@ export function GoogleCalendarCard({
 
         {state.kind === "nicht-eingerichtet" ? (
           <p className="text-[15px] text-ink-2">
-            Auf diesem Server ist Google nicht eingerichtet — es fehlt{" "}
-            {state.missing.join(", ")}. Die Variablen gehören in die .env auf
-            dem NAS; wie, steht im README unter „Google Kalender“. War der
-            Kalender schon verbunden, bleibt „Schule“ bis dahin auf altem
-            Stand.
+            Auf diesem Server fehlt {state.missing.join(", ")}. Wie man es
+            einrichtet, steht im README unter „Google Kalender“.
           </p>
         ) : null}
 
@@ -212,11 +204,9 @@ export function GoogleCalendarCard({
             <p className="text-[15px]">Nicht verbunden.</p>
             <ConnectForm label="Mit Google verbinden" />
             <p className="text-[0.8125rem] text-ink-3">
-              Google fragt, ob die App eigene Kalender anlegen und darin
-              Termine bearbeiten darf — mehr nicht. Weil die App dir gehört und
-              nicht von Google geprüft ist, warnt Google vorher („Google hat
-              diese App nicht überprüft“); über „Erweitert“ geht es weiter. Gab
-              es den Kalender „Schule“ schon, führt die App ihn weiter.
+              Google fragt, ob die App eigene Kalender anlegen darf. Bei der
+              Warnung „Google hat diese App nicht überprüft“ geht es über
+              „Erweitert“ weiter.
             </p>
             <p className="text-[0.8125rem] text-ink-3">
               Verbinde im Browser (Safari oder Chrome) unter der Adresse der
@@ -265,7 +255,7 @@ export function GoogleCalendarCard({
             </Row>
             {status.verworfen.count > 0 ? (
               <Row label="Von dir in Google gelöscht">
-                {status.verworfen.count} — die App trägt sie nicht wieder ein:{" "}
+                {status.verworfen.count}, die App trägt sie nicht wieder ein:{" "}
                 {status.verworfen.titles.join(", ")}
                 <span className="mt-1 block text-[0.8125rem] font-normal text-ink-3">
                   Die App bemerkt eine Löschung, sobald sie den Termin ändern
@@ -319,10 +309,8 @@ export function GoogleCalendarCard({
               </summary>
               <div className="mt-3 space-y-3">
                 <p className="text-ink-2">
-                  Legt in Google einen frischen Kalender „Schule“ an und trägt
-                  alles neu ein — auch, was du im alten gelöscht hattest. Den
-                  alten Kalender löschst du danach selbst in Google. Hilft,
-                  wenn du „Schule“ aus der Liste entfernt hast.
+                  Legt einen frischen Kalender „Schule“ an und trägt alles neu
+                  ein, auch Gelöschtes. Den alten löschst du selbst in Google.
                 </p>
                 <RecreateForm variant="secondary" />
               </div>

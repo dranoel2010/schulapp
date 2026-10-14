@@ -135,10 +135,10 @@ const ZERO: Counts = { neu: 0, geaendert: 0, entfernt: 0, verworfen: 0, ausstehe
 const SATZ_ZUGANG =
   "Google lässt die App nicht mehr in den Kalender (invalid_grant): Der Zugang wurde entzogen oder ist abgelaufen.";
 const SATZ_SCHLUESSEL =
-  "Der gespeicherte Zugang lässt sich nicht entschlüsseln — GOOGLE_TOKEN_KEY hat sich geändert. Neu verbinden behebt es.";
+  "Der gespeicherte Zugang lässt sich nicht entschlüsseln, GOOGLE_TOKEN_KEY hat sich geändert. Neu verbinden behebt es.";
 const SATZ_KALENDER_WEG = "Den Kalender „Schule“ gibt es in Google nicht mehr.";
 const SATZ_LAEUFT =
-  "Ein Abgleich war nach Ablauf der Wartezeit noch nicht fertig und läuft weiter; sein Ergebnis steht danach in den Einstellungen. Kommt dieser Satz jede Stunde, hängt ein Lauf — dann den Container neu starten (sudo docker compose restart app).";
+  "Ein Abgleich war nach Ablauf der Wartezeit noch nicht fertig und läuft weiter; sein Ergebnis steht danach in den Einstellungen. Kommt dieser Satz jede Stunde, hängt ein Lauf. Dann den Container neu starten (sudo docker compose restart app).";
 
 const QUELLEN: Record<string, string> = {
   klausur: "Prüfungen",
@@ -291,7 +291,7 @@ async function zugangEntzogen(tokens: TokenSource): Promise<boolean> {
 function tokenSentence(fehler: unknown): string {
   if (fehler instanceof GoogleTokenError) {
     if (fehler.kind === "invalid_client") {
-      return "Google lehnt die Zugangsdaten der App ab (invalid_client) — GOOGLE_CLIENT_ID und GOOGLE_CLIENT_SECRET prüfen.";
+      return "Google lehnt die Zugangsdaten der App ab (invalid_client). GOOGLE_CLIENT_ID und GOOGLE_CLIENT_SECRET prüfen.";
     }
     if (fehler.kind === "anfrage") {
       return `Google lehnt das Erneuern des Zugangs ab (${fehler.message}).`;

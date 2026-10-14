@@ -106,7 +106,7 @@ describe("collectWishes", () => {
     const iserv: CalendarSource = {
       kind: "iserv",
       wanted: async () => {
-        throw new Error("Noch kein Stand aus IServ — der erste Abruf steht aus oder ist gescheitert (Einstellungen → IServ).");
+        throw new Error("Noch kein Stand aus IServ. Der erste Abruf steht aus oder ist gescheitert (Einstellungen → IServ).");
       },
     };
 

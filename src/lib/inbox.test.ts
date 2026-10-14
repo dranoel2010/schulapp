@@ -254,7 +254,7 @@ describe("prefillFromProposal", () => {
       vorschlag({ topics: ["Integrale"] }),
     );
 
-    assert.equal(zeile(prefill, "Themen")?.vorher, "—");
+    assert.equal(zeile(prefill, "Themen")?.vorher, "leer");
   });
 
   it("nennt beim Fachwechsel die Namen und nicht die ids", () => {
@@ -310,7 +310,7 @@ describe("prefillFromProposal", () => {
     assert.deepEqual(zeile(prefill, "Themen"), {
       feld: "Themen",
       vorher: "Kettenregel",
-      nachher: "—",
+      nachher: "leer",
     });
   });
 
@@ -382,7 +382,7 @@ describe("prefillFromProposal", () => {
     assert.deepEqual(zeile(prefill, "Fach"), {
       feld: "Fach",
       vorher: "Mathematik",
-      nachher: "—",
+      nachher: "leer",
     });
   });
 
@@ -395,7 +395,7 @@ describe("prefillFromProposal", () => {
     assert.equal(prefill.werte.note, "Seite 2 fehlt");
     assert.deepEqual(zeile(prefill, "Notiz"), {
       feld: "Notiz",
-      vorher: "—",
+      vorher: "leer",
       nachher: "Seite 2 fehlt",
     });
   });
@@ -801,7 +801,7 @@ describe("proposalInputSchema", () => {
           { pageId: SEITE_1, text: "a".repeat(PROPOSAL_TRANSCRIPT_MAX + 1) },
         ],
       }),
-      ["Die Abschrift ist zu lang — höchstens 8000 Zeichen je Seite."],
+      ["Die Abschrift ist zu lang. Höchstens 8000 Zeichen je Seite."],
     );
   });
 
@@ -889,7 +889,7 @@ describe("proposalInputSchema", () => {
     );
     assert.deepEqual(
       issuesFor("title", eingabe({ title: "a".repeat(MATERIAL_TITLE_MAX + 1) })),
-      ["Der Titel ist zu lang — höchstens 80 Zeichen."],
+      ["Der Titel ist zu lang. Höchstens 80 Zeichen."],
     );
   });
 
@@ -900,7 +900,7 @@ describe("proposalInputSchema", () => {
     );
     assert.deepEqual(
       issuesFor("note", eingabe({ note: "n".repeat(MATERIAL_NOTE_MAX + 1) })),
-      ["Die Notiz ist zu lang — höchstens 500 Zeichen."],
+      ["Die Notiz ist zu lang. Höchstens 500 Zeichen."],
     );
   });
 

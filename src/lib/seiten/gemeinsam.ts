@@ -100,8 +100,10 @@ export function epocheAusWoche(week: WeekPlan): string | null {
 export type SchulKalender = {
   week: WeekPlan;
   epoche: string | null;
-  /** Seit wann die Epoche läuft: der Tag, an dem ihre erste Stunde eingetragen
-   *  wurde (wie `epoche.seit` im Zeilenvorrat). Null ohne Epoche. */
+  /** Seit wann die Epoche läuft: der früheste Tag, seit dem eine ihrer Stunden
+   *  in der ersten Stunde ihr Fach trägt (`created_at`; „Epoche wechseln“ setzt
+   *  ihn auf den Tag des Wechsels). Wie `epoche.seit` im Zeilenvorrat. Null
+   *  ohne Epoche. */
   epocheSeit: string | null;
   frei: (tag: string) => string | null;
   stundenAm: (tag: string) => StundeDaten[];

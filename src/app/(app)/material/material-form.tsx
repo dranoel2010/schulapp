@@ -485,7 +485,7 @@ function vorlageHint(page: MaterialFormPage): string | undefined {
   if (page.prefill !== page.transcript) {
     return page.transcript === null
       ? "Vorgeschlagen. Am Blatt steht zu dieser Seite bisher nichts."
-      : "Vorgeschlagen. Am Blatt steht zu dieser Seite schon eine andere Abschrift — diese hier ersetzt sie.";
+      : "Vorgeschlagen. Sie ersetzt die Abschrift, die am Blatt steht.";
   }
 
   if (page.transcript === null) {
@@ -815,8 +815,7 @@ function TranscriptFields({ pages, values, onChange }: TranscriptFieldsProps) {
 
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
         <p className="min-w-0 flex-1 text-[15px] text-ink-2">
-          Was auf den Seiten steht, wörtlich. Gespeichert wird, was hier im Feld
-          steht — lies es gegen das Bild daneben.
+          Was auf den Seiten steht, wörtlich. Lies es gegen das Bild daneben.
         </p>
 
         {pages.length > 1 ? (
@@ -1381,7 +1380,7 @@ export function MaterialForm({
   const subjectChanged = subjectId !== item.subjectId;
 
   const topicHint = subjectChanged
-    ? "Das Fach ist gewechselt — die Themen des alten Fachs bleiben dort stehen, an diesem Blatt fallen sie weg."
+    ? "Das Fach ist gewechselt. Die alten Themen fallen an diesem Blatt weg."
     : "Wonach du dieses Blatt später suchen würdest. Angetippt geht schneller als getippt.";
 
   /**

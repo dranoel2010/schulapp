@@ -51,7 +51,7 @@ export const homeworkInputSchema = z.object({
     .string("Was ist aufgegeben?")
     .trim()
     .min(1, "Was ist aufgegeben?")
-    .max(120, "Der Titel ist zu lang — höchstens 120 Zeichen."),
+    .max(120, "Der Titel ist zu lang. Höchstens 120 Zeichen."),
   dueDate: z
     .string("Wann ist die Aufgabe fällig?")
     .min(1, "Wann ist die Aufgabe fällig?")
@@ -60,7 +60,7 @@ export const homeworkInputSchema = z.object({
   details: z
     .string()
     .trim()
-    .max(2000, "Die Notiz ist zu lang — höchstens 2000 Zeichen.")
+    .max(2000, "Die Notiz ist zu lang. Höchstens 2000 Zeichen.")
     .nullish()
     .transform((value) => (value && value.length > 0 ? value : null)),
 });

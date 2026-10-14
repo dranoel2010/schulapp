@@ -77,9 +77,7 @@ export default async function NewProposalPage({
           Vorschlag anlegen
         </h2>
         <p className="text-[15px] text-ink-2">
-          Ein Vorschlag schreibt nichts. Er legt sich neben das Blatt und
-          wartet, bis jemand ihn übernimmt — und dann steht das volle Formular
-          des Blattes da, vorbelegt und änderbar.
+          Ein Vorschlag ändert nichts, bis du ihn übernimmst.
         </p>
       </header>
 

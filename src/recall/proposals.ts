@@ -553,7 +553,7 @@ const ABWEISUNG: Record<AnlageFehler, string> = {
   "keine-abschrift": "Die Seite hat keine Abschrift.",
   "zitat-leer": "Zu der Frage stand kein Zitat da.",
   "zitat-nicht-gefunden":
-    "Das Zitat steht nicht wörtlich in der Abschrift — der Agent hat es nacherzählt.",
+    "Das Zitat steht nicht wörtlich in der Abschrift.",
   "zitat-unsicher":
     "Das Zitat liegt in einer ⟨unsicheren Stelle⟩ der Abschrift oder reicht hinein.",
 };

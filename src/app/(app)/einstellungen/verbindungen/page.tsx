@@ -25,7 +25,7 @@ export default async function VerbindungenPage() {
     <>
       <SeitenKopf
         titel="Verbundene Programme"
-        sub="Was über den Web MCP mitlesen darf. Ein verbundenes Programm sieht deine Schulsachen und kann Vorschläge in den Eingangskorb legen — ändern kann es nichts."
+        sub="Was über den Web MCP mitlesen darf. Ein verbundenes Programm liest und schlägt vor, ändern kann es nichts."
       />
       {connections.length === 0 ? (
         <p className="p-sub" style={{ marginTop: 16 }}>

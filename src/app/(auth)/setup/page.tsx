@@ -20,7 +20,7 @@ export default async function SetupPage() {
     <>
       <h1 className="hl">Schulapp</h1>
       <p className="q-sub">
-        Einmal einrichten, dann gehört die App dir. Ein Konto, ein Passwort — keine E-Mail, kein fremder Dienst.
+        Einmal einrichten, dann gehört die App dir. Ein Konto, ein Passwort, keine E-Mail.
         Zurücksetzen lässt sich das Passwort nicht, schreib es dir auf.
       </p>
       <SetupForm />

@@ -119,7 +119,7 @@ export function HomeworkForm({
     ? null
     : dueSuggestions[subjectId]
       ? "nächste Stunde in diesem Fach"
-      : "morgen — für dieses Fach steht keine Stunde im Plan";
+      : "morgen, keine Stunde im Plan";
 
   const dueHint =
     [dayLabel(dueDate), suggestion].filter(Boolean).join(" · ") || undefined;

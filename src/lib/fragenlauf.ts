@@ -135,7 +135,7 @@ export async function fragenStand(userId: string, stoff: KlausurStoff): Promise<
     return {
       auskunft,
       was: {
-        nichts: `der Stoff ist mit ${tausender(auskunft.zeichen)} Zeichen länger als die ${tausender(MAX_DATA_CHARS)}, die ein Modell auf einmal bekommt — im Chat lässt er sich Thema für Thema holen`,
+        nichts: `der Stoff ist mit ${tausender(auskunft.zeichen)} Zeichen länger als die ${tausender(MAX_DATA_CHARS)}, die ein Modell auf einmal bekommt. Im Chat lässt er sich Thema für Thema holen`,
       },
     };
   }
@@ -225,7 +225,7 @@ export async function fragenBauen(
     return false;
   });
 
-  const zeile = `Fragen ${kurz(examId)} (${stoff.subjectName}, ${was.wieviele} bestellt): ${ausgang.ergebnis}${ausgang.grund ? ` — ${ausgang.grund}` : ""}`;
+  const zeile = `Fragen ${kurz(examId)} (${stoff.subjectName}, ${was.wieviele} bestellt): ${ausgang.ergebnis}${ausgang.grund ? `: ${ausgang.grund}` : ""}`;
   if (ausgang.ergebnis === "pause" || ausgang.ergebnis === "nichts") console.warn(zeile);
   else console.info(zeile);
   console.info(

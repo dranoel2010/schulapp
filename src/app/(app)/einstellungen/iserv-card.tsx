@@ -126,11 +126,9 @@ export function IservCard({ status }: { status: IservStatus }) {
         titel="IServ"
         sub={
           <>
-              Die App meldet sich mit deinem IServ-Konto an und liest — nur lesen —
-              den Kalender deiner Klasse, den öffentlichen Schulkalender und deine
-              Aufgaben, höchstens alle drei Stunden zwischen 6 und 21 Uhr. In
-              „Schule“ landet nur, was deine Klasse betrifft; im Zweifel bleibt ein
-              Termin draußen. Das Passwort steht nur auf dem Server.
+              Die App liest mit deinem IServ-Konto den Kalender deiner Klasse,
+              den Schulkalender und deine Aufgaben. In „Schule“ landet nur, was
+              deine Klasse betrifft. Das Passwort steht nur auf dem Server.
           </>
         }
       />
@@ -138,9 +136,8 @@ export function IservCard({ status }: { status: IservStatus }) {
       <CardContent className="space-y-4" style={{ marginTop: 16 }}>
         {state.kind === "nicht-eingerichtet" ? (
           <p className="text-[15px] text-ink-2">
-            Auf diesem Server ist IServ nicht eingerichtet — es fehlt{" "}
-            {state.missing.join(", ")}. Die Variablen gehören in die .env auf
-            dem NAS; wie, steht im README unter „IServ“.
+            Auf diesem Server fehlt {state.missing.join(", ")}. Wie man es
+            einrichtet, steht im README unter „IServ“.
           </p>
         ) : null}
 
@@ -148,7 +145,7 @@ export function IservCard({ status }: { status: IservStatus }) {
 
         {state.kind === "noch-nie" ? (
           <p className="text-[15px]">
-            Noch nicht gelesen — der nächste stündliche Lauf holt den ersten Stand.
+            Noch nicht gelesen. Der nächste Lauf holt den ersten Stand.
           </p>
         ) : null}
 
@@ -181,7 +178,7 @@ export function IservCard({ status }: { status: IservStatus }) {
                 {verwendet.map((q) => `${q.label} (${zahlFuer(q.rolle)})`).join(", ")}
                 {uebergangen.length > 0 ? (
                   <span className="mt-1 block text-[0.8125rem] font-normal text-ink-3">
-                    Übergangen: {uebergangen.map((q) => `${q.label} — ${q.grund}`).join("; ")}
+                    Übergangen: {uebergangen.map((q) => `${q.label}: ${q.grund}`).join("; ")}
                   </span>
                 ) : null}
               </Row>

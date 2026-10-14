@@ -401,17 +401,17 @@ export async function updateMaterialAction(
       ...(ueberholt.length > 0
         ? [
             ueberholt.length === 1
-              ? `An Seite ${ueberholt[0]} hat inzwischen jemand anders geschrieben — sie wurde nicht überschrieben. Im Feld steht jetzt, was wirklich an ihr steht.`
-              : `An den Seiten ${ueberholt.join(", ")} hat inzwischen jemand anders geschrieben — sie wurden nicht überschrieben. In den Feldern steht jetzt, was wirklich an ihnen steht.`,
+              ? `Seite ${ueberholt[0]} wurde inzwischen anders beschrieben und blieb so. Im Feld steht jetzt ihr Stand.`
+              : `Die Seiten ${ueberholt.join(", ")} wurden inzwischen anders beschrieben und blieben so. In den Feldern steht jetzt ihr Stand.`,
           ]
         : []),
       ...zusammengefallen.map(
         ({ getippt, thema }) =>
-          `„${getippt}“ meint dasselbe Thema wie „${thema}“ — es steht einmal am Blatt.`,
+          `„${getippt}“ meint dasselbe Thema wie „${thema}“ und steht einmal am Blatt.`,
       ),
       ...umbenannt.map(
         ({ getippt, thema }) =>
-          `„${getippt}“ führt dieses Fach als „${thema}“ — so steht es jetzt am Blatt.`,
+          `„${getippt}“ heißt in diesem Fach „${thema}“. So steht es jetzt am Blatt.`,
       ),
       ...(abgehakt === "gesetzt"
         ? ["Damit ist es durchgesehen und liegt nicht mehr im Eingangskorb."]
@@ -425,7 +425,7 @@ export async function updateMaterialAction(
         errors: {
           topics: `Nicht übernommen: ${verworfen
             .map((title) => `„${title}“`)
-            .join(", ")}. Ein Thema braucht ein Fachwort — „Übungen“ ist das, was man damit macht.`,
+            .join(", ")}. Ein Thema braucht ein Fachwort.`,
         },
       };
     }

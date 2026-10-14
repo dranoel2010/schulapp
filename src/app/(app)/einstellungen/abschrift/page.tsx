@@ -31,17 +31,16 @@ export default async function AbschriftPage() {
     <>
       <SeitenKopf
         titel="Handschrift abschreiben"
-        sub="Seiten, die Docling nicht sicher liest — Handschrift, Formeln —, schreibt Claude vom Foto ab. Daraus wird ein Vorschlag im Eingangskorb, und Jev ordnet ein; ändern kann Claude dabei nichts."
+        sub="Handschrift und Formeln schreibt Claude vom Foto ab. Gedrucktes liest Docling."
       />
       {claude ? (
         <p className="p-sub" style={{ marginTop: 16 }}>
-          {`Eingerichtet: ${CLAUDE_MODELL} über den API-Schlüssel dieses Servers. Jeder Lauf kostet Geld; diesen Monat bisher ${kostenSatz(kosten)}, Abschreiben, Fragen bauen und Arbeitsblätter zusammen. Was die Läufe an einem Blatt gekostet haben, steht an ihm, was ein Fragenlauf gekostet hat, an seiner Klausur.`}
+          {`Eingerichtet: ${CLAUDE_MODELL}. Diesen Monat bisher ${kostenSatz(kosten)} für Abschreiben, Fragen und Arbeitsblätter.`}
         </p>
       ) : (
         <p className="p-sub" style={{ marginTop: 16 }}>
-          Auf diesem Server ist Claude nicht eingerichtet — es fehlt <code>ANTHROPIC_API_KEY</code>. Gedrucktes liest
-          Docling weiter; Handschrift liest niemand, sie bleibt ohne Abschrift, bis du sie am Blatt abtippst.
-          Übungsthemen laufen dann mit Karten statt mit Arbeitsblatt.
+          Auf diesem Server fehlt <code>ANTHROPIC_API_KEY</code>. Handschrift bleibt ohne Abschrift, bis du sie
+          abtippst. Übungsthemen laufen mit Karten statt Arbeitsblatt.
         </p>
       )}
       {/* Ein Arbeitsblatt hat keine eigene Seite: sein jüngster Bau steht hier (Befund der Abnahme von H) */}
