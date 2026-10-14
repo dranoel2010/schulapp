@@ -8,7 +8,7 @@ import { createSubject } from "@/lib/subjects";
 import { berlinZeitpunkt } from "@/lib/tag";
 
 import { archivSeite } from "./archiv";
-import { klausurenSeite, klausurSeite } from "./klausur";
+import { klausurenFuerStoff, klausurenSeite, klausurSeite } from "./klausur";
 
 /**
  * Abnahmerunde 16: Eine Klausur ohne Titel heißt in der Liste „Klausuren“
@@ -61,5 +61,14 @@ describe("Liste „Klausuren“: Thema einer Klausur ohne Titel", () => {
       a.klausuren.map((k) => k.thema),
       ["Test", "Industrialisierung in Deutschland, Industrialisierung in England", "Weimarer Republik"],
     );
+  });
+
+  it("„Stoff einer Klausur“ nennt sie ebenso, nicht nach dem Fach (Runde 20)", async () => {
+    const liste = await klausurenFuerStoff(nutzer);
+    assert.deepEqual(
+      liste.map((k) => k.thema).sort(),
+      ["Industrialisierung in Deutschland, Industrialisierung in England", "Test", "Weimarer Republik"].sort(),
+    );
+    assert.ok(liste.every((k) => k.thema !== "Geschichte"));
   });
 });

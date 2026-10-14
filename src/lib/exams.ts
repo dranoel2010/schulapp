@@ -66,7 +66,12 @@ function optionalText(maxLength: number, tooLong: string) {
     .transform((value) => (value && value.length > 0 ? value : null));
 }
 
-export const examInputSchema = z.object({
+/**
+ * Die Eingabe einer Prüfung, geprüft gegen den App-Tag `heute` (bis 4 Uhr
+ * gilt der Vortag): Anlegen, Bearbeiten und „Lernplan neu erstellen“ rechnen
+ * mit demselben Tag (Runde 20).
+ */
+export const examInputSchemaAb = (heute: string) => z.object({
   subjectId: z.uuid("Zu welchem Fach gehört die Prüfung?"),
   title: optionalText(80, "Der Titel ist zu lang. Höchstens 80 Zeichen."),
   kind: z.enum(EXAM_KINDS, "Diese Art von Prüfung kennt die App nicht."),
@@ -77,7 +82,7 @@ export const examInputSchema = z.object({
     // Der Vergangenheits-Test greift nur, wenn das Datum überhaupt lesbar ist —
     // sonst stünden zwei Meldungen an einem Feld.
     .refine(
-      (value) => !isCalendarDate(value) || value >= todayInBerlin(),
+      (value) => !isCalendarDate(value) || value >= heute,
       "Dieser Tag ist schon vorbei.",
     ),
   leadDays: z.coerce
@@ -93,7 +98,7 @@ export const examInputSchema = z.object({
   notes: optionalText(2000, "Die Notiz ist zu lang. Höchstens 2000 Zeichen."),
 });
 
-export type ExamInput = z.infer<typeof examInputSchema>;
+export type ExamInput = z.infer<ReturnType<typeof examInputSchemaAb>>;
 
 /** Eine Prüfung in der Liste, mit Fach und Fortschritt. */
 export type ExamListItem = Exam & {

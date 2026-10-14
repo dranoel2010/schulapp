@@ -3,7 +3,7 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { materialPages, materialTopics, materials, subjectTopics } from "@/db/schema";
 import { daysBetween } from "@/lib/dates";
-import { examTopicTitles, getExam, listExams, mitProbe } from "@/lib/exams";
+import { examTopicTitles, getExam, listExams, mitProbe, type ExamListItem } from "@/lib/exams";
 import { freeDatesFrom } from "@/lib/free-days";
 import { gradeLabel } from "@/lib/grade-scale";
 import { gradesBySubject } from "@/lib/grades";
@@ -243,6 +243,18 @@ export type KlausurenSeite = {
   /** Wie viele Klausuren im Archiv stehen: ab 1 steht unten „Archiv“ */
   archiv: number;
 };
+
+/**
+ * Die Auswahl auf „Stoff einer Klausur“ (/abruf/klausur): alle Klausuren mit
+ * ihrem Namen wie in Liste, Seite und Archiv (`klausurThema`), damit eine
+ * Klausur ohne Titel nicht nach dem Fach heißt, das in der Unterzeile steht.
+ */
+export async function klausurenFuerStoff(
+  userId: string,
+): Promise<(ExamListItem & { thema: string })[]> {
+  const [liste, themen] = await Promise.all([listExams(userId, { includePast: true }), examTopicTitles(userId)]);
+  return liste.map((k) => ({ ...k, thema: klausurThema(k, themen.get(k.id) ?? []) }));
+}
 
 /**
  * Alle Klausuren in einer Liste wie im Prototyp (Z. 3106), ohne eigenen

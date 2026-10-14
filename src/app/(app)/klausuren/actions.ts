@@ -3,17 +3,17 @@
 
 import { requireUser } from "@/lib/auth";
 import { requestCalendarSync } from "@/lib/calendar/sync";
-import { todayInBerlin } from "@/lib/dates";
 import {
   createExam,
   deleteExam,
-  examInputSchema,
+  examInputSchemaAb,
   generatePlan,
   getExam,
   setTopics,
   updateExam,
 } from "@/lib/exams";
 import { listSubjects } from "@/lib/subjects";
+import { appTag, jetzt } from "@/lib/tag";
 import { linkExamTopics } from "@/lib/subject-topics";
 import { normalizeTopics } from "@/lib/topics";
 
@@ -24,7 +24,8 @@ import type { ExamFieldErrors, ExamFormState } from "./exam-form";
  *
  * Der Lernplan wird hier nicht gerechnet, sondern nur angestoßen: beim Anlegen
  * einmal, beim Bearbeiten nur dann, wenn sich an seinen Grundlagen etwas
- * geändert hat. "heute" kommt aus todayInBerlin(), nie aus new Date().
+ * geändert hat. "heute" ist der App-Tag (`appTag(await jetzt())`, bis 4 Uhr
+ * der Vortag) wie bei „Lernplan neu erstellen“, nie new Date().
  *
  * Dasselbe gilt für das Themen-Vokabular der Fächer: gepflegt wird es in
  * @/lib/subject-topics, angestoßen hier. Jedes Speichern hängt die Themen der
@@ -105,8 +106,9 @@ export async function createExamAction(
   formData: FormData,
 ): Promise<ExamFormState> {
   const user = await requireUser();
+  const heute = appTag(await jetzt());
 
-  const parsed = examInputSchema.safeParse(readInput(formData));
+  const parsed = examInputSchemaAb(heute).safeParse(readInput(formData));
   if (!parsed.success) {
     return { errors: fieldErrors(parsed.error.issues) };
   }
@@ -128,7 +130,7 @@ export async function createExamAction(
   // nächsten Mal stünde unter dem Themenfeld nichts.
   await linkExamTopics(user.id, exam.id);
   // Der Plan entsteht sofort, damit unter "Lernen" gleich etwas steht.
-  await generatePlan(user.id, exam.id, todayInBerlin());
+  await generatePlan(user.id, exam.id, heute);
   requestCalendarSync(user.id);
 
   // Genau dafür wurde die Prüfung eingetragen: der Lernplan steht jetzt da.
@@ -147,7 +149,7 @@ export async function updateExamAction(
     return { message: "Diese Prüfung gibt es nicht mehr." };
   }
 
-  const today = todayInBerlin();
+  const today = appTag(await jetzt());
   const raw = readInput(formData);
 
   // Eine Prüfung, die schon war, muss man weiter bearbeiten können — sonst
@@ -159,7 +161,7 @@ export async function updateExamAction(
     raw.date === existing.exam.date &&
     existing.exam.date < today;
 
-  const parsed = examInputSchema.safeParse(
+  const parsed = examInputSchemaAb(today).safeParse(
     keepsPastDate ? { ...raw, date: today } : raw,
   );
   if (!parsed.success) {

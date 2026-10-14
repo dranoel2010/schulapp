@@ -155,7 +155,7 @@ export function ProposalView({ vorschlag }: { vorschlag: Vorschlag }) {
                           Blatt stand. */}
                       {frage.maschinell ? (
                         <span className="text-ink">
-                          {" · Quelle maschinell gelesen (Docling) – Zitat am Foto prüfen"}
+                          {" · Quelle maschinell gelesen (Docling), Zitat am Foto prüfen"}
                         </span>
                       ) : null}
                     </p>

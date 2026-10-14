@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { requireUser } from "@/lib/auth";
-import { formatGerman, todayInBerlin } from "@/lib/dates";
+import { formatGerman } from "@/lib/dates";
 import { getExam } from "@/lib/exams";
 import { listSubjects } from "@/lib/subjects";
 import { suggestTopicsForExam } from "@/lib/subject-topics";
+import { appTag, jetzt } from "@/lib/tag";
 import { anhangZuKlausur } from "@/recall/items";
 
 import { deleteExamAction, updateExamAction } from "../../actions";
@@ -41,6 +42,8 @@ export default async function ExamPage({
   }
 
   const { exam, subject, topics, blocks } = detail;
+  // App-Tag wie beim Speichern: bis 4 Uhr gilt der Vortag
+  const heute = appTag(await jetzt());
 
   const active = await listSubjects(user.id);
 
@@ -88,7 +91,7 @@ export default async function ExamPage({
       <ExamForm
         action={updateExamAction.bind(null, exam.id)}
         subjects={subjects}
-        today={todayInBerlin()}
+        today={heute}
         topicSuggestions={topicSuggestions}
         exam={exam}
         topics={topics.map((topic) => topic.title)}

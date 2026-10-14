@@ -735,7 +735,7 @@ function drawTranscript(state: DrawState, page: PdfPageEntry): void {
   // Erst hier und nicht vor den beiden Sätzen oben: Über einer ungelesenen
   // oder leeren Seite gibt es nichts, dem man zu viel glauben könnte.
   if (page.maschinell) {
-    drawAside(state, "Maschinell gelesen (Docling) – von niemandem gegengelesen.");
+    drawAside(state, "Maschinell gelesen (Docling), von niemandem gegengelesen.");
   }
 
   drawRich(state, page.transcript, {

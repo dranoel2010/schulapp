@@ -13,7 +13,8 @@ import {
   formatCountdown,
   formatGerman,
 } from "@/lib/dates";
-import { listExams, type ExamListItem } from "@/lib/exams";
+import { type ExamListItem } from "@/lib/exams";
+import { klausurenFuerStoff } from "@/lib/seiten/klausur";
 import { fragenLaufenGerade, fragenStand } from "@/lib/fragenlauf";
 import { laufAnzeige } from "@/lib/leser/claude-ablauf";
 import { letzterFragenLauf } from "@/lib/leser/laeufe";
@@ -71,7 +72,7 @@ export default async function KlausurStoffPage({
   // Klausur ist auch kein toter Posten: Ihre Themen sind derselbe Schlüssel zu
   // denselben Blättern, und nach der Arbeit lernt man weiter (die
   // Erhaltungstermine liegen ausdrücklich DANACH, siehe schedule.ts).
-  const klausuren = await listExams(user.id, { includePast: true });
+  const klausuren = await klausurenFuerStoff(user.id);
   const kommende = klausuren.filter((k) => k.date >= heute);
   const geschrieben = klausuren
     .filter((k) => k.date < heute)
@@ -394,7 +395,7 @@ function KlausurZeile({
   klausur,
   heute,
 }: {
-  klausur: ExamListItem;
+  klausur: ExamListItem & { thema: string };
   heute: string;
 }) {
   const vorbei = klausur.date < heute;
@@ -403,7 +404,7 @@ function KlausurZeile({
     <li>
       <Link href={`/abruf/klausur?klausur=${klausur.id}`} className="lrow plain">
         <span>
-          <b>{klausur.title ?? klausur.subject.name}</b>
+          <b>{klausur.thema}</b>
           <span className="s">
             {klausur.subject.name} · {formatGerman(klausur.date, "kurz")} ·{" "}
             {/* „vor 3 Tagen" statt „in -3 Tagen": bei einer geschriebenen

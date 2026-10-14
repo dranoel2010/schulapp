@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 import { ButtonLink } from "@/components/kombi/form";
 import { EmptyState } from "@/components/kombi/form";
 import { requireUser } from "@/lib/auth";
-import { todayInBerlin } from "@/lib/dates";
 import { listSubjects } from "@/lib/subjects";
 import { suggestTopicsForExam } from "@/lib/subject-topics";
+import { appTag, jetzt } from "@/lib/tag";
 
 import { createExamAction } from "../actions";
 import { ExamForm } from "../exam-form";
@@ -16,7 +16,8 @@ export const metadata: Metadata = {
 
 export default async function NewExamPage() {
   const user = await requireUser();
-  const today = todayInBerlin();
+  // App-Tag wie beim Speichern: bis 4 Uhr gilt der Vortag
+  const today = appTag(await jetzt());
   const subjects = await listSubjects(user.id);
 
   // Ohne Fach kein Formular — die Auswahl wäre leer und nichts ließe sich

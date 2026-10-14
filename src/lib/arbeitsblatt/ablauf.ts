@@ -15,6 +15,7 @@ import { appTagVon } from "@/lib/kombi/tag-daten";
 import { blockAngefangen, blockErledigt, blockMinuten } from "@/lib/lernblock";
 import { themaArt } from "@/lib/themen-art";
 import { recallItems, recallSchedule } from "@/recall/schema";
+import { naechsterTerminThema } from "@/recall/themen";
 
 import { blattThema, blockAlsBlatt, blockZiel } from "./quelle";
 import { inhaltSchema, type ArbeitsblattInhalt } from "./schema";
@@ -331,7 +332,7 @@ export type Auswertung = {
   protokollId: string;
   /** Termine, die `done_at` bekamen (Antwort a) */
   termineErledigt: number;
-  /** Nächster offener Termin der Fragen nach heute — „Wieder dran“; null ohne */
+  /** „Wieder dran“: der nächste Termin des Themas, auch ein erst nachgelegter; null ohne */
   wiederDran: string | null;
   /** Der heutige Lernblock zählt jetzt als erledigt */
   blockErledigt: boolean;
@@ -398,6 +399,14 @@ export async function blattAuswerten(
       .orderBy(asc(recallSchedule.dueOn))
       .limit(1);
     wiederDran = naechster?.dueOn ?? null;
+    // Ein Blatt zu einem Thema sagt „Wieder dran“ wie die Karten
+    // (`naechsterTerminThema()`): schließt die Auswertung die letzten offenen
+    // Termine, gilt der Tag, den Dauertakt oder Lernplan danach anlegen,
+    // statt dass die Zeile entfällt (Runde 20).
+    if (zeile.subjectTopicId) {
+      const karte = await themenKarte(userId);
+      wiederDran = await naechsterTerminThema(userId, karte.aufloesen(zeile.subjectTopicId), appTag, []);
+    }
   }
 
   let blockFertig = false;
