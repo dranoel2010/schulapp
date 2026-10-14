@@ -2,4 +2,52 @@
    Vorbild: desktop.html, Abschnitte „Ablage und Blatt“, „Noten“, „Einstellungen“.
    Alles ab 1024 px, Hover nur mit feiner Maus. Gemeinsames (auch .d-drop, .d-dlg) steht in grund.css. */
 @media (min-width:1024px){
+
+/* ---------- Ablage: Fachpillen über der Liste, eine Zeile, seitlich wischbar ---------- */
+.d-fil{display:flex;gap:6px;margin:10px -22px 4px -24px;padding:0 22px 0 24px;overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain}
+.d-fil::-webkit-scrollbar{display:none}
+.d-fil .fp{height:36px;padding:0 13px;white-space:nowrap}
+
+/* ---------- Blatt im Detail ---------- */
+/* Abschrift oder Original: beide stehen im Baum, die Wahl blendet eins aus */
+.bl-aus{display:none}
+.bl-og .original{max-width:560px}
+.d-detail .abschrift{max-width:640px}
+.d-detail .refile .fp{height:36px}
+/* das Original als eigene Spalte gibt es erst ab 1440 px */
+.bl-orig{display:none}
+.bl-orig .original{margin-bottom:14px}
+.bl-cap{font-size:13px;font-weight:560;color:var(--ink-2);margin-bottom:8px}
+.bl-hinweis{margin-top:10px}
+
+@media (min-width:1440px){
+  /* Titel, Unterzeile und Inhalt links, das Original rechts daneben. Die letzte Zeile ist 1fr:
+     ist das Original höher als der Text, wächst nur sie, die Abstände links bleiben. */
+  .d-in:has(> .bl-main){display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,340px);grid-template-rows:auto auto auto 1fr;column-gap:48px;align-items:start;max-width:1180px}
+  .d-in:has(> .bl-main) > *{grid-column:1}
+  .d-in > .bl-orig{display:block;grid-column:2;grid-row:1 / 5;position:sticky;top:var(--dtop)}
+  .bl-seg{display:none}
+  .bl-ab.bl-aus{display:block}
+  .bl-og{display:none}
+}
+
+/* „Blatt löschen?“ und andere Bestätigungen: in der Mitte statt als Karte über die ganze Breite */
+body > .t-confirm[role="alertdialog"]{left:50%;right:auto;top:50%;bottom:auto;width:min(480px,calc(100% - 48px));transform:translate(-50%,-50%);border-radius:22px;padding:26px 28px 24px}
+
+/* ---------- Noten ---------- */
+.d-list .total{margin-top:8px}
+.d-list .lrow .avg{min-width:32px;text-align:right}
+
+/* ---------- Einstellungen ---------- */
+/* „Hell und dunkel … wie das System“: der zweite Span ist am Handy per style aus */
+.set-row .sr-handy{display:none}
+.set-row .sr-desk{display:inline !important}
+.keys{margin-top:18px;border-top:1px solid var(--line)}
+.key-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:16px;min-height:48px;border-bottom:1px solid var(--line);font-size:17px}
+.key-row kbd{font-family:inherit}
+.key-row .k-oder{font-size:13px;color:var(--ink-3);margin:0 6px}
+
+/* ---------- „Ein Blatt oder mehrere“ (Sheet als Dialog) ---------- */
+.d-frage .d-foot .btn{white-space:nowrap}
+
 } /* Ende ab 1024 px */

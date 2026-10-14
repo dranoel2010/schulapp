@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import { AblaufEbene } from "@/components/kombi/ablauf";
+import { Ablegen } from "@/components/kombi/desktop/ablegen";
 import { zielFuerArt, type Bereich } from "@/components/kombi/desktop/bereiche";
 import { Buehne, heuteGezeigt, zielVon, type BuehnenEintrag } from "@/components/kombi/desktop/buehne";
 import { dialogAuf, dialogZu } from "@/components/kombi/desktop/dialog";
@@ -1695,6 +1696,8 @@ export function KombiShell({ children }: { children: ReactNode }) {
       <TischEbene />
       <LernblockTisch />
       <ArbeitsblattTisch />
+      {/* am Rechner: Hochladen, Ablegen per Ziehen, „ein Blatt oder mehrere“ (am Handy nichts) */}
+      <Ablegen />
       <div id="druck" aria-hidden="true" />
     </KombiKontext.Provider>
   );

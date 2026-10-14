@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import {
   abschreibenAction,
@@ -9,11 +9,15 @@ import {
   inDenKorbAction,
 } from "@/app/(app)/material/seite-actions";
 import { dazuAn, dazuStore } from "@/components/kombi/ablauf/blaetter-store";
+import { seitenAnhaengen, useErsteAuswahl } from "@/components/kombi/desktop/ablegen";
+import { useAuswahl } from "@/components/kombi/desktop/auswahl";
+import { istDesktop, useDesktop } from "@/components/kombi/desktop/use-desktop";
 import { useKombi } from "@/components/kombi/kontext";
 import { formatGerman } from "@/lib/dates";
 import { BLATT_VOLL_HINWEIS, MAX_PAGES } from "@/lib/images";
 import { dm, fliesstext } from "@/lib/kombi/text";
 import type { AblageDaten, BlattDaten } from "@/lib/seiten/ablage";
+import type { FachDaten, ThemaZeile } from "@/lib/seiten/faecher";
 
 import { Bestaetigung, BlattRow, PLab, RowBtn, TextLine } from "./zeilen";
 
@@ -23,6 +27,14 @@ import { Bestaetigung, BlattRow, PLab, RowBtn, TextLine } from "./zeilen";
  * bisher auf der Blattseite gab — Bearbeiten (alle Felder, auch die Abschrift
  * von Hand), Seite dazu, Abschreiben lassen mit Lauf- und Kostenzeile, zurück
  * in den Eingangskorb, Vorschlag anlegen, Blatt löschen (Plan 2.2).
+ *
+ * Am Rechner (desktop.html `RENDER_ablage`, `blattDetail`) ist die Ablage die
+ * Liste links, mit Fachpillen (`.d-fil`) darüber; das Blatt steht rechts im
+ * Detail. Ab 1440 px liegt das Original als eigene Spalte neben der Abschrift
+ * (`.bl-orig`). Unter „Fach und Thema“ stehen dort „Thema üben“ oder „Thema
+ * abfragen“ und „Seite dazu“ (Bilder aus dem Ordner statt der Kamera). Am
+ * Handy ändert sich nichts: was nur am Rechner steht, rendert erst, wenn
+ * `useDesktop()` es sagt (nach dem Mount, ab 1024 px).
  */
 
 /** Solange das Blatt nicht eingeordnet ist, steht statt des Fachs sein Stand (Plan 3.8). */
@@ -94,6 +106,7 @@ export function SeiteDazu({ id, seiten }: { id: string; seiten: string[] }) {
 
 export function BlattInhalt({ daten }: { daten: BlattDaten }) {
   const kombi = useKombi();
+  const desktop = useDesktop();
   const [original, setOriginal] = useState(false);
   // Nicht eingeordnet: das vorläufige Fach ist keins, keine Pille ist gedrückt (Plan 3.8)
   const [fach, setFach] = useState<string | null>(daten.warte ? null : daten.fachId);
@@ -118,14 +131,29 @@ export function BlattInhalt({ daten }: { daten: BlattDaten }) {
     );
   };
 
+  /** Rückgängig nach dem Umlegen (am Rechner): das vorige Fach mit seinen Themen, ohne neuen Toast. */
+  const zuruecklegen = (alt: string, themen: string[]) => {
+    setFach(alt);
+    blattFachAction(daten.id, alt, themen).then(
+      (r) => {
+        if (!r.ok) throw new Error("abgewiesen");
+        void kombi.neuLaden();
+      },
+      () => kombi.fehlerToast("Nicht gespeichert", () => zuruecklegen(alt, themen), "Erneut"),
+    );
+  };
+
   const umlegen = (id: string, name: string) => {
     if (id === fach) return;
     const alt = fach;
+    // die Themen fallen beim Umlegen ab; Rückgängig bringt sie wieder
+    const themen = alt === daten.fachId ? daten.themen.map((t) => t.titel) : [];
     setFach(id);
     blattFachAction(daten.id, id).then(
       (r) => {
         if (!r.ok) throw new Error("abgewiesen");
-        kombi.toast(`Nach ${name} verschoben`);
+        // am Rechner mit Rückgängig (desktop.html `blattDetail`), am Handy wie bisher
+        kombi.toast(`Nach ${name} verschoben`, istDesktop() && alt ? () => zuruecklegen(alt, themen) : undefined);
         void kombi.neuLaden();
       },
       () => {
@@ -152,9 +180,41 @@ export function BlattInhalt({ daten }: { daten: BlattDaten }) {
   const sortiert = daten.faecher.slice().sort((x, y) => Number(y.id === fach) - Number(x.id === fach));
   const leer = daten.stand !== "da";
 
-  return (
+  const originale = daten.seiten.map((s) => (
+    <div
+      key={s.id}
+      className="original"
+      role="img"
+      aria-label="Foto der Seite"
+      style={{ backgroundImage: `url("/api/material/${s.id}")`, marginBottom: 14 }}
+    />
+  ));
+  const abschrift = (
+    <div className="abschrift">
+      {leer ? (
+        <>
+          <p className="p-sub">
+            {laeuft || daten.liestGerade
+              ? "Wird abgeschrieben …"
+              : daten.stand === "fehler"
+                ? "Abschrift fehlgeschlagen"
+                : "Abschrift folgt"}
+          </p>
+          {daten.stand === "fehler" && !laeuft && daten.knopf ? (
+            <button className="retry" type="button" onClick={abschreiben}>
+              Erneut versuchen
+            </button>
+          ) : null}
+        </>
+      ) : (
+        daten.seiten.map((s) => (s.abschrift ? <Abschrift key={s.id} text={s.abschrift} /> : null))
+      )}
+    </div>
+  );
+
+  const inhalt = (
     <>
-      <div className="seg2" role="group" aria-label="Ansicht">
+      <div className="seg2 bl-seg" role="group" aria-label="Ansicht">
         <button type="button" aria-pressed={!original} onClick={() => setOriginal(false)}>
           Abschrift
         </button>
@@ -162,40 +222,16 @@ export function BlattInhalt({ daten }: { daten: BlattDaten }) {
           Original
         </button>
       </div>
-      <div>
-        {original ? (
-          daten.seiten.map((s) => (
-            <div
-              key={s.id}
-              className="original"
-              role="img"
-              aria-label="Foto der Seite"
-              style={{ backgroundImage: `url("/api/material/${s.id}")`, marginBottom: 14 }}
-            />
-          ))
-        ) : (
-          <div className="abschrift">
-            {leer ? (
-              <>
-                <p className="p-sub">
-                  {laeuft || daten.liestGerade
-                    ? "Wird abgeschrieben …"
-                    : daten.stand === "fehler"
-                      ? "Abschrift fehlgeschlagen"
-                      : "Abschrift folgt"}
-                </p>
-                {daten.stand === "fehler" && !laeuft && daten.knopf ? (
-                  <button className="retry" type="button" onClick={abschreiben}>
-                    Erneut versuchen
-                  </button>
-                ) : null}
-              </>
-            ) : (
-              daten.seiten.map((s) => (s.abschrift ? <Abschrift key={s.id} text={s.abschrift} /> : null))
-            )}
-          </div>
-        )}
-      </div>
+      {desktop ? (
+        // Am Rechner stehen beide im Baum; ab 1440 px zeigt die Mitte immer
+        // die Abschrift, und das Original hat seine eigene Spalte (ablage.css)
+        <div>
+          <div className={original ? "bl-ab bl-aus" : "bl-ab"}>{abschrift}</div>
+          <div className={original ? "bl-og" : "bl-og bl-aus"}>{originale}</div>
+        </div>
+      ) : (
+        <div>{original ? originale : abschrift}</div>
+      )}
 
       <PLab>Fach und Thema</PLab>
       <div className="refile" role="group" aria-label="Fach ändern">
@@ -216,10 +252,11 @@ export function BlattInhalt({ daten }: { daten: BlattDaten }) {
           Thema folgt
         </p>
       )}
+      {desktop ? <BlattFuss daten={daten} fach={fach} /> : null}
 
       <PLab>Blatt</PLab>
       <RowBtn titel="Blatt bearbeiten" sub="Fach, Titel, Datum, Notiz, Themen, Abschrift, Seiten" ziel={{ href: `/material/${daten.id}/bearbeiten` }} />
-      <SeiteDazu id={daten.id} seiten={daten.seiten.map((x) => x.id)} />
+      {desktop ? null : <SeiteDazu id={daten.id} seiten={daten.seiten.map((x) => x.id)} />}
       {daten.knopf && !laeuft ? (
         <RowBtn
           titel="Abschreiben lassen"
@@ -264,7 +301,9 @@ export function BlattInhalt({ daten }: { daten: BlattDaten }) {
           onJa={() => {
             setLoeschen(false);
             fertig(() => blattLoeschenAction(daten.id), "Gelöscht", () => {
-              kombi.popPage();
+              // am Rechner bleibt die Ablage stehen, ein anderes Blatt rückt ins Detail
+              if (istDesktop()) kombi.zeigeBereich("ablage", {}, { ersetzen: true });
+              else kombi.popPage();
               setTimeout(() => void kombi.neuLaden(), 450);
             });
           }}
@@ -272,15 +311,150 @@ export function BlattInhalt({ daten }: { daten: BlattDaten }) {
       ) : null}
     </>
   );
+
+  if (!desktop) return inhalt;
+  return (
+    <>
+      <div className="bl-main">{inhalt}</div>
+      <aside className="bl-orig" aria-label="Original">
+        <p className="bl-cap">Original</p>
+        {originale}
+      </aside>
+    </>
+  );
+}
+
+/** Die Themen eines Fachs mit ihrer Art, am Rechner für „Thema üben“ oder „Thema abfragen“ nachgeholt. */
+function useFachThemen(fachId: string | null): ThemaZeile[] | null {
+  const [stand, setStand] = useState<{ id: string; themen: ThemaZeile[] } | null>(null);
+  useEffect(() => {
+    if (!fachId) return;
+    let weg = false;
+    fetch(`/api/seite/fach?id=${encodeURIComponent(fachId)}`, { headers: { accept: "application/json" } })
+      .then((r) => (r.ok ? (r.json() as Promise<{ ok: boolean; daten?: FachDaten }>) : null))
+      .then((j) => {
+        if (!weg && j?.ok && j.daten) setStand({ id: fachId, themen: j.daten.themen });
+      })
+      .catch(() => {});
+    return () => {
+      weg = true;
+    };
+  }, [fachId]);
+  return stand && stand.id === fachId ? stand.themen : null;
+}
+
+/**
+ * Am Rechner unter „Fach und Thema“ (desktop.html `blattDetail`): „Thema
+ * üben“ öffnet das Arbeitsblatt des Themas auf dem Tisch, „Thema abfragen“
+ * die Karten des Fachs; „Seite dazu“ hängt Bilder aus dem Ordner an.
+ */
+function BlattFuss({ daten, fach }: { daten: BlattDaten; fach: string | null }) {
+  const kombi = useKombi();
+  const datei = useRef<HTMLInputElement>(null);
+  const eingeordnet = !daten.warte && fach === daten.fachId;
+  const themen = useFachThemen(eingeordnet && daten.themen.length ? daten.fachId : null);
+  const thema = themen ? (daten.themen.map((t) => themen.find((x) => x.id === t.id)).find((x) => !!x) ?? null) : null;
+  const dazu = dazuAn(useSyncExternalStore(dazuStore.subscribe, dazuStore.get, dazuStore.leer), daten.id);
+  const voll = daten.seiten.length >= MAX_PAGES && !dazu;
+
+  let lernen: ReactNode = null;
+  if (thema && eingeordnet) {
+    const ueben = thema.art === "ueben";
+    lernen = (
+      <button
+        className="btn quiet"
+        type="button"
+        onClick={(e) =>
+          kombi.openTisch(
+            ueben ? { thema: thema.id, origin: e.currentTarget } : { mode: "wh", fach: daten.fachId, origin: e.currentTarget },
+          )
+        }
+      >
+        {ueben ? "Thema üben" : "Thema abfragen"}
+      </button>
+    );
+  }
+  return (
+    <>
+      <div className="d-foot bl-foot">
+        {lernen}
+        {voll ? null : (
+          <button className="btn quiet" type="button" onClick={() => datei.current?.click()}>
+            Seite dazu
+          </button>
+        )}
+      </div>
+      {voll ? <p className="p-sub bl-hinweis">{BLATT_VOLL_HINWEIS}</p> : null}
+      {dazu ? (
+        <p className="p-sub bl-hinweis">{dazu.lokal === "haengt" ? "Seite dazu hängt, wird erneut versucht" : "Seite dazu wird hochgeladen"}</p>
+      ) : null}
+      <input
+        ref={datei}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        aria-hidden="true"
+        tabIndex={-1}
+        onChange={(e) => {
+          const dateien = [...(e.target.files ?? [])];
+          e.target.value = "";
+          if (dateien.length) void seitenAnhaengen(daten.id, dateien, kombi);
+        }}
+      />
+    </>
+  );
 }
 
 export const ablageSub = (d: AblageDaten) =>
   d.filter ? (d.filter.art === "thema" ? `Thema: ${d.filter.titel}` : `Nur ${d.filter.titel}`) : null;
 
+/**
+ * Der Fachfilter der Ablage am Rechner (desktop.html `ui.filter`): Zustand
+ * des Fensters, nicht der Adresse. Er bleibt, wenn ein Blatt im Detail steht
+ * und die Liste daneben neu rendert.
+ */
+let filterJetzt: string | null = null;
+const filterHoerer = new Set<() => void>();
+const filterStore = {
+  get: () => filterJetzt,
+  leer: () => null,
+  subscribe(f: () => void) {
+    filterHoerer.add(f);
+    return () => filterHoerer.delete(f);
+  },
+  setzen(id: string | null) {
+    filterJetzt = id;
+    filterHoerer.forEach((f) => f());
+  },
+};
+
 export function AblageInhalt({ daten }: { daten: AblageDaten }) {
   const kombi = useKombi();
+  // am Rechner in der Liste (sonst null): Fachpillen, Filter im Fenster
+  const auswahl = useAuswahl();
+  const gesetzt = useSyncExternalStore(filterStore.subscribe, filterStore.get, filterStore.leer);
+  const pillen = !!auswahl && !daten.filter && daten.gruppen.length > 0;
+  const aktiv = pillen && daten.gruppen.some((g) => g.fachId === gesetzt) ? gesetzt : null;
+  const gruppen = aktiv ? daten.gruppen.filter((g) => g.fachId === aktiv) : daten.gruppen;
+  const faecher = pillen ? daten.gruppen.map((g) => ({ id: g.fachId, name: g.fach })).sort((a, b) => a.name.localeCompare(b.name, "de")) : [];
+  const erstes = gruppen[0]?.blaetter[0]?.id ?? null;
+  useErsteAuswahl("/material", erstes ? { art: "blatt", params: { id: erstes } } : null);
+
   return (
     <>
+      {pillen ? (
+        <div className="d-fil" role="group" aria-label="Fach">
+          <button className="fp" type="button" aria-pressed={!aktiv} onClick={() => filterStore.setzen(null)}>
+            Alle
+          </button>
+          {faecher.map((f) => (
+            <button key={f.id} className="fp" type="button" aria-pressed={aktiv === f.id} onClick={() => filterStore.setzen(f.id)}>
+              {f.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {daten.eingang > 0 ? (
         <TextLine href="/material/eingang">
           {daten.eingang === 1 ? "Eingangskorb · ein Blatt" : `Eingangskorb · ${daten.eingang} Blätter`}
@@ -297,7 +471,7 @@ export function AblageInhalt({ daten }: { daten: AblageDaten }) {
         </div>
       ) : null}
       {daten.gruppen.length === 0 ? <p className="empty">Noch keine Blätter abgelegt.</p> : null}
-      {daten.gruppen.map((g) => (
+      {gruppen.map((g) => (
         <Fragment key={g.fachId}>
           {daten.filter?.art === "fach" ? (
             <h3 className="p-lab">{g.fach}</h3>
@@ -306,7 +480,8 @@ export function AblageInhalt({ daten }: { daten: AblageDaten }) {
               <button
                 type="button"
                 style={{ minHeight: 44, margin: "-12px 0", display: "inline-flex", alignItems: "center", font: "inherit", color: "inherit" }}
-                onClick={() => kombi.openPage("ablage", { fach: g.fachId })}
+                // am Rechner filtert der Kopf wie die Pille, am Handy öffnet er die gefilterte Ablage
+                onClick={() => (pillen ? filterStore.setzen(g.fachId) : kombi.openPage("ablage", { fach: g.fachId }))}
                 aria-label={`Nur ${g.fach} zeigen`}
               >
                 {g.fach}

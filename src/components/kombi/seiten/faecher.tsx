@@ -1,12 +1,17 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import { themaArtAction, themaArtZurueckAction, wiederAufnehmenAction } from "@/app/(app)/faecher/seite-actions";
+import { useErsteAuswahl } from "@/components/kombi/desktop/ablegen";
+import { useDesktop } from "@/components/kombi/desktop/use-desktop";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
+import { Tn } from "@/components/kombi/tn";
+import { formatAverage } from "@/lib/grade-scale";
 import { lang } from "@/lib/kombi/text";
 import type { FachDaten, FaecherDaten, ThemaZeile } from "@/lib/seiten/faecher";
+import type { NotenDaten } from "@/lib/seiten/noten";
 
 import { AufgabeZeile, useAufgaben } from "./aufgabe";
 import { BlattRow, PLab, RowBtn, TextLine } from "./zeilen";
@@ -15,10 +20,17 @@ import { BlattRow, PLab, RowBtn, TextLine } from "./zeilen";
  * Fächer und Fach (Prototyp Z. 3175–3193, `themaArtRow` Z. 3203). Archivierte
  * Fächer stehen zugeklappt unter „Archiviert · n“, in der Gestalt der Zeile
  * „Erledigt“ der Hausaufgaben-Seite (Plan 2.2).
+ *
+ * Am Rechner (desktop.html `RENDER_faecher`) ist die Liste links, das Fach
+ * rechts im Detail: Offen, Klausur, Themen mit Abfragen oder Üben, Blätter
+ * und, nur dort, die Noten des Fachs als Zeile in den Bereich „Noten“.
  */
 
 export function FaecherInhalt({ daten }: { daten: FaecherDaten }) {
   const [auf, setAuf] = useState(false);
+  // Am Rechner ohne Auswahl: das erste Fach
+  const erstes = daten.faecher[0]?.id ?? null;
+  useErsteAuswahl("/faecher", erstes ? { art: "fach", params: { id: erstes } } : null);
   return (
     <>
       {daten.faecher.length === 0 ? <p className="empty">Noch keine Fächer angelegt.</p> : null}
@@ -113,8 +125,41 @@ function ThemaArtRow({ t }: { t: ThemaZeile }) {
   );
 }
 
+/**
+ * Am Rechner: die Noten des Fachs als eine Zeile (desktop.html `RENDER_faecher`),
+ * Notenreihe und Schnitt aus der Seite „Noten“. Ohne Noten steht nichts da.
+ */
+function FachNoten({ id }: { id: string }) {
+  const [noten, setNoten] = useState<NotenDaten | null>(null);
+  useEffect(() => {
+    let weg = false;
+    fetch("/api/seite/noten", { headers: { accept: "application/json" } })
+      .then((r) => (r.ok ? (r.json() as Promise<{ ok: boolean; daten?: NotenDaten }>) : null))
+      .then((j) => {
+        if (!weg && j?.ok && j.daten) setNoten(j.daten);
+      })
+      .catch(() => {});
+    return () => {
+      weg = true;
+    };
+  }, [id]);
+  const f = noten ? [...noten.faecher, ...noten.abgewaehlt].find((x) => x.id === id) : null;
+  if (!f) return null;
+  return (
+    <>
+      <PLab>Noten</PLab>
+      <RowBtn
+        titel={f.reihe}
+        sub={<Tn s={f.schnitt === null ? "Noch kein Schnitt" : `Schnitt ${formatAverage(f.schnitt, 1)}`} />}
+        ziel={{ seite: "notenfach", params: { id } }}
+      />
+    </>
+  );
+}
+
 export function FachInhalt({ daten: vomServer }: { daten: FachDaten }) {
   const kombi = useKombi();
+  const desktop = useDesktop();
   // gezeigt wird der Stand, den der FLIP-Lauf übernommen hat (useAufgaben);
   // eine eben abgehakte Zeile bleibt 350 ms stehen
   const { stand: daten, anwenden, schalten, loeschen, halten, ankerRef } = useAufgaben(vomServer);
@@ -166,6 +211,7 @@ export function FachInhalt({ daten: vomServer }: { daten: FachDaten }) {
           ))}
         </>
       ) : null}
+      {desktop ? <FachNoten id={daten.id} /> : null}
       <PLab>Fach</PLab>
       {daten.archiviert ? (
         <RowBtn

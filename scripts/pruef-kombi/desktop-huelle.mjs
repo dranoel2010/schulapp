@@ -157,7 +157,8 @@ try {
 
       // Zurück im Browser
       await page.click('.rail .r-item[data-v="ablage"]');
-      await page.waitForURL(`${BASIS}/material`);
+      // ohne Auswahl rückt das erste Blatt ins Detail (Teil Ablage): /material oder /material/<id>
+      await page.waitForURL(/\/material(\/[0-9a-f-]{36})?$/);
       await sleep(800);
       await page.goBack();
       await page.waitForURL(`${BASIS}/klausuren/${klausur.id}`);
@@ -167,7 +168,8 @@ try {
 
       // ↑/↓ in der Ablage
       await page.click('.rail .r-item[data-v="ablage"]');
-      await page.waitForURL(`${BASIS}/material`);
+      // ohne Auswahl rückt das erste Blatt ins Detail (Teil Ablage): /material oder /material/<id>
+      await page.waitForURL(/\/material(\/[0-9a-f-]{36})?$/);
       await page.waitForSelector(".d-list [data-id]");
       await sleep(500);
       await page.keyboard.press("ArrowDown");
