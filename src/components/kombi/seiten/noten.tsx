@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { useErsteAuswahl } from "@/components/kombi/desktop/ablegen";
 import { Tn } from "@/components/kombi/tn";
 import { formatAverage } from "@/lib/grade-scale";
 import { dm } from "@/lib/kombi/text";
@@ -14,11 +15,18 @@ import { PLab, RowBtn, TextLine } from "./zeilen";
  * die Notenreihe mit Schnitt; im Fach die Noten mit Titel, Datum und Art,
  * die beiden Töpfe und ihre Gewichtung. „Note eintragen“ führt zum Formular,
  * der Zielrechner steht als Zeile „Was brauche ich für …?“ (Plan 2.2).
+ *
+ * Am Rechner (desktop.html `RENDER_noten`) ist die Liste links mit Gesamt und
+ * Schnitt je Fach, das Fach rechts im Detail. „Note eintragen“ und eine Note
+ * bearbeiten öffnen ihr Formular dort im Detail.
  */
 
 const avg = (x: number) => formatAverage(x, 1);
 
 export function NotenInhalt({ daten }: { daten: NotenDaten }) {
+  // Am Rechner ohne Auswahl: das erste Fach
+  const erstes = daten.faecher[0]?.id ?? daten.abgewaehlt[0]?.id ?? null;
+  useErsteAuswahl("/noten", erstes ? { art: "notenfach", params: { id: erstes } } : null);
   if (!daten.faecher.length && !daten.abgewaehlt.length) {
     return (
       <>

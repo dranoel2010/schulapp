@@ -12,7 +12,7 @@ import {
   claudeVonHandAnstossen,
   claudeVonHandVormerken,
 } from "@/lib/leser/claude-leser";
-import { deleteMaterial, getMaterial, ownsSubject, updateMaterial } from "@/lib/materials";
+import { deleteMaterial, getMaterial, ownsSubject, setMaterialTopics, updateMaterial } from "@/lib/materials";
 
 /**
  * Die Actions der Blattseite im Stapel (Plan 2.2, Zeile `blatt`): Fach
@@ -27,13 +27,20 @@ const id = z.uuid();
  * „Fach ändern“ (Prototyp `refileRow`): setzt das Fach und hakt das Blatt als
  * durchgesehen ab. Die Themen des alten Fachs fallen dabei ab (wie beim
  * Speichern im Formular); ohne Thema zeigt die Seite „Thema folgt“.
+ *
+ * `themen`: nur für Rückgängig am Rechner. Das Blatt geht zurück in sein
+ * altes Fach und bekommt die Themen wieder, die beim Umlegen abgefallen sind.
  */
+const themenTitel = z.array(z.string().max(200)).max(40);
+
 export async function blattFachAction(
   materialId: string,
   subjectId: string,
+  themen?: string[],
 ): Promise<{ ok: boolean }> {
   const user = await requireUser();
   if (!id.safeParse(materialId).success || !id.safeParse(subjectId).success) return { ok: false };
+  if (themen !== undefined && !themenTitel.safeParse(themen).success) return { ok: false };
   if (!(await ownsSubject(user.id, subjectId))) return { ok: false };
   const blatt = await getMaterial(user.id, materialId);
   if (!blatt) return { ok: false };
@@ -43,6 +50,7 @@ export async function blattFachAction(
     capturedOn: blatt.capturedOn,
     note: blatt.note,
   });
+  if (ok && themen?.length) await setMaterialTopics(user.id, materialId, themen);
   if (ok) await markFiled(user.id, materialId, true, await jetzt());
   return { ok };
 }

@@ -14,7 +14,7 @@ import { cap, zahl } from "@/lib/kombi/text";
  */
 
 /** Vorschaubild wie die Kamera (`grab`): 360 px breit, A4-Format, JPEG. */
-async function vorschau(datei: File): Promise<string> {
+export async function vorschau(datei: File): Promise<string> {
   const url = URL.createObjectURL(datei);
   try {
     const img = new Image();
