@@ -178,7 +178,7 @@ describe("Probeklausur im Lernplan", () => {
       assert.equal(blatt.tag, "2026-10-21");
     });
 
-    it("Ferien eintragen: an einem anderen Tag bleibt die Probe, an ihrem Tag rückt sie mit Blatt auf den Tag vor der Klausur", async () => {
+    it("Ferien eintragen: an einem anderen Tag bleibt die Probe, an ihrem Tag rückt sie mit Blatt auf den nächstfrüheren Lerntag", async () => {
       const f = await fachMitThema(nutzer, "Physik", "Optik", "2026-10-01");
       const [k] = await testDb
         .insert(exams)
@@ -199,13 +199,14 @@ describe("Probeklausur im Lernplan", () => {
       assert.equal((await testDb.select().from(studyBlocks).where(eq(studyBlocks.id, probe.id)))[0].date, "2026-11-04");
 
       // Ihr eigener Tag wird auch frei: zwei Tage vorher geht nicht mehr, also
-      // der Tag vor der Klausur (ein bis zwei Tage vorher, Abnahmerunde 17)
+      // der nächstfrühere erlaubte Tag, der Montag (Regel vom 14.10.2026), nie
+      // der Tag vor der Klausur
       await testDb.insert(freePeriods).values({ userId: nutzer, kind: "frei", startsOn: "2026-11-04", endsOn: "2026-11-04" });
       await moveOffFreeDays(nutzer, "2026-11-02");
       const [p] = await testDb.select().from(studyBlocks).where(eq(studyBlocks.id, probe.id));
-      assert.deepEqual([p.date, p.status], ["2026-11-05", "open"]);
+      assert.deepEqual([p.date, p.status], ["2026-11-02", "open"]);
       const [blatt] = await testDb.select().from(arbeitsblaetter).where(eq(arbeitsblaetter.id, zeile.id));
-      assert.equal(blatt.tag, "2026-11-05", "das wartende Blatt zieht mit");
+      assert.equal(blatt.tag, "2026-11-02", "das wartende Blatt zieht mit");
     });
   });
 
