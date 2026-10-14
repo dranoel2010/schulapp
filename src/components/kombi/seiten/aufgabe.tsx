@@ -7,6 +7,7 @@ import { flushSync } from "react-dom";
 import {
   aufgabeLoeschenAction,
   aufgabeSetzenAction,
+  aufgabeWiederAbhakenAction,
   aufgabeWiederherstellenAction,
   aufgabeZuruecknehmenAction,
 } from "@/app/(app)/hausaufgaben/zeile-actions";
@@ -186,8 +187,24 @@ export function useAufgaben<T>(daten: T, optionen?: { wiederOffenMelden?: boolea
               `${a.fach}, ${a.text}`,
             );
           } else if (wiederOffenMelden) {
-            // Im Archiv verlässt eine wieder geöffnete Aufgabe die Seite: sagen, was geschah
-            kombi.toast(`${a.fach} wieder offen`, null, `${a.fach}, ${a.text}`);
+            // Im Archiv verlässt eine wieder geöffnete Aufgabe die Seite: sagen,
+            // was geschah, und Rückgängig stellt das alte doneAt zurück (Antwort 6)
+            const vorher = r.doneAtVorher;
+            const zurueck = () => {
+              if (!vorher) return;
+              laufend.current.add(a.id);
+              loslassen(a.id, () => setze(a.id, { done: true }));
+              const nichtGespeichert = () => {
+                laufend.current.delete(a.id);
+                kombi.fehlerToast("Nicht gespeichert", zurueck, "Erneut");
+              };
+              aufgabeWiederAbhakenAction(a.id, vorher, r.protokollId ?? null).then(async (z) => {
+                if (!z.ok) return nichtGespeichert();
+                await kombi.neuLaden();
+                fertig(a.id);
+              }, nichtGespeichert);
+            };
+            kombi.toast(`${a.fach} wieder offen`, vorher ? zurueck : null, `${a.fach}, ${a.text}`);
           }
           await kombi.neuLaden();
           fertig(a.id);
