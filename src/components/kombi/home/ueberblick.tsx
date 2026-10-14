@@ -14,7 +14,8 @@ import { eingangskorbText, tagName, type AufgabeT, type BlattT, type TagDaten } 
  * Der Überblick (V2 Abschnitt 4, Prototyp `renderUeberblick`, Z. 1932):
  * Aufgaben für den nächsten Schultag (ohne sichtbares Label, die Überschrift
  * sagt es), die nächste Klausur mit Lernblock, Wiederholen (Abschnitt E) und
- * „Zuletzt abgelegt“. In den Ferien nur die Blätter.
+ * „Zuletzt abgelegt“. In den Ferien nur die Blätter, am Tag einer
+ * Probeklausur dazu ihr Klausurblock.
  */
 export function Ueberblick({
   d,
@@ -70,7 +71,8 @@ export function Ueberblick({
           </div>
         </div>
       ) : null}
-      {!d.ferien && d.klausurBlock ? <KlausurBlock daten={d.klausurBlock} heute={d.tag} /> : null}
+      {/* in den Ferien nur am Tag der Probeklausur (letzter Ferientag vor der Klausur) */}
+      {(!d.ferien || d.lernblock) && d.klausurBlock ? <KlausurBlock daten={d.klausurBlock} heute={d.tag} /> : null}
       <WiederholenBlock stand={d.wiederholen} />
       {/* ohne ein einziges Blatt keine Überschrift über leerer Fläche (frisches Konto) */}
       {d.blaetter.length || d.eingangskorb > 0 ? (

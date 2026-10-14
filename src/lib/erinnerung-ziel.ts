@@ -17,3 +17,12 @@ export function zielHeuteLernen(bloecke: readonly { examId: string }[]): string 
 export function zielCountdown(klausuren: readonly { id: string }[]): string {
   return klausuren.length === 1 ? `/klausuren/${klausuren[0].id}` : "/klausuren";
 }
+
+/**
+ * Welche Blöcke von heute in „Heute lernen“ stehen: die offenen. An einem
+ * freien Tag (Ferien sind ganz frei) nur die Probeklausur, die am letzten
+ * Ferientag vor der Klausur liegt (Antwort vom 14.10.2026).
+ */
+export function bloeckeZumErinnern<T extends { status: string; kind: string }>(bloecke: readonly T[], imFrei: boolean): T[] {
+  return bloecke.filter((b) => b.status === "open" && (!imFrei || b.kind === "probe"));
+}

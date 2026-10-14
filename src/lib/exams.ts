@@ -22,7 +22,9 @@ import {
   buildPlan,
   PROBE_MINUTEN,
   probeTagFuer,
+  probeTagGueltig,
   replanOpen,
+  studyDaysFor,
   type Plan,
   type PlanKind,
   type PlanTopic,
@@ -625,7 +627,7 @@ export async function generatePlan(
     mitProbe(exam.kind) &&
     !plan.blocks.some((block) => block.kind === "probe") &&
     !settled.some((block) => block.kind === "probe") &&
-    probeTagFuer(exam.date, plan.studyDays)
+    probeTagFuer(exam.date, plan.studyDays, excludedDates)
   ) {
     remaining.push({ date: today, topicId: null, kind: "probe", minutes: PROBE_MINUTEN, sortOrder: 0 });
   }
@@ -874,7 +876,12 @@ export async function moveOffFreeDays(
     ]);
 
     const open = all.filter((block) => frei(block) && block.date >= today);
-    if (!open.some((block) => free.has(block.date))) continue;
+    // Die Probe darf an ihrem freien Tag liegen (letzter Ferientag vor der
+    // Klausur, `probeTagFuer`); nur alles andere muss aus den Ferien.
+    const lerntage = studyDaysFor({ examDate: exam.date, today, leadDays: exam.leadDays, excludedDates });
+    const darfBleiben = (block: StudyBlock) =>
+      block.kind === "probe" && probeTagGueltig(exam.date, lerntage, block.date, excludedDates);
+    if (!open.some((block) => free.has(block.date) && !darfBleiben(block))) continue;
 
     const occupied = await occupiedAcrossExams(userId, exam.id, all);
 

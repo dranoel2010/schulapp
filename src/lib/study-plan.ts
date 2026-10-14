@@ -133,29 +133,50 @@ function splitDays(days: string[]): {
  * Der Tag der Probeklausur, ein bis zwei Tage vor dem Termin (Antwort 4 vom
  * 13.10.2026, Regel vom 14.10.2026): mit genug Vorlauf (mindestens vier
  * Lerntage) zwei Tage vorher, sonst einer. Liegt die Klausur am Montag, ist
- * es ausdrücklich der Sonntag davor. Ein Wochenendtag ist erlaubt, Ferien und
- * freie Tage nicht (sie fehlen schon in `studyDays`). Ist der Tag nicht
- * erlaubt, gilt der nächstfrühere Lerntag (bei einem Tag Abstand also der Tag
- * zwei vorher), nie ein späterer. Nur ein Tag, der schon vorbei ist (eine
- * verpasste Probe beim Nachholen), rückt auf den Tag vor der Klausur. Nie der Prüfungstag, nie vor heute (beides
- * steckt schon in `studyDays`).
+ * es ausdrücklich der Sonntag davor. Ein Wochenendtag ist erlaubt.
+ *
+ * Ferien und freie Tage (`frei`, nur ab heute) sind sonst ganz frei, die
+ * Probe ist die einzige Ausnahme (Antwort vom 14.10.2026, „am letzten Tag von
+ * den Ferien“): fällt ihr Tag in einen freien Zeitraum, liegt sie am letzten
+ * freien Tag vor der Klausur. Reichen die Ferien bis zum Tag vor der Klausur,
+ * ist es dieser; endet der freie Zeitraum vorher, sein letzter Tag. So springt
+ * sie nie eine Woche vor die Ferien zurück.
+ *
+ * Sonst, ist der Tag nicht erlaubt, gilt der nächstfrühere Lerntag, nie ein
+ * späterer. Nur ein Tag, der schon vorbei ist (eine verpasste Probe beim
+ * Nachholen), rückt auf den Tag vor der Klausur. Nie der Prüfungstag, nie vor
+ * heute.
  *
  * Bleibt nur ein Lerntag (Test morgen), gehört er der Probeklausur. Null,
  * wenn kein Tag in Frage kommt.
  */
-export function probeTagFuer(examDate: string, studyDays: string[]): string | null {
-  if (studyDays.length === 0) return null;
-  return probeTagMitAbstand(examDate, studyDays, studyDays.length >= 4 ? 2 : 1);
+export function probeTagFuer(examDate: string, studyDays: string[], frei: readonly string[] = []): string | null {
+  if (studyDays.length === 0 && frei.length === 0) return null;
+  return probeTagMitAbstand(examDate, studyDays, studyDays.length >= 4 ? 2 : 1, frei);
 }
 
-function probeTagMitAbstand(examDate: string, studyDays: string[], abstand: number): string | null {
+function probeTagMitAbstand(
+  examDate: string,
+  studyDays: string[],
+  abstand: number,
+  frei: readonly string[] = [],
+): string | null {
   // Klausur am Montag: die Probe liegt am Sonntag davor (Antwort vom 14.10.2026)
   const tage = weekdayIndex(examDate) === 0 ? 1 : abstand;
   const ziel = addDays(examDate, -tage);
   if (studyDays.includes(ziel)) return ziel;
+  // Ferien: der letzte freie Tag ab dem Zieltag, höchstens der Tag vor der Klausur
+  const freieTage = new Set(frei.filter((day) => day < examDate));
+  if (freieTage.has(ziel)) {
+    let letzter = ziel;
+    while (freieTage.has(addDays(letzter, 1))) letzter = addDays(letzter, 1);
+    return letzter;
+  }
   // Ist der Tag schon vorbei (verpasst, Nachholen), bleibt der Tag vor der
   // Klausur, wenn er noch kommt.
-  if (tage === 2 && ziel < studyDays[0]) return probeTagMitAbstand(examDate, studyDays, 1);
+  if (tage === 2 && (studyDays.length === 0 || ziel < studyDays[0])) {
+    return probeTagMitAbstand(examDate, studyDays, 1, frei);
+  }
   // Geht der Tag nicht, gilt der nächstfrühere erlaubte, nie ein späterer:
   // bei einem Tag Abstand also zuerst der Tag zwei vorher, bei zwei Tagen
   // Abstand nie der Tag direkt vor der Klausur.
@@ -165,14 +186,28 @@ function probeTagMitAbstand(examDate: string, studyDays: string[], abstand: numb
 
 /**
  * Darf eine Probeklausur, die schon im Plan steht, an ihrem Tag bleiben? Ja,
- * wenn der Tag noch ein Lerntag ist (nicht vorbei, nicht frei, nicht der
- * Prüfungstag) und zur Regel passt, mit zwei oder einem Tag Abstand. Der
- * Abstand gilt ab dem Planen: bleiben beim Nachholen weniger als vier
- * Lerntage, rückt die Probe deshalb nicht auf den Tag vor der Prüfung.
+ * wenn der Tag noch ein Lerntag ist (nicht vorbei, nicht der Prüfungstag) oder
+ * der freie Tag, den die Regel ihr gibt, und er zur Regel passt, mit zwei oder
+ * einem Tag Abstand. Der Abstand gilt ab dem Planen: bleiben beim Nachholen
+ * weniger als vier Lerntage, rückt die Probe deshalb nicht auf den Tag vor der
+ * Prüfung.
  */
-export function probeTagGueltig(examDate: string, studyDays: string[], tag: string): boolean {
-  if (!studyDays.includes(tag)) return false;
-  return probeTagMitAbstand(examDate, studyDays, 2) === tag || probeTagMitAbstand(examDate, studyDays, 1) === tag;
+export function probeTagGueltig(
+  examDate: string,
+  studyDays: string[],
+  tag: string,
+  frei: readonly string[] = [],
+): boolean {
+  if (!studyDays.includes(tag) && !frei.includes(tag)) return false;
+  return (
+    probeTagMitAbstand(examDate, studyDays, 2, frei) === tag ||
+    probeTagMitAbstand(examDate, studyDays, 1, frei) === tag
+  );
+}
+
+/** Die freien Tage, die für die Probe zählen: ab heute, vor der Klausur. */
+function freieTageFuerProbe(input: { examDate: string; today: string; excludedDates?: string[] }): string[] {
+  return (input.excludedDates ?? []).filter((day) => day >= input.today && day < input.examDate);
 }
 
 /**
@@ -192,19 +227,29 @@ export function probeTagGueltig(examDate: string, studyDays: string[], tag: stri
  * davor (nichts mehr durchzuarbeiten, oder ihr Tag ist heute). `abstand`
  * legt eine Probe neu, deren Tag nicht mehr gilt, mit dem Abstand, den sie
  * beim Planen bekommen hat.
+ *
+ * Liegt die Probe an einem freien Tag, gehört er nicht zu `studyDays`: die
+ * Lerntage bleiben alle zum Durcharbeiten und Wiederholen.
  */
 export function tageAufteilen(
   examDate: string,
   studyDays: string[],
   mitProbe: boolean,
-  optionen: { fest?: string | null; abstand?: 1 | 2; behalten?: (probeTag: string) => boolean } = {},
+  optionen: {
+    fest?: string | null;
+    abstand?: 1 | 2;
+    behalten?: (probeTag: string) => boolean;
+    /** freie Tage ab heute: dort darf nur die Probe liegen (`probeTagFuer`) */
+    frei?: readonly string[];
+  } = {},
 ): { probeTag: string | null; learnDays: string[]; reviewDays: string[] } {
+  const frei = optionen.frei ?? [];
   const probeTag = !mitProbe
     ? null
     : (optionen.fest ??
-      (optionen.abstand && studyDays.length > 0
-        ? probeTagMitAbstand(examDate, studyDays, optionen.abstand)
-        : probeTagFuer(examDate, studyDays)));
+      (optionen.abstand && (studyDays.length > 0 || frei.length > 0)
+        ? probeTagMitAbstand(examDate, studyDays, optionen.abstand, frei)
+        : probeTagFuer(examDate, studyDays, frei)));
   if (!probeTag) return { probeTag: null, ...splitDays(studyDays) };
 
   const rest = studyDays.filter((day) => day !== probeTag);
@@ -293,17 +338,18 @@ export function buildPlan(input: PlanInput): Plan {
     input.examDate,
     studyDays,
     Boolean(input.probe),
+    { frei: freieTageFuerProbe(input) },
   );
 
   const warnings: PlanWarning[] = [];
   if (topics.length === 0) warnings.push("no-topics");
-  if (studyDays.length === 0) warnings.push("no-days");
+  if (studyDays.length === 0 && !probeTag) warnings.push("no-days");
   if (topics.length > 0 && studyDays.length > 0 && reviewDays.length === 0 && !probeTag) {
     // Ein einziger Tag: es reicht gerade fürs Durcharbeiten, wiederholt wird nicht mehr.
     warnings.push("tight");
   }
 
-  if (topics.length === 0 || studyDays.length === 0) {
+  if (topics.length === 0 || (studyDays.length === 0 && !probeTag)) {
     return { blocks: [], studyDays, reviewDays, warnings };
   }
 
@@ -328,7 +374,9 @@ export function buildPlan(input: PlanInput): Plan {
   const byDay = collect(entries);
   const blocks: PlannedBlock[] = [];
 
-  for (const day of studyDays) {
+  // Die Probe kann an einem freien Tag liegen, der nicht unter den Lerntagen ist.
+  const tage = probeTag && !studyDays.includes(probeTag) ? [...studyDays, probeTag].sort() : studyDays;
+  for (const day of tage) {
     if (day === probeTag) {
       blocks.push({ date: day, topicId: null, kind: "probe", minutes: PROBE_MINUTEN, sortOrder: 0 });
       continue;
@@ -376,10 +424,11 @@ export function replanOpen(
 
   const minutesPerDay = sanitizeMinutes(input.minutesPerDay);
   const studyDays = studyDaysFor(input);
+  const frei = freieTageFuerProbe(input);
   const ersteProbe = open.find((block) => block.kind === "probe");
   // Eine Probe, die schon im Plan steht und deren Tag noch gilt, bleibt dort.
   const fest =
-    ersteProbe?.date && probeTagGueltig(input.examDate, studyDays, ersteProbe.date)
+    ersteProbe?.date && probeTagGueltig(input.examDate, studyDays, ersteProbe.date, frei)
       ? ersteProbe.date
       : null;
   // Muss sie neu gelegt werden, behält sie ihren Abstand vom Planen (zwei
@@ -390,6 +439,7 @@ export function replanOpen(
     fest,
     abstand,
     behalten: (tag) => !lernenOffen || tag === input.today,
+    frei,
   });
 
   // Tage, an denen schon gelernt wurde, sind ganz oder teilweise verbraucht.

@@ -10,7 +10,7 @@ import {
 } from "@/lib/dates";
 import { vorabBauen } from "@/lib/arbeitsblatt/bauen";
 import { isCronAuthorized } from "@/lib/cron-auth";
-import { zielCountdown, zielHeuteLernen } from "@/lib/erinnerung-ziel";
+import { bloeckeZumErinnern, zielCountdown, zielHeuteLernen } from "@/lib/erinnerung-ziel";
 import { blocksForDay, upcomingExams } from "@/lib/exams";
 import { freePeriodToday } from "@/lib/free-days";
 import { isPushConfigured, sendToUser, type PushPayload } from "@/lib/push";
@@ -101,23 +101,23 @@ export async function GET(request: Request) {
     try {
       // Ferien und Klassenfahrt sind ganz frei — auch von der Vorwarnung vor
       // der Klausur danach. Die kommt am ersten Schultag trotzdem, solange
-      // die Klausur dann noch drei oder einen Tag entfernt ist.
-      if (await freePeriodToday(user.id, today)) {
+      // die Klausur dann noch drei oder einen Tag entfernt ist. Einzige
+      // Ausnahme ist die Probeklausur am letzten Ferientag vor der Klausur.
+      const imFrei = Boolean(await freePeriodToday(user.id, today));
+      const blocks = bloeckeZumErinnern(await blocksForDay(user.id, today), imFrei);
+      if (imFrei && blocks.length === 0) {
         free += 1;
         continue;
       }
 
       const messages: PushPayload[] = [];
 
-      const blocks = (await blocksForDay(user.id, today)).filter(
-        (block) => block.status === "open",
-      );
       if (blocks.length > 0) {
         messages.push(dailyMessage(blocks));
         reminders += 1;
       }
 
-      const soon = (await upcomingExams(user.id, today, 10)).filter((exam) =>
+      const soon = (imFrei ? [] : await upcomingExams(user.id, today, 10)).filter((exam) =>
         COUNTDOWN_DAYS.includes(daysBetween(today, exam.date)),
       );
       if (soon.length > 0) {

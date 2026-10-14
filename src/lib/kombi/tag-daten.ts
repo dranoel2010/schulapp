@@ -1,7 +1,7 @@
-import { and, asc, eq, gt, inArray } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, ne } from "drizzle-orm";
 
 import { db } from "@/db";
-import { examTopics, studyBlocks } from "@/db/schema";
+import { examTopics, exams, studyBlocks } from "@/db/schema";
 import { blocksForDay, listExams, missedBlocks, type TodayBlock } from "@/lib/exams";
 import { freeLabel, freePeriodOn } from "@/lib/free-days";
 import { homeworkForRange, listHomework, type HomeworkItem } from "@/lib/homework";
@@ -125,6 +125,10 @@ export async function ladeTag(userId: string, now: Date, uhrVersatz = 0): Promis
   const tag = stand.tag;
   const ns = naechsterSchultagIn(k, tag);
   const frei = freePeriodOn(k.frei, tag);
+  // Frei heißt ganz frei, mit einer Ausnahme: die Probeklausur am letzten
+  // Ferientag vor der Klausur (`probeTagFuer`). An diesem Tag zeigt der
+  // Überblick ihren Klausurblock trotzdem.
+  const probeImFrei = frei ? await offeneProbeAm(userId, tag) : false;
 
   const alleStunden = [...k.stunden.values()].flat();
   const epochenFach = guessEpochSubject(
@@ -143,7 +147,7 @@ export async function ladeTag(userId: string, now: Date, uhrVersatz = 0): Promis
     listMaterialCards(userId, { limit: 3, order: "aufnahme" }),
     countInbox(userId),
     wiederholenStand(userId, tag),
-    frei ? Promise.resolve(null) : lernblockUeberblick(userId, tag),
+    frei && !probeImFrei ? Promise.resolve(null) : lernblockUeberblick(userId, tag),
   ]);
 
   // Offene Aufgaben und die erledigten bis zum nächsten Schultag (Morgens,
@@ -169,7 +173,11 @@ export async function ladeTag(userId: string, now: Date, uhrVersatz = 0): Promis
     .map((e) => ({ id: e.id, fach: fachKurz(e.subject.name), fachName: e.subject.name, datum: e.date }));
 
   const naechste = klausurenBald[0] ?? null;
-  const block = naechste ? heuteBloecke.find((b) => b.examId === naechste.id) : undefined;
+  const block = frei
+    ? heuteBloecke.find((b) => b.kind === "probe")
+    : naechste
+      ? heuteBloecke.find((b) => b.examId === naechste.id)
+      : undefined;
   let naechsterLernblock: TagDaten["naechsterLernblock"] = null;
   if (naechste && !block) {
     const [nx] = await db
@@ -218,7 +226,7 @@ export async function ladeTag(userId: string, now: Date, uhrVersatz = 0): Promis
     morgens,
     frueh,
     klausurenBald: frei ? [] : klausurenBald,
-    lernblock: frei || !block ? null : lernblockT(block),
+    lernblock: block && (!frei || probeImFrei) ? lernblockT(block) : null,
     naechsterLernblock: frei ? null : naechsterLernblock,
     verpasst:
       !frei && verpasstHier.length
@@ -226,7 +234,26 @@ export async function ladeTag(userId: string, now: Date, uhrVersatz = 0): Promis
         : null,
     blaetter,
     eingangskorb: korb,
-    klausurBlock,
+    // Im Freien nur die Probe von heute, ohne verpasste Blöcke
+    klausurBlock: frei ? (probeImFrei && klausurBlock ? { ...klausurBlock, verpasst: [] } : null) : klausurBlock,
     wiederholen,
   };
+}
+
+/** Steht heute eine offene Probeklausur im Plan einer kommenden Klausur? */
+async function offeneProbeAm(userId: string, tag: string): Promise<boolean> {
+  const [p] = await db
+    .select({ id: studyBlocks.id })
+    .from(studyBlocks)
+    .innerJoin(exams, and(eq(exams.id, studyBlocks.examId), eq(exams.userId, userId)))
+    .where(
+      and(
+        eq(studyBlocks.date, tag),
+        eq(studyBlocks.kind, "probe"),
+        ne(studyBlocks.status, "skipped"),
+        gt(exams.date, tag),
+      ),
+    )
+    .limit(1);
+  return Boolean(p);
 }

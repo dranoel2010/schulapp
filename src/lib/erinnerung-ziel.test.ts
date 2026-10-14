@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 
-import { zielCountdown, zielHeuteLernen } from "@/lib/erinnerung-ziel";
+import { bloeckeZumErinnern, zielCountdown, zielHeuteLernen } from "@/lib/erinnerung-ziel";
 
 describe("Ziele der Push-Erinnerungen (Abschnitt F)", () => {
   it("„Heute lernen“: eine Klausur → ihre Seite, mehrere → Überblick", () => {
@@ -23,5 +23,16 @@ describe("Ziele der Push-Erinnerungen (Abschnitt F)", () => {
     assert.ok(!cron.includes('"/lernen"'));
     const test = readFileSync(path.join(wurzel, "src/app/api/push/test/route.ts"), "utf8");
     assert.match(test, /url: "\/",/);
+  });
+
+  it("am freien Tag nur die Probeklausur (letzter Ferientag), sonst alle offenen", () => {
+    const bloecke = [
+      { id: "l", status: "open", kind: "learn" },
+      { id: "p", status: "open", kind: "probe" },
+      { id: "e", status: "done", kind: "review" },
+    ];
+    assert.deepEqual(bloeckeZumErinnern(bloecke, false).map((b) => b.id), ["l", "p"]);
+    assert.deepEqual(bloeckeZumErinnern(bloecke, true).map((b) => b.id), ["p"]);
+    assert.deepEqual(bloeckeZumErinnern([{ status: "done", kind: "probe" }], true), []);
   });
 });
