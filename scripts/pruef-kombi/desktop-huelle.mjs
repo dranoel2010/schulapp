@@ -140,7 +140,8 @@ try {
       const vorrat = await page.evaluate(async () => (await (await fetch("/api/zeile/vorrat")).json()).vorrat);
       const klausur = vorrat.klausuren.find((k) => k.datum === "2026-10-16") ?? vorrat.klausuren[0];
       await page.goto(`${BASIS}/klausuren/${klausur.id}`);
-      await page.waitForSelector(".d-split .d-detail .p-title");
+      // die Klausur trägt ihre Überschrift selbst (.d-h1, Teil „Hausaufgaben und Klausuren“), andere Details den Seitentitel
+      await page.waitForSelector(".d-split .d-detail :is(.p-title, .d-h1) >> visible=true");
       await sleep(900);
       const direkt = await listeUndDetail(page);
       p.ok(direkt.liste === "Klausuren" && !!direkt.detail, `${w}: /klausuren/<id> direkt: Liste und Detail (${JSON.stringify(direkt)})`);

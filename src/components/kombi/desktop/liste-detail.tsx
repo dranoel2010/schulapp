@@ -12,7 +12,7 @@ import {
 import { SeitenInhalt } from "@/components/kombi/seite";
 import { reduce } from "@/lib/kombi/motion";
 
-import { AuswahlKontext } from "./auswahl";
+import { AuswahlKontext, detailSlot } from "./auswahl";
 import type { Bereich } from "./bereiche";
 import { perTaste, tipptGerade, ueberlagert } from "./tasten";
 
@@ -70,6 +70,18 @@ export function seitenDatenMerken(art: string, params: Record<string, string>, d
 
 /** Eine Seite der Registry, die die Bühne selbst holt (Liste links, Detail rechts). */
 export function GeladeneSeite({ art, params }: { art: string; params: Record<string, string> }) {
+  const { daten, ausCache, ohneNetz } = useSeitenDaten(art, params);
+  return <SeitenInhalt art={art} params={params} daten={daten} ausCache={ausCache} ohneNetz={ohneNetz} />;
+}
+
+/**
+ * Die Daten einer Seite (`/api/seite/<art>`), nach jeder Action neu geholt
+ * (`datenNeu`). Für Details, die ein Teil selbst rendert (die Aufgabe).
+ */
+export function useSeitenDaten(
+  art: string,
+  params: Record<string, string>,
+): { daten: unknown; ausCache: string | null; ohneNetz: boolean } {
   const k = schluessel(art, params);
   const s = useSyncExternalStore(standAbo, () => stand, () => 0);
   const [geladen, setGeladen] = useState<{ k: string; a: Antwort } | null>(null);
@@ -95,7 +107,7 @@ export function GeladeneSeite({ art, params }: { art: string; params: Record<str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [k, art, s]);
   const a = geladen && geladen.k === k ? geladen.a : (cache.get(k) ?? null);
-  return <SeitenInhalt art={art} params={params} daten={a?.daten} ausCache={a?.ausCache ?? null} ohneNetz={ohneNetz && !a} />;
+  return { daten: a?.daten, ausCache: a?.ausCache ?? null, ohneNetz: ohneNetz && !a };
 }
 
 // ── Auswahl ───────────────────────────────────────────────────────────────────
@@ -104,20 +116,11 @@ export { useAuswahl, type Auswahl } from "./auswahl";
 
 // ── Detail-Slots der Teile ────────────────────────────────────────────────────
 
-/**
- * Was ein Teil für eine Auswahl ohne eigene Seite rendert (die Aufgabe hat
- * keine Seite der Registry). Der Teil setzt ihn beim Laden seines Moduls:
- * `detailSlotSetzen("hausaufgaben", (sel) => <AufgabeDetail id={sel} />)`.
- */
-export type DetailSlot = (sel: string) => ReactNode;
-const slots = new Map<Bereich, DetailSlot>();
-
-export function detailSlotSetzen(bereich: Bereich, f: DetailSlot): void {
-  slots.set(bereich, f);
-}
+// Die Slots selbst stehen in auswahl.ts (ohne Kreis über die Registry)
+export { detailSlotSetzen, type DetailSlot } from "./auswahl";
 
 export function DetailAusSlot({ bereich, sel }: { bereich: Bereich; sel: string }) {
-  return slots.get(bereich)?.(sel) ?? null;
+  return detailSlot(bereich)?.(sel) ?? null;
 }
 
 // ── Liste und Detail ──────────────────────────────────────────────────────────

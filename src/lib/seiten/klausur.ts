@@ -11,7 +11,7 @@ import { appTag, jetzt } from "@/lib/tag";
 import { klausurListe } from "@/lib/kombi/archiv";
 import { blockDatenLaden, type BlockDaten } from "@/lib/kombi/lernblock-daten";
 import { buildPlan, type PlanWarning } from "@/lib/study-plan";
-import { lessonsForWeekday, weekdayOf } from "@/lib/timetable";
+import { lessonsForWeekday, listPeriods, periodTimes, weekdayOf } from "@/lib/timetable";
 
 /**
  * Die Klausurseite (Prototyp `PAGES.klausur`, Z. 3112) mit dem ganzen Lernplan,
@@ -59,6 +59,8 @@ export type KlausurSeite = {
   thema: string | null;
   /** Erste Stunde des Fachs am Klausurtag, falls im Stundenplan */
   stunde: number | null;
+  /** Beginn dieser Stunde laut Raster („08:00“), am Rechner im Lernplan */
+  stundeVon: string | null;
   themen: number;
   /** Alle Blöcke ohne die gestrichenen, nach Tag und Reihenfolge */
   bloecke: BlockDaten[];
@@ -72,6 +74,12 @@ export type KlausurSeite = {
   verpasst: { anzahl: number; minuten: number; tag: string } | null;
   /** „2 · 3+ · 2−“ in der Reihenfolge des Eintragens; null ohne Noten */
   noten: string | null;
+  /**
+   * Am Rechner „Noten in ⟨Fach⟩“ neben den Blättern: die Noten einzeln,
+   * älteste zuerst (wie „Noten ⟨Fach⟩“), und der Fachschnitt.
+   */
+  notenListe: { id: string; label: string; titel: string | null; datum: string; art: "schriftlich" | "mündlich"; gewicht: number }[];
+  schnitt: number | null;
   /** `deckblatt`: ID der ersten Seite für die Vorschau (`/api/material/<seite>/vorschau`) */
   blaetter: { id: string; titel: string; datum: string; thema: string; deckblatt: string | null }[];
 };
@@ -152,11 +160,12 @@ export async function klausurSeite(
   const heute = appTag(await jetzt());
 
   const geplant = blocks.filter((b) => b.status !== "skipped");
-  const [bloeckeDaten, freieTage, noten, stunden, blaetter] = await Promise.all([
+  const [bloeckeDaten, freieTage, noten, stunden, raster, blaetter] = await Promise.all([
     blockDatenLaden(userId, geplant),
     freeDatesFrom(userId, heute),
     gradesBySubject(userId),
     lessonsForWeekday(userId, weekdayOf(exam.date)),
+    listPeriods(userId),
     blaetterZurKlausur(userId, topics.map((t) => t.subjectTopicId).filter((x): x is string => x !== null)),
   ]);
 
@@ -188,6 +197,7 @@ export async function klausurSeite(
     art: ART_NAMEN[exam.kind] ?? "Prüfung",
     thema: exam.title ?? (topics.length ? topics.map((t) => t.title).join(", ") : null),
     stunde,
+    stundeVon: stunde !== null ? (periodTimes(raster).get(stunde)?.startsAt ?? null) : null,
     themen: topics.length,
     bloecke: bloeckeDaten,
     erledigt: geplant.filter((b) => b.status === "done").length,
@@ -209,6 +219,18 @@ export async function klausurSeite(
     noten: fachNoten && fachNoten.grades.length
       ? [...fachNoten.grades].reverse().map((g) => gradeLabel(g.value)).join(" · ")
       : null,
+    notenListe: (fachNoten?.grades ?? [])
+      .slice()
+      .reverse()
+      .map((g) => ({
+        id: g.id,
+        label: gradeLabel(g.value),
+        titel: g.title,
+        datum: g.date,
+        art: g.kind === "muendlich" ? ("mündlich" as const) : ("schriftlich" as const),
+        gewicht: g.weight,
+      })),
+    schnitt: fachNoten?.average ?? null,
     blaetter,
   };
 }

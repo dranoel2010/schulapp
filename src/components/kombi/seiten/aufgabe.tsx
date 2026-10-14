@@ -11,6 +11,7 @@ import {
   aufgabeWiederherstellenAction,
   aufgabeZuruecknehmenAction,
 } from "@/app/(app)/hausaufgaben/zeile-actions";
+import { useAuswahl } from "@/components/kombi/desktop/auswahl";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import { buzz, E, flip, moveTo, reduce, springOpts } from "@/lib/kombi/motion";
@@ -68,7 +69,8 @@ export function useAufgaben<T>(daten: T, optionen?: { wiederOffenMelden?: boolea
 
   /** Ein FLIP-Lauf über die Seite: `mutate` setzt Zustand, flushSync malt ihn. */
   const imFlip = useCallback((mutate: () => void) => {
-    const sc = ankerRef.current?.closest<HTMLElement>(".scroll") ?? null;
+    // am Handy die Scrollfläche der Seite, am Rechner die Liste neben dem Detail
+    const sc = ankerRef.current?.closest<HTMLElement>(".scroll, .d-list") ?? null;
     const run = () => flushSync(mutate);
     if (sc && sc.offsetParent) flip(sc, run, { duration: 340, easing: E.io });
     else run();
@@ -341,6 +343,12 @@ export function AufgabeZeile({
 }) {
   const router = useRouter();
   const kombi = useKombi();
+  // Am Rechner in der Liste (desktop.html `taskRow` mit `onSelect`): der Text
+  // wählt aus, nur der Ring hakt ab. Außerhalb der Liste „Hausaufgaben“ ist
+  // `auswahl` null, die Zeile verhält sich wie am Handy.
+  const imBereich = useAuswahl();
+  const auswahl = imBereich?.bereich === "hausaufgaben" ? imBereich : null;
+  const gewaehlt = auswahl?.sel === a.id;
   const rowRef = useRef<HTMLDivElement>(null);
   const frontRef = useRef<HTMLDivElement>(null);
   const warDone = useRef(a.done);
@@ -390,9 +398,10 @@ export function AufgabeZeile({
   return (
     <div
       ref={rowRef}
-      className={`task${a.done ? " done" : ""}`}
+      className={`task${a.done ? " done" : ""}${gewaehlt ? " sel" : ""}`}
       data-id={a.id}
       data-mode={modus}
+      aria-current={gewaehlt ? "true" : undefined}
       onClickCapture={(e) => {
         if (schluckeKlick) {
           e.stopPropagation();
@@ -431,6 +440,10 @@ export function AufgabeZeile({
           if (offeneZeile) offeneZeile.schliessen();
           if ((e.target as HTMLElement).closest(".check")) {
             onSchalten(a, !a.done);
+            return;
+          }
+          if (auswahl) {
+            if (!gewaehlt) kombi.zeigeBereich("hausaufgaben", { sel: a.id });
             return;
           }
           if (a.done) onSchalten(a, false);
@@ -513,7 +526,7 @@ export function AufgabeZeile({
             </span>
           </span>
         </button>
-        <div className="t-text">
+        <div className="t-text" data-waehlen={auswahl ? "" : undefined}>
           <p className="t-title">
             <b>{a.fach}</b>
             <span className="t-txt">{a.text}</span>
