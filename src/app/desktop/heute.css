@@ -1,5 +1,49 @@
 /* Teil: Heute (Startseite am Rechner: links die Startseite des Handys, rechts der nächste Schultag als Packhilfe,
    darunter „Zuletzt abgelegt“ über die volle Breite). Vorbild: desktop.html, Abschnitt „Heute“ (.h-grid, .h-col, .d-thumbs …).
-   Alles ab 1024 px, Hover nur mit feiner Maus. Gemeinsames steht in grund.css. */
+   Alles ab 1024 px, Hover nur mit feiner Maus. Gemeinsames steht in grund.css.
+   Unter 1024 px ist .h-grid ein schlichter Block, und Packhilfe und „Zuletzt abgelegt“ sind per style-Attribut aus. */
 @media (min-width:1024px){
+/* Die Seitenleiste trägt das Datum und die Einstellungen: keine Datumszeile mit Zahnrad */
+#whenrow{display:none}
+/* Die Überschrift steht wie .d-head der anderen Bereiche */
+#homeScroll h1.hl{min-height:44px;align-content:center;margin:0}
+
+/* Zwei Spalten: links die Startseite, rechts die Packhilfe. Abstand 40, 64 und 96 px je Stufe. */
+.h-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);column-gap:40px;align-items:start;margin-top:14px}
+@media (min-width:1280px){.h-grid{column-gap:64px}}
+@media (min-width:1680px){.h-grid{column-gap:96px}}
+.h-grid > .modes{min-width:0}
+/* In den Ferien gibt es keine Packhilfe: dieselbe linke Spalte, rechts bleibt frei */
+.h-grid.h-ohne > .modes{grid-column:1}
+/* Morgens ohne Abgabe und ohne Klausur stünde links nichts: dann steht die Packhilfe dort */
+.h-grid.h-eins > .modes{display:none}
+.h-grid.h-eins > .h-side{grid-column:1}
+.h-side{display:block !important;min-width:0}
+
+/* Links dieselben Blöcke, mit etwas mehr Luft (desktop.html .h-col) */
+.h-grid .mode > .blk + .blk{margin-top:24px}
+.h-grid .mode > .wh{margin-top:28px}
+.h-grid .mode > .wh + .blk{margin-top:28px}
+/* Stunden und Woche stehen in der Packhilfe, nicht noch einmal links */
+.h-grid .mo-stunden,.h-grid .mo-woche{display:none}
+/* „Zuletzt abgelegt“ steht breit unter beiden Spalten */
+#ovBl{display:none}
+
+/* Packhilfe */
+.h-side .blk:first-child{margin-top:0}
+.h-pack .lesson-row{min-height:52px}
+.h-note{font-size:15px;line-height:1.35;color:var(--ink-2);margin-top:6px}
+
+/* Zuletzt abgelegt: 4 Spalten, ab 1440 px sechs */
+.h-thumbs{display:block !important;max-width:var(--wide);margin-top:44px}
+.d-thumbs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px 16px}
+@media (min-width:1440px){.d-thumbs{grid-template-columns:repeat(6,minmax(0,1fr))}}
+@media (max-width:1439px){.d-thumbs .tcell:nth-child(n+5){display:none}}
+.d-thumbs .tcell{flex:none;width:100%}
+.d-thumbs .tmini{height:auto;aspect-ratio:1/.74}
+/* Titel brechen in der Zelle mit Trennstrich um, nie in die Nachbarzelle */
+.d-thumbs .tcell b{font-size:15px;overflow-wrap:anywhere;hyphens:auto;-webkit-hyphens:auto}
+.d-thumbs .tcell span{font-size:13px}
+.h-thumbs > .textline{margin-top:10px}
+@media (hover:hover) and (pointer:fine){.d-thumbs .tcell:hover .tmini{box-shadow:0 0 0 1px var(--line-strong)}}
 } /* Ende ab 1024 px */

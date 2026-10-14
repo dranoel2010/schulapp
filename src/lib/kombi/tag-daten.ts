@@ -144,7 +144,8 @@ export async function ladeTag(userId: string, now: Date, uhrVersatz = 0): Promis
     listExams(userId, { heute: tag }),
     blocksForDay(userId, tag),
     missedBlocks(userId, tag),
-    listMaterialCards(userId, { limit: 3, order: "aufnahme" }),
+    // sechs für „Zuletzt abgelegt“ am Rechner; das Handy zeigt die ersten drei
+    listMaterialCards(userId, { limit: 6, order: "aufnahme" }),
     countInbox(userId),
     wiederholenStand(userId, tag),
     frei && !probeImFrei ? Promise.resolve(null) : lernblockUeberblick(userId, tag),

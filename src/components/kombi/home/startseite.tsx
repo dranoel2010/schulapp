@@ -13,6 +13,7 @@ import { Datumszeile } from "@/components/kombi/home/datumszeile";
 import { Morgens } from "@/components/kombi/home/morgens";
 import { Ueberblick } from "@/components/kombi/home/ueberblick";
 import { Ueberschrift, type UeberschriftApi } from "@/components/kombi/home/ueberschrift";
+import { HeuteAbgelegt, HeutePack } from "@/components/kombi/desktop/heute-seite";
 import { istDesktop } from "@/components/kombi/desktop/use-desktop";
 import { useKombi } from "@/components/kombi/kontext";
 import { RUECKSPRUNG_MS, TOAST_MS } from "@/lib/kombi/aktion";
@@ -22,6 +23,7 @@ import {
   headlineFor,
   istAelter,
   moAbgaben,
+  packhilfe,
   ueberblickAufgaben,
   type Ansicht,
   type AufgabeT,
@@ -52,6 +54,13 @@ import { themeColor } from "@/lib/kombi/theme-color";
  *
  * Der Ablauf (Ebene `flow`) kommt mit Abschnitt C. Solange er fehlt, zeigt
  * die Startseite nach Schulschluss den Überblick.
+ *
+ * Am Rechner (ab 1024 px, desktop.html `RENDER_heute`) steht dieselbe Seite
+ * links in `.h-grid`, rechts daneben die Packhilfe und darunter „Zuletzt
+ * abgelegt“ über die volle Breite (desktop/heute-seite.tsx). Die Datumszeile
+ * entfällt dort, die Seitenleiste trägt das Datum. Unter 1024 px sind beide
+ * Teile per style-Attribut aus, und die Hülle `.h-grid` ist ein schlichter
+ * Block: am Handy ändert sich nichts.
  */
 
 const ORDER: Record<Ansicht, number> = { morgens: 0, ablauf: 1, ueberblick: 2, frueh: 3 };
@@ -607,41 +616,55 @@ export function Startseite({ daten, vomServer = false }: { daten: TagDaten | nul
   const ov = d ? ueberblickAufgaben(d, ordnung, gehalten) : { gezeigt: [], zeilen: [] };
   const datum = d && view && view !== "ablauf" ? voll(datumFuer(view, d)) : d ? voll(d.tag) : "";
   const handlers = { onAbhaken: abhaken, onBearbeiten: bearbeiten, onLoeschen: loeschen };
+  const moJetzt = d ? zuEcht(moAbgaben(ordnung, d.morgens.tag, d)) : [];
+  const frJetzt = d ? zuEcht(moAbgaben(ordnung, d.frueh.tag, d)) : [];
+
+  // Am Rechner: rechts die Packhilfe. Hat links eine Morgenansicht nichts
+  // abzugeben und keine Klausur (Stunden und Woche stehen dann rechts), rückt
+  // die Packhilfe nach links, statt neben einer leeren Spalte zu stehen.
+  const pack = d ? packhilfe(view, d) : null;
+  const links =
+    view === "morgens" ? { n: moJetzt.length, k: d?.morgens.klausur } : view === "frueh" ? { n: frJetzt.length, k: d?.frueh.klausur } : null;
+  const linksLeer = !!pack && !!links && links.n === 0 && !links.k;
 
   return (
     <div className="scroll" id="homeScroll">
       <Datumszeile datum={datum} />
       <Ueberschrift start={startHeadline} apiRef={ueberschrift} />
-      <div className="modes">
-        <section className={`mode${view === "morgens" ? " on" : ""}`} id="m-morgens" data-v="morgens" aria-label="Morgens">
-          {d ? (
-            <Morgens
-              morgen={d.morgens}
-              abgaben={zuEcht(moAbgaben(ordnung, d.morgens.tag, d))}
-              heute={d.tag}
-              {...handlers}
-            />
-          ) : null}
-        </section>
-        <section
-          className={`mode${view === "ueberblick" ? " on" : ""}`}
-          id="m-ueberblick"
-          data-v="ueberblick"
-          aria-label="Überblick"
-        >
-          {d ? <Ueberblick d={d} gezeigt={zuEcht(ov.gezeigt)} zeilen={ov.zeilen} {...handlers} /> : null}
-        </section>
-        <section className={`mode${view === "frueh" ? " on" : ""}`} id="m-frueh" data-v="frueh" aria-label="Morgen früh">
-          {d ? (
-            <Morgens
-              morgen={d.frueh}
-              abgaben={zuEcht(moAbgaben(ordnung, d.frueh.tag, d))}
-              heute={d.tag}
-              {...handlers}
-            />
-          ) : null}
-        </section>
+      <div className={`h-grid${pack ? "" : " h-ohne"}${linksLeer ? " h-eins" : ""}`}>
+        <div className="modes">
+          <section className={`mode${view === "morgens" ? " on" : ""}`} id="m-morgens" data-v="morgens" aria-label="Morgens">
+            {d ? (
+              <Morgens
+                morgen={d.morgens}
+                abgaben={moJetzt}
+                heute={d.tag}
+                {...handlers}
+              />
+            ) : null}
+          </section>
+          <section
+            className={`mode${view === "ueberblick" ? " on" : ""}`}
+            id="m-ueberblick"
+            data-v="ueberblick"
+            aria-label="Überblick"
+          >
+            {d ? <Ueberblick d={d} gezeigt={zuEcht(ov.gezeigt)} zeilen={ov.zeilen} {...handlers} /> : null}
+          </section>
+          <section className={`mode${view === "frueh" ? " on" : ""}`} id="m-frueh" data-v="frueh" aria-label="Morgen früh">
+            {d ? (
+              <Morgens
+                morgen={d.frueh}
+                abgaben={frJetzt}
+                heute={d.tag}
+                {...handlers}
+              />
+            ) : null}
+          </section>
+        </div>
+        {pack ? <HeutePack morgen={pack} /> : null}
       </div>
+      {d ? <HeuteAbgelegt d={d} /> : null}
     </div>
   );
 }

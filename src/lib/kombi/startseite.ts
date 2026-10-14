@@ -112,7 +112,7 @@ export type TagDaten = {
   naechsterLernblock: { tag: string; label: string } | null;
   /** Offene Blöcke aus der Vergangenheit (Plan 3.5) */
   verpasst: { anzahl: number; tag: string; examId: string } | null;
-  /** Die drei zuletzt aufgenommenen Blätter */
+  /** Die sechs zuletzt aufgenommenen Blätter (das Handy zeigt die ersten drei, `ZULETZT_HANDY`) */
   blaetter: BlattT[];
   /** Blätter im Eingangskorb */
   eingangskorb: number;
@@ -289,4 +289,22 @@ export function verpasstText(v: { anzahl: number; tag: string }, heute: string):
 /** „3 Blätter im Eingangskorb“ / „Ein Blatt im Eingangskorb“ (Plan 3.2). */
 export function eingangskorbText(n: number): string {
   return n === 1 ? "Ein Blatt im Eingangskorb" : `${n} Blätter im Eingangskorb`;
+}
+
+/** Wie viele Blätter „Zuletzt abgelegt“ am Handy zeigt; `TagDaten.blaetter` trägt sechs für den Rechner. */
+export const ZULETZT_HANDY = 3;
+
+/**
+ * Die Packhilfe am Rechner (desktop.html `RENDER_heute`, rechte Spalte):
+ * welcher Schultag dort steht. Am Morgen vor der Schule die Stunden von
+ * heute, sonst die des nächsten Schultags. In den Ferien keiner (frei heißt
+ * ganz frei), dann `null`.
+ */
+export function packhilfe(
+  v: Ansicht | null,
+  d: Pick<TagDaten, "ferien" | "schultag" | "nachSchluss" | "morgens" | "frueh">,
+): MorgenT | null {
+  if (d.ferien) return null;
+  if (v === "morgens" && d.schultag && !d.nachSchluss) return d.morgens;
+  return d.frueh;
 }

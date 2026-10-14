@@ -8,7 +8,14 @@ import { WiederholenBlock } from "@/components/kombi/home/wiederholen";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import { dm } from "@/lib/kombi/text";
-import { eingangskorbText, tagName, type AufgabeT, type BlattT, type TagDaten } from "@/lib/kombi/startseite";
+import {
+  eingangskorbText,
+  tagName,
+  ZULETZT_HANDY,
+  type AufgabeT,
+  type BlattT,
+  type TagDaten,
+} from "@/lib/kombi/startseite";
 
 /**
  * Der Überblick (V2 Abschnitt 4, Prototyp `renderUeberblick`, Z. 1932):
@@ -16,6 +23,10 @@ import { eingangskorbText, tagName, type AufgabeT, type BlattT, type TagDaten } 
  * sagt es), die nächste Klausur mit Lernblock, Wiederholen (Abschnitt E) und
  * „Zuletzt abgelegt“. In den Ferien nur die Blätter, am Tag einer
  * Probeklausur dazu ihr Klausurblock.
+ *
+ * Am Rechner steht „Zuletzt abgelegt“ nicht hier, sondern breit unter beiden
+ * Spalten (desktop/heute-seite.tsx); src/app/desktop/heute.css blendet
+ * `#ovBl` dort aus.
  */
 export function Ueberblick({
   d,
@@ -91,7 +102,7 @@ export function Ueberblick({
                 </button>
               </div>
               <div className="thumbs" id="ovThumbs">
-                {d.blaetter.map((b) => (
+                {d.blaetter.slice(0, ZULETZT_HANDY).map((b) => (
                   <Miniatur key={b.id} b={b} heute={d.tag} />
                 ))}
               </div>
@@ -115,7 +126,16 @@ export function Ueberblick({
  * (`blattStatus`): „Wird eingeordnet“ nur, solange ein Lauf arbeitet; ein
  * Blatt, das im Korb liegen blieb, sagt „Liegt im Eingangskorb“.
  */
-function Miniatur({ b, heute }: { b: BlattT; heute: string }) {
+export function Miniatur({
+  b,
+  heute,
+  onOeffnen,
+}: {
+  b: BlattT;
+  heute: string;
+  /** Am Rechner: das Blatt in der Ablage zeigen statt als Stapelseite */
+  onOeffnen?: (id: string) => void;
+}) {
   const kombi = useKombi();
   const titel = b.titel || (b.datum === heute ? "Blatt von heute" : `Blatt vom ${dm(b.datum)}`);
   const [t, s] =
@@ -132,7 +152,7 @@ function Miniatur({ b, heute }: { b: BlattT; heute: string }) {
       // die Ansage nennt denselben Titel, der unter der Miniatur steht
       aria-label={`${/^Blatt\b/.test(t) ? t : `Blatt ${t}`} öffnen`}
       onPointerDown={() => kombi.vorladen("blatt", { id: b.id })}
-      onClick={() => kombi.openPage("blatt", { id: b.id })}
+      onClick={() => (onOeffnen ? onOeffnen(b.id) : kombi.openPage("blatt", { id: b.id }))}
     >
       <span
         className="tmini"

@@ -13,6 +13,10 @@ import { tn } from "@/lib/kombi/text";
  * Thema), „Klausur heute“ nur an dem Tag, und am Ende „Ganze Woche“.
  *
  * Dieselbe Ansicht zeigt als „Morgen früh“ (`frueh`) den nächsten Schultag.
+ *
+ * Am Rechner stehen „Stunden“ und „Ganze Woche“ in der Packhilfe rechts
+ * daneben (desktop/heute-seite.tsx); heute.css blendet `.mo-stunden` und
+ * `.mo-woche` hier dort aus.
  */
 export function Morgens({
   morgen,
@@ -51,7 +55,7 @@ export function Morgens({
           </div>
         </div>
       ) : null}
-      <div className="blk enter">
+      <div className="blk enter mo-stunden">
         <h2 className="lab">Stunden</h2>
         <div>
           {morgen.stunden.map((l) => (
@@ -72,7 +76,7 @@ export function Morgens({
           <p className="examtoday">{morgen.klausur}</p>
         </div>
       ) : null}
-      <div className="blk enter">
+      <div className="blk enter mo-woche">
         <button
           className="textline big"
           type="button"
