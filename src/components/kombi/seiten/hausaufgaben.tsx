@@ -78,7 +78,7 @@ export function HausaufgabenInhalt({ daten: vomServer }: { daten: HausaufgabenDa
   useEffect(() => {
     if (!amRechner || auswahl?.sel || !erste || pfad !== "/hausaufgaben") return;
     if (new URLSearchParams(window.location.search).get("sel")) return;
-    kombi.zeigeBereich("hausaufgaben", { sel: erste }, { ersetzen: true });
+    kombi.zeigeBereich("hausaufgaben", { sel: erste }, { ersetzen: true, vonSelbst: true });
   }, [amRechner, auswahl?.sel, erste, pfad, kombi]);
 
   const archivGewaehlt = amRechner && pfad === "/archiv";

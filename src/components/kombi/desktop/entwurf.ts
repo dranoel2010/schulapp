@@ -20,6 +20,10 @@ import { istDesktop } from "./use-desktop";
  * (etwa: Aufgabe halb getippt, Noten angesehen, Zurück). Wer das Formular
  * neu öffnet (Link, Knopf), bekommt es leer. Am Handy bleibt das Formular
  * unter einer Seite darüber stehen und braucht das nicht.
+ *
+ * Auch der Fokus übersteht das Queren: stand er in einem Feld, steht er
+ * danach im selben Feld des neuen Formulars (nicht im ersten, wo ein Tippen
+ * still die Fach-Auswahl umstellte).
  */
 
 type Feld = { name: string; i: number; wert: string; an?: boolean };
@@ -60,6 +64,26 @@ const adresse = () => `${window.location.pathname}${window.location.search}`;
 export function useEntwurfUeberSchwelle(desktop: boolean, pfad: string): void {
   const entwuerfe = useRef(new Map<string, Map<string, Feld>>());
   const zurueckspielen = useRef(false);
+  /** Das Feld mit dem Fokus (je Adresse); bleibt stehen, wenn das Feld beim Queren ausgehängt wird */
+  const fokus = useRef<{ k: string; name: string; i: number } | null>(null);
+
+  useEffect(() => {
+    const rein = (e: FocusEvent) => {
+      const el = e.target;
+      if (istFeld(el) && el.name && el.form && el.closest("#pages")) fokus.current = { k: adresse(), name: el.name, i: stelle(el) };
+    };
+    // Wer den Fokus aus dem Feld woandershin gibt, meint es so. Ein Feld, das beim Queren
+    // ausgehängt wird, meldet nichts; der Fokus, den danach Bühne oder Formular setzen, zählt nicht.
+    const raus = (e: FocusEvent) => {
+      if (e.relatedTarget && istFeld(e.target) && !istFeld(e.relatedTarget)) fokus.current = null;
+    };
+    document.addEventListener("focusin", rein, true);
+    document.addEventListener("focusout", raus, true);
+    return () => {
+      document.removeEventListener("focusin", rein, true);
+      document.removeEventListener("focusout", raus, true);
+    };
+  }, []);
 
   // Mitschreiben (ein Listener für alle Formulare der Seiten)
   useEffect(() => {
@@ -114,17 +138,32 @@ export function useEntwurfUeberSchwelle(desktop: boolean, pfad: string): void {
 
   // Nach dem Wechsel über die Schwelle (oder Zurück am Rechner): den Entwurf in die neuen Felder
   const erstes = useRef(true);
+  const vorherDesktop = useRef(desktop);
   useLayoutEffect(() => {
     if (erstes.current) {
       erstes.current = false;
       return;
     }
+    const gequert = vorherDesktop.current !== desktop;
+    vorherDesktop.current = desktop;
     const m = entwuerfe.current.get(adresse());
-    if (!m || !m.size) return;
-    const offen = new Map(m);
+    const f0 = gequert && fokus.current?.k === adresse() ? fokus.current : null;
+    if ((!m || !m.size) && !f0) return;
+    const offen = new Map(m ?? []);
+    let fokusOffen = f0;
     const versuch = () => {
       const pages = document.getElementById("pages");
       if (!pages) return;
+      if (fokusOffen) {
+        const f = fokusOffen;
+        const sel = `[name="${CSS.escape(f.name)}"]`;
+        const form = [...pages.querySelectorAll("form")].find((x) => x.querySelectorAll(sel).length > f.i);
+        const el = form?.querySelectorAll<HTMLElement>(sel)[f.i];
+        if (el && el.getClientRects().length > 0) {
+          fokusOffen = null;
+          if (document.activeElement !== el) el.focus({ preventScroll: true });
+        }
+      }
       zurueckspielen.current = true;
       try {
         for (const [key, f] of offen) {

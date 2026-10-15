@@ -217,7 +217,7 @@ export function useErsteAuswahl(pfad: string, ziel: { art: string; params: Recor
     if (window.location.pathname !== pfad || window.location.search) return;
     if (schon.current === `${art}?${params}`) return;
     schon.current = `${art}?${params}`;
-    kombi.zeigeBereich(art, JSON.parse(params) as Record<string, string>, { ersetzen: true });
+    kombi.zeigeBereich(art, JSON.parse(params) as Record<string, string>, { ersetzen: true, vonSelbst: true });
   }, [leer, art, params, pfad, kombi]);
 }
 

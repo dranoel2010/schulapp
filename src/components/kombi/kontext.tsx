@@ -36,7 +36,12 @@ export type KombiApi = {
    * Zurück gehen; innerhalb desselben Bereichs (andere Auswahl) per
    * replaceState. `"heute"` zeigt die Startseite. Am Handy ist es `openPage`.
    */
-  zeigeBereich: (art: string, params?: Record<string, string>, optionen?: { ersetzen?: boolean }) => void;
+  zeigeBereich: (
+    art: string,
+    params?: Record<string, string>,
+    /** `vonSelbst`: die Auswahl, die der Rechner ohne Klick setzt (die erste der Liste); unter 1024 px gilt wieder die Liste */
+    optionen?: { ersetzen?: boolean; vonSelbst?: boolean },
+  ) => void;
   /**
    * Am Rechner statt der Kamera: Dateien ablegen (Knopf der Zeile, Ziehen ins
    * Fenster). Ohne Dateien öffnet es die Dateiauswahl. Hängt sich eine Ebene

@@ -8,7 +8,7 @@ import { E, reduce } from "@/lib/kombi/motion";
 
 import { BEREICHE, zielFuerArt, zielFuerPfad, type BereichZiel } from "./bereiche";
 import { DetailAusSlot, GeladeneSeite, ListeDetail, seitenDatenMerken } from "./liste-detail";
-import { perTaste } from "./tasten";
+import { perTaste, tipptGerade, ueberlagert } from "./tasten";
 
 /**
  * Die Bühne am Rechner: rechts der Seitenleiste steht genau eine Seite, die
@@ -38,6 +38,8 @@ export function heuteGezeigt(el: HTMLElement | null): void {
 function fokusHinein(el: HTMLElement): void {
   const a = document.activeElement;
   if (a instanceof HTMLElement && el.contains(a) && a !== el) return;
+  // Wer in der Zeile tippt (etwa beim Queren der Schwelle), bleibt dort: eine Ziffer wechselte sonst den Bereich
+  if (tipptGerade() && !(a instanceof HTMLElement && a.closest("[inert]"))) return;
   if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
   el.focus({ preventScroll: true });
 }
@@ -97,6 +99,30 @@ export function Buehne({
     }
     zuletzt = ziel.bereich;
   }, [ziel.bereich]);
+  // Eine Spalte (Seite ohne Bereich) geht auf: der Fokus steht in ihr, Esc ist ihr Zurück-Pfeil
+  const spalte = ziel.lage === "spalte" ? eintrag.key : null;
+  const warSpalte = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    // auch beim Schließen (Zurück in denselben Bereich): der Fokus bleibt nicht auf body liegen
+    const zu = !!warSpalte.current && !spalte && document.activeElement === document.body;
+    warSpalte.current = spalte;
+    if ((spalte || zu) && ref.current) fokusHinein(ref.current);
+  }, [spalte]);
+  const zurueckRef = useRef(onZurueck);
+  useEffect(() => {
+    zurueckRef.current = onZurueck;
+  }, [onZurueck]);
+  useEffect(() => {
+    if (!spalte) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || e.repeat || tipptGerade() || ueberlagert()) return;
+      e.preventDefault();
+      zurueckRef.current();
+    };
+    // vor der Shell: ist Menü, Sheet oder Dialog offen, schließt deren Esc zuerst (ueberlagert)
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [spalte]);
   // Geht die Bühne (zurück nach Heute), weiß der nächste Bereich, woher er kommt
   useEffect(
     () => () => {

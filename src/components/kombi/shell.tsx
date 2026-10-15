@@ -13,7 +13,7 @@ import {
 
 import { AblaufEbene } from "@/components/kombi/ablauf";
 import { Ablegen } from "@/components/kombi/desktop/ablegen";
-import { zielFuerArt, type Bereich } from "@/components/kombi/desktop/bereiche";
+import { BEREICH_JE_ART, zielFuerArt, type Bereich } from "@/components/kombi/desktop/bereiche";
 import { Buehne, heuteGezeigt, zielVon, type BuehnenEintrag } from "@/components/kombi/desktop/buehne";
 import { dialogAuf, dialogZu } from "@/components/kombi/desktop/dialog";
 import { useEntwurfUeberSchwelle } from "@/components/kombi/desktop/entwurf";
@@ -24,6 +24,7 @@ import { Seitenleiste } from "@/components/kombi/desktop/seitenleiste";
 import { useTasten } from "@/components/kombi/desktop/tasten";
 import { istDesktop, useDesktop } from "@/components/kombi/desktop/use-desktop";
 import { Startseite } from "@/components/kombi/home/startseite";
+import { Icon } from "@/components/kombi/icon";
 import { KameraEbene } from "@/components/kombi/kamera";
 import { appUhrStellen } from "@/components/kombi/lernblock/uhr";
 import {
@@ -122,6 +123,22 @@ type KombiState = {
 const LADUNG = Math.random().toString(36).slice(2, 10);
 
 type SeitenAntwort = { daten: unknown; ausCache: string | null };
+
+/** Ein Pfad (Adresse oder Segmente des Routers) ohne Abfrage, Routengruppen und Kodierung: zum Vergleichen. */
+function pfadTeile(pfad: string): string {
+  return pfad
+    .split("?")[0]
+    .split("/")
+    .filter((x) => x && !x.startsWith("("))
+    .map((x) => {
+      try {
+        return decodeURIComponent(x);
+      } catch {
+        return x;
+      }
+    })
+    .join("/");
+}
 
 const gleich = (a: StapelEintrag, b: StapelEintrag) =>
   a.art === b.art && JSON.stringify(a.params) === JSON.stringify(b.params);
@@ -561,6 +578,9 @@ export function KombiShell({ children }: { children: ReactNode }) {
     [router],
   );
 
+  /** Die Stapelseite, die der Rechner von selbst gewählt hat (die erste Klausur neben der Liste) */
+  const autoAuswahl = useRef<string | null>(null);
+
   // für „Erneut“ im Fehler-Toast: openPage ruft sich selbst wieder auf
   const openPageRef = useRef<(art: string, params?: Record<string, string>) => void>(() => {});
   const zeigeBereichRef = useRef<KombiApi["zeigeBereich"]>(() => {});
@@ -681,6 +701,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
       // Eine andere Auswahl im selben Bereich ersetzt den Eintrag; ein anderer Bereich kommt dazu
       const ersetzen = optionen.ersetzen ?? (neu.lage === "split" && alt.lage === "split" && alt.bereich === neu.bereich);
       const key = keyFuer(art);
+      autoAuswahl.current = optionen.vonSelbst ? key : null;
       let gezeigt = false;
       let erledigt = false;
       const zeigen = (daten: unknown, ausCache: string | null) => {
@@ -1280,6 +1301,63 @@ export function KombiShell({ children }: { children: ReactNode }) {
     ausPop.current = false;
   }, [segKey, istStart, setzeEbenen, beschriften, obersteEbene, holen]);
 
+  // Am Rechner folgt die Bühne der Adresse: lag eine Auswahl (Stapelseite) über der Route und
+  // führt ein Link wieder auf genau diese Route (zweimal „Mit Details eintragen“), ändert sich
+  // der Baum des Routers nicht und der Effekt oben schweigt. Dann kommt die Route nach oben.
+  // Umgekehrt führt Zurück von dort auf die Auswahl: die Route geht wieder unter die Stapelseite.
+  useEffect(() => {
+    if (!desktop || istStart) return;
+    const hier = pfadTeile(pathname);
+    const oben = obersteEbene();
+    const r = ebenenRef.current.find((e) => e.typ === "route" && !e.geht);
+    if (!oben || !r) return;
+    const stapelUrl = (e: Ebene) => (e.typ === "stapel" ? pfadTeile(seitenArt(e.art)?.url(e.params) ?? "") : null);
+    if (oben.typ === "stapel") {
+      if (pfadTeile(segKey) !== hier || stapelUrl(oben) === hier) return;
+      setzeEbenen((alt) => [...alt.filter((e) => e !== r), r]);
+      // ein neuer Eintrag des Links (ohne Stapel) bekommt seine Beschriftung, einer aus Zurück/Vor hat sie
+      beschriften(!stateJetzt().kombi);
+      return;
+    }
+    if (pfadTeile(segKey) === hier || stateJetzt().route) return;
+    const auswahl = [...ebenenRef.current].reverse().find((e) => e.typ === "stapel" && !e.geht);
+    if (!auswahl || stapelUrl(auswahl) !== hier) return;
+    setzeEbenen((alt) => [r, ...alt.filter((e) => e !== r)]);
+  }, [desktop, istStart, pathname, segKey, obersteEbene, setzeEbenen, beschriften]);
+
+  // Vom Rechner unter die Schwelle: eine Auswahl, die der Rechner von selbst gesetzt hat (die erste
+  // Klausur, das neueste Blatt), war nie ein Klick. Das Handy zeigt dort wie beim Öffnen die Liste.
+  const warDesktop = useRef(desktop);
+  useEffect(() => {
+    const vorher = warDesktop.current;
+    warDesktop.current = desktop;
+    if (!vorher || desktop) return;
+    const oben = obersteEbene();
+    if (!oben || oben.typ !== "stapel" || oben.key !== autoAuswahl.current) return;
+    autoAuswahl.current = null;
+    const a = Object.hasOwn(BEREICH_JE_ART, oben.art) ? BEREICH_JE_ART[oben.art] : undefined;
+    const liste = a?.detail && a.liste ? a.liste : null;
+    const s = liste ? seitenArt(liste) : null;
+    if (!liste || !s) return;
+    const url = s.url({});
+    // liegt die Liste als Route darunter (Direktaufruf), geht nur die Auswahl; sonst tritt die Liste an ihre Stelle
+    const darunter = [...ebenenRef.current].reverse().find((e) => !e.geht && e.key !== oben.key);
+    if (darunter?.typ === "route" && pfadTeile(url) === pfadTeile(segKey)) {
+      setzeEbenen((alt) => alt.filter((e) => e.key !== oben.key));
+    } else {
+      const key = keyFuer(liste);
+      setzeEbenen((alt) =>
+        alt.map((e): Ebene => (e.key === oben.key ? { key, typ: "stapel", art: liste, params: {}, daten: undefined, ausCache: null, still: true } : e)),
+      );
+      holen(liste, {}).then(
+        (x) => setzeEbenen((alt) => alt.map((e) => (e.key === key && e.typ === "stapel" ? { ...e, daten: x.daten, ausCache: x.ausCache } : e))),
+        () => {},
+      );
+    }
+    window.history.replaceState({ ...stateJetzt(), stapel: stapelJetzt() }, "", url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desktop]);
+
   // „Zuletzt geöffnet“: Seiten ohne Parameter, die (bis G) noch Routen sind,
   // zählen bei jedem Einstieg — nicht nur über openPage (Prototyp `remember`)
   useEffect(() => {
@@ -1730,6 +1808,10 @@ export function KombiShell({ children }: { children: ReactNode }) {
         ref={sheetRef}
       >
         <SheetGriff sheetRef={sheetRef} onSchliessen={() => sheetSchliessen()} />
+        {/* am Rechner beim Blatt auf dem Tisch: ein Ort für den Fokus und ein Weg hinaus (am Handy aus, wie die Seitenleiste) */}
+        <button className="icb d-zu" type="button" aria-label="Schließen" style={{ display: "none" }} onClick={() => sheetSchliessen()}>
+          <Icon name="close" />
+        </button>
         <div className="sh-body" id="sheetBody">
           {sheet?.inhalt}
         </div>

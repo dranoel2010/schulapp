@@ -76,7 +76,8 @@ function merken(el: HTMLElement | null): Ausloeser | null {
     vorgemerkt = null;
     return v && v.bis > Date.now() && v.el.isConnected ? merken(v.el) : null;
   }
-  const sel = el.tagName.toLowerCase() + [...el.classList].map((c) => `.${CSS.escape(c)}`).join("");
+  // mit id (#whBtn, #lbBtn) eindeutig, sonst Tag und Klassen und das wievielte
+  const sel = el.id ? `#${CSS.escape(el.id)}` : el.tagName.toLowerCase() + [...el.classList].map((c) => `.${CSS.escape(c)}`).join("");
   return { el, sel, nr: [...document.querySelectorAll(sel)].indexOf(el) };
 }
 
@@ -87,13 +88,21 @@ function wiederfinden(a: Ausloeser | null | undefined): HTMLElement | null {
   return statt ?? null;
 }
 
+/**
+ * Je Ebene: wer den Fokus vorher hatte. Außerhalb des Effekts, damit es das
+ * Queren der Schwelle übersteht (Tisch auf, Fenster schmal und wieder breit,
+ * Esc: der Fokus kommt trotzdem auf „Wiederholen“ zurück).
+ */
+const ausloeser = new Map<HTMLElement, Ausloeser | null>();
+
 export function useUeberlagerungFokus(desktop: boolean): void {
   useEffect(() => {
     if (!desktop) return;
+    // was am Handy zuging, hat keinen Auslöser mehr
+    const offen = offeneEbenen();
+    for (const el of [...ausloeser.keys()]) if (!offen.includes(el)) ausloeser.delete(el);
     /** Was wir selbst inert gemacht haben (nur das wird wieder frei). */
     const gesperrt = new Set<HTMLElement>();
-    /** Je Ebene: wer den Fokus vorher hatte. */
-    const ausloeser = new WeakMap<HTMLElement, Ausloeser | null>();
     let oben: HTMLElement | null = null;
     let raf = 0;
     /** Kurz nach dem Zurückgeben: wird der Auslöser noch neu gerendert, folgt ihm der Fokus */
@@ -137,7 +146,9 @@ export function useUeberlagerungFokus(desktop: boolean): void {
       oben = neu;
       const aktiv = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       if (neu) {
-        if (!ausloeser.has(neu)) ausloeser.set(neu, aktiv && !neu.contains(aktiv) ? (alt && alt.contains(aktiv) ? null : merken(aktiv)) : merken(null));
+        // ein Auslöser in der Ebene darunter zählt, solange sie offen bleibt (Blatt auf dem Tisch)
+        if (!ausloeser.has(neu))
+          ausloeser.set(neu, aktiv && !neu.contains(aktiv) ? (alt && alt.contains(aktiv) && !ebenen.includes(alt) ? null : merken(aktiv)) : merken(null));
         if (!aktiv || aktiv === document.body || !neu.contains(aktiv)) {
           // ein Bild später: die Ebene blendet per visibility ein
           requestAnimationFrame(() => {
@@ -155,7 +166,7 @@ export function useUeberlagerungFokus(desktop: boolean): void {
         const a = document.activeElement;
         const verloren = !a || a === document.body || alt.contains(a) || !!(a instanceof HTMLElement && a.closest("[inert]"));
         if (verloren) {
-          if (neu) erstesZiel(neu).focus({ preventScroll: true });
+          if (neu) (zurueck && neu.contains(zurueck) && fokussierbar(zurueck) ? zurueck : erstesZiel(neu)).focus({ preventScroll: true });
           else {
             if (zurueck?.isConnected && fokussierbar(zurueck)) zurueck.focus({ preventScroll: true });
             if (ausloeserVon) nachsorge = { a: ausloeserVon, el: zurueck ?? ausloeserVon.el, bis: Date.now() + 2000 };

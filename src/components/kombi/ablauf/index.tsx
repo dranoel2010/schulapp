@@ -17,7 +17,7 @@ import {
   fachAendernAction,
 } from "@/app/(app)/ablauf-actions";
 import { ablaufAusMenuNehmen, ablaufStore, ablaufTagSetzen } from "@/components/kombi/ablauf/ablauf-store";
-import { istDesktop } from "@/components/kombi/desktop/use-desktop";
+import { istDesktop, useDesktop } from "@/components/kombi/desktop/use-desktop";
 import { AufgabeZeile } from "@/components/kombi/ablauf/aufgabe";
 import { BlattZeile, type BlattAnzeige } from "@/components/kombi/ablauf/blatt-zeile";
 import { blattFertig } from "@/components/kombi/ablauf/status-texte";
@@ -384,6 +384,30 @@ export function AblaufEbene() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Vom Rechner unter die Schwelle gezogen: wie beim Öffnen am Handy kommt der Ablauf von selbst,
+  // wenn er dran ist (am Rechner hat ihn der Start oben ausgelassen); nicht über Tisch oder Kamera.
+  // Zurück über die Schwelle: den Ablauf, den erst das Queren brachte, gibt es am Rechner nicht von selbst.
+  const desktop = useDesktop();
+  const warDesktop = useRef(desktop);
+  const vomQueren = useRef(false);
+  useEffect(() => {
+    const vorher = warDesktop.current;
+    warDesktop.current = desktop;
+    if (vorher === desktop) return;
+    if (desktop) {
+      if (vomQueren.current && z.current.sichtbar) setView("ueberblick", { anim: false });
+      vomQueren.current = false;
+      return;
+    }
+    if (document.body.classList.contains("cam-offen") || document.querySelector(".tisch.open")) return;
+    const state = window.history.state as { stapel?: unknown[] } | null;
+    if (z.current.live && !z.current.gestartet && !z.current.sichtbar && window.location.pathname === "/" && !state?.stapel?.length) {
+      z.current.gestartet = true;
+      vomQueren.current = true;
+      setView("ablauf", { anim: false });
+    }
+  }, [desktop, setView]);
 
   useEffect(() => {
     const onVis = () => {

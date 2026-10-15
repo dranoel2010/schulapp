@@ -639,7 +639,7 @@ export function KlausurenInhalt({ daten }: { params: Record<string, string>; dat
   const amRechner = !!auswahl;
   useEffect(() => {
     if (!amRechner || auswahl?.sel || !erste || pfad !== "/klausuren") return;
-    kombi.zeigeBereich("klausur", { id: erste }, { ersetzen: true });
+    kombi.zeigeBereich("klausur", { id: erste }, { ersetzen: true, vonSelbst: true });
   }, [amRechner, auswahl?.sel, erste, pfad, kombi]);
   return (
     <>

@@ -57,12 +57,18 @@ button{-webkit-user-select:none;user-select:none}
 .d-foot .btn{flex:none;min-width:168px}
 /* Bereichsseiten haben keinen Zurück-Pfeil; Seiten ohne Bereich (Spalte) behalten ihn */
 .d-bereich .p-top{display:none}
-.page.d-spalte{left:0;right:0;margin:0 auto;max-width:var(--col)}
+/* Die Spalte deckt die ganze Bühne (sonst schaut Heute links und rechts hervor); nur der Inhalt steht bis --col.
+   --sr ist der Rand neben der Spalte, gerechnet von der Breite der Seite (Prozent bei left und padding). */
+.page.d-spalte{left:0;right:0;margin:0;max-width:none;--sr:max(0px, (100% - var(--col)) / 2)}
+.page.d-spalte > .p-top{left:calc(var(--sr) + 7px);right:calc(var(--sr) + var(--pad))}
+.page.d-spalte > .scroll{padding-left:calc(var(--sr) + var(--pad));padding-right:calc(var(--sr) + var(--pad))}
 /* Die Startseite, solange der Teil „Heute“ sie nicht gestaltet: dieselben Ränder wie die Bühne */
 #homeScroll{padding:var(--dtop) var(--dpad) 128px}
 #homeScroll > *{max-width:var(--wide)}
 /* Der Ablauf kommt am Rechner nicht von selbst; ausdrücklich geöffnet steht er als Spalte bis --col */
 .stage #flow{left:0;right:0;margin:0 auto;max-width:var(--col)}
+/* daneben Papier statt der Startseite: eine Fläche über die ganze Bühne, unter den Schritten (fängt auch Klicks ab) */
+.stage #flow::before{content:"";position:absolute;top:0;bottom:0;left:calc(50% - 100vw);width:200vw;background:var(--bg)}
 
 /* Liste am Rechner: dieselbe Zeile wie am Handy, die Auswahl als leise Fläche */
 .d-list .lrow{position:relative;margin:0 -12px;width:calc(100% + 24px);padding:10px 12px;border-radius:10px;border-bottom:0;min-height:60px;transition:background-color 120ms ease}
@@ -167,6 +173,9 @@ button{-webkit-user-select:none;user-select:none}
 .sheet.d-dlg:not(.on){visibility:hidden}
 .sheet.d-dlg .grab{display:none}
 .sheet.d-dlg .sh-body{overflow:visible;padding:0}
+/* das Blatt auf dem Tisch hat keinen Knopf: oben rechts ein Schließen, der erste Tab-Stopp */
+.sheet.d-dlg.on-table .d-zu{display:grid !important;position:absolute;top:14px;right:14px}
+.sheet.d-dlg.on-table .sh-body > .p-title:first-child{padding-right:44px}
 .d-form{margin-top:18px;display:flex;flex-direction:column;gap:18px}
 .d-form label{display:block;font-size:15px;line-height:1.3;color:var(--ink-2);margin-bottom:8px}
 .d-inp{display:block;width:100%;height:52px;padding:0 16px;border:0;border-radius:14px;background:var(--raise);font-size:17px;outline:none}
