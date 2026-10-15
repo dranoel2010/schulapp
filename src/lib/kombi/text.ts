@@ -10,6 +10,15 @@
 
 const ZONE = "Europe/Berlin";
 
+/**
+ * Anzeigename eines Fachs („Mathe abgehakt“, Klausurzeile, Fachfilter der
+ * Ablage), wörtlich aus dem Prototyp Z. 1094–1100: Mathematik → Mathe,
+ * Biologie → Bio, sonst der Name. `subjects.short` ist ein Kürzel wie „M“
+ * und taugt dafür nicht (Plan 3.2).
+ */
+const KURZ: Record<string, string> = { Mathematik: "Mathe", Biologie: "Bio" };
+export const kurzVon = (name: string): string => KURZ[name] ?? name;
+
 export const TAG = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"] as const;
 export const TK = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"] as const;
 export const MONAT = [

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 
 import { blattOeffnenAction, blattStandAction, type ArbeitsblattAntwort } from "@/app/(app)/arbeitsblatt-actions";
 import { lernblockStartenAction, lernblockTischAction, lernblockUhrAction } from "@/app/(app)/lernblock-actions";
-import { tischAufRechner, tischTastenAn, tischZuRechner } from "@/components/kombi/desktop/tisch-tasten";
+import { selbstDrucken, tischAufRechner, tischTastenAn, tischZuRechner, useDruckVermerk } from "@/components/kombi/desktop/tisch-tasten";
 import { useDesktop } from "@/components/kombi/desktop/use-desktop";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
@@ -373,13 +373,15 @@ export function ArbeitsblattTisch() {
       window.open(`/api/arbeitsblatt/${stand.id}/pdf`, "_blank", "noopener");
     } else {
       try {
-        window.print();
+        selbstDrucken();
       } catch {
         // ohne Druckdialog: die Wertung kommt trotzdem
       }
     }
     void blatt.gedruckt();
   }, [stand, blatt]);
+  // Strg/Cmd+P am Rechner zählt wie der Knopf
+  useDruckVermerk(offen && !!stand?.inhalt && phase === "vorschau", () => void blatt.gedruckt());
 
   const fertig = useCallback(async () => {
     const a = await blatt.auswerten(imBlock);

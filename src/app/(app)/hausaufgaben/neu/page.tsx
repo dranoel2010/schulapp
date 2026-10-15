@@ -81,6 +81,7 @@ export default async function NewHomeworkPage() {
     return (
       <div className="kf-seite">
         <header className="space-y-1">
+          <p className="kf-ober">Hausaufgaben</p>
           <h2 className="p-title">
             Neue Aufgabe
           </h2>
@@ -98,6 +99,7 @@ export default async function NewHomeworkPage() {
   return (
     <div className="kf-seite">
       <header className="space-y-1">
+        <p className="kf-ober">Hausaufgaben</p>
         <h2 className="p-title">Neue Aufgabe</h2>
         <p className="text-[15px] text-ink-2">
           Fällig zur nächsten Stunde im Fach. Das lässt sich ändern.

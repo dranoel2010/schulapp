@@ -141,7 +141,6 @@ export function ListeDetail({
 }) {
   const listeRef = useRef<HTMLDivElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
-  const [detailEl, setDetailEl] = useState<HTMLDivElement | null>(null);
   const vorher = useRef(detailKey);
 
   // Detailwechsel: mit der Maus 140 ms Überblenden, mit der Tastatur keins
@@ -162,7 +161,8 @@ export function ListeDetail({
     el?.scrollIntoView({ block: "nearest" });
   }, [sel]);
 
-  // ↑/↓ und j/k: die nächste Zeile mit data-id, wie ein Klick auf sie
+  // ↑/↓ und j/k: die nächste Zeile mit data-id, wie ein Klick auf sie. Nicht, solange der
+  // Fokus im Detail steht: dort scrollen die Pfeile das Gewählte (.d-detail ist dafür fokussierbar)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -170,6 +170,8 @@ export function ListeDetail({
       const hoch = e.key === "ArrowUp" || e.key === "k";
       if (!runter && !hoch) return;
       if (tipptGerade() || ueberlagert()) return;
+      const a = document.activeElement;
+      if (a instanceof Node && detailRef.current?.contains(a)) return;
       const zeilen = [...(listeRef.current?.querySelectorAll<HTMLElement>("[data-id]") ?? [])].filter((z) => z.offsetParent);
       if (!zeilen.length) return;
       e.preventDefault();
@@ -189,15 +191,10 @@ export function ListeDetail({
   return (
     <div className="d-split">
       <div className="d-list" ref={listeRef}>
-        <AuswahlKontext.Provider value={{ bereich, sel, detailEl }}>{liste}</AuswahlKontext.Provider>
+        <AuswahlKontext.Provider value={{ bereich, sel }}>{liste}</AuswahlKontext.Provider>
       </div>
-      <div
-        className="d-detail"
-        ref={(el) => {
-          detailRef.current = el;
-          setDetailEl(el);
-        }}
-      >
+      {/* tabIndex -1: ein Klick in den Text legt den Fokus hierher, dann scrollen Bild ab und Leertaste das Detail */}
+      <div className="d-detail" ref={detailRef} tabIndex={-1}>
         {detail}
       </div>
     </div>

@@ -27,6 +27,10 @@
 .wk-x{padding:6px 10px 8px;border-left:1px solid var(--line);min-height:64px}
 .wk-x.td{background:var(--quiet)}
 .wk-free{grid-column:2 / -1;padding:28px 14px;border-left:1px solid var(--line);font-size:17px;color:var(--ink-2)}
+/* Ohne Stundenplan: der Satz liegt über den leeren Zellen der Tage (die heute markieren) */
+.wk-c-leer{min-height:0;border-left-color:transparent}
+.wk-leer{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding-top:22px;padding-bottom:12px;border-left:0}
+.wk-leer .textbtn{height:44px;font-size:15px}
 
 /* Aufgabe im Raster: Ring zum Abhaken, Fach fett vor dem Text */
 .mt{display:grid;grid-template-columns:28px minmax(0,1fr);column-gap:4px;align-items:start;padding:5px 0}
@@ -45,7 +49,9 @@
 /* Lernen im Raster: ohne Uhrzeit, „Starten“ steht unter dem Text, nie daneben */
 .ml{display:grid;grid-template-columns:minmax(0,1fr);align-items:center;column-gap:6px;padding:6px 4px}
 .ml p{font-size:15px;line-height:1.35;font-weight:560;min-width:0}
-.ml p span{display:block;font-weight:450;color:var(--ink-2)}
+.ml p span:not(.ml-t){display:block;font-weight:450;color:var(--ink-2)}
+/* Lange Titel kürzt das Raster nach drei Zeilen; ganz stehen sie im title und im Detail */
+.ml-t,.mt p{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden}
 .ml .lbbtn{justify-self:start;padding:0;height:36px;font-size:15px}
 
 /* Lange Wörter (Scheitelpunktform, Gedichtanalyse) brechen in engen Spalten mit Trennstrich, statt in die Nachbarspalte zu laufen */
@@ -62,6 +68,8 @@
   .wk-x{padding-left:6px;padding-right:6px}
   .wk-c b{font-size:15px}
   .mt p b{display:block;hyphens:manual;-webkit-hyphens:manual;overflow-wrap:normal}
+  /* das Fach steht hier in einer eigenen Zeile: dazu drei Zeilen Text */
+  .mt p{-webkit-line-clamp:4;line-clamp:4}
   .mt{grid-template-columns:26px minmax(0,1fr);column-gap:2px}
   .mt .check{width:26px}
 }

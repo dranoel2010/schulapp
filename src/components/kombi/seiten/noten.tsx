@@ -3,7 +3,7 @@
 import Link from "next/link";
 
 import { useErsteAuswahl } from "@/components/kombi/desktop/ablegen";
-import { LeeresDetail } from "@/components/kombi/desktop/leeres-detail";
+import { useAuswahl } from "@/components/kombi/desktop/auswahl";
 import { Tn } from "@/components/kombi/tn";
 import { formatAverage } from "@/lib/grade-scale";
 import { dm } from "@/lib/kombi/text";
@@ -31,17 +31,17 @@ export function NotenInhalt({ daten }: { daten: NotenDaten }) {
   // Am Rechner ohne Auswahl: das erste Fach
   const erstes = daten.faecher[0]?.id ?? daten.abgewaehlt[0]?.id ?? null;
   useErsteAuswahl("/noten", erstes ? { art: "notenfach", params: { id: erstes } } : null);
+  // am Rechner (in der Liste): eine leere Liste sagt es einmal, das Detail daneben bleibt leer
+  const amRechner = !!useAuswahl();
   if (!daten.faecher.length && !daten.abgewaehlt.length) {
     return (
       <>
         <p className="empty">Noch keine Noten eingetragen.</p>
-        {daten.hatFaecher ? <TextLine href="/noten/neu">Note eintragen</TextLine> : null}
-        {/* am Rechner: rechts ein Satz statt einer leeren Spalte */}
-        <LeeresDetail
-          satz={daten.hatFaecher ? "Noch keine Noten." : "Noch keine Fächer."}
-          knopf={daten.hatFaecher ? "Note eintragen" : "Fach anlegen"}
-          href={daten.hatFaecher ? "/noten/neu" : "/faecher/neu"}
-        />
+        {daten.hatFaecher ? (
+          <TextLine href="/noten/neu">Note eintragen</TextLine>
+        ) : amRechner ? (
+          <TextLine href="/faecher/neu">Fach anlegen</TextLine>
+        ) : null}
       </>
     );
   }

@@ -197,6 +197,7 @@ export default async function InboxPage({
     <div className="kf-seite">
 
       <header className="space-y-1">
+        <p className="kf-ober">Ablage</p>
         <h2 className="p-title">Eingangskorb</h2>
         <p className="text-[15px] text-ink-2">
           Neue Blätter und Vorschläge, die eine Entscheidung brauchen. Ein

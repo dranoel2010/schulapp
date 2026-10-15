@@ -54,8 +54,6 @@ button{-webkit-user-select:none;user-select:none}
 .d-list .p-title{min-height:44px;display:flex;align-items:center;margin:0}
 .d-lede{font-size:17px;line-height:1.4;margin-top:14px}
 .d-foot{display:flex;gap:10px;margin-top:28px}
-/* Leere Liste: rechts ein Satz auf der Höhe des Listentitels und die Handlung dazu (leeres-detail.tsx) */
-.d-leer .d-lede{margin-top:0;min-height:44px;display:flex;align-items:center;color:var(--ink-2)}
 .d-foot .btn{flex:none;min-width:168px}
 /* Bereichsseiten haben keinen Zurück-Pfeil; Seiten ohne Bereich (Spalte) behalten ihn */
 .d-bereich .p-top{display:none}
@@ -101,9 +99,10 @@ button{-webkit-user-select:none;user-select:none}
 .d-fact em{font-style:normal;color:var(--ink-2);font-size:15px}
 .d-pane{animation:none}
 
-/* Umbruch: Titel und Listen haben Platz, dort nur im Notfall umbrechen, ohne Trennstrich.
-   Trennstriche (hyphens:auto) setzen nur die Teile in ihren engen Rasterzellen (Woche, Lernplan). */
+/* Umbruch: Titel und Angaben haben Platz, dort nur im Notfall umbrechen, ohne Trennstrich.
+   Die Listen sind schmal: dort trennt ein überlanges Wort mit Trennstrich wie in der Woche und im Lernplan. */
 .d-h1,.d-fact,.d-list .lrow b,.d-list .lrow .s{overflow-wrap:break-word}
+.d-list .lrow b,.d-list .lrow .s,.d-list .task .t-text{hyphens:auto;-webkit-hyphens:auto}
 
 /* ---------- Knöpfe und Tasten ---------- */
 .icb{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--ink-2);transition:background-color 120ms ease,transform 140ms var(--ease-out)}
@@ -176,7 +175,7 @@ button{-webkit-user-select:none;user-select:none}
 
 /* ---------- Fokus und Tastatur ---------- */
 /* Flächen, die den Fokus nur halten (Bereich nach dem Wechsel, Tisch, Dialog), zeigen keinen Ring */
-.d-bereich:focus,#home:focus,.page.d-spalte:focus,.tisch:focus,.cam:focus,.sheet:focus,.d-dlg:focus{outline:none}
+.d-bereich:focus,.d-detail:focus,#home:focus,.page.d-spalte:focus,.tisch:focus,.cam:focus,.sheet:focus,.d-dlg:focus{outline:none}
 /* Wischaktionen des Handys: nur sichtbar und per Tab erreichbar, wenn die Zeile sie zeigt */
 .task:not(.drag-l):not(.open-l) .t-acts{visibility:hidden}
 /* „Zeigen“ der Zeile ist ohne Text 0 px breit: dann auch kein Tab-Stopp */

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 
+import { istDesktop } from "@/components/kombi/desktop/use-desktop";
 import { useKombi } from "@/components/kombi/kontext";
 
 /**
@@ -83,17 +84,33 @@ export function AbbrechenKnopf({ children = "Abbrechen" }: { children?: string }
 }
 
 /**
- * Nach einer abgewiesenen Eingabe (Server Action mit Fehlern): der Fokus geht
- * auf das erste Feld mit Fehler (`aria-invalid`), sonst auf die Meldung über
- * dem Formular. Das scrollt mit, und wer liest, hört die Meldung, die per
- * `aria-describedby` am Feld hängt. Ohne Fehler tut es nichts.
+ * Am Rechner, nach einer abgewiesenen Eingabe (Server Action mit Fehlern):
+ * der Fokus geht auf das erste Feld mit Fehler (`aria-invalid`), sonst auf
+ * die Meldung über dem Formular. Das scrollt mit, und wer liest, hört die
+ * Meldung, die per `aria-describedby` am Feld hängt. Ohne Fehler tut es
+ * nichts. Beim Öffnen steht der Fokus im ersten Feld (nicht auf der Seite).
+ *
+ * Am Handy tut es nichts: dort bliebe sonst die Seite nicht beim Knopf
+ * stehen, und ein Textfeld öffnete die Tastatur (EINBAU.md, „Am Rechner“).
  */
 export function FehlerFokus({ zustand }: { zustand: { message?: string; errors?: object } }) {
   const ref = useRef<HTMLSpanElement>(null);
   const vorher = useRef(zustand);
+  // Beim Öffnen am Rechner: das erste Feld, solange niemand anderswo den Fokus hingesetzt hat
+  useEffect(() => {
+    if (!istDesktop()) return;
+    const form = ref.current?.closest("form");
+    if (!form || !form.closest(".d-detail")) return;
+    const a = document.activeElement;
+    if (a && a !== document.body && !a.matches(".d-bereich, .d-detail") && !form.contains(a)) return;
+    form
+      .querySelector<HTMLElement>("input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])")
+      ?.focus({ preventScroll: true });
+  }, []);
   useEffect(() => {
     if (zustand === vorher.current) return;
     vorher.current = zustand;
+    if (!istDesktop()) return;
     const fehler = zustand.message || (zustand.errors && Object.keys(zustand.errors).length);
     const form = ref.current?.closest("form");
     if (!fehler || !form) return;

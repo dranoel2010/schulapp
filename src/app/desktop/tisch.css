@@ -70,6 +70,14 @@
 .tisch.blatt .t-mat{position:absolute;z-index:4;top:16px;left:0;right:0;margin:0 auto;width:fit-content;max-width:calc(100% - 320px)}
 .tisch.blatt .t-mat span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
+/* ---------- Fokus ---------- */
+/* Hell ist der Tisch so blau wie der Fokusring: auf der Fläche ist er darum hell, auf weißen Karten bleibt er blau.
+   Dunkel ist der Ring schon hell genug und bleibt, wie er ist. */
+.tisch :focus-visible{outline-color:var(--t-on);outline-offset:2px}
+.tisch :is(.t-confirm,.sc) :focus-visible{outline-color:var(--accent)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .tisch :focus-visible{outline-color:var(--accent)}}
+:root[data-theme="dark"] .tisch :focus-visible{outline-color:var(--accent)}
+
 /* ---------- Hover (nur mit feiner Maus) ---------- */
 @media (hover:hover) and (pointer:fine){
   .tisch .rb:hover,.tisch .tlink:hover,.tisch .tb-main:not([aria-disabled="true"]):hover,.tisch .t-mat:hover,.tisch .tb-seg button:hover{filter:brightness(1.08)}

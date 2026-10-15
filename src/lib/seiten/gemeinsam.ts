@@ -2,6 +2,7 @@ import { addDays, berlinDay } from "@/lib/dates";
 import { freePeriodOn, freiQuelleText, listFreePeriods } from "@/lib/free-days";
 import type { HomeworkItem } from "@/lib/homework";
 import { appTagVon } from "@/lib/kombi/tag-daten";
+import { kurzVon } from "@/lib/kombi/text";
 import { lessonRoom } from "@/lib/home";
 import {
   loadWeek,
@@ -21,13 +22,8 @@ import {
 /** Der App-Tag (Wechsel um 04:00, Plan 3.1). */
 export const heuteApp = (now: Date = new Date()): string => appTagVon(now);
 
-/**
- * Anzeigename eines Fachs („Mathe abgehakt“, Klausurzeile), wörtlich aus dem
- * Prototyp Z. 1094–1100: Mathematik → Mathe, Biologie → Bio, sonst der Name.
- * `subjects.short` ist ein Kürzel wie „M“ und taugt dafür nicht (Plan 3.2).
- */
-const KURZ: Record<string, string> = { Mathematik: "Mathe", Biologie: "Bio" };
-export const kurzVon = (name: string): string => KURZ[name] ?? name;
+/** Anzeigename eines Fachs (Mathe, Bio); steht in text.ts, damit auch der Browser ihn hat. */
+export { kurzVon };
 
 /** Eine Aufgabenzeile, wie sie die Seiten zeichnen (Prototyp `taskRow`). */
 export type AufgabeDaten = {

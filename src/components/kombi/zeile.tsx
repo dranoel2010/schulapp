@@ -1554,7 +1554,13 @@ export function Zeile({
                 e.preventDefault();
                 const opts = optionenJetzt();
                 if (!opts.length) return;
-                zz.sel = (zz.sel + (e.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length;
+                if (istDesktop()) {
+                  // Popover: die Pfeile folgen dem Bild. Der beste Treffer steht unten an der Pille,
+                  // ↑ geht zum Eintrag darüber, ↓ darunter; am Rand bleibt die Auswahl stehen
+                  const reihe = opts.map((n, i) => ({ i, y: n.getBoundingClientRect().top })).sort((a, b) => a.y - b.y);
+                  const hier = Math.max(0, reihe.findIndex((x) => x.i === zz.sel));
+                  zz.sel = reihe[Math.max(0, Math.min(reihe.length - 1, hier + (e.key === "ArrowDown" ? 1 : -1)))].i;
+                } else zz.sel = (zz.sel + (e.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length;
                 syncSel(opts);
               } else if (e.key === "Backspace" && !textRef.current && zz.ctx) {
                 e.preventDefault();

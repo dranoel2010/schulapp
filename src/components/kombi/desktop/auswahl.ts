@@ -13,8 +13,6 @@ import type { Bereich } from "./bereiche";
 export type Auswahl = {
   bereich: Bereich;
   sel: string | null;
-  /** die Detailspalte daneben (für `LeeresDetail`, solange nichts gewählt ist) */
-  detailEl?: HTMLElement | null;
 };
 
 export const AuswahlKontext = createContext<Auswahl | null>(null);

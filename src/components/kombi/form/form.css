@@ -36,6 +36,8 @@ input.kf-input[type="number"]{font-variant-numeric:tabular-nums}
 .kf-gefahr{margin-top:8px}
 .kf-gefahr > * + *{margin-top:12px}
 .kf-seite > * + *{margin-top:20px}
+/* die Zeile über dem Titel gibt es nur am Rechner im Detail (src/app/desktop/listen.css) */
+.kf-ober{display:none}
 .kf-seite > header + *{margin-top:16px}
 /* Formular-Abstände: Felder untereinander mit 16px, Knopfzeile wie .foot */
 .kf-form > * + *{margin-top:16px}

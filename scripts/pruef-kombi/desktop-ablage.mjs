@@ -222,15 +222,18 @@ async function rechner(browser) {
           da: !!f,
           n: pills.length,
           zeilen: tops.size,
-          alleSichtbar: pills.every((x) => { const b = x.getBoundingClientRect(); return b.left >= r.left - 0.5 && b.right <= r.right + 0.5; }),
           hoehe: pills[0]?.getBoundingClientRect().height ?? 0,
-          umbruch: getComputedStyle(f).flexWrap === "wrap",
+          scrollt: getComputedStyle(f).flexWrap === "nowrap" && getComputedStyle(f).overflowX === "auto",
           erste: pills[0]?.textContent,
+          namen: pills.map((x) => x.textContent),
           rechts: r ? r.right <= document.querySelector(".d-list").getBoundingClientRect().right + 0.5 : false,
         };
       });
-      // mit der Maus gibt es kein Wischen: die Pillen brechen um, jede steht ganz in der Spalte
-      p.ok(fil.da && fil.n >= 3 && fil.alleSichtbar && fil.umbruch && fil.hoehe === 36 && fil.erste === "Alle", `${w} ${schema}: Fachpillen umgebrochen, alle sichtbar, 36 px (${JSON.stringify(fil)})`);
+      // eine Zeile wie im Entwurf, Kurznamen (Mathe), seitlich scrollbar, wenn sie nicht reicht
+      p.ok(
+        fil.da && fil.n >= 3 && fil.zeilen === 1 && fil.scrollt && fil.rechts && fil.hoehe === 36 && fil.erste === "Alle" && !fil.namen.includes("Mathematik"),
+        `${w} ${schema}: Fachpillen in einer Zeile, Kurznamen, 36 px (${JSON.stringify(fil)})`,
+      );
       const gruppenVor = await page.evaluate(() => document.querySelectorAll(".d-list h3.p-lab").length);
       await page.click(".d-list .d-fil .fp:nth-child(2)");
       await sleep(400);
@@ -239,7 +242,8 @@ async function rechner(browser) {
         gedrueckt: document.querySelector('.d-list .d-fil .fp[aria-pressed="true"]')?.textContent,
         kopf: document.querySelector(".d-list h3.p-lab")?.textContent,
       }));
-      p.ok(gruppenVor > 1 && gruppenNach.n === 1 && gruppenNach.gedrueckt === gruppenNach.kopf, `${w} ${schema}: Filter zeigt nur ein Fach (${gruppenVor} → ${JSON.stringify(gruppenNach)})`);
+      const kurz = (n) => ({ Mathematik: "Mathe", Biologie: "Bio" })[n] ?? n;
+      p.ok(gruppenVor > 1 && gruppenNach.n === 1 && gruppenNach.gedrueckt === kurz(gruppenNach.kopf), `${w} ${schema}: Filter zeigt nur ein Fach (${gruppenVor} → ${JSON.stringify(gruppenNach)})`);
       if (w === 1280) await bild(page, "ablage-filter", w, schema);
       await page.click(".d-list .d-fil .fp:first-child");
       await sleep(300);
@@ -277,9 +281,10 @@ async function rechner(browser) {
         await sleep(300);
         const og = await page.evaluate(() => {
           const e = document.querySelector(".d-detail .bl-og");
-          return !!e && getComputedStyle(e).display !== "none" && !!e.querySelector(".original");
+          // ein unlesbares Foto (die Saat legt eins an) steht als Satz da, nicht als graue Fläche
+          return !!e && getComputedStyle(e).display !== "none" && !!e.querySelector(".original, .bl-ohne");
         });
-        p.ok(og, `${w} ${schema}: „Original“ zeigt das Foto`);
+        p.ok(og, `${w} ${schema}: „Original“ zeigt das Foto (oder sagt, dass es sich nicht anzeigen lässt)`);
         if (w === 1280) await bild(page, "blatt-original", w, schema);
         await page.click('.d-detail .bl-seg button:nth-child(1)');
         await sleep(300);

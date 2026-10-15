@@ -81,6 +81,7 @@ export default async function ExamPage({
     <div className="kf-seite">
 
       <header>
+        <p className="kf-ober">Klausur bearbeiten</p>
         <h2 className="p-title">{`${subject.name} bearbeiten`}</h2>
         <p className="p-sub">
           {[exam.title ?? kindLabel, formatGerman(exam.date)].join(" · ")}. Änderungen an Datum, Themen oder Lernplanung

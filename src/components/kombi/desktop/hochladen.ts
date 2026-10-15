@@ -43,6 +43,8 @@ export type AblegenDeps = {
   toast: (text: string, fn?: (() => void) | null, desc?: string, label?: string) => void;
   openPage: (art: string, params?: Record<string, string>) => void;
   neuLaden: () => Promise<void>;
+  /** ein Satz hinter „Blatt abgelegt“, etwa zu einem PDF, das nicht mitkam */
+  zusatz?: string;
 };
 
 /** Legt je Gruppe ein Blatt an; der Toast „Blatt abgelegt · Ansehen“ wie nach der Kamera. */
@@ -79,8 +81,9 @@ export async function dateienAblegen(gruppen: File[][], deps: AblegenDeps): Prom
   void deps.neuLaden();
   const n = keys.length;
   const erster = keys[0];
+  const abgelegt = n === 1 ? "Blatt abgelegt" : `${cap(zahl(n, "n"))} Blätter abgelegt`;
   deps.toast(
-    n === 1 ? "Blatt abgelegt" : `${cap(zahl(n, "n"))} Blätter abgelegt`,
+    deps.zusatz ? `${abgelegt}. ${deps.zusatz}` : abgelegt,
     () => {
       const id = blaetterStore.get().find((x) => x.key === erster)?.id;
       if (n === 1 && id) deps.openPage("blatt", { id });

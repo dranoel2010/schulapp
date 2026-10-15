@@ -26,6 +26,7 @@ export default async function NewExamPage() {
     return (
       <div className="kf-seite">
         <header className="space-y-1">
+          <p className="kf-ober">Klausuren</p>
           <h2 className="p-title">
             Neue Klausur
           </h2>
@@ -59,6 +60,7 @@ export default async function NewExamPage() {
   return (
     <div className="kf-seite">
       <header className="space-y-1">
+        <p className="kf-ober">Klausuren</p>
         <h2 className="p-title">Neue Klausur</h2>
         <p className="text-[15px] text-ink-2">
           Termin und Themen eintragen. Den Lernplan baut die App daraus.

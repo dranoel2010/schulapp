@@ -4,8 +4,12 @@
 @media (min-width:1024px){
 
 /* ---------- Ablage: Fachpillen über der Liste ---------- */
-/* Sie brechen um statt seitlich zu scrollen: mit der Maus gibt es kein Wischen, und Höhe ist genug da */
-.d-fil{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+/* Eine Zeile wie im Entwurf, Kurznamen (Mathe, Bio) in der Reihenfolge der Liste (blatt.tsx). Reicht die Breite
+   nicht, scrollt die Zeile seitlich (Trackpad, Shift und Mausrad, Tab) und läuft bis an den Rand der Liste.
+   4 px Innenabstand ringsum, damit der Fokusring nicht abgeschnitten wird */
+.d-fil{display:flex;flex-wrap:nowrap;gap:6px;margin:6px -22px 0 -4px;padding:4px 22px 4px 4px;overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain}
+.d-fil::-webkit-scrollbar{display:none}
+.d-fil .fp{flex:none}
 .d-fil .fp{height:36px;padding:0 13px;white-space:nowrap}
 
 /* ---------- Blatt im Detail ---------- */
@@ -19,6 +23,7 @@
 .bl-orig .original{margin-bottom:14px}
 .bl-cap{font-size:13px;font-weight:560;color:var(--ink-2);margin-bottom:8px}
 .bl-hinweis{margin-top:10px}
+.bl-ohne{margin:0 0 14px}
 
 @media (min-width:1440px){
   /* Titel, Unterzeile und Inhalt links, das Original rechts daneben, am rechten Rand der Spalte
@@ -26,9 +31,13 @@
      ist das Original höher als der Text, wächst nur sie, die Abstände links bleiben. */
   .d-in:has(> .bl-main){display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,340px);grid-template-rows:auto auto auto 1fr;column-gap:48px;align-items:start;max-width:none}
   .d-in:has(> .bl-main) > *{grid-column:1}
-  .d-in > .bl-orig{display:block;grid-column:2;grid-row:1 / 5;position:sticky;top:var(--dtop)}
+  /* top 0: klebt am Rand des Inhalts (unter dem Innenabstand), also auf derselben Höhe wie ohne Scrollen */
+  .d-in > .bl-orig{display:block;grid-column:2;grid-row:1 / 5;position:sticky;top:0}
   .bl-seg{display:none}
   .bl-ab.bl-aus{display:block}
+  /* ohne den Schalter hält die Abschrift den Abstand zum Titel selbst: 22 px wie im Entwurf (6 px am Titel, 16 px hier) */
+  .bl-ab > .abschrift{padding-top:16px}
+  .bl-ab > .abschrift > :first-child{margin-top:0}
   .bl-og{display:none}
 }
 

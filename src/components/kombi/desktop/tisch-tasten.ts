@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+
 import { E, reduce } from "@/lib/kombi/motion";
 
 import { perTaste, tipptGerade } from "./tasten";
@@ -53,6 +55,42 @@ function onKey(e: KeyboardEvent): void {
     e.preventDefault();
     rate.querySelector<HTMLElement>(".rb.known")?.click();
   }
+}
+
+/** Druckt der Knopf selbst (dann vermerkt er es auch selbst)? */
+let selbstDruck = false;
+
+/** `window.print()` aus dem Knopf „Arbeitsblatt drucken“; der Vermerk unten zählt das nicht doppelt. */
+export function selbstDrucken(): void {
+  selbstDruck = true;
+  try {
+    window.print();
+  } finally {
+    // afterprint kann nach print() kommen: kurz nachlaufen lassen
+    window.setTimeout(() => {
+      selbstDruck = false;
+    }, 500);
+  }
+}
+
+/**
+ * Am Rechner druckt man meist mit Strg/Cmd+P. Liegt ein Arbeitsblatt noch
+ * ungedruckt auf dem Tisch (`aktiv`), gilt das wie der Knopf: danach kommt
+ * „Wie lief es?“ (`vermerk`), und der Knopf druckt nicht ein zweites Mal.
+ */
+export function useDruckVermerk(aktiv: boolean, vermerk: () => void): void {
+  const f = useRef(vermerk);
+  useEffect(() => {
+    f.current = vermerk;
+  });
+  useEffect(() => {
+    if (!aktiv) return;
+    const nach = () => {
+      if (!selbstDruck && istDesktop()) f.current();
+    };
+    window.addEventListener("afterprint", nach);
+    return () => window.removeEventListener("afterprint", nach);
+  }, [aktiv]);
 }
 
 /** Die Tasten des Tisches einschalten (einmal je Seite, egal wie viele Tische es gibt). */

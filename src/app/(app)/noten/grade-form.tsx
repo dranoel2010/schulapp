@@ -4,7 +4,7 @@ import { useActionState, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
 import { Button, type ButtonProps } from "@/components/kombi/form";
-import { AbbrechenKnopf, FertigBeiErfolg, useNachAktion } from "@/components/kombi/form/fertig";
+import { AbbrechenKnopf, FehlerFokus, FertigBeiErfolg, useNachAktion } from "@/components/kombi/form/fertig";
 import { Field } from "@/components/kombi/form";
 import { Input, Select } from "@/components/kombi/form";
 import type { Grade, GradeKind, Subject } from "@/db/schema";
@@ -125,6 +125,7 @@ export function GradeForm({
   return (
     <form action={formAction} className="kf-form" noValidate>
       <FertigBeiErfolg marke={state.fertig} toast={item ? "Gespeichert" : "Note eingetragen"} />
+      <FehlerFokus zustand={state} />
       {state.message ? (
         <p
           role="alert"

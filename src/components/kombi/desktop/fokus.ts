@@ -53,15 +53,51 @@ export function erstesZiel(ebene: HTMLElement): HTMLElement {
   return ebene;
 }
 
+/**
+ * Wohin der Fokus nach dem Schließen zurückgeht: der Auslöser selbst. Wurde
+ * er inzwischen neu gerendert (nach dem Lernblock lädt das Detail neu, und
+ * „Starten“ heißt dann „Weiter“), das Element an seiner Stelle: dasselbe
+ * Tag mit denselben Klassen, das wievielte im Dokument. Ohne Auslöser ein
+ * vorgemerkter (der Knopf „Blatt hochladen“ vor dem Dateidialog, nach dem
+ * der Fokus auf body steht).
+ */
+type Ausloeser = { el: HTMLElement; sel: string; nr: number };
+
+let vorgemerkt: { el: HTMLElement; bis: number } | null = null;
+
+/** Den Auslöser einer Ebene vormerken, die erst nach einem Umweg aufgeht (Dateidialog). */
+export function ausloeserVormerken(el: Element | null): void {
+  vorgemerkt = el instanceof HTMLElement ? { el, bis: Date.now() + 120000 } : null;
+}
+
+function merken(el: HTMLElement | null): Ausloeser | null {
+  if (!el || el === document.body) {
+    const v = vorgemerkt;
+    vorgemerkt = null;
+    return v && v.bis > Date.now() && v.el.isConnected ? merken(v.el) : null;
+  }
+  const sel = el.tagName.toLowerCase() + [...el.classList].map((c) => `.${CSS.escape(c)}`).join("");
+  return { el, sel, nr: [...document.querySelectorAll(sel)].indexOf(el) };
+}
+
+function wiederfinden(a: Ausloeser | null | undefined): HTMLElement | null {
+  if (!a) return null;
+  if (a.el.isConnected) return a.el;
+  const statt = a.nr >= 0 ? document.querySelectorAll<HTMLElement>(a.sel)[a.nr] : undefined;
+  return statt ?? null;
+}
+
 export function useUeberlagerungFokus(desktop: boolean): void {
   useEffect(() => {
     if (!desktop) return;
     /** Was wir selbst inert gemacht haben (nur das wird wieder frei). */
     const gesperrt = new Set<HTMLElement>();
     /** Je Ebene: wer den Fokus vorher hatte. */
-    const ausloeser = new WeakMap<HTMLElement, HTMLElement | null>();
+    const ausloeser = new WeakMap<HTMLElement, Ausloeser | null>();
     let oben: HTMLElement | null = null;
     let raf = 0;
+    /** Kurz nach dem Zurückgeben: wird der Auslöser noch neu gerendert, folgt ihm der Fokus */
+    let nachsorge: { a: Ausloeser; el: HTMLElement; bis: number } | null = null;
 
     const sperren = (el: HTMLElement | null, an: boolean) => {
       if (!el) return;
@@ -77,6 +113,18 @@ export function useUeberlagerungFokus(desktop: boolean): void {
     const abgleichen = () => {
       raf = 0;
       if (!istDesktop()) return;
+      if (nachsorge) {
+        const n = nachsorge;
+        if (Date.now() > n.bis || document.activeElement !== document.body) {
+          if (Date.now() > n.bis || document.activeElement !== n.el) nachsorge = null;
+        } else if (!n.el.isConnected) {
+          const neuEl = wiederfinden({ ...n.a, el: n.el });
+          if (neuEl && fokussierbar(neuEl)) {
+            neuEl.focus({ preventScroll: true });
+            nachsorge = { ...n, el: neuEl };
+          }
+        }
+      }
       const ebenen = offeneEbenen();
       const neu = ebenen[0] ?? null;
       const desk = document.getElementById("desk");
@@ -89,7 +137,7 @@ export function useUeberlagerungFokus(desktop: boolean): void {
       oben = neu;
       const aktiv = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       if (neu) {
-        if (!ausloeser.has(neu)) ausloeser.set(neu, aktiv && !neu.contains(aktiv) ? (alt && alt.contains(aktiv) ? null : aktiv) : null);
+        if (!ausloeser.has(neu)) ausloeser.set(neu, aktiv && !neu.contains(aktiv) ? (alt && alt.contains(aktiv) ? null : merken(aktiv)) : merken(null));
         if (!aktiv || aktiv === document.body || !neu.contains(aktiv)) {
           // ein Bild später: die Ebene blendet per visibility ein
           requestAnimationFrame(() => {
@@ -101,13 +149,17 @@ export function useUeberlagerungFokus(desktop: boolean): void {
         }
       }
       if (alt && !ebenen.includes(alt)) {
-        const zurueck = ausloeser.get(alt);
+        const ausloeserVon = ausloeser.get(alt);
+        const zurueck = wiederfinden(ausloeserVon);
         ausloeser.delete(alt);
         const a = document.activeElement;
         const verloren = !a || a === document.body || alt.contains(a) || !!(a instanceof HTMLElement && a.closest("[inert]"));
         if (verloren) {
           if (neu) erstesZiel(neu).focus({ preventScroll: true });
-          else if (zurueck?.isConnected && fokussierbar(zurueck)) zurueck.focus({ preventScroll: true });
+          else {
+            if (zurueck?.isConnected && fokussierbar(zurueck)) zurueck.focus({ preventScroll: true });
+            if (ausloeserVon) nachsorge = { a: ausloeserVon, el: zurueck ?? ausloeserVon.el, bis: Date.now() + 2000 };
+          }
         }
       }
     };

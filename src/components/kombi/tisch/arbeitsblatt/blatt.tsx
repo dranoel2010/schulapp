@@ -449,7 +449,11 @@ function BlattRechner(p: KoerperProps) {
     const vorher = letztePhase.current;
     letztePhase.current = phase;
     const wer = werRef.current;
-    if (vorher === phase || phase !== "bewerten" || !wer || reduce() || perTaste()) return;
+    if (vorher === phase || phase !== "bewerten" || !wer) return;
+    // Nach dem Drucken steht der Fokus auf der ersten Wertung, nicht im Leeren (der Knopf ist jetzt „Fertig“)
+    const a = document.activeElement;
+    if (!a || a === document.body || a.matches(".tisch, #tbMain")) wer.querySelector<HTMLElement>(".tb-seg button")?.focus({ preventScroll: true });
+    if (reduce() || perTaste()) return;
     [...wer.children].forEach((c, i) =>
       c.animate([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], {
         duration: 180,

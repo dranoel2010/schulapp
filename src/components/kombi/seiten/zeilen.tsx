@@ -5,6 +5,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { useAuswahl } from "@/components/kombi/desktop/auswahl";
+import { istDesktop } from "@/components/kombi/desktop/use-desktop";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
 import { dm } from "@/lib/kombi/text";
@@ -169,10 +170,34 @@ export function Bestaetigung({
       if (!war) zeile?.classList.remove("hide");
     };
   }, [hideToast]);
+  // Am Rechner: Esc und ein Klick daneben heißen Abbrechen (Einstellungen, Tastatur: „Esc: Schließen“).
+  // Den Fokus gibt danach desktop/fokus.ts dem Auslöser zurück. Am Handy schließt Zurück.
+  const karteRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const taste = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || !istDesktop()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      neinRef.current();
+    };
+    const daneben = (e: PointerEvent) => {
+      if (!istDesktop() || !(e.target instanceof Node) || karteRef.current?.contains(e.target)) return;
+      // ein Toast oder Sheet darüber gehört nicht zum Rest
+      if (e.target instanceof Element && e.target.closest(".toast, #sheet")) return;
+      neinRef.current();
+    };
+    document.addEventListener("keydown", taste, true);
+    document.addEventListener("pointerdown", daneben, true);
+    return () => {
+      document.removeEventListener("keydown", taste, true);
+      document.removeEventListener("pointerdown", daneben, true);
+    };
+  }, []);
   // Außerhalb von #pages (eigener Stapelkontext unter der Zeile): sonst lägen
   // die Knöpfe hinter dem Dock. Über Zeile (40), unter Toast (66) und Sheet.
   const karte = (
     <div
+      ref={karteRef}
       className="t-confirm on"
       role="alertdialog"
       aria-label={titel}

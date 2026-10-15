@@ -15,7 +15,7 @@ import { istDesktop, useDesktop } from "@/components/kombi/desktop/use-desktop";
 import { useKombi } from "@/components/kombi/kontext";
 import { formatGerman } from "@/lib/dates";
 import { BLATT_VOLL_HINWEIS, MAX_PAGES } from "@/lib/images";
-import { dm, fliesstext } from "@/lib/kombi/text";
+import { dm, fliesstext, kurzVon } from "@/lib/kombi/text";
 import type { AblageDaten, BlattDaten } from "@/lib/seiten/ablage";
 import type { FachDaten, ThemaZeile } from "@/lib/seiten/faecher";
 
@@ -70,6 +70,30 @@ function Abschrift({ text }: { text: string }) {
         ),
       )}
     </>
+  );
+}
+
+/**
+ * Das Foto einer Seite. Am Rechner (`pruefen`) steht statt einer leeren
+ * grauen Fläche ein Satz, wenn sich das Bild nicht lesen lässt.
+ */
+function OriginalSeite({ id, pruefen }: { id: string; pruefen: boolean }) {
+  const [kaputt, setKaputt] = useState<string | null>(null);
+  useEffect(() => {
+    if (!pruefen) return;
+    let weg = false;
+    const img = new Image();
+    img.src = `/api/material/${id}`;
+    img.decode().catch(() => {
+      if (!weg) setKaputt(id);
+    });
+    return () => {
+      weg = true;
+    };
+  }, [id, pruefen]);
+  if (pruefen && kaputt === id) return <p className="p-sub bl-ohne">Das Foto lässt sich nicht anzeigen.</p>;
+  return (
+    <div className="original" role="img" aria-label="Foto der Seite" style={{ backgroundImage: `url("/api/material/${id}")`, marginBottom: 14 }} />
   );
 }
 
@@ -180,15 +204,7 @@ export function BlattInhalt({ daten }: { daten: BlattDaten }) {
   const sortiert = daten.faecher.slice().sort((x, y) => Number(y.id === fach) - Number(x.id === fach));
   const leer = daten.stand !== "da";
 
-  const originale = daten.seiten.map((s) => (
-    <div
-      key={s.id}
-      className="original"
-      role="img"
-      aria-label="Foto der Seite"
-      style={{ backgroundImage: `url("/api/material/${s.id}")`, marginBottom: 14 }}
-    />
-  ));
+  const originale = daten.seiten.map((s) => <OriginalSeite key={s.id} id={s.id} pruefen={desktop} />);
   const abschrift = (
     <div className="abschrift">
       {leer ? (
@@ -437,7 +453,8 @@ export function AblageInhalt({ daten }: { daten: AblageDaten }) {
   const pillen = !!auswahl && !daten.filter && daten.gruppen.length > 0;
   const aktiv = pillen && daten.gruppen.some((g) => g.fachId === gesetzt) ? gesetzt : null;
   const gruppen = aktiv ? daten.gruppen.filter((g) => g.fachId === aktiv) : daten.gruppen;
-  const faecher = pillen ? daten.gruppen.map((g) => ({ id: g.fachId, name: g.fach })).sort((a, b) => a.name.localeCompare(b.name, "de")) : [];
+  // Kurznamen in der Reihenfolge der Liste (desktop.html `ui.filter`): so bleibt es meist bei einer Zeile
+  const faecher = pillen ? daten.gruppen.map((g) => ({ id: g.fachId, name: kurzVon(g.fach) })) : [];
   const erstes = gruppen[0]?.blaetter[0]?.id ?? null;
   useErsteAuswahl("/material", erstes ? { art: "blatt", params: { id: erstes } } : null);
 

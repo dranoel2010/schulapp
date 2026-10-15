@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { artAction, blattOeffnenAction } from "@/app/(app)/arbeitsblatt-actions";
-import { tischTastenAn } from "@/components/kombi/desktop/tisch-tasten";
+import { selbstDrucken, tischTastenAn, useDruckVermerk } from "@/components/kombi/desktop/tisch-tasten";
 import { useDesktop } from "@/components/kombi/desktop/use-desktop";
 import { Icon } from "@/components/kombi/icon";
 import { useKombi } from "@/components/kombi/kontext";
@@ -105,13 +105,15 @@ export function TischEbene() {
     if (alsApp()) window.open(`/api/arbeitsblatt/${stand.id}/pdf`, "_blank", "noopener");
     else {
       try {
-        window.print();
+        selbstDrucken();
       } catch {
         // ohne Druckdialog: die Wertung kommt trotzdem
       }
     }
     void blatt.gedruckt();
   }, [stand, blatt]);
+  // Strg/Cmd+P am Rechner zählt wie der Knopf
+  useDruckVermerk(!!blattThema && !!stand?.inhalt && phase === "vorschau", () => void blatt.gedruckt());
 
   const fertig = useCallback(async () => {
     const a = await blatt.auswerten(false);

@@ -51,6 +51,7 @@ export default async function NewGradePage({
     return (
       <div className="kf-seite">
         <header className="space-y-1">
+          <p className="kf-ober">Noten</p>
           <h2 className="p-title">Neue Note</h2>
         </header>
 
@@ -66,6 +67,7 @@ export default async function NewGradePage({
   return (
     <div className="kf-seite">
       <header className="space-y-1">
+        <p className="kf-ober">Noten</p>
         <h2 className="p-title">Neue Note</h2>
         <p className="text-[15px] text-ink-2">
           Eingetragen für heute. Das Datum lässt sich ändern.

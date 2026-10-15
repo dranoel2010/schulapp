@@ -46,6 +46,7 @@ export default async function HomeworkPage({
   return (
     <div className="kf-seite">
       <header className="">
+        <p className="kf-ober">Aufgabe bearbeiten</p>
         <h2 className="p-title">{item.title}</h2>
         <p className="p-sub">
           {`${item.subject.name} · ${item.done ? `erledigt, fällig war ${formatGerman(item.dueDate)}` : `fällig ${formatGerman(item.dueDate)}`}`}

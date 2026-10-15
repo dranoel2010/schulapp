@@ -67,6 +67,7 @@ export default async function MaterialEditPage({ params }: PageProps<"/material/
   return (
     <div className="kf-seite">
       <header>
+        <p className="kf-ober">Ablage</p>
         <h2 className="p-title">Blatt bearbeiten</h2>
         <p className="p-sub">
           {`${item.title} · ${item.subject.name} · ${formatGerman(item.capturedOn)} · ${item.pages.length} ${item.pages.length === 1 ? "Seite" : "Seiten"}, ${formatBytes(totalBytes)}`}

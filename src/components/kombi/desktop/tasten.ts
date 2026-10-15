@@ -49,27 +49,37 @@ export function tipptGerade(): boolean {
   return a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
 }
 
-/** Liegt etwas über der Bühne (Tisch, Kamera, Sheet, Dialog, Menü der Zeile)? */
+/** Liegt etwas über der Bühne (Tisch, Kamera, Sheet, Dialog, Bestätigung, Menü der Zeile)? */
 export function ueberlagert(): boolean {
-  return !!document.querySelector(".tisch.open, .cam.open, #sheet.open, .d-dlg.on, #menu.open");
+  return !!document.querySelector(".tisch.open, .cam.open, #sheet.open, .d-dlg.on, body > .t-confirm.on, #menu.open");
 }
 
 /**
  * Die globalen Kürzel. `zeile` öffnet die Zeile, `bereich` wechselt den
  * Bereich (mit `taste: true`, also ohne Übergang). Nur, solange `aktiv`.
+ *
+ * Strg/Cmd+P druckt nur, wo es etwas zu drucken gibt (das Arbeitsblatt in
+ * `#druck`); sonst käme eine leere Seite, und `ohneDruck` sagt es stattdessen.
  */
-export function useTasten(aktiv: boolean, zeile: () => void, bereich: (b: Bereich) => void): void {
-  const fn = useRef({ zeile, bereich });
+export function useTasten(aktiv: boolean, zeile: () => void, bereich: (b: Bereich) => void, ohneDruck: () => void): void {
+  const fn = useRef({ zeile, bereich, ohneDruck });
   useEffect(() => {
-    fn.current = { zeile, bereich };
-  }, [zeile, bereich]);
+    fn.current = { zeile, bereich, ohneDruck };
+  }, [zeile, bereich, ohneDruck]);
   useEffect(() => {
     eingabeMerken();
     if (!aktiv) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
-      if (tipptGerade() || ueberlagert()) return;
       const k = e.key.toLowerCase();
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && k === "p") {
+        if (!document.querySelector("#druck > *")) {
+          e.preventDefault();
+          fn.current.ohneDruck();
+        }
+        return;
+      }
+      if (tipptGerade() || ueberlagert()) return;
       if (e.key === "/" || ((e.metaKey || e.ctrlKey) && k === "k")) {
         e.preventDefault();
         fn.current.zeile();

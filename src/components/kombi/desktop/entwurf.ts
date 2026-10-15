@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+
+import { istDesktop } from "./use-desktop";
 
 /**
  * Was in einem Formular getippt, aber noch nicht gespeichert ist, übersteht
@@ -12,8 +14,12 @@ import { useEffect, useLayoutEffect, useRef } from "react";
  * Darum merkt sich die Shell jede Eingabe in Formularen unter `#pages` (je
  * Adresse, je Feldname) und spielt sie nach dem Wechsel in die neuen Felder
  * zurück, über dieselben Ereignisse wie eine Eingabe (React übernimmt sie in
- * seinen Zustand). Nur der Entwurf der Adresse, auf der man gerade ist; nach
- * dem Absenden oder dem Verlassen der Adresse ist er weg.
+ * seinen Zustand). Nach dem Absenden ist er weg.
+ *
+ * Am Rechner führt auch Zurück auf ein Formular wieder zu seinem Entwurf
+ * (etwa: Aufgabe halb getippt, Noten angesehen, Zurück). Wer das Formular
+ * neu öffnet (Link, Knopf), bekommt es leer. Am Handy bleibt das Formular
+ * unter einer Seite darüber stehen und braucht das nicht.
  */
 
 type Feld = { name: string; i: number; wert: string; an?: boolean };
@@ -84,13 +90,29 @@ export function useEntwurfUeberSchwelle(desktop: boolean, pfad: string): void {
     };
   }, []);
 
-  // Eine andere Adresse: ältere Entwürfe gelten nicht mehr
+  // Zurück oder Vor (popstate) kommt auf einen Eintrag, den man schon kannte
+  const ausPop = useRef(0);
+  useEffect(() => {
+    const pop = () => {
+      ausPop.current = Date.now();
+    };
+    window.addEventListener("popstate", pop);
+    return () => window.removeEventListener("popstate", pop);
+  }, []);
+
+  // Eine andere Adresse: per Zurück am Rechner kommt der Entwurf wieder, sonst beginnt das Formular leer
+  const [zurueckAuf, setZurueckAuf] = useState(0);
   useEffect(() => {
     const k = adresse();
-    for (const key of [...entwuerfe.current.keys()]) if (key !== k) entwuerfe.current.delete(key);
+    if (Date.now() - ausPop.current < 1500 && istDesktop()) {
+      if (entwuerfe.current.get(k)?.size) setZurueckAuf((n) => n + 1);
+    } else entwuerfe.current.delete(k);
+    // nur die jüngsten Adressen behalten
+    const keys = [...entwuerfe.current.keys()];
+    keys.slice(0, Math.max(0, keys.length - 6)).forEach((x) => entwuerfe.current.delete(x));
   }, [pfad]);
 
-  // Nach dem Wechsel über die Schwelle: den Entwurf in die neuen Felder
+  // Nach dem Wechsel über die Schwelle (oder Zurück am Rechner): den Entwurf in die neuen Felder
   const erstes = useRef(true);
   useLayoutEffect(() => {
     if (erstes.current) {
@@ -121,9 +143,11 @@ export function useEntwurfUeberSchwelle(desktop: boolean, pfad: string): void {
     // Inhalte, die erst nach dem Einhängen kommen (nachgeladene Seiten): noch zweimal
     const t1 = window.setTimeout(versuch, 120);
     const t2 = window.setTimeout(versuch, 500);
+    const t3 = window.setTimeout(versuch, 1000);
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
+      window.clearTimeout(t3);
     };
-  }, [desktop]);
+  }, [desktop, zurueckAuf]);
 }

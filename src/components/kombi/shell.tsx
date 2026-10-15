@@ -17,7 +17,7 @@ import { zielFuerArt, type Bereich } from "@/components/kombi/desktop/bereiche";
 import { Buehne, heuteGezeigt, zielVon, type BuehnenEintrag } from "@/components/kombi/desktop/buehne";
 import { dialogAuf, dialogZu } from "@/components/kombi/desktop/dialog";
 import { useEntwurfUeberSchwelle } from "@/components/kombi/desktop/entwurf";
-import { useUeberlagerungFokus } from "@/components/kombi/desktop/fokus";
+import { ausloeserVormerken, useUeberlagerungFokus } from "@/components/kombi/desktop/fokus";
 import { dateienAblegen } from "@/components/kombi/desktop/hochladen";
 import { datenNeu } from "@/components/kombi/desktop/liste-detail";
 import { Seitenleiste } from "@/components/kombi/desktop/seitenleiste";
@@ -782,6 +782,16 @@ export function KombiShell({ children }: { children: ReactNode }) {
           () => toast("Keine Verbindung", null),
         );
       });
+      // Am Rechner gehört der Eintrag einer Route (Formular „Mit Details eintragen“) der Route:
+      // ein Bereich dazwischen (Seitenleiste) hat die Seiten darunter weggeräumt, die eben wieder
+      // dazukamen. Die Route liegt obenauf, wie beim direkten Aufruf (Adresse und Ansicht passen).
+      if (popRoute.current && istDesktop()) {
+        setzeEbenen((alt) => {
+          const r = alt.find((e) => e.typ === "route" && !e.geht);
+          if (!r || alt[alt.length - 1] === r) return alt;
+          return [...alt.filter((e) => e !== r), r];
+        });
+      }
     },
      
     [setzeEbenen, stapelEinfuegen, holen, toast],
@@ -896,6 +906,25 @@ export function KombiShell({ children }: { children: ReactNode }) {
       el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160 });
     } else moveTo(el, { transform: "translateY(0px)" }, { duration: 380, easing: E.drawer });
   }, [sheet]);
+
+  // Quert das Fenster mit offenem Sheet die Schwelle, wird aus dem Dialog der Bogen und umgekehrt
+  // (sonst stünde unter 1024 px ein Dialog ohne seine Gestalt außerhalb des Bilds)
+  const sheetDesktopVorher = useRef(desktop);
+  useEffect(() => {
+    if (sheetDesktopVorher.current === desktop) return;
+    sheetDesktopVorher.current = desktop;
+    const el = sheetRef.current;
+    if (!el || !el.classList.contains("open")) return;
+    el.getAnimations().forEach((a) => a.cancel());
+    sheetScrimRef.current?.classList.add("on");
+    if (desktop) {
+      el.style.transform = "";
+      el.classList.add("on");
+    } else {
+      el.classList.remove("on");
+      el.style.transform = "translateY(0px)";
+    }
+  }, [desktop]);
 
   // ── Menü der Zeile als Eintrag in der History (Android-Zurück schließt es) ──
 
@@ -1531,6 +1560,8 @@ export function KombiShell({ children }: { children: ReactNode }) {
       zeigeBereich,
       onHochladen: (dateien) => {
         if (!dateien) {
+          // nach dem Dateidialog steht der Fokus auf body: ein Dialog danach gibt ihn hierher zurück
+          ausloeserVormerken(document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : document.getElementById("camBtn"));
           dateiRef.current?.click();
           return;
         }
@@ -1570,7 +1601,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
   // Am Rechner: die oberste Seite auf der Bühne, ihr Bereich in der Seitenleiste
   const oben = desktop ? ([...ebenen].reverse().find((e) => !e.geht) ?? null) : null;
   const ziel = desktop ? zielVon(oben, pathname, suche) : null;
-  useTasten(desktop, () => zeileRef.current?.oeffnen(), bereichWechseln);
+  useTasten(desktop, () => zeileRef.current?.oeffnen(), bereichWechseln, () => toast("Drucken geht nur bei Arbeitsblättern."));
   // Tisch, Kamera, Dialog: was darunter liegt, ist inert; der Fokus geht hinein und zurück
   useUeberlagerungFokus(desktop);
   // Ungespeicherte Eingaben überstehen das Queren der Schwelle (Handy und Rechner rendern verschieden)

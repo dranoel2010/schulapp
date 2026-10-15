@@ -73,6 +73,7 @@ export default async function NewProposalPage({
     <div className="kf-seite">
 
       <header className="space-y-1">
+        <p className="kf-ober">Ablage</p>
         <h2 className="p-title">
           Vorschlag anlegen
         </h2>

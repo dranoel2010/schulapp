@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
-import { LeeresDetail } from "@/components/kombi/desktop/leeres-detail";
 import { useAuswahl } from "@/components/kombi/desktop/auswahl";
 import { tipptGerade, ueberlagert } from "@/components/kombi/desktop/tasten";
 import { Icon } from "@/components/kombi/icon";
@@ -89,7 +88,8 @@ export function HausaufgabenInhalt({ daten: vomServer }: { daten: HausaufgabenDa
       <div ref={ankerRef}>
         {gruppen.map(([l, liste, modus, leerZeigen]) => (
           <div className="group" data-g={l} key={l} hidden={!liste.length && !leerZeigen}>
-            <h3 className="lab">{l}</h3>
+            {/* am Rechner sagt es der Satz allein („Für Dienstag ist nichts offen.“), ohne Überschrift darüber */}
+            {amRechner && !liste.length ? null : <h3 className="lab">{l}</h3>}
             <div>
               {!liste.length && leerZeigen ? <p className="empty">{`${fuer} ist nichts offen.`}</p> : null}
               {liste.map((a) => (
@@ -108,8 +108,6 @@ export function HausaufgabenInhalt({ daten: vomServer }: { daten: HausaufgabenDa
       </div>
       <div style={{ height: 16 }} />
       <TextLine href="/hausaufgaben/neu">Mit Details eintragen</TextLine>
-      {/* am Rechner ohne Aufgabe: rechts ein Satz statt einer leeren Spalte */}
-      {!alle.length && pfad === "/hausaufgaben" ? <LeeresDetail satz="Keine Hausaufgaben offen. Neue trägst du unten in der Zeile ein." knopf="Mit Details eintragen" href="/hausaufgaben/neu" /> : null}
       {/* Antwort 11: was länger als zwei Tage erledigt ist, steht im Archiv */}
       {daten.archiv && amRechner ? (
         // am Rechner eine Zeile der Liste: das Archiv steht im Detail

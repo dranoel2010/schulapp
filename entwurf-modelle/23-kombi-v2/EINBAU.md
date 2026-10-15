@@ -110,6 +110,10 @@ Entwurf: `desktop.html`. Alle Regeln dort gelten erst ab 1024 px, darunter bleib
 - **Hochladen statt Kamera.** Ein Bild wird ein Blatt. Mehrere Bilder auf einmal fragen: ein Blatt mit mehreren Seiten oder je Bild ein Blatt. Am Blatt hängt „Seite dazu“ weitere Seiten an. Danach steht dort „Wird eingeordnet …“ und „Abschrift folgt“, wie am Handy.
 - **Lösungsblatt erst beim Bewerten.** Vor dem Drucken liegt nur die Aufgabenseite offen, die Lösungsseite ist zugeklappt. Gedruckt werden beide.
 - **Unterseiten im Detail.** Formulare (Aufgabe, Klausur, Note), Archiv, Eingangskorb und die Unterseiten der Einstellungen öffnen rechts neben der Liste, nicht als eigener Stapel. Kurze Fragen kommen als Dialog in der Mitte statt als Sheet.
+- **Formulare haben den Kopf der Ansicht:** eine Zeile darüber („Aufgabe bearbeiten“), darunter der Titel groß. Die Felder kommen vom Handy. Fach und Abgabetag bleiben Auswahl und Datumsfeld, die Chips aus `desktop.html` sind bewusst nicht übernommen.
+- **Fokus in Formularen nur am Rechner.** Beim Öffnen steht er im ersten Feld, nach einem Fehler im ersten Feld mit Fehler. Am Handy bleibt die Seite beim Knopf stehen, wie bisher.
+- **Leere Listen** sagen es einmal, in der Liste. Das Detail daneben bleibt leer.
+- **Strg/Cmd+P** druckt auf dem Tisch das Arbeitsblatt und zählt wie der Knopf („Wie lief es?“ kommt). Woanders sagt ein Toast, dass nur Arbeitsblätter gedruckt werden.
 
 ## Was offen ist
 
@@ -119,6 +123,8 @@ Entwurf: `desktop.html`. Alle Regeln dort gelten erst ab 1024 px, darunter bleib
 - **„Gelöstes Blatt fotografieren“** ist noch „bald“. Eine automatische Korrektur gibt es nicht.
 - **Die eigene Saat `saat-kombi.mts`** aus dem Plan gibt es nicht. Stattdessen gibt es `scripts/pruef-kombi/saat-startseite.mts` und `saat-zeile.mts`.
 - **Noch nicht gepusht:** Der Branch liegt nur auf dem Mac.
+- **„Datum fehlt.“ auch am Handy.** Ohne Klausurdatum stand bisher „Dieses Datum gibt es nicht.“. Die neue Meldung gilt in allen Größen, weil die Prüfung geteilt ist. Gewollte Korrektur, bitte beim Durchklicken abnehmen.
+- **Halbes Fenster am Rechner:** Unter 1024 px zeigt die Zeile wieder die Kamera statt „Hochladen“, wie am Handy. Ob dort eine Maus (`pointer: fine`) mitzählen soll, entscheidest du: es änderte das Verhalten unter 1024 px.
 
 ## Deine Antworten
 

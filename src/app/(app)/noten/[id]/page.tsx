@@ -62,6 +62,7 @@ export default async function GradePage({ params }: PageProps<"/noten/[id]">) {
   return (
     <div className="kf-seite">
       <header>
+        <p className="kf-ober">Note bearbeiten</p>
         <h2 className="p-title">{`${label} in ${item.subject.name}`}</h2>
         <p className="p-sub">
           {[item.title, formatGerman(item.date), kindLabel, weightLabel].filter(Boolean).join(" · ")}

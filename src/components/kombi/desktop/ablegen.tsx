@@ -24,7 +24,8 @@ import { istDesktop, useDesktop } from "./use-desktop";
  * - Ein Bild wird ein Blatt. Mehrere fragt ein Dialog: ein Blatt mit
  *   mehreren Seiten oder je Bild ein Blatt.
  * - „Seite dazu“ am Blatt hängt Bilder über `seitenDazu` an.
- * - PDF liest die App noch nicht; der Toast sagt es, statt still nichts zu tun.
+ * - PDF liest die App noch nicht; der Toast sagt es, statt still nichts zu tun,
+ *   auch wenn ein PDF zwischen Bildern kommt („Blatt abgelegt. Das PDF geht noch nicht.“).
  *
  * `Ablegen` hängt in der Shell. Am Handy rendert es nichts und hört auf nichts.
  */
@@ -87,7 +88,10 @@ export function Ablegen() {
         if (dateien.length) k.toast(keinBild(dateien));
         return;
       }
-      const deps = { tag: k.tagDaten?.tag ?? null, toast: k.toast, openPage: k.openPage, neuLaden: k.neuLaden };
+      // Bilder und PDF zusammen: die Bilder werden abgelegt, und der Toast sagt, dass das PDF nicht mitkam
+      const pdfs = dateien.filter(istPdf).length;
+      const zusatz = pdfs === 0 ? undefined : pdfs === 1 ? "Das PDF geht noch nicht." : "PDFs gehen noch nicht.";
+      const deps = { tag: k.tagDaten?.tag ?? null, toast: k.toast, openPage: k.openPage, neuLaden: k.neuLaden, zusatz };
       if (bilder.length === 1) {
         void dateienAblegen([bilder], deps);
         return;

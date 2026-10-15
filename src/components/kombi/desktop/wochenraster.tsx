@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 
 import { Icon } from "@/components/kombi/icon";
@@ -193,10 +194,18 @@ export function Wochenraster({ daten: vomShell }: { daten: WocheDaten }) {
             </div>
           </>
         ) : zeiten.length === 0 ? (
+          // Kein Stundenplan eingetragen: derselbe Satz wie auf Heute, der Weg dorthin daneben.
+          // Die Zellen darunter tragen die Markierung von heute weiter.
           <>
             <div className="wk-t" style={platz(ersteStunde, 1)} />
-            <div className="wk-free" style={platz(ersteStunde, "2 / -1")}>
-              Keine Schule
+            {tage.map((t, i) => (
+              <div key={t.tag} className={`wk-c wk-c-leer${td(t.tag)}`} style={platz(ersteStunde, i + 2)} aria-hidden="true" />
+            ))}
+            <div className="wk-free wk-leer" style={platz(ersteStunde, "2 / -1")}>
+              <span>Keine Stunden eingetragen</span>
+              <Link className="textbtn" href="/stundenplan/bearbeiten">
+                Stundenplan bearbeiten
+              </Link>
             </div>
           </>
         ) : (
@@ -243,9 +252,11 @@ export function Wochenraster({ daten: vomShell }: { daten: WocheDaten }) {
         )}
       </div>
 
-      <div className="wk-edit">
-        <TextLine href="/stundenplan/bearbeiten">Stundenplan bearbeiten</TextLine>
-      </div>
+      {zeiten.length === 0 && !ferien ? null : (
+        <div className="wk-edit">
+          <TextLine href="/stundenplan/bearbeiten">Stundenplan bearbeiten</TextLine>
+        </div>
+      )}
     </div>
   );
 }
@@ -267,7 +278,7 @@ function MiniAufgabe({ a, onSchalten }: { a: AufgabeDaten; onSchalten: (a: Aufga
           </span>
         </span>
       </button>
-      <p>
+      <p title={`${a.fach} ${a.text}`}>
         <b>{a.fach}</b>
         <span>{a.text}</span>
       </p>
@@ -287,8 +298,8 @@ function MiniLernen({ e, heute }: { e: LernEintrag; heute: string }) {
   const istHeute = b.tag === heute;
   return (
     <div className="ml">
-      <p>
-        {b.titel}
+      <p title={b.titel}>
+        <span className="ml-t">{b.titel}</span>
         <span>{`${e.kurz}, ${b.minuten} Minuten${erledigt ? ", erledigt" : ""}`}</span>
       </p>
       {istHeute && !erledigt ? (
