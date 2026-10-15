@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 
-import { istDesktop } from "@/components/kombi/desktop/use-desktop";
+import { istDesktop, useDesktop } from "@/components/kombi/desktop/use-desktop";
 import { useKombi } from "@/components/kombi/kontext";
 
 /**
@@ -88,7 +88,9 @@ export function AbbrechenKnopf({ children = "Abbrechen" }: { children?: string }
  * der Fokus geht auf das erste Feld mit Fehler (`aria-invalid`), sonst auf
  * die Meldung über dem Formular. Das scrollt mit, und wer liest, hört die
  * Meldung, die per `aria-describedby` am Feld hängt. Ohne Fehler tut es
- * nichts. Beim Öffnen steht der Fokus im ersten Feld (nicht auf der Seite).
+ * nichts. Beim Öffnen steht der Fokus im ersten sichtbaren Feld (nicht auf
+ * der Seite), oder in dem, das sich mit `data-fokus-start` vordrängt (die
+ * Aufgabe: das Feld, das man fast immer ändert).
  *
  * Am Handy tut es nichts: dort bliebe sonst die Seite nicht beim Knopf
  * stehen, und ein Textfeld öffnete die Tastatur (EINBAU.md, „Am Rechner“).
@@ -96,17 +98,23 @@ export function AbbrechenKnopf({ children = "Abbrechen" }: { children?: string }
 export function FehlerFokus({ zustand }: { zustand: { message?: string; errors?: object } }) {
   const ref = useRef<HTMLSpanElement>(null);
   const vorher = useRef(zustand);
+  // nach dem Hydrieren wird es erst hier true: das Formular rendert dann am Rechner anders
+  const desktop = useDesktop();
   // Beim Öffnen am Rechner: das erste Feld, solange niemand anderswo den Fokus hingesetzt hat
   useEffect(() => {
-    if (!istDesktop()) return;
+    if (!desktop) return;
     const form = ref.current?.closest("form");
     if (!form || !form.closest(".d-detail")) return;
     const a = document.activeElement;
     if (a && a !== document.body && !a.matches(".d-bereich, .d-detail") && !form.contains(a)) return;
-    form
-      .querySelector<HTMLElement>("input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])")
-      ?.focus({ preventScroll: true });
-  }, []);
+    if (a && form.contains(a) && a !== document.body) return;
+    const felder = [
+      ...form.querySelectorAll<HTMLElement>(
+        "[data-fokus-start], input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])",
+      ),
+    ].filter((el) => el.getClientRects().length > 0);
+    (felder.find((el) => el.hasAttribute("data-fokus-start")) ?? felder[0])?.focus({ preventScroll: true });
+  }, [desktop]);
   useEffect(() => {
     if (zustand === vorher.current) return;
     vorher.current = zustand;

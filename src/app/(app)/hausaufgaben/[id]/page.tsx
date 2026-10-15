@@ -5,7 +5,10 @@ import { requireUser } from "@/lib/auth";
 import { addDays, formatGerman } from "@/lib/dates";
 import { appTag, jetzt } from "@/lib/tag";
 import { getHomework } from "@/lib/homework";
+import { freeDatesFrom } from "@/lib/free-days";
+import { nextLessonPerSubject } from "@/lib/homework-faellig";
 import { listSubjects } from "@/lib/subjects";
+import { listLessons } from "@/lib/timetable";
 
 import { deleteHomeworkAction, updateHomeworkAction } from "../actions";
 import { HomeworkDangerZone, HomeworkForm } from "../homework-form";
@@ -34,21 +37,25 @@ export default async function HomeworkPage({
     notFound();
   }
 
-  const active = await listSubjects(user.id);
+  const today = appTag(await jetzt());
+  const [active, lessons, freeDays] = await Promise.all([
+    listSubjects(user.id),
+    listLessons(user.id),
+    freeDatesFrom(user.id, today),
+  ]);
   // Hängt die Aufgabe an einem archivierten Fach, fehlte es sonst in der
   // Auswahl — und beim Speichern stünde plötzlich ein anderes Fach dort.
   const subjects = active.some((subject) => subject.id === item.subject.id)
     ? active
     : [item.subject, ...active];
 
-  const today = appTag(await jetzt());
-
   return (
     <div className="kf-seite">
       <header className="">
         <p className="kf-ober">Aufgabe bearbeiten</p>
         <h2 className="p-title">{item.title}</h2>
-        <p className="p-sub">
+        {/* am Rechner stehen Fach und Abgabe als Chips im Formular: dort ohne diese Zeile */}
+        <p className="p-sub kf-handy">
           {`${item.subject.name} · ${item.done ? `erledigt, fällig war ${formatGerman(item.dueDate)}` : `fällig ${formatGerman(item.dueDate)}`}`}
         </p>
       </header>
@@ -56,6 +63,8 @@ export default async function HomeworkPage({
       <HomeworkForm
         action={updateHomeworkAction.bind(null, item.id)}
         subjects={subjects}
+        // Beim Bearbeiten zieht der Tag nicht mit (das Datum ist gewählt); am Rechner ist die nächste Stunde ein Chip
+        dueSuggestions={nextLessonPerSubject(lessons, today, new Set(freeDays))}
         fallbackDueDate={addDays(today, 1)}
         item={item}
         submitLabel="Speichern"

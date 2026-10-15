@@ -18,6 +18,8 @@
 .d-detail .kf-seite > header > .p-title{display:block;min-height:0;margin:0 0 6px;font-size:28px;line-height:1.12;font-weight:650;letter-spacing:-.03em;text-wrap:balance;overflow-wrap:break-word}
 .d-detail .kf-seite > header > .kf-ober + .p-title{margin-top:0}
 .d-detail .kf-form .foot{justify-content:flex-start}
+/* was am Rechner schon im Formular steht (Fach und Abgabe als Chips), fehlt im Kopf */
+.d-detail .kf-handy{display:none}
 .d-detail :is(.kf-form,.kf-seite) .foot .btn{flex:none;min-width:168px}
 
 /* ---------- Klausur im Detail ---------- */

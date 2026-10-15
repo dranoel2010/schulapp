@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useState, type ReactNode } from "react";
+import { useActionState, useRef, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
+import { useDesktop } from "@/components/kombi/desktop/use-desktop";
 import { Button, type ButtonProps } from "@/components/kombi/form";
 import { AbbrechenKnopf, FehlerFokus, FertigBeiErfolg, useNachAktion } from "@/components/kombi/form/fertig";
 import { Field } from "@/components/kombi/form";
@@ -10,6 +11,8 @@ import { Input, Select, Textarea } from "@/components/kombi/form";
 import type { Homework, Subject } from "@/db/schema";
 import { formatGerman } from "@/lib/dates";
 import type { HomeworkInput } from "@/lib/homework";
+import { abgabeTage } from "@/lib/kombi/abgabe-tage";
+import { kurz, kurzVon } from "@/lib/kombi/text";
 
 /**
  * Das Formular für eine Hausaufgabe — Anlegen und Bearbeiten teilen es sich.
@@ -21,7 +24,22 @@ import type { HomeworkInput } from "@/lib/homework";
  * Die Vorbelegung der Fälligkeit kommt aus dem Stundenplan und wird als
  * fertige Karte hereingereicht — dieses Bauteil rechnet nichts, es wählt nur
  * aus.
+ *
+ * Am Rechner (desktop.html `aufgabeForm`) steht die Aufgabe zuerst, darunter
+ * das Fach als Chip-Reihe und die Abgabe als Datums-Chips; das Datumsfeld
+ * kommt erst mit „Anderes Datum“, die Notiz erst mit „Notiz dazu“ (oder wenn
+ * schon eine da ist). Auswahl und Datumsfeld bleiben dabei im Formular: die
+ * Chips stellen sie wie eine Eingabe, so übersteht die Wahl auch das Queren
+ * der Schwelle (desktop/entwurf.ts).
  */
+
+/** Ein Feld so stellen, wie es eine Eingabe täte: React übernimmt es über onChange. */
+function stellen(el: HTMLInputElement | HTMLSelectElement | null, wert: string): void {
+  if (!el || el.value === wert) return;
+  const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(el, wert);
+  el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+}
 
 /** Fehler pro Feld, so wie das Formular sie erwartet. */
 export type HomeworkFieldErrors = Partial<Record<keyof HomeworkInput, string>>;
@@ -71,7 +89,8 @@ export type HomeworkFormProps = {
   subjects: HomeworkFormSubject[];
   /**
    * Je Fach der Tag seiner nächsten Stunde, aus dem Stundenplan gerechnet.
-   * Beim Bearbeiten leer: dort gilt der Tag, der schon gespeichert ist.
+   * Beim Anlegen die Vorbelegung; beim Bearbeiten zieht der Tag nicht mit
+   * (dort gilt der gespeicherte), am Rechner ist er dann ein Datums-Chip.
    */
   dueSuggestions?: Record<string, string>;
   /** Wenn für das Fach keine Stunde im Plan steht: morgen. Kommt vom Server. */
@@ -105,6 +124,13 @@ export function HomeworkForm({
 
   const [state, formAction, pending] = useActionState(action, EMPTY_STATE);
 
+  const desktop = useDesktop();
+  const fachRef = useRef<HTMLSelectElement>(null);
+  const datumRef = useRef<HTMLInputElement>(null);
+  const notizRef = useRef<HTMLTextAreaElement>(null);
+  const [datumOffen, setDatumOffen] = useState(false);
+  const [notizOffen, setNotizOffen] = useState(false);
+
   function chooseSubject(nextId: string) {
     setSubjectId(nextId);
 
@@ -137,77 +163,226 @@ export function HomeworkForm({
         </p>
       ) : null}
 
-      <Field id="subjectId" label="Fach" error={state.errors?.subjectId}>
-        {(control) => (
-          <Select
-            {...control}
-            name="subjectId"
-            value={subjectId}
-            onChange={(event) => chooseSubject(event.target.value)}
+      {desktop ? (
+        <>
+          <Field id="title" label="Aufgabe" error={state.errors?.title}>
+            {(control) => (
+              <Input
+                {...control}
+                name="title"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="S. 42 Nr. 3–7"
+                maxLength={120}
+                autoComplete="off"
+                data-fokus-start=""
+              />
+            )}
+          </Field>
+
+          <div className="kf-feld">
+            <span className="kf-label" id="subjectId-chips">
+              Fach
+            </span>
+            <div className="refile" role="group" aria-labelledby="subjectId-chips">
+              {subjects.map((subject) => (
+                <button
+                  key={subject.id}
+                  className="fp"
+                  type="button"
+                  aria-pressed={subject.id === subjectId}
+                  onClick={() => stellen(fachRef.current, subject.id)}
+                >
+                  {kurzVon(subject.name)}
+                </button>
+              ))}
+            </div>
+            {/* die Auswahl bleibt das Feld des Formulars, die Chips stellen sie */}
+            <div hidden>
+              <select
+                ref={fachRef}
+                name="subjectId"
+                value={subjectId}
+                onChange={(event) => chooseSubject(event.target.value)}
+                tabIndex={-1}
+                aria-hidden="true"
+              >
+                {subjects.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {state.errors?.subjectId ? <p className="kf-fehler">{state.errors.subjectId}</p> : null}
+          </div>
+
+          <div className="kf-feld">
+            <span className="kf-label" id="dueDate-chips">
+              Abgabe
+            </span>
+            <div className="refile" role="group" aria-labelledby="dueDate-chips">
+              {abgabeTage({ naechsteStunde: dueSuggestions[subjectId], morgen: fallbackDueDate, gewaehlt: dueDate }).map((tag) => (
+                <button
+                  key={tag}
+                  className="fp"
+                  type="button"
+                  aria-pressed={!datumOffen && tag === dueDate}
+                  onClick={() => {
+                    setDatumOffen(false);
+                    stellen(datumRef.current, tag);
+                  }}
+                >
+                  {kurz(tag)}
+                </button>
+              ))}
+              <button
+                className="fp"
+                type="button"
+                aria-pressed={datumOffen}
+                onClick={() => {
+                  setDatumOffen(true);
+                  requestAnimationFrame(() => datumRef.current?.focus());
+                }}
+              >
+                Anderes Datum
+              </button>
+            </div>
+          </div>
+          <div hidden={!datumOffen && !state.errors?.dueDate}>
+            <Field
+              id="dueDate"
+              label="Datum"
+              hint={dueHint}
+              error={state.errors?.dueDate}
+            >
+              {(control) => (
+                <Input
+                  {...control}
+                  ref={datumRef}
+                  type="date"
+                  name="dueDate"
+                  value={dueDate}
+                  // Kein min: was man vergessen hat einzutragen, trägt man auch
+                  // nachträglich ein — mit dem Tag, an dem es fällig war.
+                  onChange={(event) => {
+                    setDuePicked(true);
+                    setDueDate(event.target.value);
+                  }}
+                />
+              )}
+            </Field>
+          </div>
+
+          {details || notizOffen || state.errors?.details ? null : (
+            <button
+              className="textbtn"
+              type="button"
+              onClick={() => {
+                setNotizOffen(true);
+                requestAnimationFrame(() => notizRef.current?.focus());
+              }}
+            >
+              Notiz dazu
+            </button>
+          )}
+          <div hidden={!details && !notizOffen && !state.errors?.details}>
+            <Field
+              id="details"
+              label="Notiz"
+              optional
+              error={state.errors?.details}
+            >
+              {(control) => (
+                <Textarea
+                  {...control}
+                  ref={notizRef}
+                  name="details"
+                  rows={3}
+                  maxLength={2000}
+                  value={details}
+                  onChange={(event) => setDetails(event.target.value)}
+                />
+              )}
+            </Field>
+          </div>
+        </>
+      ) : (
+        <>
+          <Field id="subjectId" label="Fach" error={state.errors?.subjectId}>
+            {(control) => (
+              <Select
+                {...control}
+                name="subjectId"
+                value={subjectId}
+                onChange={(event) => chooseSubject(event.target.value)}
+              >
+                {subjects.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.name}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+
+          <Field id="title" label="Aufgabe" error={state.errors?.title}>
+            {(control) => (
+              <Input
+                {...control}
+                name="title"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="S. 42 Nr. 3–7"
+                maxLength={120}
+                autoComplete="off"
+              />
+            )}
+          </Field>
+
+          <Field
+            id="dueDate"
+            label="Fällig"
+            hint={dueHint}
+            error={state.errors?.dueDate}
           >
-            {subjects.map((subject) => (
-              <option key={subject.id} value={subject.id}>
-                {subject.name}
-              </option>
-            ))}
-          </Select>
-        )}
-      </Field>
+            {(control) => (
+              <Input
+                {...control}
+                type="date"
+                name="dueDate"
+                value={dueDate}
+                // Kein min: was man vergessen hat einzutragen, trägt man auch
+                // nachträglich ein — mit dem Tag, an dem es fällig war.
+                onChange={(event) => {
+                  setDuePicked(true);
+                  setDueDate(event.target.value);
+                }}
+              />
+            )}
+          </Field>
 
-      <Field id="title" label="Aufgabe" error={state.errors?.title}>
-        {(control) => (
-          <Input
-            {...control}
-            name="title"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="S. 42 Nr. 3–7"
-            maxLength={120}
-            autoComplete="off"
-          />
-        )}
-      </Field>
+          <Field
+            id="details"
+            label="Notiz"
+            optional
+            hint="Was im Titel keinen Platz hat: Umfang, Abgabeform, ein Hinweis aus der Stunde."
+            error={state.errors?.details}
+          >
+            {(control) => (
+              <Textarea
+                {...control}
+                name="details"
+                rows={3}
+                maxLength={2000}
+                value={details}
+                onChange={(event) => setDetails(event.target.value)}
+              />
+            )}
+          </Field>
 
-      <Field
-        id="dueDate"
-        label="Fällig"
-        hint={dueHint}
-        error={state.errors?.dueDate}
-      >
-        {(control) => (
-          <Input
-            {...control}
-            type="date"
-            name="dueDate"
-            value={dueDate}
-            // Kein min: was man vergessen hat einzutragen, trägt man auch
-            // nachträglich ein — mit dem Tag, an dem es fällig war.
-            onChange={(event) => {
-              setDuePicked(true);
-              setDueDate(event.target.value);
-            }}
-          />
-        )}
-      </Field>
-
-      <Field
-        id="details"
-        label="Notiz"
-        optional
-        hint="Was im Titel keinen Platz hat: Umfang, Abgabeform, ein Hinweis aus der Stunde."
-        error={state.errors?.details}
-      >
-        {(control) => (
-          <Textarea
-            {...control}
-            name="details"
-            rows={3}
-            maxLength={2000}
-            value={details}
-            onChange={(event) => setDetails(event.target.value)}
-          />
-        )}
-      </Field>
+        </>
+      )}
 
       <div className="foot">
         <Button type="submit" loading={pending}>
