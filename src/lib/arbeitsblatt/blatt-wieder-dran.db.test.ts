@@ -3,7 +3,7 @@ import { dbBereit, testDb, testNutzer } from "@/test/db-harness";
 import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
 
-import { and, asc, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
 import { exams } from "@/db/schema";
 import { blattAuswerten, blattFuerThema } from "@/lib/arbeitsblatt/ablauf";
@@ -12,7 +12,7 @@ import { ABSCHRIFT_MATHE, UEBUNG_MATHE } from "@/lib/arbeitsblatt/beispiel";
 import { bauFertig, wertungSetzen } from "@/lib/arbeitsblatt/stand";
 import { blattMitAbschrift, fachMitThema, frageMitTerminen } from "@/lib/arbeitsblatt/test-saat";
 import { dauertaktNachlegen } from "@/recall/nachlegen";
-import { recallSchedule } from "@/recall/schema";
+import { recallItems, recallSchedule } from "@/recall/schema";
 
 /**
  * Abnahmerunde 20: Schließt die Auswertung eines Arbeitsblatts beim
@@ -38,6 +38,8 @@ async function blattGanzAusgewertet(fachName: string, klausurtag: string | null)
   if (klausurtag) await testDb.insert(exams).values({ userId: nutzer, subjectId: f.subjectId, date: klausurtag });
   const material = await blattMitAbschrift(nutzer, f.subjectId, f.topicId, "Scheitelpunktform, Übungen", "2026-10-08", ABSCHRIFT_MATHE);
   const frage = await frageMitTerminen(nutzer, f.subjectId, f.topicId, ["2026-10-12", HEUTE]);
+  // Aufgenommen vor HEUTE, nicht an der echten Uhr: sonst zählt der Dauertakt ab dem Tag des Testlaufs
+  await testDb.update(recallItems).set({ createdAt: um("2026-10-08") }).where(eq(recallItems.id, frage));
 
   const zeile = await blattFuerThema(nutzer, f.topicId, HEUTE);
   const e = blattErgebnis(
