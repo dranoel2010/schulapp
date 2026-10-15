@@ -1,6 +1,6 @@
 # Modell 23 in der App
 
-Stand: 14.10.2026, Branch `modell-23`, mit dem IServ-Ferienabgleich. Noch nicht auf dem NAS, noch nicht in `main`.
+Stand: 15.10.2026, Branch `modell-23`, mit dem IServ-Ferienabgleich und der Desktop-Variante. Noch nicht auf dem NAS, noch nicht in `main`.
 
 ## Was jetzt in der App ist
 
@@ -18,6 +18,7 @@ Die App sieht aus und verhält sich wie der Prototyp „Kombi V2“. Alle Abschn
 - **Archiv:** Vergangenes kommt nach zwei Wochen ins Archiv, gelöscht wird nichts. Eine Klausur steht nach ihrem Tag noch bis Tag 14 in der Liste „Klausuren“, unten und blasser, die jüngste zuerst. Ab Tag 15 steht sie im Archiv (der Tag wechselt um 4 Uhr, Berliner Zeit), und die Zeile schlägt sie dann auch nicht mehr vor. Erledigte Hausaufgaben stehen wie bisher zwei Tage unter „Erledigt“, danach im Archiv. Die Zeile findet sie noch zwei Wochen, danach nur noch das Archiv. Am Ende beider Listen steht die Zeile „Archiv“, sobald etwas darin ist. In der Zeile öffnet „archiv“ es auch, als erstes Wort oder allein nach einem Fach; „Geschichte Archiv besuchen“ bleibt eine Aufgabe. Im Archiv öffnet ein Tipp auf eine Aufgabe sie wieder, sie steht dann wieder in „Hausaufgaben“, auch nach dem Zurück auf die Liste darunter. Eine vergangene Klausur zeigt keinen Lernplan-Hinweis, kein „Themen eintragen“ und kein „Termine neu rechnen“ mehr, nur Kopf, Thema, „Stoff und Fragen“ und „Bearbeiten“ (ein Lernplan mit Blöcken bleibt als Rückblick). Dafür braucht es kein SQL. Zum Ausprobieren: nach `saat-startseite.mts` noch `npx tsx scripts/pruef-kombi/saat-archiv.mts`.
 - **Alle alten Seiten** gibt es weiter, im neuen Stil: Noten, Klausuren, Ablage, Fächer, Stundenplan, Eingangskorb, Einstellungen, Kalender, Push.
 - Hell und Dunkel richten sich nach dem Handy. Den Umschalter gibt es nicht mehr.
+- **Am Rechner** (ab 1024 px Fensterbreite) gibt es eine eigene Ansicht, siehe unten. Am Handy ändert sich dadurch nichts.
 
 ## Lokal ausprobieren
 
@@ -101,9 +102,18 @@ Ablauf im Ganzen:
    ```
    Einzelne Zeilen: `DELETE FROM free_periods WHERE id = '…' AND quelle IS NULL`. Danach `kalender.sh` (oder den nächsten stündlichen Lauf) abwarten; der doppelte Balken verschwindet aus Google. Die Zählzeilen dazu stehen im Kopf von `kombi-iserv-ferien.sql`. Wer nicht warten will: `UPDATE iserv_state SET last_attempt_at = NULL` und dann `kalender.sh`.
 
-## Am Rechner (Entwurf, noch nicht gebaut)
+## Am Rechner (gebaut am 15.10.)
 
-Entwurf: `desktop.html`. Alle Regeln dort gelten erst ab 1024 px, darunter bleibt alles wie oben. Bezug für Farben und Klassen ist `src/app/kombi.css`, nicht `index.html`.
+Entwurf: `desktop.html`. Alle Regeln gelten erst ab 1024 px, darunter bleibt alles wie oben (Bildvergleich bei 360 und 390, hell und dunkel: keine Abweichung). Farben, Schriften, Texte und Bewegungen sind die vom Handy aus `src/app/kombi.css`. Das CSS für den Rechner liegt in `src/app/desktop/`, die Bausteine in `src/components/kombi/desktop/`.
+
+Was am Rechner anders ist:
+
+- **Seitenleiste links** mit Datum, Heute, Hausaufgaben, Klausuren, Woche, Ablage, Fächer, Noten, unten Einstellungen. Die Ziffern 1 bis 7 wechseln den Bereich, `/` oder Strg/Cmd+K öffnet die Zeile.
+- **Heute** in zwei Spalten: links Abgaben, Klausur und Lernblock, rechts die Stunden dazu. Darunter „Zuletzt abgelegt“ als Reihe.
+- **Liste und Detail** in Hausaufgaben, Klausuren, Ablage, Fächer, Noten und Einstellungen: links die Liste, rechts das Gewählte. ↑/↓ oder j/k gehen durch die Liste.
+- **Woche** als Raster: Abgaben, Lernen und die Stunden je Tag, mit Blättern vor und zurück.
+- **Die Zeile** steht unten mittig und ist breiter; statt der Kamera lädt ihr Knopf Bilder hoch. Man kann Bilder auch ins Fenster ziehen.
+- **Tisch** (Wiederholen, Lernblock) füllt das Fenster, Karten und Arbeitsblatt sind mit Tasten bedienbar.
 
 - **Kein Ablauf am Rechner.** Fotos macht das Handy. Am Rechner zeigt die Startseite auch nach der Schule gleich den Überblick. Wer `/ablauf` direkt aufruft, bekommt ihn als Spalte bis 680 px.
 - **Hell und dunkel** folgen dem System, wie am Handy. Einen Umschalter gibt es auch am Rechner nicht.
@@ -122,6 +132,7 @@ Entwurf: `desktop.html`. Alle Regeln dort gelten erst ab 1024 px, darunter bleib
 ## Was offen ist
 
 - **Dein Durchklicken am Handy.** Geprüft haben bisher nur Tests, Agenten und Playwright. Fehler, die man nur in der Hand merkt, fehlen noch. Bitte hell und dunkel, mit echter Kamera und mit Drucken.
+- **Dein Durchklicken am Rechner.** Auch hier haben nur Agenten und Playwright geprüft (drei Prüfrunden, alle Befunde behoben). Bitte mit echter Maus, Tastatur, Hochladen und Drucken.
 - **Drucken in der installierten Android-App** (`window.print()`) ist ungeprüft. Notfalls geht der Weg über das PDF.
 - **Kleinigkeiten aus dem Prototyp:** Morgens rutscht eine abgehakte Abgabe unter die andere. Auf kleinen Handys steht „Gelöstes Blatt fotografieren“ erst nach Scrollen im Bild. Ein Suchmenü mit nur einem Treffer hat viel Leerfläche.
 - **„Gelöstes Blatt fotografieren“** ist noch „bald“. Eine automatische Korrektur gibt es nicht.
@@ -132,9 +143,9 @@ Entwurf: `desktop.html`. Alle Regeln dort gelten erst ab 1024 px, darunter bleib
 
 ## Deine Antworten
 
-Offene Fragen gibt es keine mehr. Beantwortet am 12.10. (1 bis 3), am 13.10. (4 bis 11) und am 14.10. (12):
+Offene Fragen gibt es keine mehr. Beantwortet am 12.10. (1 bis 3), am 13.10. (4 bis 11) und am 14.10. (12, 13 und 1 neu):
 
-1. Am Rechner keine Handyspalte, Inhalt mittig bis 680px.
+1. Am Rechner gilt die Desktop-Variante (14.10.: „bau bitte jetzt noch eine desktop variante … bis auf das es zusammen passen muss“). Sie ersetzt die frühere Antwort „keine Handyspalte, Inhalt mittig bis 680px“; mittig bis 680 px stehen nur noch Seiten ohne Bereich.
 2. Kein Hell/Dunkel-Umschalter.
 3. Ein ausgewertetes Arbeitsblatt zählt wie eine Kartenrunde.
 4. Die Probeklausur kommt als neue Art in den Lernplan, gebaut wie oben.
