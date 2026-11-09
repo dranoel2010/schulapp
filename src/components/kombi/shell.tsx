@@ -14,6 +14,7 @@ import {
 import { AblaufEbene } from "@/components/kombi/ablauf";
 import { Startseite } from "@/components/kombi/home/startseite";
 import { KameraEbene } from "@/components/kombi/kamera";
+import { MorgenEbene } from "@/components/kombi/morgen";
 import { appUhrStellen } from "@/components/kombi/lernblock/uhr";
 import {
   KombiKontext,
@@ -1386,6 +1387,7 @@ export function KombiShell({ children }: { children: ReactNode }) {
         <div className="layer" id="flow">
           <AblaufEbene />
         </div>
+        <MorgenEbene />
         <div
           id="pages"
           onPointerDown={randRunter}
