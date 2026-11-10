@@ -1,4 +1,4 @@
-import { addDays, daysBetween, weekdayIndex } from "@/lib/dates";
+import { addDays, daysBetween } from "@/lib/dates";
 
 /**
  * Der Lernplan.
@@ -9,8 +9,8 @@ import { addDays, daysBetween, weekdayIndex } from "@/lib/dates";
  * Klausur alles zu lernen und danach nichts mehr bringt nichts.
  *
  * Dazu kommt bei Klausur und Test eine Probeklausur (Antwort 4 vom
- * 13.10.2026): ein Arbeitsblatt im Klausurformat über den ganzen Stoff, ein
- * bis zwei Tage vor dem Termin (`probeTagFuer`). Ihr Tag gehört allein ihr,
+ * 13.10.2026): ein Arbeitsblatt im Klausurformat über den ganzen Stoff, seit
+ * dem 10.11.2026 am Tag direkt vor dem Termin (`probeTagFuer`). Ihr Tag gehört allein ihr,
  * gelernt und wiederholt wird an den übrigen Tagen.
  *
  * Alles hier ist reine Rechnung: keine Datenbank, keine Systemuhr. "heute"
@@ -130,10 +130,10 @@ function splitDays(days: string[]): {
 }
 
 /**
- * Der Tag der Probeklausur, ein bis zwei Tage vor dem Termin (Antwort 4 vom
- * 13.10.2026, Regel vom 14.10.2026): mit genug Vorlauf (mindestens vier
- * Lerntage) zwei Tage vorher, sonst einer. Liegt die Klausur am Montag, ist
- * es ausdrücklich der Sonntag davor. Ein Wochenendtag ist erlaubt.
+ * Der Tag der Probeklausur: der Tag direkt vor dem Termin (Regel vom
+ * 10.11.2026, Leonard: „Klausur am Donnerstag, Probe am Mittwoch“; vorher
+ * zwei Tage bei genug Vorlauf). Liegt die Klausur am Montag, ist es der
+ * Sonntag davor. Ein Wochenendtag ist erlaubt.
  *
  * Ferien und freie Tage (`frei`, nur ab heute) sind sonst ganz frei, die
  * Probe ist die einzige Ausnahme (Antwort vom 14.10.2026, „am letzten Tag von
@@ -162,12 +162,13 @@ export function probeTagFuer(examDate: string, studyDays: string[], frei: readon
 function probeTagMitAbstand(
   examDate: string,
   studyDays: string[],
-  abstand: number,
+  _abstand: number,
   frei: readonly string[] = [],
 ): string | null {
-  // Klausur am Montag: die Probe liegt am Sonntag davor (Antwort vom 14.10.2026)
-  const tage = weekdayIndex(examDate) === 0 ? 1 : abstand;
-  const ziel = addDays(examDate, -tage);
+  // Seit dem 10.11.2026 (Leonard): immer der Tag direkt vor der Klausur —
+  // Klausur am Donnerstag, Probe am Mittwoch; am Montag also der Sonntag.
+  // Der alte Abstand von zwei Tagen kommt nicht mehr zum Zug.
+  const ziel = addDays(examDate, -1);
   if (studyDays.includes(ziel)) return ziel;
   // Ferien bis direkt vor die Klausur: der letzte Ferientag. Endet der freie
   // Zeitraum vorher, zuerst der Lerntag direkt vor der Klausur.
@@ -179,15 +180,7 @@ function probeTagMitAbstand(
     if (letzter === tagDavor) return letzter;
     if (studyDays.includes(tagDavor)) return tagDavor;
   }
-  // Ist der Tag schon vorbei (verpasst, Nachholen), bleibt der Tag vor der
-  // Klausur, wenn er noch kommt.
-  if (tage === 2 && (studyDays.length === 0 || ziel < studyDays[0])) {
-    return probeTagMitAbstand(examDate, studyDays, 1, frei);
-  }
-  // Geht der Tag nicht, gilt der nächstfrühere erlaubte, nie ein späterer:
-  // bei einem Tag Abstand also zuerst der Tag zwei vorher, bei zwei Tagen
-  // Abstand nie der Tag direkt vor der Klausur, außer der Zieltag ist frei,
-  // dann gilt zuerst der Tag vor der Klausur (siehe oben).
+  // Geht der Tag nicht, gilt der nächstfrühere erlaubte, nie ein späterer.
   const frueher = studyDays.filter((day) => day < ziel);
   return frueher[frueher.length - 1] ?? null;
 }
