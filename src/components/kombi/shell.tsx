@@ -15,6 +15,7 @@ import { AblaufEbene } from "@/components/kombi/ablauf";
 import { Startseite } from "@/components/kombi/home/startseite";
 import { KameraEbene } from "@/components/kombi/kamera";
 import { MorgenEbene } from "@/components/kombi/morgen";
+import { aufNeueVersionAchten } from "@/components/kombi/neue-version";
 import { appUhrStellen } from "@/components/kombi/lernblock/uhr";
 import {
   KombiKontext,
@@ -1367,6 +1368,11 @@ export function KombiShell({ children }: { children: ReactNode }) {
     }),
     [openPage, vorladen, popPage, toast, hideToast, fehlerToast, openSheet, sheetSchliessen, navigiereEcht, pathname, setzeEbenen, pushStapel, tagDaten, merkeTagDaten, neuLaden, registriere, ebeneAuf, ebeneZu],
   );
+
+  // Nach einem neuen Stand auf dem NAS: alte Actions → einmal neu laden (neue-version.ts)
+  useEffect(() => {
+    aufNeueVersionAchten();
+  }, []);
 
   // Nur mit SCHULAPP_TESTUHR (data-pruefung am <html>): die API für die
   // Playwright-Prüfungen unter scripts/pruef-kombi/.
